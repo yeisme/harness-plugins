@@ -9,6 +9,8 @@
     "sourceMap": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
     "verbatimModuleSyntax": false,
     "strict": true,
     "noUncheckedIndexedAccess": true,
