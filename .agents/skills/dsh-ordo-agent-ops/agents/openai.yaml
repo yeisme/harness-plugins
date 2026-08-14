@@ -1,0 +1,4 @@
+interface:
+  display_name: "DSH Ordo Agent Ops"
+  short_description: "Build the tenant-safe Ordo adapter for DSH"
+  default_prompt: "Use $dsh-ordo-agent-ops when designing or changing the DeepSeek Harness Ordo Agent Ops plugin."

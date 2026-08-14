@@ -1,0 +1,7 @@
+packages:
+  - packages/*/*
+
+# A standalone plugin repo consumes the published DeepSeek Harness surface,
+# never its vendored source. Keep peerDependencies of @deepseek-ai/dsh-* at
+# the published release this repo targets.
+linkWorkspacePackages: true

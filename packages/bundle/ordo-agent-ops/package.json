@@ -1,0 +1,29 @@
+{
+  "name": "@yeisme/dsh-ordo-agent-ops",
+  "description": "Installable DSH profile bundle: Ordo Agent Ops host adapters, /ordo command, client panel, and composition preview as one patch layer",
+  "version": "0.1.0-rc.6",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yeisme/harness-plugins.git",
+    "directory": "packages/bundle/ordo-agent-ops"
+  },
+  "type": "module",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@yeisme/dsh-host-ordo-agent-ops": "workspace:^",
+    "@yeisme/dsh-host-ordo-commands": "workspace:^",
+    "@yeisme/dsh-client-ui-ordo-agent-ops": "workspace:^",
+    "@yeisme/dsh-agent-composition-preview": "workspace:^"
+  },
+  "files": [
+    "cordis.patch.yml"
+  ],
+  "license": "MIT"
+}
