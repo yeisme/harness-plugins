@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
+
+vi.mock('@deepseek-ai/dsh-client-runtime/client', () => import('../../../bundle/ordo-agent-ops/tests/browser-runtime.mock.ts'))
+vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => import('../../../bundle/ordo-agent-ops/tests/browser-runtime.mock.ts'))
+
 import { OrdoAgentOpsController } from '../src/client/controller.ts'
-import type { OrdoAgentOpsSnapshot } from '@deepseek-ai/dsh-api-remotes/client'
+import type { OrdoAgentOpsSnapshot } from '../src/client/contracts.ts'
 
 const snapshot: OrdoAgentOpsSnapshot = {
   schemaVersion: 'ordo.agent_ops.snapshot.v1alpha1',

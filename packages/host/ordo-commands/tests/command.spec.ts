@@ -9,13 +9,15 @@ import Loader from '@deepseek-ai/cordis-plugin-loader'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
-import OrdoAgentOpsGateway, {
+import {
+  OrdoAgentOpsGateway,
   ORDO_AGENT_OPS_EXPECTED_CONTEXT,
   type OrdoAgentOpsExpectedContext,
   type OrdoAgentOpsOwnerSource,
   type OrdoAgentOpsSnapshot,
-} from '@yeisme/dsh-host-ordo-agent-ops'
+} from '@yeisme/dsh-ordo-agent-ops'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import * as LegacyHost from '../../ordo-agent-ops/src/index.ts'
 import * as OrdoCommands from '../src/index.ts'
 import * as OrdoCommandsInvariant from '../src/invariant.ts'
 import { parseOrdoCommand, parseSafeOrdoRef } from '../src/parser.ts'
@@ -158,7 +160,7 @@ describe('@yeisme/dsh-host-ordo-commands registration', () => {
     expect(OrdoCommands.inject).toEqual(['commands', 'ordoAgentOps'])
     expect(OrdoCommandsInvariant.inject).toEqual(['invariants'])
     const loader = Object.create(Loader.prototype) as Loader
-    expect(loader.unwrapExports(OrdoCommands)).toBe(OrdoCommands)
+    expect(loader.unwrapExports(OrdoCommands)).toBe(OrdoCommands.default)
     expect(test.ctx.commands.list(test.agent)).toContainEqual({
       name: 'ordo',
       description: 'read the safe Ordo Agent Ops snapshot',
@@ -192,7 +194,7 @@ describe('@yeisme/dsh-host-ordo-commands registration', () => {
     ctx.loader.builtins.include = Include
     const modules = new Map<string, unknown>([
       ['@deepseek-ai/dsh-commands', CommandRuntime],
-      ['@yeisme/dsh-host-ordo-agent-ops', OrdoAgentOpsGateway],
+      ['@yeisme/dsh-host-ordo-agent-ops', LegacyHost],
       ['@yeisme/dsh-host-ordo-commands', OrdoCommands],
     ])
     ctx.loader.internal = {

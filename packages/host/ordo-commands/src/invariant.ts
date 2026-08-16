@@ -1,6 +1,7 @@
 /** Package-owned invariant companion for the read-only `/ordo` registration. */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-commands'
 import type { InvariantFailure, InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 import { hasOrdoCommandRegistration } from './index.ts'
 

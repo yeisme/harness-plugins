@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
-import OrdoAgentOpsGateway, {
+import {
+  OrdoAgentOpsGateway,
   ORDO_AGENT_OPS_EXPECTED_CONTEXT,
   needsContractSnapshot,
   type OrdoAgentOpsExpectedContext,

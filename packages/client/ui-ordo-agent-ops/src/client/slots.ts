@@ -1,10 +1,3 @@
-import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
-import type { OrdoAgentOpsViewState } from './controller.ts'
+/** @deprecated 0.1.0-rc.7 compatibility slot type. */
 
-/** Injected facts and lifecycle verbs for the compact Agent Ops action. */
-export interface OrdoAgentOpsPanelFace {
-  hooks: {
-    state: HostObservable<OrdoAgentOpsViewState>
-  }
-  refresh: () => Promise<void>
-}
+export type { OrdoAgentOpsPanelFace } from '@yeisme/dsh-ordo-agent-ops/client-runtime'

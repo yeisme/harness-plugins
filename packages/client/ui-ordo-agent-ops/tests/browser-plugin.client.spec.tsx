@@ -5,15 +5,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
-import { makeTranslate, usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
-import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { OrdoAgentOpsPanel } from '../src/client/OrdoAgentOpsPanel.tsx'
 import type { OrdoAgentOpsPanelFace } from '../src/client/slots.ts'
-import type { OrdoAgentOpsSnapshot } from '@deepseek-ai/dsh-api-remotes/client'
+import type { OrdoAgentOpsSnapshot } from '../src/client/contracts.ts'
 import { zh } from '../src/client/locales.ts'
 
-usePinnedBrowserLanguages('zh-CN')
+vi.mock('@deepseek-ai/dsh-client-runtime/client', () => import('../../../bundle/ordo-agent-ops/tests/browser-runtime.mock.ts'))
+vi.mock('@deepseek-ai/dsh-client-locale/client', () => import('../../../bundle/ordo-agent-ops/tests/browser-runtime.mock.ts'))
+vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => import('../../../bundle/ordo-agent-ops/tests/browser-runtime.mock.ts'))
+
 afterEach(cleanup)
 
 const snapshot: OrdoAgentOpsSnapshot = {
@@ -28,7 +29,7 @@ const snapshot: OrdoAgentOpsSnapshot = {
   safeMessage: 'owner projection is not mounted',
 }
 
-const t = makeTranslate(zh, commonZh)
+const t = (key: string, _params?: Record<string, unknown>): string => (zh as Record<string, string>)[key] ?? key
 const neverHook = (() => { throw new Error('Agent Ops panel must not read global hooks') }) as never
 
 async function bench() {
