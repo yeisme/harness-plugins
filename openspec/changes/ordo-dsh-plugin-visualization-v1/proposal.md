@@ -81,7 +81,7 @@ Ordo 已经拥有多 runtime 调度、DAG、session、writer/worktree lease、ap
 
 - 根设计依赖：`../../../../openspec/changes/enterprise-harness-platform-v1/` 的 host adapter、Studio、action/receipt 与供应链边界。
 - Ordo handoff：`agent/ordo/openspec/changes/ordo-agent-operations-projection-v1/`。
-- DSH 实现 owner：当前 change，路径为 `client/deepseek-harness/openspec/changes/ordo-dsh-plugin-visualization-v1/`。
+- DSH plugin 实现 owner：当前 change，路径为 `agent/harness-plugins/openspec/changes/ordo-dsh-plugin-visualization-v1/`；`client/deepseek-harness` 仅保留最小 upstream-aligned fork 补丁，不创建本地 OpenSpec task。
 - Workbench handoff：`client/yeisme-workbench/openspec/changes/workbench-ordo-agent-ops-v1/`。
 - Harness Plugins handoff：远程仓库与 submodule 获得明确授权后，建立 `agent/harness-plugins/openspec/changes/ordo-agent-ops-pack-v1/`。
 - Control Plane handoff：`backend-server/harness-control-plane/openspec/changes/ordo-agent-ops-installation-v1/`，仅在该独立仓库获授权后创建。

@@ -21,6 +21,7 @@ export type OrdoAgentOpsReasonCode =
   | 'owner_read_contract_unavailable'
   | 'owner_projection_unavailable'
   | 'context_stale'
+  | 'reconcile_required'
   | 'permission_denied'
   | 'contract_mismatch'
 
@@ -63,6 +64,54 @@ export interface OrdoAgentOpsCapacity {
   readonly reservationState: OrdoAgentOpsReservationState
 }
 
+/** Ordo owner 已经预览并授权给当前上下文的唯一可操作动作。 */
+export interface OrdoAgentOpsActionDescriptor {
+  readonly actionType: 'ordo.reconcile.request' | 'ordo.approval.decide'
+  readonly decisionRef: OrdoAgentOpsRef
+  readonly targetRef: OrdoAgentOpsRef
+  readonly targetVersion: number
+  readonly ownerRef: OrdoAgentOpsRef
+  readonly safeEffect: string
+  readonly expiresAt: string
+  readonly previewDigest: string
+  readonly contractDigest: string
+}
+
+/** Ordo owner 对一次 compare-and-swap action 的安全 receipt。 */
+export interface OrdoAgentOpsActionReceipt {
+  readonly receiptRef: OrdoAgentOpsRef
+  readonly state: 'accepted' | 'reconcile_required' | 'still_unknown'
+  readonly safeSummary: string
+}
+
+/** 只有 owner 明确返回此结构时，Host 才能把结果解释为 rejected。 */
+export interface OrdoAgentOpsActionRejection {
+  readonly kind: 'rejected'
+  readonly reason: 'stale' | 'permission_denied' | 'not_available' | 'expired'
+  readonly safeMessage: string
+}
+
+/** Owner action 的安全返回值；异常不通过此 union 伪装成 rejection。 */
+export type OrdoAgentOpsActionResult = OrdoAgentOpsActionReceipt | OrdoAgentOpsActionRejection
+
+/** Host 对 action settle 的 fail-closed 结果。 */
+export type OrdoAgentOpsDecisionOutcome =
+  | { readonly kind: 'receipt'; readonly receipt: OrdoAgentOpsActionReceipt }
+  | { readonly kind: 'rejected'; readonly rejection: OrdoAgentOpsActionRejection }
+  | { readonly kind: 'unknown'; readonly state: 'still_unknown' | 'reconcile_required'; readonly safeSummary: string }
+
+/**
+ * Host 内由 Ordo/BFF 注入的唯一写入边界。浏览器从不持有它；实现必须在副作用前
+ * 再次核对 decision、preview digest 和完整授权上下文。
+ */
+export interface OrdoAgentOpsActionSource {
+  decide(input: {
+    readonly decisionRef: OrdoAgentOpsRef
+    readonly previewDigest: string
+    readonly expectedContext: OrdoAgentOpsExpectedContext
+  }): Promise<OrdoAgentOpsActionResult>
+}
+
 /** DSH 与 Workbench 共同消费的只读、版本化 Ordo 投影。 */
 export interface OrdoAgentOpsSnapshot {
   readonly schemaVersion: 'ordo.agent_ops.snapshot.v1alpha1'
@@ -77,4 +126,5 @@ export interface OrdoAgentOpsSnapshot {
   readonly context?: OrdoAgentOpsContext
   readonly run?: OrdoAgentOpsRunSummary
   readonly capacity?: OrdoAgentOpsCapacity
+  readonly actions?: readonly OrdoAgentOpsActionDescriptor[]
 }

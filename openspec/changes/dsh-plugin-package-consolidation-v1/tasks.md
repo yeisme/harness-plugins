@@ -40,4 +40,7 @@
 
 - 已完成：统一 package、三项 rc.7 shim、打包内容、legacy/new/mixed 去重与临时 clean profile 的两条 patch row 验证；完整 package/profile conformance 仍待独立 composition owner 可运行后复跑。
 - retain-next：`2.5` ToolView 与 `3.2` 可选 composition contract consumer；本 change 没有把它们伪装成已交付能力。
+- 2026-08-16 收束：统一 package 新增未注册的 `src/client/toolview.tsx` 和 typed server-authored action/receipt boundary；它不渲染 placeholder action、不会在浏览器提交 mutation，且因未完成 focused test，`2.5` 仍未勾选。
+- 2026-08-16 收束：`3.1`、`3.2`、`5.1`–`5.4` 仍依赖独立 composition owner 和 DSH peer release；本次未构造本地 composition facts、未伪造 packed/profile 或 registry evidence。
+- P1 repair（2026-08-16）：unified Host mount 使用 root-scoped 串行 lifecycle tail；final release 与 immediate reacquire/HMR overlap 不再让旧 disposer 删除新 generation 的 bridge/command。
 - 发布前置条件（外部 owner）：当前 `@yeisme/dsh-agent-composition-preview@0.1.0-rc.5` 与 `@yeisme/dsh-ordo-agent-ops@0.1.0-rc.7` 均尚未发布到 npm；更重要的是，npm 当前可用的 DSH peer 最高仅为 `0.1.0-rc.6`，不提供 composition preview 已冻结设计所需的 `AgentPresets.standingFactsFor()`、`compositionTextDigest()`、`readPresetLineage()`、`ToolRuntime.sources()`、`SystemPrompt.sectionSources()` 与 `SessionProjectionRegistry.attributions()`。该需求已在独立 `dsh-agent-composition-preview-v1` change 的 projection-core 任务中归属于 DSH core 的 additive read seam，不能由 Ordo package 通过私有字段、伪造 source 或本地事实副本绕过。因此 `5.2`–`5.4` 保持未完成：须先由 DSH core owner 发布兼容 peer，再分别发布 composition preview 与 unified Ordo candidate，最后重跑真实单命令 clean-profile 验收；不得以手动安装旧 Ordo leaf package 掩盖该失败。

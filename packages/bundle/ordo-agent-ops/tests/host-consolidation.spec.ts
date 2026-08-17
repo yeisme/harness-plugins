@@ -7,8 +7,10 @@ import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import OrdoAgentOpsPlugin, {
   applyLegacyCommands,
   applyLegacyHostBridge,
+  ORDO_AGENT_OPS_ACTION_SOURCE,
   ORDO_AGENT_OPS_EXPECTED_CONTEXT,
   type OrdoAgentOpsExpectedContext,
+  type OrdoAgentOpsActionSource,
   type OrdoAgentOpsOwnerSource,
   type OrdoAgentOpsSnapshot,
 } from '../src/index.ts'
@@ -53,6 +55,24 @@ function snapshot(): OrdoAgentOpsSnapshot {
   }
 }
 
+function actionSnapshot(): OrdoAgentOpsSnapshot {
+  return {
+    ...snapshot(),
+    reasonCode: 'reconcile_required',
+    actions: [{
+      actionType: 'ordo.approval.decide',
+      decisionRef: 'decision-1' as never,
+      targetRef: 'run-1' as never,
+      targetVersion: 1,
+      ownerRef: 'ordo-owner' as never,
+      safeEffect: 'reconcile the owner target',
+      expiresAt: '2999-01-01T00:00:00.000Z',
+      previewDigest: 'a'.repeat(64),
+      contractDigest: 'b'.repeat(64),
+    }],
+  }
+}
+
 function agent(): Agent {
   return {
     session: Session.create(SessionId('unified-ordo')),
@@ -62,11 +82,15 @@ function agent(): Agent {
   } as unknown as Agent
 }
 
-async function harness(): Promise<Context> {
+async function harness(
+  owner: OrdoAgentOpsOwnerSource = { snapshot },
+  actionSource?: OrdoAgentOpsActionSource,
+): Promise<Context> {
   const ctx = new Context()
   contexts.push(ctx)
   ctx.provide(ORDO_AGENT_OPS_EXPECTED_CONTEXT, expectedContext())
-  ctx.provide('ordoAgentOpsOwner', { snapshot } satisfies OrdoAgentOpsOwnerSource)
+  ctx.provide('ordoAgentOpsOwner', owner)
+  if (actionSource !== undefined) ctx.provide(ORDO_AGENT_OPS_ACTION_SOURCE, actionSource)
   await ctx.plugin(CommandRuntime)
   return ctx
 }
@@ -106,22 +130,52 @@ describe('@yeisme/dsh-ordo-agent-ops Host consolidation', () => {
     expect(ctx.commands.list(agent()).find(command => command.name === 'ordo')).toBeUndefined()
     expect(warning).not.toHaveBeenCalled()
   })
+
+  it('serializes an immediate reacquire behind the previous generation teardown', async () => {
+    const ctx = await harness()
+    const first = await ctx.plugin(OrdoAgentOpsPlugin)
+    const firstDispose = first.dispose()
+    const second = await ctx.plugin(OrdoAgentOpsPlugin)
+
+    await firstDispose
+    expect(ctx.get('ordoAgentOps')).toBeDefined()
+    expect(ctx.commands.list(agent()).filter(command => command.name === 'ordo')).toHaveLength(1)
+
+    await second.dispose()
+    expect(ctx.get('ordoAgentOps')).toBeUndefined()
+  })
+
+  it.each([
+    ['transport uncertainty', { decide: vi.fn().mockRejectedValue(new Error('transport unavailable')) }, 'still_unknown:', false],
+    ['malformed settlement', { decide: vi.fn().mockResolvedValue({}) }, 'still_unknown:', false],
+    ['explicit owner rejection', { decide: vi.fn(async () => ({ kind: 'rejected' as const, reason: 'stale' as const, safeMessage: 'Owner preview is stale.' })) }, 'rejected: stale.', true],
+  ] as const)('preserves %s as a typed fail-closed command result', async (_name, actionSource, marker, rejected) => {
+    const ctx = await harness({ snapshot: actionSnapshot }, actionSource)
+    await ctx.plugin(OrdoAgentOpsPlugin)
+
+    const execution = await ctx.commands.execute(agent(), '/ordo approve decision-1', new AbortController().signal)
+    expect(execution?.result.text).toContain(marker)
+    expect(execution?.result.text).not.toContain('owner_confirmed')
+    if (rejected) expect(execution?.result.text).not.toContain('reconcile')
+    else {
+      expect(execution?.result.text).toContain('reconcile')
+      expect(execution?.result.text).not.toContain('rejected:')
+    }
+  })
 })
 
 describe('package contract', () => {
-  it('declares only the unified package and independent composition preview in the patch', async () => {
+  it('declares only the unified Ordo package in the patch', async () => {
     const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as {
       dependencies: Record<string, string>
     }
     const patch = await readFile(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
 
     expect(manifest.dependencies).toEqual({
-      '@yeisme/dsh-agent-composition-preview': 'workspace:^',
       zod: '^4.4.3',
     })
     expect(patch).toContain("name: '@yeisme/dsh-ordo-agent-ops'")
-    expect(patch).toContain("name: '@yeisme/dsh-agent-composition-preview'")
-    expect(patch).not.toMatch(/dsh-host-ordo-agent-ops|dsh-host-ordo-commands|dsh-client-ui-ordo-agent-ops/)
+    expect(patch).not.toMatch(/dsh-host-ordo-agent-ops|dsh-host-ordo-commands|dsh-client-ui-ordo-agent-ops|dsh-agent-composition-preview/)
   })
 
   it('contains no AionUI/Web Shell DOM interception contract', async () => {

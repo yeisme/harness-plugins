@@ -1,10 +1,6 @@
-# Yeisme Ordo Agent Ops bundle: one unified dual-face package plus its
-# independently owned composition-preview fact contribution.
+# Yeisme Ordo Agent Ops bundle: one unified dual-face package.
 # Install with: dsh plugin --profile web add @yeisme/dsh-ordo-agent-ops
 # (or a local checkout: dsh plugin --profile web add ./packages/bundle/ordo-agent-ops)
 - insert:
     - id: ordo-agent-ops
       name: '@yeisme/dsh-ordo-agent-ops'
-
-    - id: agent-composition-preview
-      name: '@yeisme/dsh-agent-composition-preview'

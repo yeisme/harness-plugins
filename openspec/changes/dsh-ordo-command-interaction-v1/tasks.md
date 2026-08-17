@@ -21,3 +21,9 @@
 
 - [ ] 4.1 端到端验证命令面与快照语义一致。Owner: DSH maintainer；Lane: verify；Dependencies: 2.1, 3.2；Scope: 不新增 tracked 实现、只产出验证证据；Exclusions: 不伪造 owner 证据、不开放外部动作门；Acceptance: profile 装载 host 与 client 后 ordo status 与 ordo preview 与 qualify CLI handoff 与 reconcile 负向与 stale 重放证据齐备、生命周期事件落会话；Verification: `pnpm run build && pnpm run test:e2e`（无 key 自跳过）加 keyless snapshot；Expected: exit 0；Failure recheck: 语义漂移回 conformance fixture；Automation: safe-local。
 - [ ] 4.2 校验 change 并撰写 Agent Note。Owner: DSH maintainer；Lane: verify；Dependencies: 4.1；Scope: `openspec/changes/dsh-ordo-command-interaction-v1/`、`.agents/notes/`；Exclusions: 不修改已冻结的 spec 语义；Acceptance: openspec strict valid、Agent Note 记录语法归属与 decision-ref CAS 决策；Verification: `openspec validate dsh-ordo-command-interaction-v1 --strict && git diff --check`；Expected: exit 0；Failure recheck: 生成目录被手改时回源修复；Automation: safe-local。
+
+## 2026-08-16 收束状态
+
+- 统一 package 已增加安全 grammar、server-authored descriptor preview 与 owner-CAS forwarding；未完成 focused action tests，任务 2.1 保持未勾选。
+- 当前 DSH rc.6 未公开 popup/decorate、`command/executed` client event 或 ToolView registration seam；3.1/3.2 保持 external owner blocker，不能以私有 API 或 browser fetch 替代。
+- P1 repair（2026-08-16）：unified Host 将 owner transport/settlement exception 与 malformed result 映射为 `still_unknown`/`reconcile_required`，只有结构化 owner rejection 才输出 `rejected`；未自动重试或伪造 accepted。

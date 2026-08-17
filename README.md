@@ -33,5 +33,15 @@ preview patch row。完整运行仍取决于 DSH core 发布 composition preview
     # 或发布后按包名安装
     dsh plugin --profile web add @yeisme/dsh-ordo-agent-ops
 
-详见 docs/README.md 与 AGENTS.md。
+### Anchored Standard 预设
 
+    # 从本地 checkout 安装 Anchored Standard 预设族
+    dsh plugin --profile web add ./packages/bundle/anchored-standard
+
+    # 或发布后按包名安装
+    dsh plugin --profile web add @yeisme/dsh-anchored-standard
+
+该 bundle 会在 DSH 启动时把 `anchored-standard`、`zero-anchored-standard`、
+`whoami-standard` 三个实验预设安装到 `$DSH_HOME/.agent-presets/`。
+
+详见 docs/README.md 与 AGENTS.md。

@@ -163,8 +163,8 @@ describe('@yeisme/dsh-host-ordo-commands registration', () => {
     expect(loader.unwrapExports(OrdoCommands)).toBe(OrdoCommands.default)
     expect(test.ctx.commands.list(test.agent)).toContainEqual({
       name: 'ordo',
-      description: 'read the safe Ordo Agent Ops snapshot',
-      input: { hint: '[help|status [safe-ref]|preview <safe-ref>|capacity]' },
+      description: 'read or safely preview the Ordo Agent Ops projection',
+      input: { hint: '[help|status [safe-ref]|preview <safe-ref>|capacity|qualify <preset-id>|reconcile <safe-ref>|approve <decision-ref>]' },
     })
     expect(OrdoCommands.hasOrdoCommandRegistration(test.ctx)).toBe(true)
 
@@ -225,7 +225,7 @@ describe('/ordo read-only command', () => {
       text: [
         'Conclusion: Read-only Ordo command help.',
         'Freshness / status: needs_contract; owner_read_contract_unavailable.',
-        'Safe refs / summary: Usage: /ordo [help|status [safe-ref]|preview <safe-ref>|capacity]',
+        'Safe refs / summary: Usage: /ordo [help|status [safe-ref]|preview <safe-ref>|capacity|qualify <preset-id>|reconcile <safe-ref>|approve <decision-ref>|run <launch|cancel|redispatch>]',
         'Next action: Run /ordo status to read the mounted owner snapshot.',
       ].join('\n'),
     })

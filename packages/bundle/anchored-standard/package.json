@@ -1,0 +1,37 @@
+{
+  "name": "@yeisme/dsh-anchored-standard",
+  "description": "Installable DSH profile bundle: Anchored Standard, Zero-Anchored Standard, and Whoami Standard presets",
+  "version": "0.1.0-rc.6",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yeisme/harness-plugins.git",
+    "directory": "packages/bundle/anchored-standard"
+  },
+  "type": "module",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "exports": {
+    "./installer": "./installer.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "installer.mjs",
+    "presets/**",
+    "LICENSE",
+    "NOTICE",
+    "README.md",
+    "upstream-README.md",
+    "upstream-README.zh-CN.md"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test"
+  }
+}

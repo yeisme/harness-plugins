@@ -5,6 +5,7 @@
 ## 入口
 
 - cookbook/adding-ordo-agent-ops-plugin.md：Ordo Agent Ops 插件的组装/安装方式。
+- ../packages/bundle/anchored-standard/README.md：Anchored Standard 预设族的安装与行为。
 - ../openspec/changes/ordo-dsh-plugin-visualization-v1/：插件合同、状态机、DSH/Workbench 可视化设计。
 - ../packages/**/README.md：各包配置与运行时语义。
 

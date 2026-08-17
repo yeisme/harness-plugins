@@ -65,7 +65,6 @@
     }
   },
   "dependencies": {
-    "@yeisme/dsh-agent-composition-preview": "workspace:^",
     "zod": "^4.4.3"
   },
   "peerDependencies": {

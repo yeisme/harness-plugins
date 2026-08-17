@@ -17,7 +17,7 @@ Ordo 是 run/task/session/lease/approval/verification/evidence/closeout 的唯�
 - packages/host/*：Host 插件 —— 类型化服务/transport、事件订阅、命令、dispose。
 - packages/client/*：Client 插件 —— dsh.client bundle、受审查 slot、可访问 UI。
 - packages/preset/*：组合/预设投影与只读摘要。
-- packages/bundle/*：可安装的 dsh --profile patch 层（声明 dsh.bundle.patch），只引用本仓库插件行，不承载业务逻辑。
+- packages/bundle/*：可安装的 dsh --profile patch 层（声明 dsh.bundle.patch）。通常只引用本仓库插件行；自包含的轻量安装器/预设数据（如 `anchored-standard`）可作为例外放在 bundle 内。
 - Host 边界只向浏览器传 safe projection：opaque ref、有界摘要、版本、freshness、evidence ref、server-authored action；不传 cookie/token/raw URL/文件路径/任意 fetch。
 
 ## Prohibited Actions

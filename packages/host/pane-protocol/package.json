@@ -1,0 +1,29 @@
+{
+  "type": "module",
+  "name": "@yeisme/dsh-pane-protocol",
+  "version": "0.1.0-rc.1",
+  "description": "Experimental headless protocol for DSH Pane plugins, projections, and artifact handoff",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.mts",
+      "default": "./lib/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit --strict --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext src/index.ts",
+    "test": "vitest run",
+    "build": "tsdown src/index.ts --out-dir lib --format esm --dts --clean"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "type": "module",
+  "name": "@yeisme/dsh-client-ui-pane-workbench",
+  "version": "0.1.0-rc.1",
+  "description": "Experimental safe-pane registry, accessible workbench chrome, and shell.overlay adapter for DSH",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.mts",
+      "default": "./lib/index.mjs"
+    },
+    "./client": {
+      "types": "./lib/client.d.mts",
+      "default": "./lib/client.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ],
+      "platform": "web"
+    }
+  },
+  "files": [
+    "lib/**",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "pnpm --filter @yeisme/dsh-pane-protocol run build && tsc -p tsconfig.json --noEmit",
+    "test": "pnpm --filter @yeisme/dsh-pane-protocol run build && vitest run",
+    "build": "pnpm --filter @yeisme/dsh-pane-protocol run build && tsdown src/index.ts src/client.ts --out-dir lib --format esm --dts --clean",
+    "test:integration": "node scripts/run-integration-tests.mjs"
+  },
+  "dependencies": {
+    "@yeisme/dsh-pane-protocol": "workspace:^"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6",
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-session": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-session-projection": "0.1.0-rc.6",
+    "@testing-library/react": "^16.1.0",
+    "@types/react": "~18.3.1",
+    "jsdom": "^30.0.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "zod": "^4.4.3"
+  }
+}

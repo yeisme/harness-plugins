@@ -2,21 +2,26 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
-import { needsContractSnapshot, type OrdoAgentOpsGateway, type OrdoAgentOpsSnapshot } from './bridge.ts'
+import {
+  needsContractSnapshot,
+  type OrdoAgentOpsActionDescriptor,
+  type OrdoAgentOpsGateway,
+  type OrdoAgentOpsSnapshot,
+} from './bridge.ts'
 import { parseOrdoCommand, parseSafeOrdoRef, type SafeOrdoRef } from './parser.ts'
 
-export { parseOrdoCommand, parseSafeOrdoRef, type OrdoCommand, type SafeOrdoRef } from './parser.ts'
+export { parseOrdoCommand, parseSafeOrdoRef, parseSafePresetId, type OrdoCommand, type SafeOrdoRef } from './parser.ts'
 
 /** Cordis 表示名；兼容旧 command package 但不再单独发布运行面。 */
 export const name = 'ordo-commands'
 /** 命令必须等 Host bridge 和既有 dsh-commands runtime 均可用。 */
 export const inject = ['commands', 'ordoAgentOps']
 
-const USAGE = 'Usage: /ordo [help|status [safe-ref]|preview <safe-ref>|capacity]'
+const USAGE = 'Usage: /ordo [help|status [safe-ref]|preview <safe-ref>|capacity|qualify <preset-id>|reconcile <safe-ref>|approve <decision-ref>|run <launch|cancel|redispatch>]'
 const READABLE_STATES = new Set<OrdoAgentOpsSnapshot['state']>(['ready', 'stale'])
 const registeredCommandContexts = new WeakSet<object>()
 
-type SnapshotSource = Pick<OrdoAgentOpsGateway, 'snapshot'>
+type SnapshotSource = Pick<OrdoAgentOpsGateway, 'snapshot' | 'decide'>
 
 /** 检查当前 runtime 是否已拥有唯一 `/ordo` 注册。 */
 export function hasOrdoCommandRegistration(ctx: Context): boolean {
@@ -105,14 +110,14 @@ function syntaxError(error: ReturnType<typeof parseOrdoCommand> & { readonly kin
   const message = error.error === 'unknown'
     ? 'Unsupported /ordo subcommand.'
     : error.error === 'missing-ref'
-      ? 'The /ordo preview command requires one safe reference.'
+      ? 'The /ordo command requires one safe reference.'
       : error.error === 'extra-arguments'
         ? 'The /ordo command does not accept extra arguments.'
         : 'The supplied reference is not safe.'
   return { kind: 'error', text: `${message} ${USAGE}` }
 }
 
-function executeOrdoCommand(ctx: Context, invocation: CommandInvocation): CommandResult {
+async function executeOrdoCommand(ctx: Context, invocation: CommandInvocation): Promise<CommandResult> {
   const command = parseOrdoCommand(invocation.rawInput)
   switch (command.kind) {
     case 'overview': return renderSnapshot(readSnapshot(ctx), undefined, 'overview')
@@ -120,10 +125,93 @@ function executeOrdoCommand(ctx: Context, invocation: CommandInvocation): Comman
     case 'status': return renderSnapshot(readSnapshot(ctx), command.ref, 'status')
     case 'preview': return renderHelpPreview()
     case 'capacity': return renderSnapshot(readSnapshot(ctx), undefined, 'capacity')
+    case 'qualify': return renderQualify(ctx, command.presetId)
+    case 'reconcile': return renderActionPreview(readSnapshot(ctx), command.ref, 'ordo.reconcile.request')
+    case 'approve': return approveAction(ctx, command.decisionRef)
+    case 'run-unavailable': return notAvailable(`run ${command.operation}`, 'Durable reservation, writer fencing, and the owner action contract are not available.')
     case 'invalid': return syntaxError(command)
     /* v8 ignore next 2 -- parser 的闭合联合在上方已逐一处理 */
     default: return assertNever(command)
   }
+}
+
+/** Qualify remains a read-only composition handoff until Ordo opens its typed action. */
+function renderQualify(ctx: Context, presetId: SafeOrdoRef): CommandResult {
+  const composition = ctx.get('agentCompositionPreview') as { project?: (id: string) => Promise<unknown> } | undefined
+  if (typeof composition?.project !== 'function') {
+    return notAvailable('qualify', 'The independent composition preview owner is not mounted.')
+  }
+  return {
+    kind: 'success',
+    text: [
+      'Conclusion: Qualification requires the Ordo owner handoff.',
+      'Freshness / status: preview_only; no DSH mutation was submitted.',
+      `Safe refs / summary: Preset ${presetId}; composition preview is available to the owner.`,
+      `Next action: Run ordo agent qualify ${presetId} --approve --events in an authorized Ordo environment.`,
+    ].join('\n'),
+  }
+}
+
+function renderActionPreview(
+  snapshot: OrdoAgentOpsSnapshot,
+  targetRef: SafeOrdoRef,
+  actionType: OrdoAgentOpsActionDescriptor['actionType'],
+): CommandResult {
+  if (snapshot.state !== 'ready' || snapshot.freshness !== 'fresh') {
+    return notAvailable('reconcile', `The owner snapshot is ${snapshot.freshness}/${snapshot.state}; refresh before preview.`)
+  }
+  if (snapshot.reasonCode !== 'reconcile_required') {
+    return notAvailable('reconcile', 'Only owner-marked reconcile_required resources may be reconciled.')
+  }
+  const descriptor = snapshot.actions?.find(action => action.actionType === actionType && String(action.targetRef) === targetRef)
+  if (descriptor === undefined || Date.parse(descriptor.expiresAt) <= Date.now()) {
+    return notAvailable('reconcile', 'No current server-authored reconcile preview is available for this safe reference.')
+  }
+  return previewResult(descriptor)
+}
+
+function previewResult(descriptor: OrdoAgentOpsActionDescriptor): CommandResult {
+  return {
+    kind: 'success',
+    text: [
+      'Conclusion: Owner action preview only; no mutation was submitted.',
+      `Freshness / status: fresh; previewed; expires ${descriptor.expiresAt}.`,
+      `Safe refs / summary: target ${descriptor.targetRef}; effect ${descriptor.safeEffect}; owner ${descriptor.ownerRef}; decision ${descriptor.decisionRef}; preview_digest ${descriptor.previewDigest}.`,
+      `Next action: Run /ordo approve ${descriptor.decisionRef} before the preview expires.`,
+    ].join('\n'),
+  }
+}
+
+async function approveAction(ctx: Context, decisionRef: SafeOrdoRef): Promise<CommandResult> {
+  const source = ctx.get('ordoAgentOps') as SnapshotSource | undefined
+  const snapshot = readSnapshot(ctx)
+  if (source === undefined || snapshot.state !== 'ready' || snapshot.freshness !== 'fresh' || snapshot.context === undefined) {
+    return notAvailable('approve', 'A fresh owner snapshot and bound action source are required.')
+  }
+  const descriptor = snapshot.actions?.find(action => String(action.decisionRef) === decisionRef)
+  if (descriptor === undefined || Date.parse(descriptor.expiresAt) <= Date.now()) {
+    return notAvailable('approve', 'This decision reference is stale, unknown, or not bound to the current tenant context.')
+  }
+  const receipt = await source.decide(decisionRef)
+  if (receipt.kind === 'rejected') {
+    return { kind: 'error', text: `rejected: ${receipt.rejection.reason}. ${receipt.rejection.safeMessage}` }
+  }
+  if (receipt.kind === 'unknown') {
+    return { kind: 'error', text: `${receipt.state}: ${receipt.safeSummary} Do not retry; read /ordo status and request a fresh reconcile preview.` }
+  }
+  return {
+    kind: 'success',
+    text: [
+      'Conclusion: Owner action receipt received.',
+      `Freshness / status: ${receipt.receipt.state}; owner_confirmed.`,
+      `Safe refs / summary: receipt ${receipt.receipt.receiptRef}; ${receipt.receipt.safeSummary}`,
+      'Next action: Refresh /ordo status; unknown outcomes remain reconcile-only.',
+    ].join('\n'),
+  }
+}
+
+function notAvailable(action: string, reason: string): CommandResult {
+  return { kind: 'error', text: `not_available: ${action}. ${reason} ${USAGE}` }
 }
 
 function renderHelpPreview(): CommandResult {
@@ -154,8 +242,8 @@ export function apply(ctx: Context): void {
     registeredCommandContexts.add(ctx.root)
     const unregister = commands.register({
       name: 'ordo',
-      description: 'read the safe Ordo Agent Ops snapshot',
-      input: { hint: '[help|status [safe-ref]|preview <safe-ref>|capacity]' },
+      description: 'read or safely preview the Ordo Agent Ops projection',
+      input: { hint: '[help|status [safe-ref]|preview <safe-ref>|capacity|qualify <preset-id>|reconcile <safe-ref>|approve <decision-ref>]' },
       handler: invocation => executeOrdoCommand(ctx, invocation),
     })
     return () => {

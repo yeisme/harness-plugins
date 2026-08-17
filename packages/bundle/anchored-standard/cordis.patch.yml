@@ -1,0 +1,10 @@
+# Yeisme Anchored Standard bundle: installs the Anchored Standard preset family
+# into the DSH user preset root on boot.
+#
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-anchored-standard
+# or from a local checkout:
+#   dsh plugin --profile web add ./packages/bundle/anchored-standard
+- insert:
+    - id: anchored-standard
+      name: '@yeisme/dsh-anchored-standard/installer'

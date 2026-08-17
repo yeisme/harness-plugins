@@ -9,17 +9,26 @@ import OrdoCommandsPlugin, { hasOrdoCommandRegistration } from './host/commands.
 
 export {
   ORDO_AGENT_OPS_EXPECTED_CONTEXT,
+  ORDO_AGENT_OPS_ACTION_SOURCE,
   ORDO_AGENT_OPS_OWNER_SOURCE,
   OrdoAgentOpsGateway,
   needsContractSnapshot,
   ordoAgentOpsExpectedContextSchema,
   ordoAgentOpsSnapshotSchema,
   validateOrdoAgentOpsExpectedContext,
+  validateOrdoAgentOpsActionReceipt,
+  validateOrdoAgentOpsActionResult,
   validateOrdoAgentOpsSnapshot,
 } from './host/bridge.ts'
 export type {
   OrdoAgentOpsCapacity,
+  OrdoAgentOpsActionDescriptor,
+  OrdoAgentOpsActionReceipt,
+  OrdoAgentOpsActionRejection,
+  OrdoAgentOpsActionResult,
+  OrdoAgentOpsActionSource,
   OrdoAgentOpsContext,
+  OrdoAgentOpsDecisionOutcome,
   OrdoAgentOpsExpectedContext,
   OrdoAgentOpsFreshness,
   OrdoAgentOpsOwnerSource,
@@ -46,9 +55,10 @@ type HostRequirement = {
 
 type SharedHostMount = {
   references: number
-  ready: Promise<void>
-  bridge?: FiberHandle
-  commands?: FiberHandle
+  /** 所有 mount/setup/teardown 都通过同一条 tail 串行化。 */
+  tail: Promise<void>
+  bridge?: FiberHandle | undefined
+  commands?: FiberHandle | undefined
 }
 
 const HOST_MOUNTS = Symbol.for('yeisme.dsh-ordo-agent-ops.host-mounts.v1')
@@ -76,13 +86,13 @@ async function acquireHost(ctx: Context, requirement: HostRequirement): Promise<
   const mounts = hostMounts()
   let mount = mounts.get(root)
   if (mount === undefined) {
-    mount = { references: 0, ready: Promise.resolve() }
+    mount = { references: 0, tail: Promise.resolve() }
     mounts.set(root, mount)
   }
   mount.references += 1
 
   const current = mount
-  const setup = current.ready.then(async () => {
+  const setup = current.tail.then(async () => {
     // 允许一个还在兼容窗口中的外部 bridge 先挂载；统一 package 不抢占或复制它。
     if (requirement.bridge && current.bridge === undefined && root.get('ordoAgentOps') === undefined) {
       current.bridge = await root.plugin(OrdoAgentOpsGateway)
@@ -92,7 +102,8 @@ async function acquireHost(ctx: Context, requirement: HostRequirement): Promise<
       current.commands = await root.plugin(OrdoCommandsPlugin)
     }
   })
-  current.ready = setup
+  // 后续操作必须等待本次 setup，即使本次 setup 失败也不能永久堵塞 teardown/reacquire。
+  current.tail = setup.catch(() => undefined)
 
   try {
     await setup
@@ -112,11 +123,20 @@ async function acquireHost(ctx: Context, requirement: HostRequirement): Promise<
 async function releaseHost(root: Context, mount: SharedHostMount): Promise<void> {
   if (mount.references > 0) mount.references -= 1
   if (mount.references !== 0) return
-  const mounts = hostMounts()
-  if (mounts.get(root) === mount) mounts.delete(root)
-  await mount.ready.catch(() => undefined)
-  await mount.commands?.dispose()
-  await mount.bridge?.dispose()
+  const teardown = mount.tail.then(async () => {
+    // A new acquire can increment references while this queued teardown waits or disposes.
+    // It is still safe to dispose the old generation because the next setup is queued after it.
+    const commands = mount.commands
+    const bridge = mount.bridge
+    mount.commands = undefined
+    mount.bridge = undefined
+    await commands?.dispose()
+    await bridge?.dispose()
+    const mounts = hostMounts()
+    if (mount.references === 0 && mounts.get(root) === mount) mounts.delete(root)
+  })
+  mount.tail = teardown.catch(() => undefined)
+  await teardown
 }
 
 /** 挂载完整的 unified Host 面：Remote 与只读 `/ordo`。 */
