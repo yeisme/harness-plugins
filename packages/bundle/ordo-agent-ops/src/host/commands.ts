@@ -8,6 +8,7 @@ import {
   type OrdoAgentOpsGateway,
   type OrdoAgentOpsSnapshot,
 } from './bridge.ts'
+import { parseSafeCompositionPreview } from './composition-contract.ts'
 import { parseOrdoCommand, parseSafeOrdoRef, type SafeOrdoRef } from './parser.ts'
 
 export { parseOrdoCommand, parseSafeOrdoRef, parseSafePresetId, type OrdoCommand, type SafeOrdoRef } from './parser.ts'
@@ -22,6 +23,7 @@ const READABLE_STATES = new Set<OrdoAgentOpsSnapshot['state']>(['ready', 'stale'
 const registeredCommandContexts = new WeakSet<object>()
 
 type SnapshotSource = Pick<OrdoAgentOpsGateway, 'snapshot' | 'decide'>
+type CompositionPreviewSource = { readonly project?: (id: string) => Promise<unknown> }
 
 /** 检查当前 runtime 是否已拥有唯一 `/ordo` 注册。 */
 export function hasOrdoCommandRegistration(ctx: Context): boolean {
@@ -136,17 +138,29 @@ async function executeOrdoCommand(ctx: Context, invocation: CommandInvocation): 
 }
 
 /** Qualify remains a read-only composition handoff until Ordo opens its typed action. */
-function renderQualify(ctx: Context, presetId: SafeOrdoRef): CommandResult {
-  const composition = ctx.get('agentCompositionPreview') as { project?: (id: string) => Promise<unknown> } | undefined
+async function renderQualify(ctx: Context, presetId: SafeOrdoRef): Promise<CommandResult> {
+  const composition = ctx.get('agentCompositionPreview') as CompositionPreviewSource | undefined
   if (typeof composition?.project !== 'function') {
     return notAvailable('qualify', 'The independent composition preview owner is not mounted.')
   }
+
+  let projection: unknown
+  try {
+    projection = await composition.project(presetId)
+  } catch {
+    return notAvailable('qualify', 'The composition preview owner did not return a readable projection.')
+  }
+  const preview = parseSafeCompositionPreview(projection, presetId)
+  if (preview === undefined) {
+    return notAvailable('qualify', 'The composition preview did not match the safe DSH projection contract.')
+  }
+
   return {
     kind: 'success',
     text: [
-      'Conclusion: Qualification requires the Ordo owner handoff.',
-      'Freshness / status: preview_only; no DSH mutation was submitted.',
-      `Safe refs / summary: Preset ${presetId}; composition preview is available to the owner.`,
+      'Conclusion: Read-only qualification handoff preview; no DSH mutation was submitted.',
+      `Freshness / status: fresh; preview_only; shape_ok=${preview.shapeOk}; mount_ok=${preview.mountOk}; health_reason=${preview.healthReason}; drift=${preview.driftState}; generated_at=${preview.generatedAt}; mount_ref=${preview.mountRef}.`,
+      `Safe refs / summary: target ${preview.presetId}; effect owner-side qualification handoff; owner Ordo CLI; expiry not_applicable until ordo.agent_qualify.request opens; preview_digest ${preview.capabilityDigest}; tools ${preview.toolCount}; prompt_sections ${preview.promptSectionCount}.`,
       `Next action: Run ordo agent qualify ${presetId} --approve --events in an authorized Ordo environment.`,
     ].join('\n'),
   }
@@ -243,7 +257,7 @@ export function apply(ctx: Context): void {
     const unregister = commands.register({
       name: 'ordo',
       description: 'read or safely preview the Ordo Agent Ops projection',
-      input: { hint: '[help|status [safe-ref]|preview <safe-ref>|capacity|qualify <preset-id>|reconcile <safe-ref>|approve <decision-ref>]' },
+      input: { hint: '[help|status [safe-ref]|preview <safe-ref>|capacity|qualify <preset-id>|reconcile <safe-ref>|approve <decision-ref>|run <launch|cancel|redispatch>]' },
       handler: invocation => executeOrdoCommand(ctx, invocation),
     })
     return () => {

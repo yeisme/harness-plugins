@@ -1,0 +1,12 @@
+# Yeisme Pane Workbench bundle.
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-pane-workbench
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/pane-workbench
+#
+# The client package owns the official shell.overlay registration. This bundle
+# only adds one independently identifiable profile row and never patches the
+# DSH sidebar, conversation, details, or DOM layout.
+- insert:
+    - id: pane-workbench
+      name: '@yeisme/dsh-pane-workbench'

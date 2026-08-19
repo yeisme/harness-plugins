@@ -1,0 +1,11 @@
+# Yeisme DSH Workbench Core bundle.
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-workbench-core
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/dsh-workbench-core
+#
+# This bundle adds one profile row. Feature modules register tabs into the
+# Workbench Core; canonical state stays with DSH/domain owners.
+- insert:
+    - id: dsh-workbench-core
+      name: '@yeisme/dsh-workbench-core'

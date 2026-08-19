@@ -128,3 +128,43 @@ export interface OrdoAgentOpsSnapshot {
   readonly capacity?: OrdoAgentOpsCapacity
   readonly actions?: readonly OrdoAgentOpsActionDescriptor[]
 }
+
+/**
+ * Ordo owner event 的安全、版本化投影。事件只携带 bounded summary，不携带
+ * raw prompt、provider payload、private tool arguments 或 host path。
+ */
+export interface OrdoAgentOpsEvent {
+  readonly schemaVersion: 'ordo.agent_ops.event.v1alpha1'
+  readonly eventRef: OrdoAgentOpsRef
+  readonly streamRef: OrdoAgentOpsRef
+  readonly sequence: number
+  readonly cursor: OrdoAgentOpsRef
+  readonly occurredAt: string
+  readonly observedAt: string
+  readonly entityRef: OrdoAgentOpsRef
+  readonly entityVersion: number
+  readonly eventType: string
+  readonly safeDeltaOrSummary: string
+  readonly evidenceRefs: readonly OrdoAgentOpsRef[]
+  readonly context: OrdoAgentOpsContext
+  readonly membershipRevision: number
+  readonly pluginReleaseDigest: string
+  readonly ordoContractDigest: string
+  readonly runtimeGeneration: OrdoAgentOpsRef
+}
+
+/**
+ * 由 authoritative snapshot 或 owner replacement generation 提供的事件游标锚点。
+ * 没有锚点时，consumer 只能要求 snapshot reconcile，不能直接应用事件。
+ */
+export interface OrdoAgentOpsEventCursorAnchor {
+  readonly streamRef: OrdoAgentOpsRef
+  readonly sequence: number
+  readonly cursor: OrdoAgentOpsRef
+  readonly eventRef?: OrdoAgentOpsRef
+  readonly context: OrdoAgentOpsExpectedContext
+  readonly membershipRevision: number
+  readonly pluginReleaseDigest: string
+  readonly ordoContractDigest: string
+  readonly runtimeGeneration: OrdoAgentOpsRef
+}

@@ -164,7 +164,7 @@ describe('@yeisme/dsh-host-ordo-commands registration', () => {
     expect(test.ctx.commands.list(test.agent)).toContainEqual({
       name: 'ordo',
       description: 'read or safely preview the Ordo Agent Ops projection',
-      input: { hint: '[help|status [safe-ref]|preview <safe-ref>|capacity|qualify <preset-id>|reconcile <safe-ref>|approve <decision-ref>]' },
+      input: { hint: '[help|status [safe-ref]|preview <safe-ref>|capacity|qualify <preset-id>|reconcile <safe-ref>|approve <decision-ref>|run <launch|cancel|redispatch>]' },
     })
     expect(OrdoCommands.hasOrdoCommandRegistration(test.ctx)).toBe(true)
 

@@ -17,13 +17,17 @@ import {
 
 export type * from './types.ts'
 export {
+  ordoAgentOpsEventSchema,
   ordoAgentOpsExpectedContextSchema,
   ordoAgentOpsSnapshotSchema,
   validateOrdoAgentOpsActionReceipt,
   validateOrdoAgentOpsActionResult,
+  validateOrdoAgentOpsEvent,
   validateOrdoAgentOpsExpectedContext,
   validateOrdoAgentOpsSnapshot,
 } from './validation.ts'
+export { OrdoAgentOpsEventCursor } from './event-cursor.ts'
+export type { OrdoAgentOpsEventCursorDecision, OrdoAgentOpsEventCursorState } from './event-cursor.ts'
 
 /** Ordo owner 提供的唯一读取入口；此 package 不拥有 canonical facts。 */
 export interface OrdoAgentOpsOwnerSource {

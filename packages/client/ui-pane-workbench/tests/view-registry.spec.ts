@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
-import { PaneViewRegistry, PaneViewRegistrationError } from '../src/index.js'
+import {
+  PaneViewRegistry,
+  PaneViewRegistrationError,
+  createPaneWorkspace,
+  markOrphanedPaneViews,
+  reducePaneWorkspace,
+} from '../src/index.js'
 import { pluginDefinition } from './fixtures.js'
 
 describe('local pane view registry', () => {
@@ -27,11 +33,42 @@ describe('local pane view registry', () => {
 
   it('rejects remote component selection fields before mutation', () => {
     const registry = new PaneViewRegistry({ capabilities: new Set() })
+    for (const field of ['componentUrl', 'moduleName', 'iframe']) {
+      expect(() => registry.registerView({
+        descriptor: pluginDefinition('pinax.notes-preview').views[0],
+        component: () => null,
+        [field]: 'untrusted-component',
+      })).toThrow(PaneViewRegistrationError)
+    }
+    expect(registry.snapshot()).toEqual([])
+  })
+
+  it('gates capabilities before registration and orphan-recovers on disposer', () => {
+    const registry = new PaneViewRegistry({ capabilities: new Set() })
     expect(() => registry.registerView({
       descriptor: pluginDefinition('pinax.notes-preview').views[0],
       component: () => null,
-      componentUrl: 'https://unsafe.invalid/view.js',
-    })).toThrow(PaneViewRegistrationError)
-    expect(registry.snapshot()).toEqual([])
+      requiredCapabilities: ['pane.notes.v1'],
+    })).toThrow(/capabilit/iu)
+
+    const admitted = new PaneViewRegistry({ capabilities: new Set(['pane.notes.v1']) })
+    const dispose = admitted.registerView({
+      descriptor: pluginDefinition('pinax.notes-preview').views[0],
+      component: () => null,
+      requiredCapabilities: ['pane.notes.v1'],
+    })
+    const state = reducePaneWorkspace(createPaneWorkspace(), {
+      type: 'open_view',
+      request: {
+        kind: 'pinax.notes-preview.view',
+        resourceKey: 'artifact:notes:1',
+        role: 'content',
+        preferredRegion: 'right',
+        retention: 'recreate',
+        singleton: false,
+      },
+    }).state
+    dispose()
+    expect(markOrphanedPaneViews(state, admitted).views[Object.keys(state.views)[0]!]?.status).toBe('orphaned')
   })
 })

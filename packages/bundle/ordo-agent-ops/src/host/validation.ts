@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type {
   OrdoAgentOpsActionResult,
   OrdoAgentOpsActionReceipt,
+  OrdoAgentOpsEvent,
   OrdoAgentOpsExpectedContext,
   OrdoAgentOpsRef,
   OrdoAgentOpsSnapshot,
@@ -102,6 +103,27 @@ export const ordoAgentOpsSnapshotSchema = z.object({
   }
 })
 
+/** Ordo event 的安全消费边界；event source 仍由 Ordo/DSH owner 提供。 */
+export const ordoAgentOpsEventSchema = z.object({
+  schemaVersion: z.literal('ordo.agent_ops.event.v1alpha1'),
+  eventRef: opaqueRef,
+  streamRef: opaqueRef,
+  sequence: count,
+  cursor: opaqueRef,
+  occurredAt: z.string().min(1).max(64).refine(isIsoTimestamp, 'occurredAt must be an ISO timestamp'),
+  observedAt: z.string().min(1).max(64).refine(isIsoTimestamp, 'observedAt must be an ISO timestamp'),
+  entityRef: opaqueRef,
+  entityVersion: count,
+  eventType: safeKey,
+  safeDeltaOrSummary: safeText,
+  evidenceRefs: z.array(opaqueRef).max(32),
+  context: ordoAgentOpsExpectedContextSchema,
+  membershipRevision: count,
+  pluginReleaseDigest: digest,
+  ordoContractDigest: digest,
+  runtimeGeneration: opaqueRef,
+}).strict()
+
 /**
  * 验证、脱离并冻结 Host 注入的上下文；无效值不会进入 Remote 生命周期。
  * @param input - 未信任的 Context 注入值。
@@ -127,6 +149,12 @@ export function validateOrdoAgentOpsExpectedContext(input: unknown): OrdoAgentOp
 export function validateOrdoAgentOpsSnapshot(input: unknown): OrdoAgentOpsSnapshot | undefined {
   const result = ordoAgentOpsSnapshotSchema.safeParse(input)
   return result.success ? result.data as unknown as OrdoAgentOpsSnapshot : undefined
+}
+
+/** 在 Host event cursor 前校验 owner event；坏事件不得部分进入增量投影。 */
+export function validateOrdoAgentOpsEvent(input: unknown): OrdoAgentOpsEvent | undefined {
+  const result = ordoAgentOpsEventSchema.safeParse(input)
+  return result.success ? result.data as unknown as OrdoAgentOpsEvent : undefined
 }
 
 /** Owner action 的返回值也必须在进入命令文本前经过 safe projection 校验。 */

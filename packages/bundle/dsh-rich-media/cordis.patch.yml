@@ -1,0 +1,11 @@
+# Yeisme DSH Rich Media bundle.
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-rich-media
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/dsh-rich-media
+#
+# This bundle adds one independently identifiable profile row. Media storage,
+# model multimodal intake, and domain media editing remain with DSH/domain owners.
+- insert:
+    - id: dsh-rich-media
+      name: '@yeisme/dsh-rich-media'

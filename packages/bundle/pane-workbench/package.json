@@ -1,0 +1,52 @@
+{
+  "name": "@yeisme/dsh-pane-workbench",
+  "description": "Installable DSH Web profile bundle for the safe Pane Workbench overlay",
+  "version": "0.1.0-rc.1",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yeisme/harness-plugins.git",
+    "directory": "packages/bundle/pane-workbench"
+  },
+  "type": "module",
+  "main": "index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./client": "./client.mjs",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ],
+      "platform": "web"
+    }
+  },
+  "files": [
+    "index.mjs",
+    "cordis.patch.yml",
+    "client.mjs",
+    "README.md"
+  ],
+  "dependencies": {
+    "@yeisme/dsh-client-ui-pane-workbench": "0.1.0-rc.1"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6",
+    "react": "^18.2.0"
+  },
+  "scripts": {
+    "test": "node scripts/run-profile-conformance.mjs"
+  },
+  "license": "MIT"
+}
