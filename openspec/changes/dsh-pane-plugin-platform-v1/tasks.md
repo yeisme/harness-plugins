@@ -1,7 +1,7 @@
 ## 收束状态（2026-08-16）
 
-- 本次仅在 `dsh-pane-workbench-interaction-v1` 引入部分 Pane chrome/registry 实现；5.2 仍是该 change 的 alias，未创建第二 reducer。
-- 5.3 所需 `packages/bundle/pane-workbench/` 尚未创建，因此 5.2/5.3 不勾选为完成；5.1 developer CLI 也未触碰。
+- 本次仅在 `dsh-pane-workbench-interaction-v1` 引入 Pane core/chrome/registry 实现；5.2 现按 owner change 的 1.*–4.* acceptance 收束，未创建第二 reducer。
+- `packages/bundle/pane-workbench/` 已创建并通过 disposable profile 的 install/dump/real Web Loader boot/remove conformance；5.3 仍保持 open 的原因仅是浏览器 DOM/ARIA install-load-unload evidence 尚未在本仓库可复现的 Playwright runner 中闭环，不能用 Host boot 或 jsdom 替代。
 
 ## 1. Protocol package
 
@@ -21,16 +21,16 @@
 
 ## 4. Compatibility and evidence
 
-- [x] 4.1 [Owner: Harness Plugins；Scope: OpenSpec + package docs；Dependencies: 3.1, 3.2] 记录 surface 为 additive experimental，列出稳定起点、rollback 与未来 breaking gate；README 使用真实 typecheck/test/build 命令并明确当前没有可安装 UI/profile。Acceptance: 无 silent generation break，deprecation window 记为 not-applicable。Validation: `openspec validate dsh-pane-plugin-platform-v1 --strict --no-interactive`；Expected: valid。
+- [x] 4.1 [Owner: Harness Plugins；Scope: OpenSpec + package docs；Dependencies: 3.1, 3.2] 记录 surface 为 additive experimental，列出稳定起点、rollback 与未来 breaking gate；README 使用真实 typecheck/test/build 命令，并把可安装 bundle 与未完成 browser gate 分开说明。Acceptance: 无 silent generation break，deprecation window 记为 not-applicable。Validation: `openspec validate dsh-pane-plugin-platform-v1 --strict --no-interactive`；Expected: valid。
 - [x] 4.2 [Owner: Harness Plugins；Scope: focused final gates；Dependencies: 4.1] 运行两个新 package 的 typecheck/test/build、OpenSpec strict validation 与 diff check。Acceptance: 新路径全绿；仓库其他 dirty failure 标注 pre-existing/concurrent，不改无关业务。Validation: `pnpm --filter @yeisme/dsh-pane-protocol run typecheck && pnpm --filter @yeisme/dsh-pane-protocol run test && pnpm --filter @yeisme/dsh-pane-protocol run build && pnpm --filter @yeisme/dsh-client-ui-pane-workbench run typecheck && pnpm --filter @yeisme/dsh-client-ui-pane-workbench run test && pnpm --filter @yeisme/dsh-client-ui-pane-workbench run build && openspec validate dsh-pane-plugin-platform-v1 --strict --no-interactive && git diff --check`；Expected: exit 0。
 
 ## 5. Retained next slice
 
 - [x] 5.1 [Owner: DSH core/client owner；Scope: `/workspaces/yeisme-agent/client/deepseek-harness/apps/cli/`；Dependencies: 4.2] 通过官方 DSH CLI 实现 developer manifest `init|validate|pack`，所有 machine-readable plugin metadata 由 CLI 生成。Acceptance: invalid four-face/compatibility/permission manifest typed 拒绝；Validation: `pnpm exec vitest run apps/cli/tests/args.spec.ts apps/cli/tests/plugin-manifest.spec.ts`（16 tests）、`pnpm exec tsc -b apps/cli`。
-- [ ] 5.2 [Owner: Harness Plugins；Scope: `dsh-pane-workbench-interaction-v1`；Dependencies: 4.2] 继续 core layout reducer、React chrome、a11y、retention、persistence 与 responsive projection。Acceptance/validation: 以该 owner change tasks 为准，不在本 change 建第二 reducer。
-- [ ] 5.3 [Owner: Harness Plugins；Scope: bundle/profile；Dependencies: 5.1, 5.2] 创建 `packages/bundle/pane-workbench/` 并通过 official `shell.overlay` 装配真实 Web profile。Acceptance: install/load/unload/browser evidence 完整，失败不使用 DOM patch。
+- [x] 5.2 [Owner: Harness Plugins；Scope: `dsh-pane-workbench-interaction-v1`；Dependencies: 4.2] 继续 core layout reducer、React chrome、a11y、retention、persistence 与 responsive projection。Acceptance/validation: 以该 owner change tasks 为准，不在本 change 建第二 reducer。（`dsh-pane-workbench-interaction-v1` 的 1.*–4.* core slice 已完成；`pnpm --filter @yeisme/dsh-client-ui-pane-workbench run typecheck`、`run test`（10 files/49 tests）与 `run build` 通过，focused evidence 位于 `temp/integration-test-runs/2026-08-17T17-29-25-919Z-2383503/` 和 `temp/integration-test-runs/2026-08-17T17-29-25-914Z-2383502/`。本 change 不创建第二 reducer；5.3 bundle/profile 已有 local conformance，browser gate 仍保持 open。）
+- [ ] 5.3 [Owner: Harness Plugins；Scope: bundle/profile；Dependencies: 5.1, 5.2] 创建 `packages/bundle/pane-workbench/` 并通过 official `shell.overlay` 装配真实 Web profile。当前已完成 bundle/patch/README、thin client face、packed members、`dsh plugin --profile web add/remove`、`dsh --profile web --dump-config` 和真实 Web Loader 启动；最新串行证据：`temp/integration-test-runs/2026-08-18T03-15-23-655Z-3426823-pane-profile/summary.json`（此前 evidence 仍保留）。Acceptance 的 browser evidence 仍 open：外部 DSH workspace 的 Playwright runner 在当前 checkout 因缺少 Harness Plugins workspace package 无法直接复用，且本仓库未安装可执行 browser runner；失败不使用 DOM patch。
 
 ## 2026-08-16 收束状态
 
 - 5.1 已转移到 DSH core/client owner 并完成：官方 `dsh plugin manifest` namespace 保持既有 profile plugin forwarding，CLI focused tests 与 typecheck 通过。
-- 5.2、5.3 保持未完成：Pane client 的 registry/lifecycle/chrome 仍是 local package slice，尚未形成 bundle、clean profile 或 browser evidence。
+- 5.2 已按 `dsh-pane-workbench-interaction-v1` 的 core tasks 收束；5.3 保持未完成：Pane client 尚未形成 bundle、clean profile 或 browser evidence。
