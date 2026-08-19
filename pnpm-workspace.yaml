@@ -76,3 +76,5 @@ minimumReleaseAgeExclude:
   - '@oh-my-pi/pi-natives@17.3.5'
   - '@oh-my-pi/pi-tui@17.3.5'
   - '@oh-my-pi/pi-utils@17.3.5'
+
+storeDir: /workspaces/yeisme-agent/agent/harness-plugins/.pnpm-store

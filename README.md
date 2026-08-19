@@ -33,6 +33,9 @@ preview patch row。完整运行仍取决于 DSH core 发布 composition preview
     # 或发布后按包名安装
     dsh plugin --profile web add @yeisme/dsh-ordo-agent-ops
 
+    # 安装 Pane Workbench overlay
+    dsh plugin --profile web add ./packages/bundle/pane-workbench
+
 ### Anchored Standard 预设
 
     # 从本地 checkout 安装 Anchored Standard 预设族

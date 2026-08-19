@@ -31,6 +31,13 @@ The host face owns:
 
 An event disconnect changes freshness to `stale` or `offline`; it does not change a run to succeeded, failed, or stopped.
 
+The unified bundle now provides a Host-side event contract validator and bounded cursor
+consumer. It requires an authoritative stream anchor, accepts only the next sequence,
+ignores exact duplicate refs, and clears the cursor for gaps, entity-version regressions,
+context/membership/digest/runtime drift, or reset. This is a safe consumer utility, not
+an Ordo event source; real subscription, transport backoff, and profile evidence remain
+owner-gated.
+
 ## 3. Create the client face
 
 Declare `dsh.client` and export the built `./client` bundle. Use existing UI primitives and a reviewed client slot for a persistent Agent Ops panel. Keep the DSH view compact:
@@ -64,7 +71,7 @@ For every action, show target, requested effect, owner, approval, expiry, expect
 
 Add tests at three levels:
 
-1. Host service tests cover context binding, redaction, cursor gap reload, duplicate events, action idempotency, and idempotent disposal.
+1. Host service tests cover context binding, redaction, snapshot and event cursor gap reload, duplicate events, entity-version regression, action idempotency, and idempotent disposal. The local event contract/cursor evidence is in [event-cursor.spec.ts](../../packages/bundle/ordo-agent-ops/tests/event-cursor.spec.ts); it does not replace the owner event source.
 2. Client tests cover state reduction, stale/unknown rendering, keyboard focus, reduced motion, and ToolView output.
 3. Profile/Web tests load the real bundle through the Loader and verify install, removal, HMR/unload, browser token absence, and tenant-switch cache clearing.
 
@@ -86,3 +93,72 @@ Integration evidence belongs under `temp/integration-test-runs/<run-id>/` and mu
 ## 7. Document the contract
 
 Update the package README for configuration and lifecycle semantics, this cookbook for the developer path, and the local OpenSpec when fields, actions, ownership, or failure behavior changes. Add or update a DSH Agent Note when the architecture or security boundary changes. Do not add a root-repository OpenSpec task for DSH-only implementation work.
+
+## 8. Handoff ledger for external owners
+
+The following ledger is the DSH consumer contract. It records the fields and
+version summaries that an Ordo, Workbench, Harness Plugins, or Control Plane
+owner must publish; it does not implement those owners or turn a missing field
+into a local default.
+
+### Ordo read and action services
+
+| Surface | Required safe fields | Version / failure rule |
+| --- | --- | --- |
+| Snapshot read | `schema_version`, `snapshot_ref`, `snapshot_version`, `generated_at`, `fresh_until`, `context.tenant_ref`, `context.workspace_ref`, `context.principal_ref`, `context.context_revision`, `context.installation_ref`, `membership_revision`, `delegation_ref`, `policy_revision`, `plugin_release_digest`, `ordo_contract_digest`, `stream_ref`, `cursor`, safe run/task/runtime/lease/approval/verification/evidence summaries, `allowed_actions` | `ordo.agent_ops.snapshot.v1alpha1`; `ready` and `stale` facts require an exact frozen context match. Missing, unsafe, unknown, or drifted fields fail closed as `needs_contract` or `contract_mismatch`. |
+| Event stream | `schema_version`, `event_ref`, `stream_ref`, monotonic `sequence`, `cursor`, `occurred_at`, `observed_at`, `entity_ref`, `entity_version`, `event_type`, bounded `safe_delta_or_summary`, redacted `evidence_refs` | `ordo.agent_ops.event.v1alpha1`; duplicates are ignored, while gaps, expired cursors, digest changes, tenant/config changes, or runtime-generation changes stop delta application and require a snapshot reload. |
+| Action descriptor | `action_type`, `decision_ref`, `target_ref`, `target_version`, exact principal/tenant/workspace/context/installation binding, `runtime_generation` when applicable, `plugin_release_digest`, `ordo_contract_digest`, policy/approval/expiry, idempotency key, `preview_digest` | `harness.action.v1alpha1`; only server-authored descriptors are dispatchable. DSH never sends arbitrary command, argv, env, URL, host path, bearer, or unregistered action type. |
+| Receipt | `receipt_ref`, owner state, bounded `safe_summary`, `evidence_refs`, freshness, and reconcile/unknown semantics | `harness.receipt.v1alpha1`; terminal UI state requires an owner receipt or authoritative snapshot. `unknown`, `partial`, and `cancel_unknown` disable retry, replacement writer, and lease release. |
+
+The canonical capability requirements are in [the Ordo Agent Operations
+spec](../../openspec/changes/ordo-dsh-plugin-visualization-v1/specs/ordo-agent-operations-plugin/spec.md).
+If the owner cannot provide a field or version digest, the adapter reports the
+contract failure and waits for owner reconciliation; it does not derive
+qualification, capacity, terminal state, or permission locally.
+
+### Workbench handoff and semantic parity
+
+The DSH panel may pass only opaque resource refs, owner versions, freshness,
+reason codes, evidence refs, and a safe summary to Workbench. `Open in Studio`
+is a navigation hint, not an authorization grant. Workbench must re-authenticate
+the principal, tenant, workspace, installation, and target resource before
+rendering or dispatching anything. Both clients consume the same
+`status`, `reason`, `freshness`, `permission`, `approval`, `allowed_actions`,
+owner refs, and receipt state; layout and density may differ, action eligibility
+may not.
+
+The Workbench owner owns the Studio route, Canvas presentation state, and
+multi-tenant navigation. The DSH adapter does not embed a private React store,
+construct a privileged URL, or use a deep link as a substitute for BFF/owner
+authorization. See [the visualization spec](../../openspec/changes/ordo-dsh-plugin-visualization-v1/specs/ordo-visualization-experience/spec.md).
+
+### Harness Plugins pack handoff
+
+The pack owner must publish a fixed manifest and profile composition containing
+the package name/version, `dsh.bundle.patch` path, host/client contribution
+keys, DSH host compatibility range, Ordo contract digest, plugin release
+digest, and the profile conformance command. The current local bundle exposes
+these seams through [`@yeisme/dsh-ordo-agent-ops`](../../packages/bundle/ordo-agent-ops/package.json)
+and [`cordis.patch.yml`](../../packages/bundle/ordo-agent-ops/cordis.patch.yml);
+its package tests and `pnpm run build` are local evidence, not catalog or
+release authority.
+
+Installation consumes the fixed release and profile composition, then verifies
+the assembled tree and removable patch. The pack must not become a tenant
+database, Ordo state store, scheduler, lease authority, or release catalog;
+those responsibilities stay with the Harness Plugins and Control Plane owners.
+
+### Control Plane inputs
+
+The Host adapter accepts only a tenant-bound access capability or BFF transport
+whose audience is the Ordo Agent Ops service, plus an exact runtime binding
+(`tenant`, `workspace`, runtime subject and generation), installation config
+revision, membership revision, policy/delegation context, and plugin/contract
+digests. A membership revoke, audience mismatch, runtime or installation drift,
+or stale context invalidates old cursors and action descriptors and disables
+mutation until a fresh safe projection is authorized.
+
+The Control Plane owner remains responsible for the tenant database, OAuth
+issuer, secret store, BFF/access-ticket issuance, and durable revocation. DSH
+never receives credential values, stores generic bearer tokens, or infers
+authorization from a browser parameter. See [the host adapter spec](../../openspec/changes/ordo-dsh-plugin-visualization-v1/specs/dsh-ordo-host-adapter/spec.md).

@@ -5,6 +5,8 @@
 ## 入口
 
 - cookbook/adding-ordo-agent-ops-plugin.md：Ordo Agent Ops 插件的组装/安装方式。
+- cookbook/adding-ordo-agent-ops-plugin.md §8：Ordo、Workbench、pack 与 Control Plane handoff 字段账本。
+- ../packages/bundle/pane-workbench/README.md：Pane Workbench overlay 的安装、快捷操作、排障与 canary handoff。
 - ../packages/bundle/anchored-standard/README.md：Anchored Standard 预设族的安装与行为。
 - ../openspec/changes/ordo-dsh-plugin-visualization-v1/：插件合同、状态机、DSH/Workbench 可视化设计。
 - ../packages/**/README.md：各包配置与运行时语义。
@@ -15,4 +17,3 @@
     pnpm publish --filter @yeisme/dsh-ordo-agent-ops --access public
 
 发布是 external action，需 npm 权限与远端仓库，按需执行。
-

@@ -31,6 +31,12 @@ host face 负责：
 
 事件断开只会把 freshness 变为 `stale` 或 `offline`，不能把 run 改成 succeeded、failed 或 stopped。
 
+统一 bundle 现在提供 Host 侧 event contract validator 和有界 cursor consumer：必须
+先有 authoritative stream anchor，只接受下一个 sequence，幂等忽略完全重复的 event
+ref；gap、entity version 回退、context/membership/digest/runtime 漂移或 reset 都会清空
+cursor。它只是安全 consumer 工具，不是 Ordo event source；真实订阅、transport backoff
+和 profile 证据仍由 owner 提供。
+
 ## 3. 创建 client face
 
 声明 `dsh.client` 并导出构建后的 `./client` bundle。持久 Agent Ops 面板使用现有 UI primitives 和 reviewed client slot。DSH 视图保持紧凑，显示：
@@ -64,7 +70,7 @@ dsh --profile web --dump-config
 
 测试至少覆盖三层：
 
-1. host service 测试覆盖 context binding、redaction、cursor gap reload、duplicate event、action idempotency 和幂等 dispose。
+1. host service 测试覆盖 context binding、redaction、snapshot 与 event cursor gap reload、duplicate event、entity version 回退、action idempotency 和幂等 dispose。本地 event contract/cursor 证据见 [event-cursor.spec.ts](../../packages/bundle/ordo-agent-ops/tests/event-cursor.spec.ts)；它不替代 owner event source。
 2. client 测试覆盖 state reduction、stale/unknown 渲染、键盘焦点、reduced motion 和 ToolView 输出。
 3. profile/Web 测试通过真实 Loader 加载 bundle，验证安装、移除、HMR/unload、浏览器无 token 以及 tenant switch 清理 cache。
 
@@ -86,3 +92,61 @@ git diff --check
 ## 7. 记录合同
 
 配置和生命周期语义更新包 README，开发路径更新本文，字段、动作、owner 或失败行为变化更新本地 OpenSpec。架构或安全边界变化时添加或更新 DSH Agent Note。仅属于 DSH 的实现工作不得再新增根仓库 OpenSpec 任务。
+
+## 8. 外部 owner handoff 账本
+
+下面的账本是 DSH consumer contract。它记录 Ordo、Workbench、Harness Plugins
+或 Control Plane owner 必须发布的字段和版本摘要；它不实现这些 owner，也不把
+缺少字段转换成本地默认值。
+
+### Ordo read 与 action service
+
+| 面 | 必需安全字段 | 版本 / 失败规则 |
+| --- | --- | --- |
+| Snapshot read | `schema_version`、`snapshot_ref`、`snapshot_version`、`generated_at`、`fresh_until`、`context.tenant_ref`、`context.workspace_ref`、`context.principal_ref`、`context.context_revision`、`context.installation_ref`、`membership_revision`、`delegation_ref`、`policy_revision`、`plugin_release_digest`、`ordo_contract_digest`、`stream_ref`、`cursor`、安全的 run/task/runtime/lease/approval/verification/evidence 摘要、`allowed_actions` | `ordo.agent_ops.snapshot.v1alpha1`；`ready` 和 `stale` facts 必须与冻结 context 精确一致。字段缺失、不安全、未知或漂移时，以 `needs_contract` 或 `contract_mismatch` fail closed。 |
+| Event stream | `schema_version`、`event_ref`、`stream_ref`、单调 `sequence`、`cursor`、`occurred_at`、`observed_at`、`entity_ref`、`entity_version`、`event_type`、有界 `safe_delta_or_summary`、脱敏 `evidence_refs` | `ordo.agent_ops.event.v1alpha1`；duplicate 幂等忽略；gap、cursor 过期、digest 变化、tenant/config 变化或 runtime generation 变化会停止 delta 应用并要求重读 snapshot。 |
+| Action descriptor | `action_type`、`decision_ref`、`target_ref`、`target_version`、精确的 principal/tenant/workspace/context/installation 绑定、需要时的 `runtime_generation`、`plugin_release_digest`、`ordo_contract_digest`、policy/approval/expiry、幂等 key、`preview_digest` | `harness.action.v1alpha1`；只能 dispatch server-authored descriptor。DSH 不发送任意 command、argv、env、URL、host path、bearer 或未注册 action type。 |
+| Receipt | `receipt_ref`、owner state、有界 `safe_summary`、`evidence_refs`、freshness 以及 reconcile/unknown 语义 | `harness.receipt.v1alpha1`；terminal UI state 必须由 owner receipt 或 authoritative snapshot 确认。`unknown`、`partial`、`cancel_unknown` 禁止 retry、replacement writer 和 lease release。 |
+
+规范要求见[Ordo Agent Operations spec](../../openspec/changes/ordo-dsh-plugin-visualization-v1/specs/ordo-agent-operations-plugin/spec.md)。
+如果 owner 不能提供字段或版本 digest，adapter 返回合同失败并等待 owner reconcile；
+不会在本地推导 qualification、capacity、terminal state 或 permission。
+
+### Workbench handoff 与语义 parity
+
+DSH 面板只能向 Workbench 传递 opaque resource refs、owner versions、freshness、
+reason codes、evidence refs 和安全摘要。`Open in Studio` 只是 navigation hint，
+不是 authorization grant。Workbench 必须重新鉴权 principal、tenant、workspace、
+installation 和 target resource，然后才能渲染或 dispatch。两端必须消费相同的
+`status`、`reason`、`freshness`、`permission`、`approval`、`allowed_actions`、
+owner refs 和 receipt state；布局和密度可以不同，动作资格不能不同。
+
+Workbench owner 负责 Studio route、Canvas presentation state 和多租户导航。DSH
+adapter 不嵌入私有 React store，不构造 privileged URL，也不把 deep link 当成
+BFF/owner authorization 的替代品。详见[可视化 spec](../../openspec/changes/ordo-dsh-plugin-visualization-v1/specs/ordo-visualization-experience/spec.md)。
+
+### Harness Plugins pack handoff
+
+pack owner 必须发布固定 manifest 和 profile composition，包含 package name/version、
+`dsh.bundle.patch` 路径、host/client contribution key、DSH host compatibility range、
+Ordo contract digest、plugin release digest 和 profile conformance 命令。当前本地
+bundle 通过 [`@yeisme/dsh-ordo-agent-ops`](../../packages/bundle/ordo-agent-ops/package.json)
+和 [`cordis.patch.yml`](../../packages/bundle/ordo-agent-ops/cordis.patch.yml) 暴露这些
+缝；package tests 和 `pnpm run build` 只是本地证据，不是 catalog 或 release authority。
+
+安装只消费固定 release 与 profile composition，随后检查组合树和可移除 patch。pack
+不得成为 tenant database、Ordo state store、scheduler、lease authority 或 release
+catalog；这些职责仍归 Harness Plugins 与 Control Plane owner。
+
+### Control Plane 输入
+
+Host adapter 只接受 audience 指向 Ordo Agent Ops service 的 tenant-bound access
+capability 或 BFF transport，以及精确 runtime binding（`tenant`、`workspace`、runtime
+subject 与 generation）、installation config revision、membership revision、policy/
+delegation context 和 plugin/contract digest。membership revoke、audience mismatch、
+runtime 或 installation drift、stale context 会使旧 cursor 与 action descriptor 失效，
+并在新的安全 projection 获得授权前禁用 mutation。
+
+Control Plane owner 负责 tenant database、OAuth issuer、secret store、BFF/access-ticket
+签发和 durable revocation。DSH 不接收 credential value、不保存 generic bearer token，
+也不从 browser parameter 推导 authorization。详见[host adapter spec](../../openspec/changes/ordo-dsh-plugin-visualization-v1/specs/dsh-ordo-host-adapter/spec.md)。

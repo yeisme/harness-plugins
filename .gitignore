@@ -11,3 +11,6 @@ temp/
 !.env.sample
 !.env.template
 .gstack/
+
+# Dependency store
+.pnpm-store/
