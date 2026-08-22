@@ -3,12 +3,21 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import {
   CookieManagerPanel,
   ProfileStore,
+  ProfileStoreError,
   FORBIDDEN_PROFILE_KEYS,
+  composeAccountProjections,
+  createLoginProfilesView,
   parseProfileMeta,
+  profileErrorMessage,
   providerSnapshotToAccounts,
   registerLoginProfilesPaneViews,
+  renderableQuotaFields,
+  sessionSnapshotToAccounts,
+  submitProfileCreate,
+  submitProfileRemove,
+  submitProfileRename,
 } from '../src/index.ts'
-import type { ProfileMetaV1 } from '../src/index.ts'
+import type { ProfileMetaV1, SessionListSnapshotLike } from '../src/index.ts'
 
 const base = {
   profileId: 'profile-1',
@@ -59,6 +68,20 @@ describe('ProfileStore', () => {
     }
     const restored = ProfileStore.deserialize(text)
     expect(restored.list()).toEqual(s.list())
+  })
+
+  it('persisted schema is a closed whitelist: no credential field can exist', () => {
+    const s = store()
+    s.create({ siteScope: 'example.com', displayName: 'A', accountSummary: 'acct-1' })
+    s.create({ siteScope: '*', displayName: 'B' })
+    const entries = JSON.parse(s.serialize()) as Record<string, unknown>[]
+    const allowed = new Set(['profileId', 'siteScope', 'displayName', 'accountSummary', 'capabilities', 'createdAt', 'updatedAt'])
+    for (const entry of entries) {
+      for (const key of Object.keys(entry)) {
+        expect(allowed.has(key)).toBe(true)
+      }
+    }
+    expect(entries.every(e => typeof e.profileId === 'string' && Array.isArray(e.capabilities))).toBe(true)
   })
 
   it('deserialize fails closed on forbidden or invalid entries', () => {
@@ -144,6 +167,76 @@ describe('provider adapter and pane view', () => {
     expect(providerSnapshotToAccounts(undefined)).toEqual([])
   })
 
+  it('composes account-resume sessions read-only and drops owner-private fields', () => {
+    const snapshot: SessionListSnapshotLike = {
+      revision: 7,
+      state: 'ready',
+      sessions: [
+        { ref: 's1', title: 'Work account', status: 'running', modelLabel: 'deepseek-chat', enabled: true },
+        { ref: 's2', title: 'Old account', status: 'archived', enabled: true },
+        { ref: 's3', title: 'Disabled account', status: 'active', enabled: false },
+      ],
+    }
+    expect(sessionSnapshotToAccounts(snapshot)).toEqual([
+      { provider: 'deepseek-chat', accountSummary: 'Work account', status: 'active' },
+      { provider: 'session', accountSummary: 'Old account', status: 'expired' },
+    ])
+    expect(sessionSnapshotToAccounts({ ...snapshot, state: 'unavailable' })).toEqual([])
+    expect(sessionSnapshotToAccounts(undefined)).toEqual([])
+    const withPrivateFields = {
+      ...snapshot,
+      sessions: snapshot.sessions.map(s => ({ ...s, reason: 'host-private', actionRefs: { resume: 'server-ref' } })),
+    } as SessionListSnapshotLike
+    const projected = JSON.stringify(sessionSnapshotToAccounts(withPrivateFields))
+    expect(projected).not.toContain('reason')
+    expect(projected).not.toContain('actionRefs')
+    expect(projected).not.toContain('server-ref')
+  })
+
+  it('composition has no second state owner: pure per-call derivation, inputs untouched', () => {
+    const providerSnapshot = Object.freeze({
+      revision: 1,
+      state: 'ready' as const,
+      providers: Object.freeze([
+        Object.freeze({ id: 'p1', name: 'deepseek', status: 'available' as const, modelCount: 1 }),
+      ]),
+    })
+    const sessionSnapshot = Object.freeze({
+      revision: 1,
+      state: 'ready' as const,
+      sessions: Object.freeze([
+        Object.freeze({ ref: 's1', title: 'Work account', status: 'active' as const, enabled: true }),
+      ]),
+    })
+    const first = composeAccountProjections(providerSnapshot, sessionSnapshot)
+    expect(first).toHaveLength(2)
+    // Owner state changes are reflected on the very next call — nothing is cached locally.
+    const second = composeAccountProjections(
+      { ...providerSnapshot, state: 'stale' },
+      { ...sessionSnapshot, state: 'unavailable' },
+    )
+    expect(second.map(a => a.provider)).toEqual(['deepseek'])
+    expect(providerSnapshot.state).toBe('ready')
+    expect(sessionSnapshot.sessions[0]?.ref).toBe('s1')
+  })
+
+  it('renders the composed view read-only from owner snapshots and the metadata store', () => {
+    const store = new ProfileStore({ idFactory: () => 'profile-9', now: () => '2026-08-22T09:00:00Z' })
+    store.create({ siteScope: 'example.com', displayName: 'Work account' })
+    const View = createLoginProfilesView({
+      store,
+      providerSnapshot: { revision: 2, state: 'ready', providers: [{ id: 'p1', name: 'deepseek', status: 'available', modelCount: 3 }] },
+      sessionSnapshot: { revision: 5, state: 'ready', sessions: [{ ref: 's1', title: 'Work account session', status: 'active', enabled: true }] },
+    })
+    const html = renderToStaticMarkup(<View />)
+    expect(html).toContain('Work account')
+    expect(html).toContain('3 models')
+    expect(html).toContain('Work account session')
+    expect(html).toContain('data-profile-count="1"')
+    expect(html).not.toContain('reason')
+    expect(html).not.toContain('actionRefs')
+  })
+
   it('registers a singleton login-profiles pane view with a disposer', () => {
     const registered: unknown[] = []
     const dispose = registerLoginProfilesPaneViews({
@@ -155,5 +248,105 @@ describe('provider adapter and pane view', () => {
     expect(view.descriptor.role).toBe('navigator')
     dispose()
     expect(registered).toHaveLength(0)
+  })
+})
+
+describe('profile CRUD wiring and failure surfaces', () => {
+  it('create submission trims and only fires the handler on valid input', () => {
+    const calls: { siteScope: string; displayName: string }[] = []
+    const onCreate = (input: { siteScope: string; displayName: string }): void => { calls.push(input) }
+    expect(submitProfileCreate(onCreate, '  example.com  ', '  Work  ')).toBe(true)
+    expect(calls).toEqual([{ siteScope: 'example.com', displayName: 'Work' }])
+    expect(submitProfileCreate(onCreate, '', 'Work')).toBe(false)
+    expect(submitProfileCreate(onCreate, 'example.com', '   ')).toBe(false)
+    expect(submitProfileCreate(undefined, 'example.com', 'Work')).toBe(false)
+    expect(calls).toHaveLength(1)
+  })
+
+  it('rename submission ignores cleared drafts and delete submission passes the profile id', () => {
+    const renames: [string, string][] = []
+    expect(submitProfileRename((id, name) => { renames.push([id, name]) }, 'profile-1', '  Renamed  ')).toBe(true)
+    expect(submitProfileRename((id, name) => { renames.push([id, name]) }, 'profile-1', '   ')).toBe(false)
+    expect(submitProfileRename(undefined, 'profile-1', 'Renamed')).toBe(false)
+    expect(renames).toEqual([['profile-1', 'Renamed']])
+
+    const removed: string[] = []
+    expect(submitProfileRemove(id => { removed.push(id) }, 'profile-2')).toBe(true)
+    expect(submitProfileRemove(undefined, 'profile-2')).toBe(false)
+    expect(removed).toEqual(['profile-2'])
+  })
+
+  it('renders the create form and per-row delete affordances', () => {
+    const html = renderToStaticMarkup(<CookieManagerPanel profiles={profiles} />)
+    expect(html).toContain(`aria-label="Add profile"`)
+    expect(html).toContain('aria-label="Site"')
+    expect(html).toContain('aria-label="Display name"')
+    expect(html).toContain('<button type="submit">Add profile</button>')
+    expect(html).toContain('<button type="button">Delete</button>')
+    expect(html).toContain('<button type="button">Rename</button>')
+  })
+
+  it('maps store failures onto fixed panel error text without echoing foreign messages', () => {
+    expect(profileErrorMessage(new ProfileStoreError('invalid', 'displayName must be a clean bounded string')))
+      .toBe('displayName must be a clean bounded string')
+    expect(profileErrorMessage(new ProfileStoreError('not_found', 'profile profile-1 not found')))
+      .toBe('profile profile-1 not found')
+    expect(profileErrorMessage(new Error('token=raw-secret'))).toBe('Profile change failed.')
+    expect(profileErrorMessage('cookie: abc')).toBe('Profile change failed.')
+  })
+})
+
+describe('quota panel deny-by-default rendering', () => {
+  it('drops credential-shaped quota keys even when an owner projection carries them', () => {
+    expect(renderableQuotaFields({ fields: { used: '12 GB', token: 'x', secret: 'y', Cookie: 'z', count: 3 as unknown as string } }))
+      .toEqual({ used: '12 GB' })
+    const html = renderToStaticMarkup(
+      <CookieManagerPanel profiles={[]} quota={{ fields: { used: '12 GB', bearer: 'raw-value' } }} />,
+    )
+    expect(html).toContain('12 GB')
+    expect(html).not.toContain('raw-value')
+    expect(html).not.toContain('bearer')
+  })
+
+  it('fails visible when the owner source is absent or renders zero fields', () => {
+    const noSource = renderToStaticMarkup(<CookieManagerPanel profiles={[]} />)
+    expect(noSource).toContain('Quota source unavailable')
+    expect(noSource).toContain('role="status"')
+    const emptySource = renderToStaticMarkup(<CookieManagerPanel profiles={[]} quota={{ fields: {} }} />)
+    expect(emptySource).toContain('Quota source unavailable')
+    expect(emptySource).not.toContain('<dl>')
+  })
+
+  it('renders only owner-provided quota fields plus freshness', () => {
+    const html = renderToStaticMarkup(
+      <CookieManagerPanel profiles={[]} quota={{ fields: { used: '12 GB', limit: '100 GB' }, freshness: '2026-08-22T09:00:00Z' }} />,
+    )
+    expect(html).toContain('<dt>used</dt><dd>12 GB</dd>')
+    expect(html).toContain('<dt>limit</dt><dd>100 GB</dd>')
+    expect(html).toContain('<dt>freshness</dt><dd>2026-08-22T09:00:00Z</dd>')
+    expect(html).not.toContain('<dt>guessed')
+  })
+})
+
+describe('credential red line sweep across rendered surfaces', () => {
+  it('no credential pattern appears in any rendered panel state', () => {
+    const states = [
+      <CookieManagerPanel key="list" profiles={profiles} />,
+      <CookieManagerPanel key="error" profiles={profiles} error="displayName must be a clean bounded string" />,
+      <CookieManagerPanel
+        key="composed"
+        profiles={profiles}
+        accounts={[
+          { provider: 'deepseek', accountSummary: 'acct-1', status: 'active' },
+          { provider: 'session', accountSummary: 'Work account session', status: 'active' },
+        ]}
+        quota={{ fields: { used: '12 GB' }, freshness: '2026-08-22T09:00:00Z' }}
+      />,
+    ]
+    const credentialPattern = /(cookie|token|secret|bearer|password|authorization|credential)\s*[:=]/i
+    for (const state of states) {
+      const html = renderToStaticMarkup(state)
+      expect(html).not.toMatch(credentialPattern)
+    }
   })
 })

@@ -13,19 +13,32 @@ export {
 export { ProfileStore, ProfileStoreError } from './profile-store.ts'
 export type { CreateProfileInput, ProfileStoreOptions } from './profile-store.ts'
 export { CookieManagerPanel } from './panel.tsx'
+export {
+  renderableQuotaFields,
+  submitProfileCreate,
+  submitProfileRemove,
+  submitProfileRename,
+} from './panel.tsx'
 export type {
   AccountProjectionV1,
   CookieManagerPanelLabels,
   CookieManagerPanelProps,
+  ProfileCreateHandler,
+  ProfileRemoveHandler,
+  ProfileRenameHandler,
   QuotaProjectionV1,
 } from './panel.tsx'
 
 export {
+  composeAccountProjections,
   providerSnapshotToAccounts,
+  sessionSnapshotToAccounts,
   type ProviderGroupLike,
   type ProviderSnapshotLike,
+  type SessionListSnapshotLike,
+  type SessionSummaryLike,
 } from './provider-adapter.ts'
-export { createLoginProfilesView, registerLoginProfilesPaneViews } from './pane-views.tsx'
+export { createLoginProfilesView, profileErrorMessage, registerLoginProfilesPaneViews } from './pane-views.tsx'
 export type { ProfilesPaneDeps, ProfilesPaneSurface } from './pane-views.tsx'
 
 export const name = 'dsh-session-cookie-manager'

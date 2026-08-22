@@ -7,7 +7,7 @@
  */
 
 import { useState } from 'react'
-import type { ProfileMetaV1 } from './profile-types.ts'
+import { FORBIDDEN_PROFILE_KEYS, type ProfileMetaV1 } from './profile-types.ts'
 
 /** Read-only account projection composed from an existing owner (e.g. model-provider resume). */
 export interface AccountProjectionV1 {
@@ -20,6 +20,62 @@ export interface AccountProjectionV1 {
 export interface QuotaProjectionV1 {
   fields: Record<string, string>
   freshness?: string
+}
+
+export type ProfileCreateHandler = (input: { siteScope: string; displayName: string }) => void
+export type ProfileRenameHandler = (profileId: string, displayName: string) => void
+export type ProfileRemoveHandler = (profileId: string) => void
+
+/**
+ * Create submission used by the panel's form: trims both fields and refuses
+ * empty ones. Returns false (and never invokes the handler) on invalid input.
+ */
+export function submitProfileCreate(
+  onCreate: ProfileCreateHandler | undefined,
+  siteScope: string,
+  displayName: string,
+): boolean {
+  const site = siteScope.trim()
+  const name = displayName.trim()
+  if (site.length === 0 || name.length === 0 || onCreate === undefined) return false
+  onCreate({ siteScope: site, displayName: name })
+  return true
+}
+
+/**
+ * Rename submission used by the panel's rows: a cleared draft is a no-op, not
+ * an invalid rename. Returns false when nothing valid was submitted.
+ */
+export function submitProfileRename(
+  onRename: ProfileRenameHandler | undefined,
+  profileId: string,
+  draft: string,
+): boolean {
+  const next = draft.trim()
+  if (next.length === 0 || onRename === undefined) return false
+  onRename(profileId, next)
+  return true
+}
+
+/** Delete submission used by the panel's rows. */
+export function submitProfileRemove(onRemove: ProfileRemoveHandler | undefined, profileId: string): boolean {
+  if (onRemove === undefined) return false
+  onRemove(profileId)
+  return true
+}
+
+/**
+ * Deny-by-default quota field filter: credential-shaped keys and non-string
+ * owner values are never rendered even if a projection carries them.
+ */
+export function renderableQuotaFields(quota: QuotaProjectionV1): Record<string, string> {
+  const fields: Record<string, string> = {}
+  for (const [key, value] of Object.entries(quota.fields)) {
+    if (typeof value !== 'string') continue
+    if ((FORBIDDEN_PROFILE_KEYS as readonly string[]).includes(key.trim().toLowerCase())) continue
+    fields[key] = value
+  }
+  return fields
 }
 
 export interface CookieManagerPanelLabels {
@@ -58,9 +114,9 @@ const DEFAULT_LABELS: Required<CookieManagerPanelLabels> = {
 
 export interface CookieManagerPanelProps {
   profiles: readonly ProfileMetaV1[]
-  onCreate?: ((input: { siteScope: string; displayName: string }) => void) | undefined
-  onRename?: ((profileId: string, displayName: string) => void) | undefined
-  onRemove?: ((profileId: string) => void) | undefined
+  onCreate?: ProfileCreateHandler | undefined
+  onRename?: ProfileRenameHandler | undefined
+  onRemove?: ProfileRemoveHandler | undefined
   /** Host seam bridge; absent renders the degraded state. */
   onApply?: ((profileId: string) => void) | undefined
   accounts?: readonly AccountProjectionV1[] | undefined
@@ -88,7 +144,10 @@ export function CookieManagerPanel({
       <form
         onSubmit={event => {
           event.preventDefault()
-          if (site.length > 0 && name.length > 0) onCreate?.({ siteScope: site, displayName: name })
+          if (submitProfileCreate(onCreate, site, name)) {
+            setSite('')
+            setName('')
+          }
         }}
         aria-label={text.create}
       >
@@ -118,13 +177,12 @@ export function CookieManagerPanel({
             <button
               type="button"
               onClick={() => {
-                const next = (renameDrafts[profile.profileId] ?? profile.displayName).trim()
-                onRename?.(profile.profileId, next)
+                submitProfileRename(onRename, profile.profileId, renameDrafts[profile.profileId] ?? profile.displayName)
               }}
             >
               {text.rename}
             </button>
-            <button type="button" onClick={() => { onRemove?.(profile.profileId) }}>{text.remove}</button>
+            <button type="button" onClick={() => { submitProfileRemove(onRemove, profile.profileId) }}>{text.remove}</button>
             {onApply === undefined
               ? <button type="button" disabled aria-describedby="apply-unavailable">{text.apply}</button>
               : <button type="button" onClick={() => { onApply(profile.profileId) }}>{text.apply}</button>}
@@ -152,11 +210,11 @@ export function CookieManagerPanel({
 
       <section aria-label={text.quota} data-dsh-cookie-quota data-available={quota !== undefined || undefined}>
         <h4>{text.quota}</h4>
-        {quota === undefined
+        {quota === undefined || Object.keys(renderableQuotaFields(quota)).length === 0
           ? <p role="status">{text.quotaUnavailable}</p>
           : (
             <dl>
-              {Object.entries(quota.fields).map(([key, value]) => (
+              {Object.entries(renderableQuotaFields(quota)).map(([key, value]) => (
                 <div key={key}><dt>{key}</dt><dd>{value}</dd></div>
               ))}
               {quota.freshness !== undefined && <div><dt>freshness</dt><dd>{quota.freshness}</dd></div>}

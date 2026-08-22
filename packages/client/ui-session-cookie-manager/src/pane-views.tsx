@@ -7,13 +7,22 @@
  */
 
 import { useMemo, useState } from 'react'
-import { CookieManagerPanel, type AccountProjectionV1 } from './panel.tsx'
+import { CookieManagerPanel } from './panel.tsx'
 import { ProfileStore, ProfileStoreError } from './profile-store.ts'
-import { providerSnapshotToAccounts, type ProviderSnapshotLike } from './provider-adapter.ts'
+import { composeAccountProjections, type ProviderSnapshotLike, type SessionListSnapshotLike } from './provider-adapter.ts'
 
 /** Minimal structural pane surface; avoids a hard dependency on the shell. */
 export interface ProfilesPaneSurface {
   registerView(input: unknown): () => void
+}
+
+/**
+ * Map a store failure onto the panel error text. Store errors carry fixed
+ * parser messages (never echoed user input); anything else degrades to the
+ * generic constant so no foreign message text can leak into the renderer.
+ */
+export function profileErrorMessage(caught: unknown): string {
+  return caught instanceof ProfileStoreError ? caught.message : 'Profile change failed.'
 }
 
 export interface ProfilesPaneDeps {
@@ -21,6 +30,8 @@ export interface ProfilesPaneDeps {
   store?: ProfileStore | undefined
   /** Owner provider snapshot composed read-only into the accounts section. */
   providerSnapshot?: ProviderSnapshotLike | undefined
+  /** Owner session-resume snapshot composed read-only into the accounts section. */
+  sessionSnapshot?: SessionListSnapshotLike | undefined
 }
 
 /** Local factory for the singleton login-profiles navigator view. */
@@ -29,11 +40,10 @@ export function createLoginProfilesView(deps: ProfilesPaneDeps = {}) {
     const store = useMemo(() => deps.store ?? new ProfileStore(), [deps.store])
     const [profiles, setProfiles] = useState(() => [...store.list()])
     const [error, setError] = useState<string | undefined>(undefined)
-    const accounts: readonly AccountProjectionV1[] = providerSnapshotToAccounts(deps.providerSnapshot)
+    const accounts = composeAccountProjections(deps.providerSnapshot, deps.sessionSnapshot)
     const refresh = (): void => { setProfiles([...store.list()]) }
     const fail = (caught: unknown): void => {
-      const message = caught instanceof ProfileStoreError ? caught.message : 'Profile change failed.'
-      setError(message)
+      setError(profileErrorMessage(caught))
     }
     return (
       <CookieManagerPanel
