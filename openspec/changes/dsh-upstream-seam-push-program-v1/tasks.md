@@ -2,7 +2,7 @@
 
 - [ ] 0.1 提交在途工作并 push develop，触发 ci.yml 首跑（typecheck/test/build/check:bundles/openspec 全绿为验收）。
 - [ ] 0.2 手动 dispatch 一次 upstream-canary.yml 与 pr-rebase.yml，确认发布版安装冒烟与四系列 apply-check 真实运行；红灯则开 issue 并闭环。
-- [ ] 0.3 归档 openspec `✓ Complete` 状态的 change（openspec archive），active 列表收敛到真在做的事。
+- [ ] 0.3 归档 openspec `✓ Complete` 状态的 change（openspec archive），active 列表收敛到真在做的事。（progress 2026-08-22：19/20 已归档；dsh-pane-workspace-docking-v2 的 spec delta 依赖 dsh-pane-workbench-interaction-v1 尚未归档时创建的 spec，待其完成后归档）
 
 ## 1. Wave A：已有完整 patch 的系列（按解锁价值排序）
 
