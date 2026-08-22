@@ -192,8 +192,17 @@ process.exitCode = summary.exit_code
 
 function run(command, args, cwd, env = process.env) {
   commandLog.push(`$ ${command} ${args.map((arg, index) => index === 0 && arg.startsWith('-') ? arg : '<arg>').join(' ')}`)
-  const result = spawnSync(command, args, { cwd, env, encoding: 'utf8', maxBuffer: 2 * 1024 * 1024 })
+  const result = spawnSync(command, args, {
+    cwd,
+    env,
+    encoding: 'utf8',
+    maxBuffer: 2 * 1024 * 1024,
+    timeout: 180_000,
+  })
   if (result.error !== undefined) throw result.error
+  if (result.signal === 'SIGTERM' && result.status === null) {
+    throw new Error(`${command} timed out after 180s`)
+  }
   if ((result.status ?? 1) !== 0) {
     throw new Error(`${command} exited with ${result.status ?? 1}: ${redact(result.stderr ?? result.stdout ?? '')}`)
   }
