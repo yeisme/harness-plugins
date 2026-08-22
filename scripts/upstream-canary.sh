@@ -55,10 +55,17 @@ install_smoke() {
 overrides_test() {
   local version="${1:-}"
   echo "== canary overrides-test =="
-  local pkg="$ROOT/package.json"
-  backup="$(mktemp)"
-  cp "$pkg" "$backup"
-  restore() { [ -n "${backup:-}" ] && cp "$backup" "$pkg" || true; }
+  # Script-scoped: EXIT trap runs after this function returns, so locals
+  # like pkg/backup are already gone under `set -u`.
+  CANARY_PACKAGE_JSON="$ROOT/package.json"
+  CANARY_PACKAGE_BACKUP="$(mktemp)"
+  cp "$CANARY_PACKAGE_JSON" "$CANARY_PACKAGE_BACKUP"
+  restore() {
+    if [ -n "${CANARY_PACKAGE_BACKUP:-}" ] && [ -n "${CANARY_PACKAGE_JSON:-}" ]; then
+      cp "$CANARY_PACKAGE_BACKUP" "$CANARY_PACKAGE_JSON" || true
+      rm -f "$CANARY_PACKAGE_BACKUP"
+    fi
+  }
   trap restore EXIT
   # Force every @deepseek-ai/* workspace dependency to its newest publish.
   node -e '
@@ -74,7 +81,7 @@ overrides_test() {
       }
     }
     fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
-  ' "$pkg" "$version"
+  ' "$CANARY_PACKAGE_JSON" "$version"
   (cd "$ROOT" && pnpm install --no-frozen-lockfile)
   echo "-- resolved @deepseek-ai/* versions --"
   (cd "$ROOT" && pnpm list --depth -1 -r --json 2>/dev/null \
