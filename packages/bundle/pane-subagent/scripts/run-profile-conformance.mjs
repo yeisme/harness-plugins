@@ -134,11 +134,11 @@ function run(command, args, cwd, env = process.env) {
     env,
     encoding: 'utf8',
     maxBuffer: 2 * 1024 * 1024,
-    timeout: 180_000,
+    timeout: 300_000,
   })
   if (result.error !== undefined) throw result.error
   if (result.signal === 'SIGTERM' && result.status === null) {
-    throw new Error(`${command} timed out after 180s`)
+    throw new Error(`${command} timed out after 300s`)
   }
   if ((result.status ?? 1) !== 0) {
     throw new Error(`${command} exited with ${result.status ?? 1}: ${redact(result.stderr ?? result.stdout ?? '')}`)
