@@ -1,0 +1,11 @@
+# Yeisme DSH session cookie manager bundle (Phase 1).
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-session-cookie-manager
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/dsh-session-cookie-manager
+#
+# Metadata-only login profiles: cookies and tokens stay with the DSH Host;
+# real jar apply/switch waits for the web.cookieJars upstream seam.
+- insert:
+  - id: dsh-session-cookie-manager
+    name: '@yeisme/dsh-session-cookie-manager'
