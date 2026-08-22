@@ -63,7 +63,7 @@ jobs:
             [ -f "${d}proposal.md" ] || continue
             name="$(basename "$d")"
             echo "::group::openspec validate ${name}"
-            npx -y openspec@latest validate "$name" --strict --no-interactive || status=1
+            npx -y @fission-ai/openspec@1.6.0 validate "$name" --strict --no-interactive || status=1
             echo "::endgroup::"
           done
           exit $status
