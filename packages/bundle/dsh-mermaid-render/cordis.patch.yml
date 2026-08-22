@@ -1,0 +1,12 @@
+# Yeisme DSH Mermaid Render bundle.
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-mermaid-render
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/dsh-mermaid-render
+#
+# This bundle adds one independently identifiable profile row. Session logs,
+# markdown projection, and the pinned DOM of the conversation renderer remain
+# with DSH Host; this row only grafts settled mermaid fences into figures.
+- insert:
+    - id: dsh-mermaid-render
+      name: '@yeisme/dsh-mermaid-render'
