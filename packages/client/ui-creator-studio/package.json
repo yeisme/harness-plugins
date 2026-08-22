@@ -33,9 +33,9 @@
     "README.md"
   ],
   "scripts": {
-    "typecheck": "pnpm --filter @yeisme/dsh-pane-protocol run build && pnpm --filter @yeisme/dsh-client-ui-pane-workbench run build && pnpm --filter @yeisme/dsh-creator-studio-host run build && tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "build": "pnpm --filter @yeisme/dsh-pane-protocol run build && pnpm --filter @yeisme/dsh-client-ui-pane-workbench run build && pnpm --filter @yeisme/dsh-creator-studio-host run build && tsc -p tsconfig.json && tsdown src/index.ts src/client.ts --out-dir lib --format esm --dts --clean"
+    "build": "tsc -p tsconfig.json && tsdown src/index.ts src/client.ts --out-dir lib --format esm --dts --clean"
   },
   "dependencies": {
     "@yeisme/dsh-client-ui-pane-workbench": "workspace:^",

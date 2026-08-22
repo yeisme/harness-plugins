@@ -43,8 +43,8 @@
   "scripts": {
     "bundle": "pnpm --filter @yeisme/dsh-ordo-agent-ops run build && tsc -p tsconfig.json && tsdown",
     "watch": "pnpm --filter @yeisme/dsh-ordo-agent-ops run build && tsc -p tsconfig.json && tsdown --watch",
-    "typecheck": "pnpm --filter @yeisme/dsh-ordo-agent-ops run build && tsc -p tsconfig.json --noEmit",
-    "build": "pnpm --filter @yeisme/dsh-ordo-agent-ops run build && tsc -p tsconfig.json && tsdown",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json && tsdown",
     "test": "vitest run"
   },
   "license": "MIT",

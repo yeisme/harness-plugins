@@ -33,9 +33,9 @@
     "README.md"
   ],
   "scripts": {
-    "typecheck": "pnpm --filter @yeisme/dsh-pane-protocol run build && tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "build": "pnpm --filter @yeisme/dsh-pane-protocol run build && tsdown src/index.ts src/client.ts --out-dir lib --format esm --dts --clean",
+    "build": "tsdown src/index.ts src/client.ts --out-dir lib --format esm --dts --clean",
     "test:integration": "node scripts/run-integration-tests.mjs"
   },
   "dependencies": {
