@@ -88,6 +88,11 @@ export class ChatRewriteController {
 
   constructor(private readonly host: ChatRewriteHost) {}
 
+  /** True when the host bound `session.forkBeforeMessage`. */
+  supportsFirstRound(): boolean {
+    return this.host.forkBeforeMessage !== undefined
+  }
+
   /** 发起一次 Edit/Retry 派生。同一时刻只允许一个 pending mutation。 */
   run(sessionId: SessionId, target: RewriteTarget): Promise<void> {
     if (this.disposed) return Promise.resolve()

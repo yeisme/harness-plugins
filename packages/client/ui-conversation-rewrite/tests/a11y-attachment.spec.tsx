@@ -25,6 +25,7 @@ const fakeController = {
   store: { subscribe: () => () => {}, getSnapshot: () => idleState },
   run: async () => {},
   reset: () => {},
+  supportsFirstRound: () => false,
 } as never
 
 const t = (key: string) => key

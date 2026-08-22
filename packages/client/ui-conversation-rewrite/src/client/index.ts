@@ -15,13 +15,16 @@ import { ChatRewriteController } from './controller.ts'
 import { makeEditAction } from './edit.tsx'
 import { makeRetryAction } from './retry.tsx'
 import { en, NS, zh } from './locales.ts'
+import { bindForkBeforeMessage, hasUserActionsSlot } from './seams.ts'
 
 export { ChatRewriteController } from './controller.ts'
 export type { ChatRewriteHost, ChatRewritePhase, ChatRewriteViewState } from './controller.ts'
 export { computeEditTarget, computeRetryTarget, disableReasonKey, previousTurnEndSeq, textOfContent } from './boundary.ts'
 export type { RewriteDecision, RewriteDisableReason, RewriteTarget } from './boundary.ts'
 export { makeEditAction, EditInlineEditor } from './edit.tsx'
-export type { EditActionProps, EditInlineEditorProps, UserActionOwnerProps } from './edit.tsx'
+export type { EditActionProps, EditInlineEditorProps } from './edit.tsx'
+export { bindForkBeforeMessage, hasUserActionsSlot } from './seams.ts'
+export type { ForkBeforeMessageHost, SlotSpecReader, UserActionOwnerProps } from './seams.ts'
 export { makeRetryAction, RetryButton } from './retry.tsx'
 export type { RetryActionProps, RetryButtonProps } from './retry.tsx'
 export { lineageLabel, sessionLineageLabel } from './lineage.ts'
@@ -33,6 +36,7 @@ export const name = 'client-ui-conversation-rewrite'
 export const inject = ['slots', 'locale', 'sessions'] as const
 
 function createHost(ctx: ClientContext): ChatRewriteHost {
+  const forkBeforeMessage = bindForkBeforeMessage(ctx.sessions)
   return {
     fork: async (opts) => ctx.sessions.fork(opts.increaseTitle === undefined
       ? { sessionId: opts.sessionId, atSeq: opts.atSeq }
@@ -45,6 +49,7 @@ function createHost(ctx: ClientContext): ChatRewriteHost {
       return result.value
     },
     open: (sessionId) => { ctx.sessions.open(sessionId) },
+    ...forkBeforeMessage === undefined ? {} : { forkBeforeMessage },
   }
 }
 
@@ -58,14 +63,13 @@ function installRetry(ctx: ClientContext, controller: ChatRewriteController): vo
 }
 
 function installEditWhenAvailable(ctx: ClientContext, controller: ChatRewriteController): void {
-  const userActionsAvailable = ctx.slots.spec('conversation.chat.user-actions' as never) !== undefined
-  if (!userActionsAvailable) return
-  ctx.slots.inject('conversation.chat.user-actions' as never, () => ctx.slots.register({
+  if (!hasUserActionsSlot(ctx.slots)) return
+  ctx.slots.inject('conversation.chat.user-actions', () => ctx.slots.register({
     name: 'conversation.chat.user-actions',
     id: 'dsh-conversation-rewrite',
     locale: NS,
     order: 0,
-  } as never, makeEditAction(controller)))
+  }, makeEditAction(controller)))
 }
 
 /** Mount the client face and return an exact disposer. */

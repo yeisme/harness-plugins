@@ -21,8 +21,8 @@ dsh plugin --profile web add @yeisme/dsh-conversation-rewrite
 安装后：
 
 - Assistant 消息动作条出现 **Retry**（非首轮可用；运行中/unknown/无文本输入会禁用并显示原因）。
-- 当上游 DSH 合入 `conversation.chat.user-actions` slot 后，用户气泡自动出现 **Edit**；当前发布版 DSH 尚无该 slot，因此 Edit 默认不注册。
-- 首轮 Edit/Retry 依赖 `session.forkBeforeMessage`（retain-next），当前保持禁用。
+- 当运行中的 DSH 发布了 `conversation.chat.user-actions` slot 时，用户气泡自动出现 **Edit**；发布版尚未合入该 slot，因此默认不注册入口。
+- 首轮 Edit/Retry 仅在 host 暴露 `session.forkBeforeMessage` 时启用；否则保持禁用并显示原因。
 
 ## 回滚
 

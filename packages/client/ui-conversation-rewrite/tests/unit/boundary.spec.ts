@@ -98,6 +98,17 @@ describe('computeRetryTarget', () => {
     expect(computeRetryTarget(snapshot, 'a1' as MessageId)).toEqual({ ok: false, reason: 'first-round' })
   })
 
+  it('enables first-round retry when forkBeforeMessage is available', () => {
+    const snapshot = snapshotWith(
+      [textUser(0, 'first'), assistant(1, 1, 'a1')],
+      new Map([[1, 2]]),
+    )
+    expect(computeRetryTarget(snapshot, 'a1' as MessageId, { firstRound: true })).toMatchObject({
+      ok: true,
+      target: { kind: 'retry', seq: 1, boundarySeq: null, text: 'first' },
+    })
+  })
+
   it('disables a running turn', () => {
     const snapshot = snapshotWith(
       [textUser(6, 'second'), assistant(7, 2, 'a2')],
@@ -142,6 +153,17 @@ describe('computeEditTarget', () => {
       new Map([[1, 2]]),
     )
     expect(computeEditTarget(snapshot, 0)).toEqual({ ok: false, reason: 'first-round' })
+  })
+
+  it('enables first-round editing when forkBeforeMessage is available', () => {
+    const snapshot = snapshotWith(
+      [textUser(0, 'first'), assistant(1, 1, 'a1')],
+      new Map([[1, 2]]),
+    )
+    expect(computeEditTarget(snapshot, 0, { firstRound: true })).toMatchObject({
+      ok: true,
+      target: { kind: 'edit', seq: 0, boundarySeq: null, text: 'first' },
+    })
   })
 
   it('disables running-turn editing', () => {

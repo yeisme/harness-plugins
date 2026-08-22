@@ -53,7 +53,11 @@ export function makeRetryAction(controller: ChatRewriteController) {
   return function RetryAction({ messageId, useSession, sessionId, t }: RetryActionProps) {
     const snapshot = useSession((value) => value)
     const state = useSyncExternalStore(controller.store.subscribe, controller.store.getSnapshot)
-    const decision = useMemo(() => computeRetryTarget(snapshot, messageId), [snapshot, messageId])
+    const firstRound = controller.supportsFirstRound()
+    const decision = useMemo(
+      () => computeRetryTarget(snapshot, messageId, { firstRound }),
+      [snapshot, messageId, firstRound],
+    )
 
     const activeKey = `retry:${messageId}`
     const loading = state.phase === 'submitting' && state.activeKey === activeKey

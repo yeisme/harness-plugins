@@ -31,8 +31,8 @@
 ## 6. 后续推进目标（retain-next）
 
 - [ ] 6.1 [Owner: DSH Host；Scope: `client/deepseek-harness`；Dependencies: 1.3] 实现 `session.forkBeforeMessage` host RPC。Acceptance: 支持首轮 `seedLength: 0`、边界校验与 workspace 归属；Validation: DSH host tests + Harness Plugins integration。（blocked: 需 DSH Host 实现该 RPC）
-- [ ] 6.2 [Owner: DSH Host；Scope: `client/deepseek-harness`；Dependencies: 1.2] 实现 `conversation.chat.user-actions` slot 并接入 `UserMessageNodeView`。Acceptance: 外部插件可注册 Edit 按钮；Validation: DSH web tests。（blocked: 需 DSH Host 合入 user-actions slot）
-- [ ] 6.3 [Owner: Harness Plugins；Scope: `src/client/edit.tsx`；Dependencies: 6.1] 启用首轮 Edit/Retry，移除降级提示。Acceptance: 首轮用户消息可编辑/重试；Validation: e2e。（retain-next: 依赖 6.1/6.2）
+- [ ] 6.2 [Owner: DSH Host；Scope: `client/deepseek-harness`；Dependencies: 1.2] 实现 `conversation.chat.user-actions` slot 并接入 `UserMessageNodeView`。Acceptance: 外部插件可注册 Edit 按钮；Validation: DSH web tests。（progress 2026-08-22：DSH 实现已在 `yeisme:pr/user-actions-slot` / fork PR https://github.com/yeisme/deepseek-harness/pull/1；上游 master 未合入。插件侧 `hasUserActionsSlot` 探测后才注册 typed Edit，发布版默认不渲染入口。blocked: 需 DSH Host 合入该 slot）
+- [ ] 6.3 [Owner: Harness Plugins；Scope: `src/client/edit.tsx`；Dependencies: 6.1] 启用首轮 Edit/Retry，移除降级提示。Acceptance: 首轮用户消息可编辑/重试；Validation: e2e。（progress 2026-08-22：`supportsFirstRound()` 在 host 绑定 `forkBeforeMessage` 时放开首轮边界；发布版无该 RPC，继续禁用并显示原因。e2e 仍依赖 6.1/6.2。）
 - [x] 6.4 [Owner: Harness Plugins；Scope: `src/client/`；Dependencies: 2.x, 3.x, 4.x] 完善 a11y：键盘操作、focus restore、ARIA label、错误公告。Acceptance: 键盘/读屏矩阵全绿；Validation: component tests + a11y review。（retain-next: 交互完善后续切片）
 - [x] 6.5 [Owner: Harness Plugins；Scope: `src/client/`；Dependencies: 4.2] 支持附件/图片在 Edit 中的保留或明确禁用。Acceptance: 非文本内容不会静默丢失；Validation: component tests。（retain-next: 附件边界后续切片）
 - [x] 6.6 [Owner: Harness Plugins；Scope: `src/client/`；Dependencies: 3.x, 4.x] 增加 Branch lineage 视觉标识（child 来源、分支关系），并接入现有 sidebar/session 列表。Acceptance: 用户能识别分支来源；Validation: e2e + component tests。（`sessionLineageLabel` + Desktop Workbench `lineageOf`；child 显示 `From <parent> · <origin>`，original 不标。）

@@ -65,8 +65,14 @@ describe('ChatRewriteController', () => {
 
   it('fails closed when first-round target has no forkBeforeMessage seam', async () => {
     const controller = new ChatRewriteController(fakeHost())
+    expect(controller.supportsFirstRound()).toBe(false)
     await controller.run(SESSION, target({ boundarySeq: null }))
     expect(controller.store.getSnapshot()).toMatchObject({ phase: 'error', errorCode: 'mutation_failed' })
+  })
+
+  it('reports first-round support only when the host bound the seam', () => {
+    expect(new ChatRewriteController(fakeHost()).supportsFirstRound()).toBe(false)
+    expect(new ChatRewriteController(fakeHost({ forkBeforeMessage: vi.fn() })).supportsFirstRound()).toBe(true)
   })
 
   it('dispose settles a pending mutation as an error', async () => {

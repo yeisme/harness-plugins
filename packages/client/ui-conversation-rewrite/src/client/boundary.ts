@@ -81,8 +81,30 @@ function disabled(reason: RewriteDisableReason): RewriteDecision {
   return { ok: false, reason }
 }
 
+/** Optional first-round support: only true when `session.forkBeforeMessage` is bound. */
+export interface RewriteBoundaryOptions {
+  readonly firstRound?: boolean
+}
+
+function firstRoundDecision(
+  kind: RewriteTarget['kind'],
+  key: string,
+  seq: number,
+  text: string,
+  firstRound: boolean | undefined,
+): RewriteDecision {
+  if (firstRound === true) {
+    return { ok: true, target: { kind, key, seq, boundarySeq: null, text } }
+  }
+  return disabled('first-round')
+}
+
 /** 计算 Retry 的派生目标：定位 assistant 对应 prompt，再取 prompt 之前的 turn/end。 */
-export function computeRetryTarget(snapshot: ConversationSnapshot, messageId: MessageId): RewriteDecision {
+export function computeRetryTarget(
+  snapshot: ConversationSnapshot,
+  messageId: MessageId,
+  options?: RewriteBoundaryOptions,
+): RewriteDecision {
   if (snapshot.removed) return disabled('removed')
 
   const assistant = snapshot.nodes.find((node): node is Extract<ConversationNode, { kind: 'assistant'; messageId?: MessageId }> =>
@@ -98,7 +120,9 @@ export function computeRetryTarget(snapshot: ConversationSnapshot, messageId: Me
   if (text === null) return disabled('not-text')
 
   const boundarySeq = previousTurnEndSeq(snapshot, prompt.seq)
-  if (boundarySeq === null) return disabled('first-round')
+  if (boundarySeq === null) {
+    return firstRoundDecision('retry', `retry:${messageId}`, assistant.seq, text, options?.firstRound)
+  }
   if (!hasTurnEndAfter(snapshot, prompt.seq) && snapshot.running) return disabled('running')
 
   return {
@@ -114,7 +138,11 @@ export function computeRetryTarget(snapshot: ConversationSnapshot, messageId: Me
 }
 
 /** 计算 Edit 的派生目标：仅接受已发送且纯文本的用户消息。 */
-export function computeEditTarget(snapshot: ConversationSnapshot, seq: number): RewriteDecision {
+export function computeEditTarget(
+  snapshot: ConversationSnapshot,
+  seq: number,
+  options?: RewriteBoundaryOptions,
+): RewriteDecision {
   if (snapshot.removed) return disabled('removed')
 
   const node = snapshot.nodes.find((candidate): candidate is UserMessageNode => candidate.kind === 'user' && candidate.seq === seq)
@@ -125,7 +153,9 @@ export function computeEditTarget(snapshot: ConversationSnapshot, seq: number): 
   if (text === null) return disabled('not-text')
 
   const boundarySeq = previousTurnEndSeq(snapshot, seq)
-  if (boundarySeq === null) return disabled('first-round')
+  if (boundarySeq === null) {
+    return firstRoundDecision('edit', `edit:${seq}`, seq, text, options?.firstRound)
+  }
   if (!hasTurnEndAfter(snapshot, seq) && snapshot.running) return disabled('running')
 
   return {

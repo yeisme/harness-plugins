@@ -19,6 +19,8 @@ export {
   computeRetryTarget,
   previousTurnEndSeq,
   textOfContent,
+  hasUserActionsSlot,
+  bindForkBeforeMessage,
   en,
   NS,
   zh,
@@ -36,4 +38,6 @@ export type {
   RewriteDisableReason,
   RewriteTarget,
   UserActionOwnerProps,
+  SlotSpecReader,
+  ForkBeforeMessageHost,
 } from '@yeisme/dsh-client-ui-conversation-rewrite/client'

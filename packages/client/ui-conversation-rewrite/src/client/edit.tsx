@@ -10,24 +10,15 @@
  * @module @yeisme/dsh-client-ui-conversation-rewrite/edit
  */
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from 'react'
-import type { SnapshotSelectorHook, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ConversationSnapshot, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
-import type { MessageId } from '@deepseek-ai/dsh-client-connection/client'
+import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { computeEditTarget, disableReasonKey } from './boundary.ts'
 import type { ChatRewriteController } from './controller.ts'
 import { NS, type ConversationRewriteKey } from './locales.ts'
+import type { UserActionOwnerProps } from './seams.ts'
 
-/** user-actions slot（additive seam）的 owner currency；DSH 未合入前仅作为本地契约。 */
-export interface UserActionOwnerProps {
-  readonly seq: number
-  readonly messageId?: MessageId | undefined
-}
+export type { UserActionOwnerProps }
 
-export type EditActionProps = UserActionOwnerProps & {
-  readonly useSession: SnapshotSelectorHook<ConversationSnapshot>
-  readonly sessionId: SessionId
-  readonly t: TranslateNS<typeof NS>
-}
+export type EditActionProps = PropsRuntime<'conversation.chat.user-actions'> & PropsLocale<typeof NS>
 
 export interface EditInlineEditorProps {
   readonly initialText: string
@@ -107,7 +98,11 @@ export function makeEditAction(controller: ChatRewriteController) {
   return function EditAction({ seq, useSession, sessionId, t }: EditActionProps) {
     const snapshot = useSession((value) => value)
     const state = useSyncExternalStore(controller.store.subscribe, controller.store.getSnapshot)
-    const decision = useMemo(() => computeEditTarget(snapshot, seq), [snapshot, seq])
+    const firstRound = controller.supportsFirstRound()
+    const decision = useMemo(
+      () => computeEditTarget(snapshot, seq, { firstRound }),
+      [snapshot, seq, firstRound],
+    )
     const [editing, setEditing] = useState(false)
     const triggerRef = useRef<HTMLButtonElement | null>(null)
     const activeKey = `edit:${seq}`
