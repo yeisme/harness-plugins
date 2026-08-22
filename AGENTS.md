@@ -30,14 +30,17 @@ Ordo 是 run/task/session/lease/approval/verification/evidence/closeout 的唯�
 
 ## Validation
 
+插件完成门是本仓库协议对接，不依赖官方 DSH 已实现 seam、不启动官方 `dsh web`、不把官方合入当验收。
+
     pnpm install
     pnpm run typecheck
     pnpm run test
     pnpm run build
+    pnpm run check:bundles
     openspec validate <change-id> --strict --no-interactive
     git diff --cached --check
 
-集成/组件/系统/e2e 测试证据写入本仓库 temp/integration-test-runs/<run-id>/，脱敏 secret、raw prompt、provider payload、private tool arguments、绝对路径与完整思维链。
+包测试只验 typed probe、bundle 合同、ModuleLoader 面与诚实降级。官方 `dsh plugin add` / Web boot 是可选 host 集成，MUST NOT 阻塞插件完成。集成证据写入本仓库 temp/integration-test-runs/<run-id>/，脱敏 secret、raw prompt、provider payload、private tool arguments、绝对路径与完整思维链。
 
 ## Upstream Seam Channel（fork 退役后唯一 core 通道）
 

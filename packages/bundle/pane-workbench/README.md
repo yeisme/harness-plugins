@@ -10,6 +10,8 @@ AppFrame 正式布局；不注册生产 `shell.overlay`，不覆盖 canonical �
 `window.__ModuleLoader__.load({ id: "@yeisme/dsh-pane-workbench", factory })` 格式，并把
 `@yeisme/*` 实现内联、仅 external 平台包。
 
+插件完成门是协议对接：探测 workspace slot / `workspaceLayout`，缺席时失败可见。官方 `dsh plugin add` 与 Web boot 是可选 host 集成，不作为本包测试门。
+
 ## 安装与移除
 
 ```bash

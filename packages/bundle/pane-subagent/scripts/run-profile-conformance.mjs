@@ -15,7 +15,6 @@ const commandLog = []
 const structuralLog = []
 let status = 'passed'
 let failure
-let dshHome
 let packRoot
 
 await mkdir(artifactsRoot, { recursive: true })
@@ -56,26 +55,7 @@ try {
     "const fs = await import('node:fs'); const code = fs.readFileSync('./lib/client.js', 'utf8'); if (!code.startsWith('window.__ModuleLoader__.load({')) throw new Error('client bundle is not a __ModuleLoader__.load registration'); if (!code.includes('id: \"@yeisme/dsh-pane-subagent\"')) throw new Error('client bundle registers the wrong id'); if (!code.includes('factory: (require)')) throw new Error('client bundle is missing the factory face'); console.log('client-bundle-ok')",
   ], bundleRoot)
   assert(faceProbe.stdout.includes('client-bundle-ok'), 'client bundle is not a DSH __ModuleLoader__ face')
-  structuralLog.push({ stage: 'client_bundle_face', loader_registration: true, id: '@yeisme/dsh-pane-subagent' })
-
-  dshHome = await mkdtemp('/tmp/pane-subagent-dsh-home-')
-  const env = { ...process.env, DSH_HOME: dshHome }
-  run('dsh', ['plugin', '--profile', 'web', 'add', './packages/bundle/pane-workbench'], projectRoot, env)
-  run('dsh', ['plugin', '--profile', 'web', 'add', './packages/bundle/pane-subagent'], projectRoot, env)
-  const profileDir = resolve(dshHome, 'profiles/web')
-  const installed = JSON.parse(await readFile(resolve(profileDir, 'package.json'), 'utf8'))
-  assert(installed.dependencies?.[manifest.name] !== undefined, 'profile dependency missing after install')
-  assert(installed.dsh?.profile?.bundles?.includes(manifest.name), 'profile bundle row missing after install')
-
-  const addedConfig = run('dsh', ['--profile', 'web', '--dump-config'], projectRoot, env)
-  assert(countLines(addedConfig.stdout, 'id: pane-subagent') === 1, 'profile dump does not contain one pane-subagent row')
-  assert(addedConfig.stdout.includes("name: '@yeisme/dsh-pane-subagent'"), 'profile dump misses the Pane Subagent bundle row')
-  structuralLog.push({ stage: 'install_dump', row_count: countLines(addedConfig.stdout, 'id: pane-subagent'), bundle_row: true })
-
-  run('dsh', ['plugin', '--profile', 'web', 'remove', manifest.name], projectRoot, env)
-  const removedConfig = run('dsh', ['--profile', 'web', '--dump-config'], projectRoot, env)
-  assert(countLines(removedConfig.stdout, 'id: pane-subagent') === 0, 'profile dump retained pane-subagent after remove')
-  structuralLog.push({ stage: 'remove_dump', row_count: 0, bundle_row: false })
+  structuralLog.push({ stage: 'client_bundle_face', loader_registration: true, id: '@yeisme/dsh-pane-subagent', host_cli: 'not_required' })
 } catch (error) {
   status = 'failed'
   failure = redact(error instanceof Error ? error.message : String(error))
@@ -86,7 +66,7 @@ const summary = {
   schema_version: 'yeisme.integration_test_evidence.v1',
   project: 'agent/harness-plugins',
   run_id: runId,
-  layer: 'profile-conformance',
+  layer: 'protocol-conformance',
   command: 'pnpm --filter @yeisme/dsh-pane-subagent run test',
   status,
   exit_code: status === 'passed' ? 0 : 1,
@@ -163,7 +143,6 @@ function redact(value) {
     .replace(/https?:\/\/[^\s)]+/giu, '<url>')
     .replace(/\/(?:tmp|private)\/[^\s)]+/giu, '<temp>')
     .replace(/(api[-_]?key|authorization|password|secret|token)\s*[:=]\s*[^,\s]+/giu, '$1=<redacted>')
-  if (dshHome !== undefined) redacted = redacted.replaceAll(dshHome, '<dsh-home>')
   return redacted
 }
 

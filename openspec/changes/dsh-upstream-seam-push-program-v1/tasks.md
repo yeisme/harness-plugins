@@ -2,7 +2,7 @@
 
 - [x] 0.1 提交在途工作并 push develop，触发 ci.yml 首跑（typecheck/test/build/check:bundles/openspec 全绿为验收）。（progress 2026-08-22：首跑连环红后修到 `a73c2b8`/`46e2e0d`。验收 run：https://github.com/yeisme/harness-plugins/actions/runs/32556110363 与 32555256174，node 22/24 + OpenSpec + check:bundles 全绿。）
 - [x] 0.2 手动 dispatch 一次 upstream-canary.yml 与 pr-rebase.yml，确认发布版安装冒烟与四系列 apply-check 真实运行；红灯则开 issue 并闭环。（progress 2026-08-22：canary install-smoke + overrides-test 在 `46e2e0d` run 32556111499 绿；#4 为环境/trap/bump-PR 假阳，关。pr-rebase 四系列真实跑过：user-actions-slot 绿，#1/#2/#3 真实 drift 留 Wave A。）
-- [x] 0.3 归档 openspec `✓ Complete` 状态的 change（openspec archive），active 列表收敛到真在做的事。（progress 2026-08-22：19/20 已归档。`dsh-pane-workspace-docking-v2` 任务全勾但 `openspec archive` 因目标 spec `dsh-pane-workbench-extension` / `dsh-pane-workspace-docking` / `pane-workbench-interaction` 不存在而 aborted；本 program 不再阻塞于该 archive。商品区 `dsh-pane-workspace-experience-v3` 保持 parked。）
+- [x] 0.3 归档 openspec `✓ Complete` 状态的 change（openspec archive），active 列表收敛到真在做的事。（progress 2026-08-22：`dsh-pane-workspace-docking-v2` 已归档为 `2026-08-22-dsh-pane-workspace-docking-v2`。delta 改为插件侧 ADDED 协议规格，不再 MODIFIED 不存在的主 spec，也不把官方 DSH 实现当完成门。商品区 `dsh-pane-workspace-experience-v3` 保持 parked。）
 
 ## 1. Wave A：已有完整 patch 的系列（按解锁价值排序）
 

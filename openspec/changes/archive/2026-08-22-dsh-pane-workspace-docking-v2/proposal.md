@@ -16,7 +16,7 @@
 
 ## Admission Decision
 
-结论：`split-owner`。`client/deepseek-harness` canonical 拥有 root grid、slots、尺寸求解与 Tool Details 竞争；`agent/harness-plugins` canonical 拥有 Pane tree、Tab/group、view registry、打开路由与安全持久化；文件、终端、媒体等领域 provider 继续拥有业务状态。
+结论：`split-owner`。Host 几何与 slot 实现走 `upstream-prs/`，不挡插件完成。`agent/harness-plugins` 只做协议对接：探测 workspace slot / `ctx.workspaceLayout`、共享 Pane controller、V2 安全持久化与诚实降级。文件、终端、媒体等领域 provider 继续拥有业务状态。
 
 ## Capabilities
 

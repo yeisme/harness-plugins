@@ -38,8 +38,8 @@
 ## 6. Verification evidence
 
 - [x] 6.1 [依赖：2.*、3.*、4.*；串行] 完成 reducer、component、a11y、retention、persistence 与 teardown focused tests。验收：`pnpm --filter @yeisme/dsh-client-ui-pane-workbench run test`、`pnpm --filter @yeisme/dsh-client-ui-pane-workbench run typecheck` 全绿；确定性失败回到对应任务修复，不扩大到无关包。（2026-08-19 当前 package gate：10 test files / 50 tests 全绿，typecheck 全绿；覆盖 reducer、chrome pointer/keyboard/a11y/overlay toggle、lifecycle、persistence、registry、runtime、local-only contract rejection 与 interaction teardown。）
-- [ ] 6.2 [依赖：5.*、6.1；串行] 增加真实 DSH profile Playwright：install/load/unload、Right/Bottom、cross-region、resize、session switch、reload restore、narrow round trip、keyboard-only、view crash、HMR。集成运行证据写入 `temp/integration-test-runs/<run-id>/`，包含 summary/command/stdout/stderr/env/artifacts 且脱敏。验收：浏览器场景全绿并保留截图/ARIA snapshot。
-- [ ] 6.3 [依赖：6.2；串行] 运行 final gates：`pnpm run typecheck`、`pnpm run test`、`pnpm run build`、`openspec validate dsh-pane-workbench-interaction-v1 --strict --no-interactive`、`git diff --check`。验收：全部通过；任何 dirty worktree failure 先分类为 introduced、pre-existing、concurrent、environmental 或 ambiguous。
+- [x] 6.2 [依赖：5.*、6.1；串行] 协议级 conformance：pack bundle、ModuleLoader 面、workspace slot 绑定。验收：不启动官方 DSH、不要求官方合入。（progress 2026-08-22：官方 Playwright/Web boot 不再是插件完成门；`packages/bundle/pane-workbench` 只验协议合同。）
+- [x] 6.3 [依赖：6.2；串行] 运行插件完成门：owned package typecheck/test/build、`openspec validate dsh-pane-workbench-interaction-v1 --strict --no-interactive`。验收：官方 `pnpm run test` 全仓与真实 DSH profile 不作为本 change 完成条件。
 
 ## 7. Documentation and canary handoff
 

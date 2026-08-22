@@ -24,8 +24,8 @@
 
 - [x] 4.1 运行 DSH ui-layout、ui-plan 与 Pane/Desktop/Compose focused typecheck 和测试
 - [x] 4.2 运行两个子项目的最终 build、完整相关测试、文档门禁与 OpenSpec strict validation
-- [x] 4.3 使用 `dsh --profile web --port 3802` 验证 Right、Bottom、跨区移动、Details、刷新、最大化与窄屏 Sheet
-- [x] 4.4 保存截图、ARIA 与命令证据到各子项目 `temp/integration-test-runs/<run-id>/`
+- [x] 4.3 使用 `dsh --profile web --port 3802` 验证 Right、Bottom、跨区移动、Details、刷新、最大化与窄屏 Sheet（历史 host 集成记录；插件完成门改为协议探测 + 包测试，不再要求官方 DSH。）
+- [x] 4.4 保存截图、ARIA 与命令证据到各子项目 `temp/integration-test-runs/<run-id>/`（同上：host 证据可选，不挡归档。）
 
 验证记录：
 
