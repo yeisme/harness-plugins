@@ -1,5 +1,5 @@
 diff --git a/packages/client/ui-conversation/src/client/chat/ChatNodeSeat.tsx b/packages/client/ui-conversation/src/client/chat/ChatNodeSeat.tsx
-index bc9c96fd41..392a1ad689 100644
+index bc9c96fd4..392a1ad68 100644
 --- a/packages/client/ui-conversation/src/client/chat/ChatNodeSeat.tsx
 +++ b/packages/client/ui-conversation/src/client/chat/ChatNodeSeat.tsx
 @@ -1,5 +1,6 @@
@@ -71,7 +71,7 @@ index bc9c96fd41..392a1ad689 100644
        {renderSlot('conversation.chat.node', routedOwner, {
          entryKey: routedNode.kind,
 diff --git a/packages/client/ui-conversation/src/client/chat/ChatView.tsx b/packages/client/ui-conversation/src/client/chat/ChatView.tsx
-index 80f9bc2d73..c1262d8da9 100644
+index 80f9bc2d7..c1262d8da 100644
 --- a/packages/client/ui-conversation/src/client/chat/ChatView.tsx
 +++ b/packages/client/ui-conversation/src/client/chat/ChatView.tsx
 @@ -156,7 +156,7 @@ function TurnStatus({ startTime, t }: {
@@ -92,10 +92,10 @@ index 80f9bc2d73..c1262d8da9 100644
                openFile={requestOpenFile}
                inspectCall={inspectCall}
 diff --git a/packages/client/ui-conversation/src/client/contract/slots.ts b/packages/client/ui-conversation/src/client/contract/slots.ts
-index 4ea0c79402..0d933a3bf1 100644
+index 307ac3848..c06d43ee6 100644
 --- a/packages/client/ui-conversation/src/client/contract/slots.ts
 +++ b/packages/client/ui-conversation/src/client/contract/slots.ts
-@@ -396,6 +396,8 @@ export interface ChatNodeTurnDataInjected {
+@@ -416,6 +416,8 @@ export interface ChatNodeTurnDataInjected {
  export interface ChatNodeOwnerProps {
    /** Selected Tool call, when the shared details store names one. */
    selectedCallId?: CallId | undefined
@@ -105,7 +105,7 @@ index 4ea0c79402..0d933a3bf1 100644
    cwd?: string | undefined
    openFile: (path: string) => void
 diff --git a/packages/client/ui-conversation/tests/chat-view.client.spec.tsx b/packages/client/ui-conversation/tests/chat-view.client.spec.tsx
-index b81dff8e6e..8e574a6e9b 100644
+index b81dff8e6..8e574a6e9 100644
 --- a/packages/client/ui-conversation/tests/chat-view.client.spec.tsx
 +++ b/packages/client/ui-conversation/tests/chat-view.client.spec.tsx
 @@ -171,6 +171,7 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
@@ -147,7 +147,7 @@ index b81dff8e6e..8e574a6e9b 100644
    })
  
 diff --git a/packages/client/ui-layout/README.i18n.yaml b/packages/client/ui-layout/README.i18n.yaml
-index d52d995ca1..60ce25f1d5 100644
+index d52d995ca..60ce25f1d 100644
 --- a/packages/client/ui-layout/README.i18n.yaml
 +++ b/packages/client/ui-layout/README.i18n.yaml
 @@ -2,5 +2,5 @@
@@ -159,7 +159,7 @@ index d52d995ca1..60ce25f1d5 100644
 +README.md: db22ee7ac9435dd3f003ba7f4ab368b37ebe0171
 +README.zh.md: 5a0ff95cc5901361a0440d73e48b0f46f53a6417
 diff --git a/packages/client/ui-layout/README.md b/packages/client/ui-layout/README.md
-index 7c9d64b9ca..db22ee7ac9 100644
+index 7c9d64b9c..db22ee7ac 100644
 --- a/packages/client/ui-layout/README.md
 +++ b/packages/client/ui-layout/README.md
 @@ -2,11 +2,15 @@
@@ -193,7 +193,7 @@ index 7c9d64b9ca..db22ee7ac9 100644
 +- **Only one workspace owner may attach** — competing docking runtimes fail during load rather than sharing or replacing the current tracks.
  - **No scroll anchoring during squeeze reflow** — layout changes may move the reader's viewport.
 diff --git a/packages/client/ui-layout/README.zh.md b/packages/client/ui-layout/README.zh.md
-index a2604d8659..5a0ff95cc5 100644
+index a2604d865..5a0ff95cc 100644
 --- a/packages/client/ui-layout/README.zh.md
 +++ b/packages/client/ui-layout/README.zh.md
 @@ -2,11 +2,15 @@
@@ -227,24 +227,22 @@ index a2604d8659..5a0ff95cc5 100644
 +- **同一时刻只能 attach 一个工作区 owner**：竞争的 docking runtime 会在加载阶段失败，而不是共享或替换当前 tracks。
  - **挤压重排期间不提供滚动锚定**：布局变化可能移动读者的 viewport。
 diff --git a/packages/client/ui-layout/package.json b/packages/client/ui-layout/package.json
-index eaf269cc4f..4be6cfc9f0 100644
+index 3b2bf0da9..b6bb90b17 100644
 --- a/packages/client/ui-layout/package.json
 +++ b/packages/client/ui-layout/package.json
-@@ -1,7 +1,7 @@
+@@ -1,6 +1,6 @@
  {
    "name": "@deepseek-ai/dsh-client-ui-layout",
 -  "description": "Shell plugin: three-column AppFrame with drag handles, ctx.layout viewing-state service (navigation + panels)",
--  "version": "0.1.0-rc.8",
 +  "description": "Shell plugin: four-column/two-row AppFrame with official right and bottom workspace slots",
-+  "version": "0.1.0-rc.9",
+   "version": "0.1.1-rc.2",
    "publishConfig": {
      "access": "public"
-   },
 diff --git a/packages/client/ui-layout/src/client/AppFrame.module.css b/packages/client/ui-layout/src/client/AppFrame.module.css
-index ae56780133..0206d2d526 100644
+index ae5678013..e3c42bd00 100644
 --- a/packages/client/ui-layout/src/client/AppFrame.module.css
 +++ b/packages/client/ui-layout/src/client/AppFrame.module.css
-@@ -1,108 +1,165 @@
+@@ -1,108 +1,172 @@
  .frame {
 -  position: relative; /* anchors the drag handles, which straddle column borders */
 +  position: relative;
@@ -442,18 +440,18 @@ index ae56780133..0206d2d526 100644
 +  transform: translate(-50%, -50%);
 +  width: 12px;
 +  height: 32px;
- }
- 
--.handle[data-side='details']:hover::after,
--.handle[data-side='details'][data-dragging='true']::after {
++}
++
 +.handle[data-axis='y']::after {
 +  top: 50%;
 +  left: 50%;
 +  transform: translate(-50%, -50%);
 +  width: 32px;
 +  height: 12px;
-+}
-+
+ }
+ 
+-.handle[data-side='details']:hover::after,
+-.handle[data-side='details'][data-dragging='true']::after {
 +.handle:hover::after,
 +.handle:focus-visible::after,
 +.handle[data-dragging='true']::after {
@@ -461,7 +459,7 @@ index ae56780133..0206d2d526 100644
    background: var(--dsw-alias-button-floating-hover);
    border-color: var(--dsw-alias-border-l3);
  }
-@@ -114,6 +171,4 @@
+@@ -114,6 +178,4 @@
    pointer-events: none;
  }
  
@@ -470,7 +468,7 @@ index ae56780133..0206d2d526 100644
 -}
 +.overlayLayer > * { pointer-events: auto; }
 diff --git a/packages/client/ui-layout/src/client/AppFrame.tsx b/packages/client/ui-layout/src/client/AppFrame.tsx
-index 2696dc91fa..212106debc 100644
+index 2696dc91f..212106deb 100644
 --- a/packages/client/ui-layout/src/client/AppFrame.tsx
 +++ b/packages/client/ui-layout/src/client/AppFrame.tsx
 @@ -1,201 +1,275 @@
@@ -869,7 +867,7 @@ index 2696dc91fa..212106debc 100644
    )
  }
 diff --git a/packages/client/ui-layout/src/client/index.ts b/packages/client/ui-layout/src/client/index.ts
-index c56d83bfbb..81704327e9 100644
+index c56d83bfb..81704327e 100644
 --- a/packages/client/ui-layout/src/client/index.ts
 +++ b/packages/client/ui-layout/src/client/index.ts
 @@ -1,7 +1,7 @@
@@ -976,7 +974,7 @@ index c56d83bfbb..81704327e9 100644
      }
    }, 'ui-layout: service + root registration')
 diff --git a/packages/client/ui-layout/src/client/service.ts b/packages/client/ui-layout/src/client/service.ts
-index 2b2e50e5d5..14c54ed0aa 100644
+index 2b2e50e5d..14c54ed0a 100644
 --- a/packages/client/ui-layout/src/client/service.ts
 +++ b/packages/client/ui-layout/src/client/service.ts
 @@ -10,6 +10,7 @@
@@ -1005,7 +1003,7 @@ index 2b2e50e5d5..14c54ed0aa 100644
    }
  
 diff --git a/packages/client/ui-layout/tests/app-frame.client.spec.tsx b/packages/client/ui-layout/tests/app-frame.client.spec.tsx
-index d865a5c186..66b076d83e 100644
+index d865a5c18..66b076d83 100644
 --- a/packages/client/ui-layout/tests/app-frame.client.spec.tsx
 +++ b/packages/client/ui-layout/tests/app-frame.client.spec.tsx
 @@ -17,6 +17,7 @@ import { AppFrame } from '@deepseek-ai/dsh-client-ui-layout/src/client/AppFrame.
@@ -1071,7 +1069,7 @@ index d865a5c186..66b076d83e 100644
      expect(tracks(frame)).toEqual([280, 330])
    })
 diff --git a/packages/client/ui-layout/tests/apply.client.spec.ts b/packages/client/ui-layout/tests/apply.client.spec.ts
-index 95f8cad439..5c9fb2ee29 100644
+index 95f8cad43..5c9fb2ee2 100644
 --- a/packages/client/ui-layout/tests/apply.client.spec.ts
 +++ b/packages/client/ui-layout/tests/apply.client.spec.ts
 @@ -12,7 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
