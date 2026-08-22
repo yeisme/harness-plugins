@@ -9,4 +9,4 @@
 | 日志 | `grep -rn 'console\.' src` → 零命中；包内无任何日志/遥测输出点 | PASS |
 | 产物/证据 | `grep credential 关键词 lib/index.js` → 21 处命中，逐处抽样核对全部为 `FORBIDDEN_PROFILE_KEYS` 拒绝清单、validator 代码与降级文案（"waits for the host seam"），无凭据数据通路；测试快照即证据，只含元数据 | PASS |
 
-结构性保证：`parseProfileMeta` 顶层禁 15 类凭据字段；`siteScope`/`profileId` 拒 URL/路径；真实 jar apply/switch 无本地写路径（`onApply === undefined` 时按钮禁用 + 明示等待 `web.cookieJars` seam）。
+结构性保证：`parseProfileMeta` 顶层禁 15 类凭据字段；`siteScope`/`profileId` 拒 URL/路径；发布版无 seam 时 apply/switch/clear 按钮禁用 + 明示等待 `web.cookieJars`；探测到 `WebCookieJarsV1` 后只提交 profile ref，不安全 ref 不进 host，receipt 凭据词红acted。

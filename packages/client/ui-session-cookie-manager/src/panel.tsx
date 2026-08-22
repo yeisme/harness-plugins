@@ -1,7 +1,7 @@
 /**
  * Login-state profile manager panel (Phase 1): metadata CRUD, read-only
  * account composition, quota skeleton, and an honest degraded state while
- * the host cookie seam (`web.cookieJars`) is pending upstream.
+ * the host cookie seam (`web.cookieJars`) is absent on published DSH.
  *
  * @module @yeisme/dsh-client-ui-session-cookie-manager
  */
@@ -87,6 +87,10 @@ export interface CookieManagerPanelLabels {
   remove?: string
   apply?: string
   applyUnavailable?: string
+  switchProfile?: string
+  switchUnavailable?: string
+  clear?: string
+  clearUnavailable?: string
   accounts?: string
   noAccounts?: string
   quota?: string
@@ -104,6 +108,10 @@ const DEFAULT_LABELS: Required<CookieManagerPanelLabels> = {
   remove: 'Delete',
   apply: 'Apply login state',
   applyUnavailable: 'Applying a real cookie jar waits for the host seam (web.cookieJars); nothing is stored or written locally.',
+  switchProfile: 'Switch login state',
+  switchUnavailable: 'Atomic jar switch waits for the host seam (web.cookieJars); nothing is stored or written locally.',
+  clear: 'Clear login state',
+  clearUnavailable: 'Clearing a real cookie jar waits for the host seam (web.cookieJars); nothing is stored or written locally.',
   accounts: 'Accounts',
   noAccounts: 'No account projection available.',
   quota: 'Quota',
@@ -117,8 +125,14 @@ export interface CookieManagerPanelProps {
   onCreate?: ProfileCreateHandler | undefined
   onRename?: ProfileRenameHandler | undefined
   onRemove?: ProfileRemoveHandler | undefined
-  /** Host seam bridge; absent renders the degraded state. */
+  /** Host apply bridge; absent renders the degraded apply state. */
   onApply?: ((profileId: string) => void) | undefined
+  /** Host atomic switch; absent keeps the switch control disabled. */
+  onSwitch?: ((fromProfileId: string, toProfileId: string) => void) | undefined
+  /** Host clear; absent keeps the clear control disabled. */
+  onClear?: ((profileId: string) => void) | undefined
+  /** Currently applied profile; used only as an opaque switch source. */
+  activeProfileId?: string | undefined
   accounts?: readonly AccountProjectionV1[] | undefined
   quota?: QuotaProjectionV1 | undefined
   labels?: CookieManagerPanelLabels | undefined
@@ -128,7 +142,7 @@ export interface CookieManagerPanelProps {
 
 /** Phase 1 panel: metadata only — no credential value ever appears here. */
 export function CookieManagerPanel({
-  profiles, onCreate, onRename, onRemove, onApply, accounts, quota, labels, error,
+  profiles, onCreate, onRename, onRemove, onApply, onSwitch, onClear, activeProfileId, accounts, quota, labels, error,
 }: CookieManagerPanelProps) {
   const text = { ...DEFAULT_LABELS, ...labels }
   const [site, setSite] = useState('')
@@ -186,10 +200,18 @@ export function CookieManagerPanel({
             {onApply === undefined
               ? <button type="button" disabled aria-describedby="apply-unavailable">{text.apply}</button>
               : <button type="button" onClick={() => { onApply(profile.profileId) }}>{text.apply}</button>}
+            {onSwitch === undefined || activeProfileId === undefined || activeProfileId === profile.profileId
+              ? <button type="button" disabled aria-describedby="switch-unavailable">{text.switchProfile}</button>
+              : <button type="button" onClick={() => { onSwitch(activeProfileId, profile.profileId) }}>{text.switchProfile}</button>}
+            {onClear === undefined
+              ? <button type="button" disabled aria-describedby="clear-unavailable">{text.clear}</button>
+              : <button type="button" onClick={() => { onClear(profile.profileId) }}>{text.clear}</button>}
           </li>
         ))}
       </ul>
       {onApply === undefined && <p id="apply-unavailable" role="note">{text.applyUnavailable}</p>}
+      {onSwitch === undefined && <p id="switch-unavailable" role="note">{text.switchUnavailable}</p>}
+      {onClear === undefined && <p id="clear-unavailable" role="note">{text.clearUnavailable}</p>}
 
       <section aria-label={text.accounts} data-dsh-cookie-accounts>
         <h4>{text.accounts}</h4>

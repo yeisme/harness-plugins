@@ -29,7 +29,11 @@
 - **WHEN** 某 profile 的 owner 未提供配额投影
 - **THEN** 面板显示明确的不可用状态与原因，不显示占位假数据
 ### Requirement: 无 seam 时的诚实降级
-在 host cookie seam 未就绪时，系统 MUST 保持 profile 管理、账号组合面板与配额骨架可用，MUST 对真实 jar 应用/切换显示明确 unavailable 原因，且 MUST NOT 用本地伪造或猜测实现替代。
+在 host cookie seam 未就绪时，系统 MUST 保持 profile 管理、账号组合面板与配额骨架可用，MUST 对真实 jar 应用/切换/清除显示明确 unavailable 原因，且 MUST NOT 用本地伪造或猜测实现替代。探测到 `WebCookieJarsV1` 后，系统 MUST 只提交 profile ref 并走单一 host 事务。
 #### Scenario: Phase 1 尝试切换
 - **WHEN** 用户在无 seam 环境点击"应用登录态"
 - **THEN** 界面显示该能力等待 host seam 的明确说明与引导，不执行任何本地写操作
+#### Scenario: 探测到 fork seam 后原子切换
+- **WHEN** host 暴露 `WebCookieJarsV1` 且用户从 profile A 切换到同站 profile B
+- **THEN** 插件只调用一次 host `switchJar`
+- **AND** 不安全 profile ref 不得进入 host

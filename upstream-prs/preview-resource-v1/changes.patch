@@ -1,0 +1,21 @@
+diff --git a/packages/attachment/attachment/src/index.ts b/packages/attachment/attachment/src/index.ts
+index 8b54926ef..64d2f3851 100644
+--- a/packages/attachment/attachment/src/index.ts
++++ b/packages/attachment/attachment/src/index.ts
+@@ -131,3 +131,16 @@ export abstract class AttachmentStore extends Service {
+ }
+ 
+ export default AttachmentStore
++
++export {
++  PREVIEW_RESOURCE_CAPABILITY,
++  hasPreviewResourceCapability,
++  isOpaquePreviewId,
++  sniffPreviewMediaType,
++} from './preview.ts'
++export type {
++  PreviewReadRequest,
++  PreviewReadResult,
++  PreviewResourceRef,
++  PreviewResourceSource,
++} from './preview.ts'

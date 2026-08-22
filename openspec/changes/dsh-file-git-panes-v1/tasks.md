@@ -13,4 +13,4 @@
 ## 3. 验证
 
 - [x] 3.1 `openspec validate dsh-file-git-panes-v1 --strict --no-interactive`。
-- [ ] 3.2 真实 DSH `ctx.fs` watcher 合入后才宣称 File live；本 change 不勾 live 验收。
+- [x] 3.2 真实 DSH `ctx.fs` watcher 合入后才宣称 File live；本 change 不勾 live 验收。（progress 2026-08-22：fork 合同 PR #6 已登记。发布版未合入，File pane 仍不得宣称 live。）

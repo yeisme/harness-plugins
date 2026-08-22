@@ -40,6 +40,24 @@ export {
 } from './provider-adapter.ts'
 export { createLoginProfilesView, profileErrorMessage, registerLoginProfilesPaneViews } from './pane-views.tsx'
 export type { ProfilesPaneDeps, ProfilesPaneSurface } from './pane-views.tsx'
+export {
+  COOKIE_JARS_CAPABILITY,
+  applyCookieJar,
+  bindCookieJars,
+  clearCookieJar,
+  hasCookieJarsCapability,
+  isSafeCookieJarProfile,
+  receiptErrorMessage,
+  redactCookieJarReceipt,
+  switchCookieJar,
+} from './cookie-jars.ts'
+export type {
+  CookieJarAction,
+  CookieJarCallResult,
+  CookieJarProfileRef,
+  CookieJarReceipt,
+  CookieJarSource,
+} from './cookie-jars.ts'
 
 export const name = 'dsh-session-cookie-manager'
 export const inject = [] as const

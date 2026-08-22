@@ -10,4 +10,4 @@
 
 ## 3. 验证
 
-- [ ] 3.1 `openspec validate dsh-terminal-interactive-v1 --strict --no-interactive`。
+- [x] 3.1 `openspec validate dsh-terminal-interactive-v1 --strict --no-interactive`。（progress 2026-08-22：strict valid。2.2 官方 duplex 仍 commodity-parked，本 change 不勾。）

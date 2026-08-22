@@ -10,6 +10,15 @@ import { useMemo, useState } from 'react'
 import { CookieManagerPanel } from './panel.tsx'
 import { ProfileStore, ProfileStoreError } from './profile-store.ts'
 import { composeAccountProjections, type ProviderSnapshotLike, type SessionListSnapshotLike } from './provider-adapter.ts'
+import {
+  applyCookieJar,
+  bindCookieJars,
+  clearCookieJar,
+  receiptErrorMessage,
+  switchCookieJar,
+  type CookieJarSource,
+} from './cookie-jars.ts'
+import type { ProfileMetaV1 } from './profile-types.ts'
 
 /** Minimal structural pane surface; avoids a hard dependency on the shell. */
 export interface ProfilesPaneSurface {
@@ -32,24 +41,76 @@ export interface ProfilesPaneDeps {
   providerSnapshot?: ProviderSnapshotLike | undefined
   /** Owner session-resume snapshot composed read-only into the accounts section. */
   sessionSnapshot?: SessionListSnapshotLike | undefined
+  /**
+   * Host cookie-jar face. Published DSH is absent; only a live
+   * `WebCookieJarsV1` source enables apply/switch/clear.
+   */
+  cookieJars?: CookieJarSource | unknown | undefined
 }
 
 /** Local factory for the singleton login-profiles navigator view. */
 export function createLoginProfilesView(deps: ProfilesPaneDeps = {}) {
   return function LoginProfilesPaneView() {
     const store = useMemo(() => deps.store ?? new ProfileStore(), [deps.store])
+    const cookieJars = useMemo(() => bindCookieJars(deps.cookieJars), [deps.cookieJars])
     const [profiles, setProfiles] = useState(() => [...store.list()])
     const [error, setError] = useState<string | undefined>(undefined)
+    const [activeProfileId, setActiveProfileId] = useState<string | undefined>(undefined)
     const accounts = composeAccountProjections(deps.providerSnapshot, deps.sessionSnapshot)
     const refresh = (): void => { setProfiles([...store.list()]) }
     const fail = (caught: unknown): void => {
       setError(profileErrorMessage(caught))
+    }
+    const refOf = (profileId: string): { profileRef: string; siteScope: string } | undefined => {
+      const profile: ProfileMetaV1 | undefined = store.list().find(item => item.profileId === profileId)
+      if (profile === undefined) return undefined
+      return { profileRef: profile.profileId, siteScope: profile.siteScope }
     }
     return (
       <CookieManagerPanel
         profiles={profiles}
         accounts={accounts}
         error={error}
+        activeProfileId={activeProfileId}
+        {...cookieJars === undefined ? {} : {
+          onApply: (profileId: string) => {
+            const profile = refOf(profileId)
+            if (profile === undefined) {
+              setError('profile not found')
+              return
+            }
+            void applyCookieJar(cookieJars, profile).then(result => {
+              const message = receiptErrorMessage(result)
+              setError(message)
+              if (result.ok) setActiveProfileId(profileId)
+            })
+          },
+          onSwitch: (fromProfileId: string, toProfileId: string) => {
+            const from = refOf(fromProfileId)
+            const to = refOf(toProfileId)
+            if (from === undefined || to === undefined) {
+              setError('profile not found')
+              return
+            }
+            void switchCookieJar(cookieJars, from, to).then(result => {
+              const message = receiptErrorMessage(result)
+              setError(message)
+              if (result.ok) setActiveProfileId(toProfileId)
+            })
+          },
+          onClear: (profileId: string) => {
+            const profile = refOf(profileId)
+            if (profile === undefined) {
+              setError('profile not found')
+              return
+            }
+            void clearCookieJar(cookieJars, profile).then(result => {
+              const message = receiptErrorMessage(result)
+              setError(message)
+              if (result.ok && activeProfileId === profileId) setActiveProfileId(undefined)
+            })
+          },
+        }}
         onCreate={input => {
           try {
             store.create(input)

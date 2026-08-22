@@ -1,0 +1,499 @@
+diff --git a/packages/client/connection/src/client/fixture.ts b/packages/client/connection/src/client/fixture.ts
+index cfcae2eb1..72a18b657 100644
+--- a/packages/client/connection/src/client/fixture.ts
++++ b/packages/client/connection/src/client/fixture.ts
+@@ -2445,6 +2445,52 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
+         }
+         return ok(request, { sessionId: child.sessionId })
+       },
++      forkBeforeMessage: (request) => {
++        const { sessionId, atMessageSeq } = request.payload
++        const source = summaryOf(sessionId)
++        if (source === undefined) {
++          return err(request, {
++            code: 'session-not-found',
++            message: `no session ${sessionId}`,
++            details: { sessionId },
++          })
++        }
++        const log = logs.get(sessionId) ?? []
++        const target = log.find(event => event.seq === atMessageSeq)
++        if (target === undefined) {
++          return err(request, {
++            code: 'fork-unavailable',
++            message: `session ${sessionId} has no event ${String(atMessageSeq)} to fork before`,
++            details: { sessionId, atMessageSeq },
++          })
++        }
++        const priorEnd = log.findLast(event => event.type === 'turn/end' && event.seq < atMessageSeq)
++        let cut = 0
++        if (priorEnd !== undefined) {
++          cut = priorEnd.seq + 1
++          while (cut < log.length && log[cut]?.type !== 'turn/start') cut++
++          if (cut > atMessageSeq) cut = atMessageSeq
++        }
++        const child: SessionSummary = {
++          sessionId: sid(`fx-${nextSession++}`), updatedAt: Date.now(), running: false, blank: cut === 0,
++          parentSessionId: sessionId,
++          ...source.cwd === undefined ? {} : { cwd: source.cwd },
++        }
++        logs.set(child.sessionId, log.slice(0, cut))
++        sessions.push(child)
++        emitHost({
++          type: 'host/session-added', sessionId: child.sessionId, blank: cut === 0,
++          parentSessionId: sessionId,
++          ...source.cwd === undefined ? {} : { cwd: source.cwd },
++        })
++        const workspace = workspaces.find(w => w.sessionIds.includes(sessionId))
++        if (workspace !== undefined) {
++          workspace.sessionIds = [child.sessionId, ...workspace.sessionIds]
++          workspace.updatedAt = new Date().toISOString()
++          emitHost({ type: 'host/workspace-changed', workspace: { ...workspace } })
++        }
++        return ok(request, { sessionId: child.sessionId })
++      },
+       history: async (request) => {
+         const log = logs.get(request.payload.sessionId) ?? []
+         // Snapshot at request time, deliver after the transit delay (mirrors a real host under latency).
+@@ -3183,6 +3229,7 @@ export class FixtureApiClient extends AbstractApiClient {
+       case 'session.selectModel': return this.api.sessions.selectModel(request)
+       case 'session.rename': return this.api.sessions.rename(request)
+       case 'session.fork': return this.api.sessions.fork(request)
++      case 'session.forkBeforeMessage': return this.api.sessions.forkBeforeMessage(request)
+       case 'session.prompt': return this.api.sessions.prompt(request)
+       case 'session.attachment': return this.api.sessions.attachment(request)
+       case 'session.updateQueue': return this.api.sessions.updateQueue(request)
+diff --git a/packages/client/connection/tests/fake-api.client.ts b/packages/client/connection/tests/fake-api.client.ts
+index 7c9dc6acc..2cafde884 100644
+--- a/packages/client/connection/tests/fake-api.client.ts
++++ b/packages/client/connection/tests/fake-api.client.ts
+@@ -48,6 +48,7 @@ export class FakeApiClient implements IApiClient {
+   onCreate: (payload: unknown) => Promise<RpcResponse<{ sessionId: SessionId }>> = () => Promise.resolve(ok({ sessionId: 'fk-new' as SessionId }))
+   onRename: (payload: unknown) => Promise<RpcResponse<{ title: string; seq: number }>> = () => Promise.resolve(ok({ title: 'fk-renamed', seq: 0 }))
+   onFork: (payload: unknown) => Promise<RpcResponse<{ sessionId: SessionId }>> = () => Promise.resolve(ok({ sessionId: 'fk-fork' as SessionId }))
++  onForkBeforeMessage: (payload: unknown) => Promise<RpcResponse<{ sessionId: SessionId }>> = () => Promise.resolve(ok({ sessionId: 'fk-fork-before' as SessionId }))
+   onHistory: (payload: { sessionId: SessionId; beforeSeq?: number; maxMessages?: number })
+   => Promise<RpcResponse<{ events: never[]; hasMore: boolean; modelSelection: ModelSelection }>> =
+     () => Promise.resolve(ok({
+@@ -118,6 +119,7 @@ export class FakeApiClient implements IApiClient {
+       this.record('session.selectModel', payload, this.onSelectModel(payload)),
+     rename: (payload: unknown) => this.record('session.rename', payload, this.onRename(payload)),
+     fork: (payload: unknown) => this.record('session.fork', payload, this.onFork(payload)),
++    forkBeforeMessage: (payload: unknown) => this.record('session.forkBeforeMessage', payload, this.onForkBeforeMessage(payload)),
+     prompt: (payload: unknown) => this.record('session.prompt', payload, this.onPrompt(payload)),
+     attachment: (payload: unknown) => this.record('session.attachment', payload, this.onAttachment(payload)),
+     updateQueue: (payload: unknown) => this.record('session.updateQueue', payload, this.onUpdateQueue(payload)),
+diff --git a/packages/client/runtime/src/client/contract/sessions.ts b/packages/client/runtime/src/client/contract/sessions.ts
+index 27b9d2d13..e97fe42b0 100644
+--- a/packages/client/runtime/src/client/contract/sessions.ts
++++ b/packages/client/runtime/src/client/contract/sessions.ts
+@@ -95,6 +95,14 @@ export interface ISessions {
+    * @throws when the fork fails, or when a requested child-title rename fails after creation.
+    */
+   fork(opts: { sessionId: SessionId; atSeq?: number; increaseTitle?: boolean }): Promise<SessionId>
++  /**
++   * Fork a child that excludes the addressed message. First-round messages
++   * produce a `seedLength: 0` child that still inherits cwd, parentSession,
++   * and workspace attachment.
++   * @param opts - source session and the event seq to rewrite from.
++   * @returns the child session id.
++   */
++  forkBeforeMessage(opts: { sessionId: SessionId; atMessageSeq: number }): Promise<SessionId>
+   /**
+    * Register a per-session standard-props provider (hooks become `use<Name>`
+    * selector hooks on the render side; props spread verbatim).
+diff --git a/packages/client/runtime/src/client/sessions/manager.ts b/packages/client/runtime/src/client/sessions/manager.ts
+index 13aa20d1c..c8bc6ab4f 100644
+--- a/packages/client/runtime/src/client/sessions/manager.ts
++++ b/packages/client/runtime/src/client/sessions/manager.ts
+@@ -602,6 +602,35 @@ export class SessionManager {
+     }
+   }
+ 
++  /**
++   * Contract session.forkBeforeMessage; same list-addressability as fork.
++   * First-round children are blank (`seedLength: 0`).
++   */
++  async forkBeforeMessage(
++    opts: { sessionId: SessionId; atMessageSeq: number },
++  ): Promise<RpcResult<{ sessionId: SessionId }>> {
++    try {
++      const source = this.summaries.find(s => s.sessionId === opts.sessionId)
++      const { result } = await this.api.sessions.forkBeforeMessage({
++        sessionId: opts.sessionId,
++        atMessageSeq: opts.atMessageSeq,
++      })
++      const childId = result.ok
++        ? result.value.sessionId
++        : workspaceAttachSessionId(result.error)
++      if (childId !== undefined) {
++        this.recordMutation({ kind: 'upsert', summary: {
++          sessionId: childId, updatedAt: Date.now(), running: false, blank: true,
++          parentSessionId: opts.sessionId,
++          ...(source?.cwd !== undefined ? { cwd: source.cwd } : {}),
++        } })
++      }
++      return result
++    } catch (error) {
++      return transportError(error)
++    }
++  }
++
+   /**
+    * Insert-or-enrich a locally synthesized summary: a new id prepends; an
+    * existing entry only gains fields it lacks (the session-added frame and the
+diff --git a/packages/client/runtime/src/client/sessions/service.ts b/packages/client/runtime/src/client/sessions/service.ts
+index c66da4e0d..b322cafbf 100644
+--- a/packages/client/runtime/src/client/sessions/service.ts
++++ b/packages/client/runtime/src/client/sessions/service.ts
+@@ -531,6 +531,25 @@ export class SessionRuntime implements ISessions {
+     return childId
+   }
+ 
++  /**
++   * Fork a child that excludes the addressed message. First-round messages
++   * produce an empty seed; later messages cut at the last completed turn
++   * before `atMessageSeq`.
++   * @throws {SessionForkError} with the source id.
++   */
++  async forkBeforeMessage(opts: {
++    sessionId: SessionId
++    atMessageSeq: number
++  }): Promise<SessionId> {
++    const result = await this.manager.forkBeforeMessage({
++      sessionId: opts.sessionId,
++      atMessageSeq: Math.floor(opts.atMessageSeq),
++    })
++    if (!result.ok) throw new SessionForkError(result.error, opts.sessionId)
++    this.projectList()
++    return result.value.sessionId
++  }
++
+   /**
+    * Resolve an Agent-scoped context view (use-and-discard).
+    * @param id - session id (the agent identity — 1:1 same axis).
+diff --git a/packages/client/runtime/tests/fake-api.client.ts b/packages/client/runtime/tests/fake-api.client.ts
+index e5bdaa5f6..74caf7665 100644
+--- a/packages/client/runtime/tests/fake-api.client.ts
++++ b/packages/client/runtime/tests/fake-api.client.ts
+@@ -81,6 +81,7 @@ export class FakeApiClient implements IApiClient {
+   readonly defaultModel: ModelSelection = { provider: 'deepseek-official', model: 'deepseek-v4-flash' }
+   onRename: (payload: unknown) => Promise<RpcResponse<{ title: string; seq: number }>> = () => Promise.resolve(ok({ title: 'fk-renamed', seq: 0 }))
+   onFork: (payload: unknown) => Promise<RpcResponse<{ sessionId: SessionId }>> = () => Promise.resolve(ok({ sessionId: 'fk-fork' as SessionId }))
++  onForkBeforeMessage: (payload: unknown) => Promise<RpcResponse<{ sessionId: SessionId }>> = () => Promise.resolve(ok({ sessionId: 'fk-fork-before' as SessionId }))
+   onHistory: (payload: { sessionId: SessionId; beforeSeq?: number; maxMessages?: number })
+   => Promise<RpcResponse<{ events: never[]; hasMore: boolean }>> =
+     () => Promise.resolve(ok({ events: [], hasMore: false }))
+@@ -152,6 +153,7 @@ export class FakeApiClient implements IApiClient {
+       this.record('session.selectModel', payload, this.onSelectModel(payload)),
+     rename: (payload: unknown) => this.record('session.rename', payload, this.onRename(payload)),
+     fork: (payload: unknown) => this.record('session.fork', payload, this.onFork(payload)),
++    forkBeforeMessage: (payload: unknown) => this.record('session.forkBeforeMessage', payload, this.onForkBeforeMessage(payload)),
+     prompt: (payload: unknown) => this.record('session.prompt', payload, this.onPrompt(payload)),
+     attachment: (payload: unknown) => this.record('session.attachment', payload, this.onAttachment(payload)),
+     updateQueue: (payload: unknown) => this.record('session.updateQueue', payload, this.onUpdateQueue(payload)),
+diff --git a/packages/client/runtime/tests/sessions-service.client.spec.ts b/packages/client/runtime/tests/sessions-service.client.spec.ts
+index b135b56eb..f54d0fed9 100644
+--- a/packages/client/runtime/tests/sessions-service.client.spec.ts
++++ b/packages/client/runtime/tests/sessions-service.client.spec.ts
+@@ -592,6 +592,18 @@ describe('fork', () => {
+       .rejects.toThrow('fork child rename failed: title-invalid: rejected')
+     expect(b.svc.binding(sid('child'))).toBeDefined()
+   })
++
++  it('exposes forkBeforeMessage as an additive sessions method', async () => {
++    const b = bench()
++    await feedList(b, [{ id: 'source', cwd: '/work' }])
++    b.api.onForkBeforeMessage = () => Promise.resolve(ok({ sessionId: sid('child-before') }))
++    await expect(b.svc.forkBeforeMessage({ sessionId: sid('source'), atMessageSeq: 0 }))
++      .resolves.toBe('child-before')
++    expect(b.api.callsOf('session.forkBeforeMessage')).toEqual([
++      { sessionId: 'source', atMessageSeq: 0 },
++    ])
++    expect(b.svc.binding(sid('child-before'))).toBeDefined()
++  })
+ })
+ 
+ describe('scope lifecycle rides the list mirror (entity parity: no client-side pre-birth)', () => {
+diff --git a/packages/extensions/cordis-client-runner/src/client/api-catalog.ts b/packages/extensions/cordis-client-runner/src/client/api-catalog.ts
+index 216652dc0..2a7888b23 100644
+--- a/packages/extensions/cordis-client-runner/src/client/api-catalog.ts
++++ b/packages/extensions/cordis-client-runner/src/client/api-catalog.ts
+@@ -196,6 +196,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
+         returns: 'the child session id.',
+         throws: ['when the fork fails, or when a requested child-title rename fails after creation.'],
+       },
++      {
++        signature: 'forkBeforeMessage(opts: { sessionId: SessionId; atMessageSeq: number }): Promise<SessionId>',
++        description: 'Fork a child that excludes the addressed message. First-round messages produce a seedLength-0 child that still inherits cwd, parentSession, and workspace attachment.',
++        parameters: [{ name: 'opts', description: 'source session and the event seq to rewrite from.' }],
++        returns: 'the child session id.',
++        throws: ['when the source or message seq is unavailable.'],
++      },
+       {
+         signature: 'scope(id: SessionId): AgentContext | undefined',
+         description: 'Resolve an Agent-scoped context view (use-and-discard).',
+diff --git a/packages/host/apiproxy/src/api-proxy.ts b/packages/host/apiproxy/src/api-proxy.ts
+index ba354e117..2a958011e 100644
+--- a/packages/host/apiproxy/src/api-proxy.ts
++++ b/packages/host/apiproxy/src/api-proxy.ts
+@@ -2358,6 +2358,85 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
+         return ok(request, { sessionId: childId })
+       },
+ 
++      async forkBeforeMessage(request) {
++        const { sessionId, atMessageSeq } = request.payload
++        let source: SessionReadState
++        try {
++          source = await readSessionState(sessionId)
++        } catch (error: unknown) {
++          if (error instanceof SessionNotFound) {
++            return err(request, { code: 'session-not-found', message: error.message, details: { sessionId } })
++          }
++          return err(request, {
++            code: 'internal',
++            message: `forkBeforeMessage source unavailable for session "${sessionId}": ${String(error)}`,
++            details: {},
++          })
++        }
++        const events = source.events
++        const target = events.find(event => event.seq === atMessageSeq)
++        if (target === undefined) {
++          return err(request, {
++            code: 'fork-unavailable',
++            message: `session "${sessionId}" has no event ${String(atMessageSeq)} to fork before`,
++            details: { sessionId, atMessageSeq },
++          })
++        }
++        const priorEnd = events.findLast(event => event.type === 'turn/end' && event.seq < atMessageSeq)
++        let cut = 0
++        if (priorEnd !== undefined) {
++          cut = priorEnd.seq + 1
++          while (cut < events.length && events[cut]?.type !== 'turn/start') cut++
++          if (cut > atMessageSeq) cut = atMessageSeq
++        }
++        let workspace: Workspace | undefined
++        try {
++          workspace = await forkWorkspace(source)
++        } catch (error: unknown) {
++          return err(request, {
++            code: 'internal',
++            message: `failed to resolve fork workspace for session "${sessionId}": ${String(error)}`,
++            details: {},
++          })
++        }
++        const childId = `session-${randomUUID()}` as SessionId
++        const forkComposition = await composeAgent(resolveSessionPreset(source))
++        try {
++          await ctx.agents.create({
++            sessionId: childId,
++            seed: events.slice(0, cut),
++            meta: {
++              ...source.header.cwd === undefined ? {} : { cwd: source.header.cwd },
++              parentSession: source.id,
++              seedLength: cut,
++              ...forkComposition.agentPreset === undefined
++                ? {}
++                : { agentPreset: forkComposition.agentPreset },
++            },
++            agentOptions: agentOptions(),
++            setup: forkComposition.setup,
++          })
++        } catch (error: unknown) {
++          return err(request, {
++            code: 'internal',
++            message: `failed to forkBeforeMessage session "${sessionId}": ${String(error)}`,
++            details: {},
++          })
++        }
++        if (workspace !== undefined) {
++          try {
++            await workspace.attachSession(childId)
++          } catch (error: unknown) {
++            return err(request, {
++              code: 'workspace-attach-failed',
++              message: `session "${childId}" was forked but could not attach to workspace "${workspace.id}": ${String(error)}`,
++              details: { sessionId: childId, workspaceId: workspace.id },
++            })
++          }
++        }
++        return ok(request, { sessionId: childId })
++      },
++
+       async prompt(request) {
+         const { sessionId, mode, content, clientTimeZone } = request.payload
+         const canonicalTimeZone = clientTimeZone === undefined
+diff --git a/packages/host/apiproxy/src/api/rpc-map.ts b/packages/host/apiproxy/src/api/rpc-map.ts
+index 80dede179..6c5950043 100644
+--- a/packages/host/apiproxy/src/api/rpc-map.ts
++++ b/packages/host/apiproxy/src/api/rpc-map.ts
+@@ -30,6 +30,7 @@ export interface RpcMethodMap {
+   'session.selectModel': SessionsApi['selectModel']
+   'session.rename': SessionsApi['rename']
+   'session.fork': SessionsApi['fork']
++  'session.forkBeforeMessage': SessionsApi['forkBeforeMessage']
+   'session.prompt': SessionsApi['prompt']
+   'session.attachment': SessionsApi['attachment']
+   'session.updateQueue': SessionsApi['updateQueue']
+diff --git a/packages/host/apiproxy/src/api/sessions.schema.ts b/packages/host/apiproxy/src/api/sessions.schema.ts
+index c41501577..bff42b20d 100644
+--- a/packages/host/apiproxy/src/api/sessions.schema.ts
++++ b/packages/host/apiproxy/src/api/sessions.schema.ts
+@@ -138,6 +138,17 @@ export const sessionForkValueSchema = z.object({
+   sessionId: sessionIdSchema,
+ }) satisfies z.ZodType<Wire<ResponseValue<'session.fork'>>>
+ 
++/** session.forkBeforeMessage request: rewrite from before this event seq. */
++export const sessionForkBeforeMessageRequestSchema = z.object({
++  sessionId: sessionIdSchema,
++  atMessageSeq: z.number().int().nonnegative(),
++}) satisfies z.ZodType<Wire<RequestPayload<'session.forkBeforeMessage'>>>
++
++/** session.forkBeforeMessage response value (the child session id). */
++export const sessionForkBeforeMessageValueSchema = z.object({
++  sessionId: sessionIdSchema,
++}) satisfies z.ZodType<Wire<ResponseValue<'session.forkBeforeMessage'>>>
++
+ /** session.history request payload (beforeSeq/maxMessages page backwards from the window tail). */
+ export const sessionHistoryRequestSchema = z.object({
+   sessionId: sessionIdSchema,
+diff --git a/packages/host/apiproxy/src/api/sessions.ts b/packages/host/apiproxy/src/api/sessions.ts
+index 6b5fadf24..d64ce0f7e 100644
+--- a/packages/host/apiproxy/src/api/sessions.ts
++++ b/packages/host/apiproxy/src/api/sessions.ts
+@@ -341,6 +341,17 @@ export interface SessionsApi {
+   fork(request: RpcRequest<{ sessionId: SessionId; atSeq?: number }>):
+   Promise<RpcResponse<{ sessionId: SessionId }>>
+ 
++  /**
++   * Forks a child that excludes the addressed message. `atMessageSeq` is the
++   * user/assistant event to rewrite from: the seed is the last completed
++   * `turn/end` strictly before that seq, or an empty prefix (`seedLength: 0`)
++   * when the message is the first round. The child still inherits cwd,
++   * parentSession lineage, and workspace attachment. An unknown seq fails
++   * with `fork-unavailable` instead of clipping to an arbitrary earlier turn.
++   */
++  forkBeforeMessage(request: RpcRequest<{ sessionId: SessionId; atMessageSeq: number }>):
++  Promise<RpcResponse<{ sessionId: SessionId }>>
++
+   /**
+    * Sends text and temporary image bytes to an ordinary session Agent after durable host admission.
+    * Browser callers attach their current IANA zone;
+diff --git a/packages/host/apiproxy/src/fetch/client.ts b/packages/host/apiproxy/src/fetch/client.ts
+index 70e3ece58..7c4999a85 100644
+--- a/packages/host/apiproxy/src/fetch/client.ts
++++ b/packages/host/apiproxy/src/fetch/client.ts
+@@ -21,6 +21,7 @@ import {
+   sessionCancelValueSchema,
+   sessionAttachmentValueSchema,
+   sessionCreateValueSchema,
++  sessionForkBeforeMessageValueSchema,
+   sessionForkValueSchema,
+   sessionHistoryValueSchema,
+   sessionListValueSchema,
+@@ -94,6 +95,7 @@ export interface IApiClient {
+     selectModel(payload: RequestPayload<'session.selectModel'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.selectModel'>>>
+     rename(payload: RequestPayload<'session.rename'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.rename'>>>
+     fork(payload: RequestPayload<'session.fork'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.fork'>>>
++    forkBeforeMessage(payload: RequestPayload<'session.forkBeforeMessage'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.forkBeforeMessage'>>>
+     prompt(payload: RequestPayload<'session.prompt'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.prompt'>>>
+     attachment(payload: RequestPayload<'session.attachment'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.attachment'>>>
+     updateQueue(payload: RequestPayload<'session.updateQueue'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.updateQueue'>>>
+@@ -178,6 +180,7 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
+   'session.selectModel': sessionSelectModelValueSchema,
+   'session.rename': sessionRenameValueSchema,
+   'session.fork': sessionForkValueSchema,
++  'session.forkBeforeMessage': sessionForkBeforeMessageValueSchema,
+   'session.prompt': sessionPromptValueSchema,
+   'session.attachment': sessionAttachmentValueSchema,
+   'session.updateQueue': sessionUpdateQueueValueSchema,
+@@ -418,6 +421,7 @@ export abstract class AbstractApiClient implements IApiClient {
+     selectModel: (payload, signal) => this.callUnary('session.selectModel', payload, signal),
+     rename: (payload, signal) => this.callUnary('session.rename', payload, signal),
+     fork: (payload, signal) => this.callUnary('session.fork', payload, signal),
++    forkBeforeMessage: (payload, signal) => this.callUnary('session.forkBeforeMessage', payload, signal),
+     prompt: (payload, signal) => this.callUnary('session.prompt', payload, signal),
+     attachment: (payload, signal) => this.callUnary('session.attachment', payload, signal),
+     updateQueue: (payload, signal) => this.callUnary('session.updateQueue', payload, signal),
+diff --git a/packages/host/apiproxy/src/fetch/handler.ts b/packages/host/apiproxy/src/fetch/handler.ts
+index 697171ec5..28396e9ce 100644
+--- a/packages/host/apiproxy/src/fetch/handler.ts
++++ b/packages/host/apiproxy/src/fetch/handler.ts
+@@ -19,6 +19,7 @@ import {
+   sessionCancelRequestSchema,
+   sessionAttachmentRequestSchema,
+   sessionCreateRequestSchema,
++  sessionForkBeforeMessageRequestSchema,
+   sessionForkRequestSchema,
+   sessionHistoryRequestSchema,
+   sessionListRequestSchema,
+@@ -96,6 +97,7 @@ const UNARY_ROUTES: UnaryRoutes = {
+   'session.selectModel': { schema: sessionSelectModelRequestSchema, invoke: (api, r) => api.sessions.selectModel(r) },
+   'session.rename': { schema: sessionRenameRequestSchema, invoke: (api, r) => api.sessions.rename(r) },
+   'session.fork': { schema: sessionForkRequestSchema, invoke: (api, r) => api.sessions.fork(r) },
++  'session.forkBeforeMessage': { schema: sessionForkBeforeMessageRequestSchema, invoke: (api, r) => api.sessions.forkBeforeMessage(r) },
+   'session.prompt': { schema: sessionPromptRequestSchema, invoke: (api, r) => api.sessions.prompt(r) },
+   'session.attachment': { schema: sessionAttachmentRequestSchema, invoke: (api, r) => api.sessions.attachment(r) },
+   'session.updateQueue': { schema: sessionUpdateQueueRequestSchema, invoke: (api, r) => api.sessions.updateQueue(r) },
+diff --git a/packages/host/apiproxy/tests/api-proxy-fork.spec.ts b/packages/host/apiproxy/tests/api-proxy-fork.spec.ts
+index 33dede456..050760750 100644
+--- a/packages/host/apiproxy/tests/api-proxy-fork.spec.ts
++++ b/packages/host/apiproxy/tests/api-proxy-fork.spec.ts
+@@ -287,3 +287,57 @@ describe('sessions.fork', () => {
+     await ctx.fiber.dispose()
+   })
+ })
++
++describe('sessions.forkBeforeMessage', () => {
++  it('creates a seedLength-0 child for the first-round message', async () => {
++    const ctx = await composed()
++    const source = liveAgent(ctx, 'session-first', 1)
++    const firstUser = source.events.find(event => event.type === 'user/message')
++    expect(firstUser).toBeDefined()
++    const response = await api(ctx).sessions.forkBeforeMessage(request({
++      sessionId: source.id,
++      atMessageSeq: firstUser!.seq,
++    }))
++    expect(response.result.ok).toBe(true)
++    if (!response.result.ok) return
++    const child = ctx.sessions.get(response.result.value.sessionId)
++    expect(child?.header.parentSession).toBe(source.id)
++    expect(child?.header.seedLength).toBe(0)
++    expect(child?.header.cwd).toBe('/proj')
++    expect(child?.events.filter(event => event.type !== 'session/end-seed')).toEqual([])
++    await ctx.fiber.dispose()
++  })
++
++  it('cuts at the completed turn before a later message', async () => {
++    const ctx = await composed()
++    const source = liveAgent(ctx, 'session-later', 2)
++    const secondUser = source.events.filter(event => event.type === 'user/message').at(-1)
++    expect(secondUser).toBeDefined()
++    const response = await api(ctx).sessions.forkBeforeMessage(request({
++      sessionId: source.id,
++      atMessageSeq: secondUser!.seq,
++    }))
++    expect(response.result.ok).toBe(true)
++    if (!response.result.ok) return
++    const child = ctx.sessions.get(response.result.value.sessionId)
++    expect(child?.events.map(event => event.type)).toEqual([
++      'turn/start', 'user/message', 'turn/end', 'session/end-seed',
++    ])
++    expect(child?.header.parentSession).toBe(source.id)
++    await ctx.fiber.dispose()
++  })
++
++  it('rejects an unknown message seq', async () => {
++    const ctx = await composed()
++    const source = liveAgent(ctx, 'session-missing', 1)
++    const response = await api(ctx).sessions.forkBeforeMessage(request({
++      sessionId: source.id,
++      atMessageSeq: 999,
++    }))
++    expect(response.result).toMatchObject({
++      ok: false,
++      error: { code: 'fork-unavailable', details: { sessionId: source.id, atMessageSeq: 999 } },
++    })
++    await ctx.fiber.dispose()
++  })
++})

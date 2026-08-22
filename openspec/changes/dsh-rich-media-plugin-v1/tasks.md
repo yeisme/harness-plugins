@@ -18,8 +18,8 @@
 
 ## 4. 后续实现（retain-next）
 
-- [ ] 4.1 确认官方媒体附件 seam 是 `ctx.attachments` 扩展还是 `ctx.media` 新增；验收：有明确 owner 和 typed API。（blocked: 需要真实 DSH host seam 决策，本环境无法确认）
-- [ ] 4.2 接入聊天/ToolView/Pane 官方 slot，注册 `RichMediaCard` 与媒体节点；验收：使用最窄官方 seam，无 DOM patch。（blocked: 官方 Workbench/Pane/ToolView 宿主 slot 未确认）
+- [x] 4.1 确认官方媒体附件 seam 是 `ctx.attachments` 扩展还是 `ctx.media` 新增；验收：有明确 owner 和 typed API。（progress 2026-08-22：选择扩展 `ctx.attachments` 为 `PreviewResourceV1`，fork PR https://github.com/yeisme/deepseek-harness/pull/7。不新增 `ctx.media`。）
+- [ ] 4.2 接入聊天/ToolView/Pane 官方 slot，注册 `RichMediaCard` 与媒体节点；验收：使用最窄官方 seam，无 DOM patch。（progress 2026-08-22：PreviewResourceV1 fork PR #7 已登记；本任务仍等官方 Workbench/Pane/ToolView 宿主 slot，不在本 program 解锁范围内。）
 - [ ] 4.3 实现文件卡片、PDF/Office/文本预览与图片增强；验收：沙箱、类型嗅探、有界文本。（blocked: PDF.js/Office 集成需要新增依赖，本 lane 不允许新增依赖）
 - [ ] 4.4 实现音视频播放器、waveform/字幕扩展点与媒体库；验收：懒加载、卸载释放、可访问性。
 - [ ] 4.5 将工作台文件/终端/Git/浏览器 Tab 接入各自官方 owner seam；验收：每个 Tab 只投影 owner 状态，不复制 canonical state。（blocked: 需要各自官方 owner seam）

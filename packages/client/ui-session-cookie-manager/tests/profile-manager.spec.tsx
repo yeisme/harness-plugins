@@ -1,22 +1,31 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import {
+  COOKIE_JARS_CAPABILITY,
   CookieManagerPanel,
   ProfileStore,
   ProfileStoreError,
   FORBIDDEN_PROFILE_KEYS,
+  applyCookieJar,
+  bindCookieJars,
+  clearCookieJar,
   composeAccountProjections,
   createLoginProfilesView,
+  hasCookieJarsCapability,
+  isSafeCookieJarProfile,
   parseProfileMeta,
   profileErrorMessage,
   providerSnapshotToAccounts,
+  redactCookieJarReceipt,
   registerLoginProfilesPaneViews,
   renderableQuotaFields,
   sessionSnapshotToAccounts,
   submitProfileCreate,
   submitProfileRemove,
   submitProfileRename,
+  switchCookieJar,
 } from '../src/index.ts'
+import type { CookieJarReceipt, CookieJarSource } from '../src/index.ts'
 import type { ProfileMetaV1, SessionListSnapshotLike } from '../src/index.ts'
 
 const base = {
@@ -110,6 +119,25 @@ describe('CookieManagerPanel', () => {
     expect(html).toContain('disabled')
     expect(html).toContain('web.cookieJars')
     expect(html).toContain('role="note"')
+    expect(html).toContain('Apply login state')
+    expect(html).toContain('Switch login state')
+    expect(html).toContain('Clear login state')
+  })
+  it('enables apply/switch/clear only when the host bridges are present', () => {
+    const html = renderToStaticMarkup(
+      <CookieManagerPanel
+        profiles={profiles}
+        activeProfileId="profile-1"
+        onApply={() => {}}
+        onSwitch={() => {}}
+        onClear={() => {}}
+      />,
+    )
+    expect(html).not.toContain('web.cookieJars')
+    expect(html).not.toContain('role="note"')
+    expect(html).toContain('Apply login state')
+    expect(html).toContain('Switch login state')
+    expect(html).toContain('Clear login state')
   })
   it('renders read-only accounts and a fail-visible quota section', () => {
     const html = renderToStaticMarkup(
@@ -348,5 +376,66 @@ describe('credential red line sweep across rendered surfaces', () => {
       const html = renderToStaticMarkup(state)
       expect(html).not.toMatch(credentialPattern)
     }
+  })
+})
+
+function liveCookieJars(receipts: CookieJarReceipt[] = []): CookieJarSource {
+  const accepted = (action: CookieJarReceipt['action'], profileRef: string): CookieJarReceipt => {
+    const receipt = { action, profileRef, status: 'accepted' as const }
+    receipts.push(receipt)
+    return receipt
+  }
+  return {
+    capabilities: [COOKIE_JARS_CAPABILITY],
+    applyJar: async (profile) => accepted('apply', profile.profileRef),
+    switchJar: async (_from, to) => accepted('switch', to.profileRef),
+    clearJar: async (profile) => accepted('clear', profile.profileRef),
+  }
+}
+
+describe('web.cookieJars probe', () => {
+  it('rejects credential-shaped refs and incomplete hosts', () => {
+    expect(isSafeCookieJarProfile({ profileRef: 'acct-42', siteScope: 'example.com' })).toBe(true)
+    expect(isSafeCookieJarProfile({ profileRef: 'token=abc', siteScope: 'example.com' })).toBe(false)
+    expect(hasCookieJarsCapability({ capabilities: [COOKIE_JARS_CAPABILITY] })).toBe(false)
+    expect(bindCookieJars(undefined)).toBeUndefined()
+    expect(bindCookieJars({ capabilities: [COOKIE_JARS_CAPABILITY] })).toBeUndefined()
+    expect(bindCookieJars(liveCookieJars())).toBeDefined()
+  })
+
+  it('applies, switches, and clears only through the host and never locally', async () => {
+    const receipts: CookieJarReceipt[] = []
+    const source = liveCookieJars(receipts)
+    const from = { profileRef: 'profile-1', siteScope: 'example.com' }
+    const to = { profileRef: 'profile-2', siteScope: 'example.com' }
+    await expect(applyCookieJar(source, from)).resolves.toMatchObject({ ok: true })
+    await expect(switchCookieJar(source, from, to)).resolves.toMatchObject({ ok: true })
+    await expect(clearCookieJar(source, to)).resolves.toMatchObject({ ok: true })
+    expect(receipts.map(item => item.action)).toEqual(['apply', 'switch', 'clear'])
+    await expect(applyCookieJar(source, { profileRef: 'cookie=raw', siteScope: 'example.com' }))
+      .resolves.toEqual({ ok: false, reason: 'unsafe profile ref' })
+  })
+
+  it('redacts credential words from host receipts', () => {
+    expect(redactCookieJarReceipt({
+      action: 'apply',
+      profileRef: 'acct-42',
+      status: 'rejected',
+      reason: 'cookie header missing',
+    }).reason).toBe('redacted')
+  })
+
+  it('keeps the pane degraded until a live host face is injected', () => {
+    const store = new ProfileStore({ idFactory: () => 'profile-9', now: () => '2026-08-22T09:00:00Z' })
+    store.create({ siteScope: 'example.com', displayName: 'Work account' })
+    const Degraded = createLoginProfilesView({ store })
+    const Live = createLoginProfilesView({ store, cookieJars: liveCookieJars() })
+    const degraded = renderToStaticMarkup(<Degraded />)
+    expect(degraded).toContain('web.cookieJars')
+    const live = renderToStaticMarkup(<Live />)
+    expect(live).not.toContain('web.cookieJars')
+    expect(live).toContain('Apply login state')
+    expect(live).toContain('Switch login state')
+    expect(live).toContain('Clear login state')
   })
 })

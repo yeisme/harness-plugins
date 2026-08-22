@@ -1,0 +1,21 @@
+diff --git a/packages/fs/fs/src/index.ts b/packages/fs/fs/src/index.ts
+index 8ecd03c71..f6f134d04 100644
+--- a/packages/fs/fs/src/index.ts
++++ b/packages/fs/fs/src/index.ts
+@@ -250,3 +250,16 @@ export abstract class FileSystem extends Service {
+ }
+ 
+ export default FileSystem
++
++export {
++  FILE_WATCH_CAPABILITY,
++  hasFileWatchCapability,
++  isOpaqueWatchRef,
++  assertWatchEvent,
++} from './watch.ts'
++export type {
++  FileWatchEventV1,
++  FileWatchHandle,
++  FileWatchOp,
++  FileWatchSource,
++} from './watch.ts'

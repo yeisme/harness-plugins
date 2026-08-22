@@ -1,27 +1,10 @@
 # git-typed-actions
 
-Status: proposed contract. Typed Git action host for stage/unstage/commit/diff/worktree.
+`GitTypedActionsCapabilityV1` 封闭 action 集。任意 argv 拒绝；`worktree.remove` 不释放 Ordo lease。
 
-Arbitrary `git` argv from the browser is rejected. `worktree.remove` must not
-release an Ordo writer lease.
-
-## Proposed capability
-
-`GitTypedActionsCapabilityV1`
-
-Closed action ids:
-
-- `status`
-- `diff`
-- `stage`
-- `unstage`
-- `commit`
-- `worktree.create`
-- `worktree.remove`
-
-`commit` / `worktree.create` / `worktree.remove` require preview digest,
-expected revision, idempotency key, and receipt. Timeout is not success.
-
-```bash
-bash apply.sh /path/to/deepseek-harness
-```
+- Rebased onto upstream/master: `b150a551b8d`
+- 来源分支：`yeisme/deepseek-harness` `pr/git-typed-actions`（commit `28ec98cc5`）
+- Fork review PR：https://github.com/yeisme/deepseek-harness/pull/9
+- 上游 compare：https://github.com/deepseek-ai/deepseek-harness/compare/master...yeisme:deepseek-harness:pr/git-typed-actions
+- Status: fork-ready（不向 deepseek-ai 开官方 PR）
+- Verify: `vitest run packages/host/git/tests/typed-actions.spec.ts` 3/3

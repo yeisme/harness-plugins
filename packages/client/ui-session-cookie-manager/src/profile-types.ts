@@ -4,7 +4,8 @@
  * Cookies are quasi-credentials: this projection is metadata ONLY. Raw
  * cookie/token values are forbidden by the parser, never persisted by the
  * store, and never rendered. Real jar storage and apply/switch live behind
- * the future host seam (`web.cookieJars`, upstream-prs backlog).
+ * the host seam (`web.cookieJars` / `WebCookieJarsV1`). Published DSH
+ * still lacks that seam; the plugin probes and stays metadata-only.
  *
  * @module @yeisme/dsh-client-ui-session-cookie-manager
  */
