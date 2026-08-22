@@ -6,7 +6,7 @@ repo="${1:?usage: apply.sh <deepseek-harness-checkout>}"
 here="$(cd "$(dirname "$0")" && pwd)"
 git -C "$repo" apply --check "$here/changes.patch"
 git -C "$repo" apply "$here/changes.patch"
-if [ -d "$(dirname "$0")/new-files" ]; then
-  (cd "$(dirname "$0")/new-files" && tar cf - .) | (cd "$repo" && tar xf -)
+if [ -d "$here/new-files" ]; then
+  (cd "$here/new-files" && tar cf - .) | (cd "$repo" && tar xf -)
 fi
 echo "applied user-actions-slot"
