@@ -51,7 +51,7 @@ jobs:
             const slug = '${{ matrix.slug }}';
             const label = 'upstream-drift';
             const title = `upstream drift: ${slug} no longer applies`;
-            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.RUN_ID}`;
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
             const body = `The archived series \`upstream-prs/${slug}/\` no longer applies cleanly onto upstream/master.\n\nReproduce: ${runUrl}\n\nRebase the series: regenerate it against the new base (see upstream-prs/README.md) or resolve the conflict by hand, then update the series.`;
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner, repo: context.repo.repo,
