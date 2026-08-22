@@ -26,6 +26,14 @@ function satisfiesWorkspacePeer(version) {
   return below && above
 }
 
+// dsh CLI provision: CI runners have no global dsh; fall back to the released
+// npm package via npm exec (same channel as upstream-canary install-smoke).
+const dshOnPath = spawnSync('dsh', ['--version'], { encoding: 'utf8' }).status === 0
+function runDsh(args, cwd, env) {
+  if (dshOnPath) return run('dsh', args, cwd, env)
+  return run('npm', ['exec', '--yes', '--package=@deepseek-ai/dsh@0.1.1-rc.2', '--', 'dsh', ...args], cwd, env)
+}
+
 const commandLog = []
 const structuralLog = []
 let status = 'passed'
@@ -95,7 +103,7 @@ try {
 
   dshHome = await mkdtemp('/tmp/pane-workbench-dsh-home-')
   const env = { ...process.env, DSH_HOME: dshHome }
-  run('dsh', ['plugin', '--profile', 'web', 'add', './packages/bundle/pane-workbench'], projectRoot, env)
+  runDsh(['plugin', '--profile', 'web', 'add', './packages/bundle/pane-workbench'], projectRoot, env)
   const profileDir = resolve(dshHome, 'profiles/web')
   const installed = JSON.parse(await readFile(resolve(profileDir, 'package.json'), 'utf8'))
   assert(installed.dependencies?.[manifest.name] !== undefined, 'profile dependency missing after install')
@@ -115,7 +123,7 @@ try {
   assert(satisfiesWorkspacePeer(installedLayout.version), `profile resolved incompatible ui-layout ${installedLayout.version}`)
   structuralLog.push({ stage: 'layout_canary', package: installedLayout.name, version: installedLayout.version, local_source: layoutFromLocalSource })
 
-  const addedConfig = run('dsh', ['--profile', 'web', '--dump-config'], projectRoot, env)
+  const addedConfig = runDsh(['--profile', 'web', '--dump-config'], projectRoot, env)
   const addedRowCount = countLines(addedConfig.stdout, 'id: pane-workbench')
   assert(addedRowCount === 1, `profile dump contains ${addedRowCount} Pane Workbench rows after install`)
   assert(addedConfig.stdout.includes("name: '@yeisme/dsh-pane-workbench'"), 'profile dump misses the Pane bundle row')
@@ -123,11 +131,11 @@ try {
 
   await assertWebBoot(env)
 
-  run('dsh', ['plugin', '--profile', 'web', 'remove', manifest.name], projectRoot, env)
+  runDsh(['plugin', '--profile', 'web', 'remove', manifest.name], projectRoot, env)
   const removed = JSON.parse(await readFile(resolve(profileDir, 'package.json'), 'utf8'))
   assert(removed.dependencies?.[manifest.name] === undefined, 'profile dependency remained after remove')
   assert(!removed.dsh?.profile?.bundles?.includes(manifest.name), 'profile bundle row remained after remove')
-  const removedConfig = run('dsh', ['--profile', 'web', '--dump-config'], projectRoot, env)
+  const removedConfig = runDsh(['--profile', 'web', '--dump-config'], projectRoot, env)
   const removedRowCount = countLines(removedConfig.stdout, 'id: pane-workbench')
   assert(removedRowCount === 0, 'profile dump retained Pane Workbench after remove')
   structuralLog.push({ stage: 'remove_dump', row_count: removedRowCount, bundle_row: false })
@@ -193,11 +201,9 @@ function run(command, args, cwd, env = process.env) {
 }
 
 async function assertWebBoot(env) {
-  const child = spawn('dsh', ['--profile', 'web', '--port', '0'], {
-    cwd: projectRoot,
-    env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+  const child = dshOnPath
+    ? spawn('dsh', ['--profile', 'web', '--port', '0'], { cwd: projectRoot, env, stdio: ['ignore', 'pipe', 'pipe'] })
+    : spawn('npm', ['exec', '--yes', '--package=@deepseek-ai/dsh@0.1.1-rc.2', '--', 'dsh', '--profile', 'web', '--port', '0'], { cwd: projectRoot, env, stdio: ['ignore', 'pipe', 'pipe'] })
   let output = ''
   child.stdout.setEncoding('utf8')
   child.stderr.setEncoding('utf8')
