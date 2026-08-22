@@ -56,10 +56,9 @@ overrides_test() {
   local version="${1:-}"
   echo "== canary overrides-test =="
   local pkg="$ROOT/package.json"
-  local backup
   backup="$(mktemp)"
   cp "$pkg" "$backup"
-  restore() { cp "$backup" "$pkg"; }
+  restore() { [ -n "${backup:-}" ] && cp "$backup" "$pkg" || true; }
   trap restore EXIT
   # Force every @deepseek-ai/* workspace dependency to its newest publish.
   node -e '
