@@ -28,4 +28,4 @@
 - [x] tsc typecheck + tsdown build 通过；client.js 无外部 URL、mermaid 为懒工厂
 - [x] 真实 mermaid 冒烟（jsdom + getBBox stub 渲染样例图为 SVG）
 - [x] dsh plugin --profile web add 本地安装 + dump-config 出现行
-- [ ] 真实浏览器视觉验收（retain-next，无浏览器通道）
+- [x] 真实浏览器视觉验收（agent-browser + Chrome for Testing 149 via dedicated session；dsh 0.1.0-rc.7 fresh `--profile web --port 0` boot after plugin add。断言全过：`window.__DSH_BOOT__.entries` 含 `@yeisme/dsh-mermaid-render` 且 `immediately: true`；`/plugins/@yeisme[/%2F]dsh-mermaid-render/client.js` 200（7032583B，无 `require("./` / `require("@yeisme/` 残留）；注入 settled `div.md-code-block`（真实 CodeBlock banner>infostring 形态）后嫁接出 `figure[data-dsh-mermaid-figure]` 内含 SVG（flowchart-v2，57 元素，host 隐藏、code 带 on-class、无 failed）；console/page errors 为空；截图 2 张。evidence: `temp/integration-test-runs/2026-08-22T03-36-06-343Z-765920-mermaid-browser/`）
