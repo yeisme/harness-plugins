@@ -39,9 +39,17 @@ Ordo 是 run/task/session/lease/approval/verification/evidence/closeout 的唯�
 
 集成/组件/系统/e2e 测试证据写入本仓库 temp/integration-test-runs/<run-id>/，脱敏 secret、raw prompt、provider payload、private tool arguments、绝对路径与完整思维链。
 
+## Upstream Seam Channel（fork 退役后唯一 core 通道）
+
+2026-08-20 起 monorepo 不再维护 `client/deepseek-harness` 源码 fork：
+
+- 需要 DSH core 改动的 seam 一律固化为 `upstream-prs/<slug>/`（changes.patch + new-files/ + apply.sh + README，必要时 head.bundle），在 PR staging worktree（上游 clone + 应用系列）内开发与验证，以 PR 提交 deepseek-ai/deepseek-harness；不长期维护未合入 patch 层。
+- 插件侧先 capability probe：seam 未合入时不渲染入口（禁用+原因），杜绝死按钮。
+- 上游跟进自动化：`.github/workflows/upstream-canary.yml`（每日，发布版安装冒烟 + overrides 顶最新跑 gates；绿→bump PR，红→canary issue）与 `pr-rebase.yml`（每日 apply-check 各系列）。本地同路径：`scripts/upstream-canary.sh {resolve|install-smoke|overrides-test}`。人只在红灯 issue 时介入。
+
 ## Skill Triggers
 
 - 设计/实现/评审 Ordo Agent Ops 适配：读取 .agents/skills/dsh-ordo-agent-ops/SKILL.md。
-- 创建/评审 DSH UI 插件：参考 fork client/deepseek-harness 的 dsh-plugin-experience skill。
+- 创建/评审 DSH UI 插件：参考上游 deepseek-ai/deepseek-harness 的 dsh-plugin-experience skill（经 PR staging worktree 或上游仓读取）。
 - 决定 owner 边界：遵循本仓库 openspec/changes/ordo-dsh-plugin-visualization-v1/。
 

@@ -1,0 +1,65 @@
+name: Upstream PR drift
+
+# Keep the archived upstream patch series (upstream-prs/) mergeable without
+# manual tracking: every series must still apply onto upstream/master. Drift
+# opens one issue per broken series; a clean apply closes last run's noise.
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+  push:
+    paths:
+      - 'upstream-prs/**'
+      - '.github/workflows/pr-rebase.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  apply-check:
+    name: ${{ matrix.slug }} applies onto upstream/master
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        slug: [login-token-auth, pane-workspace-layout, plan-dock, user-actions-slot]
+    steps:
+      - name: Checkout plugin repo
+        uses: actions/checkout@v4
+
+      - name: Checkout dsh upstream at master
+        uses: actions/checkout@v4
+        with:
+          repository: deepseek-ai/deepseek-harness
+          path: dsh-upstream
+          fetch-depth: 0
+
+      - name: Apply archived series
+        run: |
+          cd "$GITHUB_WORKSPACE/dsh-upstream"
+          base="$(head -1 "$GITHUB_WORKSPACE/upstream-prs/.archive-base" | awk '{print $2}')"
+          echo "series base: $base"
+          echo "upstream HEAD: $(git rev-parse HEAD)"
+          "$GITHUB_WORKSPACE/upstream-prs/${{ matrix.slug }}/apply.sh" "$PWD"
+
+      - name: Report drift
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const slug = '${{ matrix.slug }}';
+            const label = 'upstream-drift';
+            const title = `upstream drift: ${slug} no longer applies`;
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.RUN_ID}`;
+            const body = `The archived series \`upstream-prs/${slug}/\` no longer applies cleanly onto upstream/master.\n\nReproduce: ${runUrl}\n\nRebase the series: regenerate it against the new base (see upstream-prs/README.md) or resolve the conflict by hand, then update the series.`;
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: label,
+            });
+            if (!issues.data.some(i => i.title === title)) {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: [label],
+              });
+            }

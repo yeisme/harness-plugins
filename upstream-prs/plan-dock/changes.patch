@@ -1,0 +1,3020 @@
+diff --git a/.agents/notes/implemented/feature/2026-08-19-plan-dock-inline-edit-and-visual-polish.md b/.agents/notes/implemented/feature/2026-08-19-plan-dock-inline-edit-and-visual-polish.md
+new file mode 100644
+index 000000000..53b703ac1
+--- /dev/null
++++ b/.agents/notes/implemented/feature/2026-08-19-plan-dock-inline-edit-and-visual-polish.md
+@@ -0,0 +1,70 @@
++# Agent Note: Plan dock and Pane workspace information design
++
++Status: implemented
++
++English | [中文](2026-08-19-plan-dock-inline-edit-and-visual-polish.zh.md)
++
++## Problem
++
++The plan-document dock originally exposed only a compact status line and expandable Markdown. The first contextual Plan Pane solved the space problem but introduced a second product header below the shared Pane toolbar/tab, put the long document before execution progress, rendered task enums such as `IN_PROGRESS`, and provided no pending/error/selected feedback for option selection.
++
++The result was functional but did not match DSH's calm, compact workspace hierarchy.
++
++## Decision
++
++- Keep the dock as the compact summary and inline-edit surface. It shows semantic status color, title, edit/save/cancel, expand/collapse, revision history, and one “open in workspace” action.
++- Let the shared Pane Workbench own docking, moving, maximizing, and closing. The production `PlanWorkspaceView` renders no duplicate product header, no second `conversation.sidebar`, and no page-covering fullscreen overlay.
++- Order the Pane for execution scanning:
++  1. plan status, title, round, and execution mode;
++  2. task completion progress and localized task states;
++  3. selectable plan options;
++  4. plan Markdown;
++  5. linked goal;
++  6. collapsed revision history.
++- Keep cards only for plan options because the card is the interaction. Tasks, plan content, goal, and revisions use one continuous low-border information flow.
++- Report option selection as pending, failed, or selected immediately. `/plan-select` remains the durable owner; the client state only explains the in-flight action and clears naturally when a new option set arrives.
++- Remove the first Markdown heading when it exactly repeats the persisted plan title.
++- Use DSH theme tokens for status semantics, focus-visible outlines, and reduced-motion behavior. Proposed is warning, approved/executing is business accent, completed is success, rejected is error, and superseded stays neutral.
++- Persist inline edits through `/plan-edit <json>`. When the current plan is approved/executing/completed, the old document is first marked `superseded` before the new proposed revision is appended.
++
++## Tests
++
++- `packages/client/ui-plan/tests/plan-document-panel.client.spec.tsx` covers the single workspace action, inline editing, successful save, failed save, status, Markdown, and revision history.
++- `packages/client/ui-plan/tests/plan-workspace-view.client.spec.tsx` covers duplicate-heading removal, progress-before-document ordering, localized task states, option pending/success/failure, and the revision disclosure.
++- `packages/client/ui-plan/tests/plan-pane-view.client.spec.ts` covers provider registration and the open request while leaving layout controls to Pane chrome.
++- Focused verification:
++
++  ```bash
++  pnpm exec vitest run packages/client/ui-plan/tests/plan-document-panel.client.spec.tsx packages/client/ui-plan/tests/plan-workspace-view.client.spec.tsx packages/client/ui-plan/tests/plan-pane-view.client.spec.ts packages/client/ui-plan/tests/browser-plugin.client.spec.ts packages/client/ui-plan/tests/plan-mode-control.client.spec.tsx
++  pnpm exec oxlint packages/client/ui-plan/src/client/PlanSidebar.tsx packages/client/ui-plan/src/client/PlanDocumentPanel.tsx packages/client/ui-plan/src/client/PlanPaneView.tsx packages/client/ui-plan/src/client/index.ts packages/client/ui-plan/src/client/locales.ts packages/client/ui-plan/tests/plan-workspace-view.client.spec.tsx packages/client/ui-plan/tests/plan-document-panel.client.spec.tsx packages/client/ui-plan/tests/browser-plugin.client.spec.ts
++  pnpm run build:lib
++  DSH_SNAPSHOT=replay pnpm exec vitest run --config vitest.web.config.ts apps/web/tests/plan-review.e2e.ts
++  DSH_SNAPSHOT=replay pnpm exec vitest run --config vitest.web.config.ts apps/web/tests/shipped-composition.e2e.ts -t "assembles the shipped Web catalog"
++  ```
++
++## Alternatives considered
++
++### Register a second conversation sidebar
++
++Rejected. It would duplicate workspace geometry and prevent Plan, Files, Details, Terminal, and future tools from sharing one Pane contract.
++
++### Keep a Plan-owned fullscreen overlay
++
++Rejected for production. The shared Pane Workbench already owns maximize and restoration. A second overlay would duplicate navigation, focus, and responsive behavior.
++
++### Split overview, options, tasks, and revisions into tabs
++
++Rejected for the first delivery. The main Plan workflow is short enough to scan as one ordered stream, while tabs would hide progress and increase navigation cost. The option grid already adapts when a bottom or wider Pane provides more width.
++
++### Put the Markdown document first
++
++Rejected. During execution, users need status, progress, blockers, and decisions before long-form plan prose.
++
++## Consequences
++
++- Users can understand current execution state before reading the full plan.
++- Plan controls no longer compete with the shared Pane chrome.
++- Machine enums do not leak into the user interface.
++- The dock and Pane remain projection consumers; durable plan, option, task, and goal state stays with their host owners.
++- The obsolete `PlanSidebar`, `PlanFullscreen`, and module-level view store were removed; production mounts only `PlanWorkspaceView` through the Pane provider.
++- `SESSION_FORMAT_VERSION` remains unchanged; the feature reuses existing plan events and commands.
+diff --git a/apps/web/tests/shipped-composition.e2e.ts b/apps/web/tests/shipped-composition.e2e.ts
+index 295e861b9..4eac62bd7 100644
+--- a/apps/web/tests/shipped-composition.e2e.ts
++++ b/apps/web/tests/shipped-composition.e2e.ts
+@@ -45,6 +45,8 @@ const EXPECTED_TOOLS = [
+   'job_list',
+   'job_output',
+   'list_agents',
++  'plan_complete',
++  'plan_form',
+   'ralph',
+   'read',
+   'read_image',
+diff --git a/apps/web/tests/snapshots/lifecycle-chrome/command-menu.expected.md b/apps/web/tests/snapshots/lifecycle-chrome/command-menu.expected.md
+index ed7e837f3..3c53db630 100644
+--- a/apps/web/tests/snapshots/lifecycle-chrome/command-menu.expected.md
++++ b/apps/web/tests/snapshots/lifecycle-chrome/command-menu.expected.md
+@@ -6,4 +6,7 @@
+   - option "goal set or view the goal for a long-running task"
+   - option "permission Switch the permission preset (sandbox mode + approval policy)"
+   - option "plan Enter or leave plan mode"
++  - option "plan-edit Edit the current plan document from JSON input"
++  - option "plan-readonly Enter plan mode with read-only file policy"
++  - option "status show session, preset, plan, permission, and model status"
+   - option "model Select the model for this conversation"
+diff --git a/apps/web/tests/snapshots/plan-review/approved.expected.md b/apps/web/tests/snapshots/plan-review/approved.expected.md
+index e2e41dd34..a4d9ef5d2 100644
+--- a/apps/web/tests/snapshots/plan-review/approved.expected.md
++++ b/apps/web/tests/snapshots/plan-review/approved.expected.md
+@@ -17,6 +17,10 @@
+   - img
+   - img
+   - text: Context injection @deepseek-ai/dsh-system-prompt
++- button "Context injection plan-mode Submit a complete plan through exit_plan_mode.":
++  - img
++  - img
++  - text: Context injection plan-mode Submit a complete plan through exit_plan_mode.
+ - 'button "Think The user wants me to plan a small change to add a `--greeting` flag to a CLI. They explicitly told me not to read or write any files, and to call exit_plan_mode with a short plan. Let me do that directly."':
+   - img
+   - img
+@@ -29,6 +33,10 @@
+   - img
+   - img
+   - text: "Tool call exit_plan_mode · # Add `--greeting` flag to CLI"
++- button "Context injection plan-mode Execute the approved plan.":
++  - img
++  - img
++  - text: Context injection plan-mode Execute the approved plan.
+ - 'button "Think The plan was approved. The user''s last instruction says: \"Once the plan is approved, reply with the single word DONE and stop.\" So I should just reply with DONE and stop."':
+   - img
+   - img
+@@ -42,7 +50,11 @@
+   - img
+ - button "Branch into a new conversation":
+   - img
+-- text: {{clock}} Ran for {{duration}} TTFT {{duration}} {{throughput}} tok/s
++- text: "{{clock}} Ran for {{duration}} TTFT {{duration}} {{throughput}} tok/s Plan document Executing Add `--greeting` flag to CLI"
++- button "Edit plan document":
++  - img
++- button "Expand plan document":
++  - img
+ - textbox "Message the agent"
+ - button "Commands":
+   - img
+diff --git a/packages/client/ui-plan/README.i18n.yaml b/packages/client/ui-plan/README.i18n.yaml
+index 86640d128..30c8834ea 100644
+--- a/packages/client/ui-plan/README.i18n.yaml
++++ b/packages/client/ui-plan/README.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write packages/client/ui-plan/README.md
+-README.md: fcc4fbab4fbe1a8cc27119366b21ef55c669ba30
+-README.zh.md: f512d40568058ef061c6f262eadb20acda78cb64
++README.md: 74b8532b1680ecb1c9bfbc00528ffe0e21e4e748
++README.zh.md: a989f645b1ccc3413dc65c95766a0702f2d2f6a5
+diff --git a/packages/client/ui-plan/README.md b/packages/client/ui-plan/README.md
+index fcc4fbab4..74b8532b1 100644
+--- a/packages/client/ui-plan/README.md
++++ b/packages/client/ui-plan/README.md
+@@ -2,17 +2,21 @@
+ 
+ English | [中文](README.zh.md)
+ 
+-Plan-mode status chip, a pure browser surface plugin. The browser half occupies the conversation-declared `conversation.input.plan` single seat (to the right of the access-mode control); the node half is an empty apply (the roster row). Plan behavior itself — the `/plan` command, the boundary-or-idle-committed `plan/mode` state, the `plan` projection unit, and the policy section — is owned by [`@deepseek-ai/dsh-plan-mode`](../../plan/plan-mode/README.md), composed independently on the host roster.
++Plan-mode status control and plan-document dock, a pure browser surface plugin. The browser half occupies the conversation-declared `conversation.input.plan` single seat (to the right of the access-mode control) and the `conversation.input.dock` list with a collapsible plan-document strip; the node half is an empty apply (the roster row). Plan behavior itself — the `/plan` command, the boundary-or-idle-committed `plan/mode` state, the `plan` projection unit, and the policy section — is owned by [`@deepseek-ai/dsh-plan-mode`](../../plan/plan-mode/README.md), composed independently on the host roster.
+ 
+-Plan mode is entered through the `/plan` command path: users can choose Plan from the composer's `+` Command menu or type `/plan`, while this package renders no inactive plan control. While the host-computed `plan` projection's effective target is plan mode (`pending ? !active : active` — a folded host value, not client optimism, so an arriving frame corrects the chip either way), the seat renders the warn-colored "Plan ×" status button, which executes `/plan off` through `command.execute`; otherwise the seat stays empty — a host without plan-mode (or a Draft with no session) shows nothing. While plan mode is the effective target, the composer textarea's placeholder switches to the plan-task hint — "describe your task to generate plan", localized through ui-conversation's `conversation` locale namespace (the `placeholder.plan` / `hint.plan` keys) and shared verbatim with the claimed `/plan` command hint (rendered by the composer from the same projection; owner-supplied placeholders win).
++Plan mode is entered through the `/plan` command path: users can choose Plan from the composer's `+` Command menu, type `/plan`, or click the inactive Plan entry chip rendered by this package. While the host-computed `plan` projection's effective target is plan mode (`pending ? !active : active` — a folded host value, not client optimism, so an arriving frame corrects the chip either way), the seat renders the warn-colored "Plan ×" status button, which executes `/plan off` through `command.execute`. While the effective target is the steady default mode, the seat renders a neutral "Plan" entry button that executes `/plan`; a pending exit leaves the seat empty until the projection confirms the switch. A host without plan-mode (or a Draft with no session) shows nothing. While plan mode is the effective target, the composer textarea's placeholder switches to the plan-task hint — "describe your task to generate plan", localized through ui-conversation's `conversation` locale namespace (the `placeholder.plan` / `hint.plan` keys) and shared verbatim with the claimed `/plan` command hint (rendered by the composer from the same projection; owner-supplied placeholders win).
+ 
+-The chip carries the accessible description "Plan mode on, press to turn off". Admission failures (`matched: false`, business errors, transport faults) surface as an inline error and the chip stays until the projection confirms the exit.
++The active chip carries the accessible description "Plan mode on, press to turn off"; the entry chip carries "Plan mode off, press to turn on". Admission failures (`matched: false`, business errors, transport faults) surface as an inline error and the chip stays until the projection confirms the switch.
+ 
+ The model exits plan mode through the stable `exit_plan_mode` tool; its plan review uses the composed Web question channel.
+ 
++The plan-document dock supports inline editing: the edit button opens a Markdown editor, and saving persists the new title/body as a new `plan/document` revision through `/plan-edit`; when the current plan is approved/executing/completed, the old document is first marked `superseded`. When a compatible Pane Workbench service is present, the dock exposes one action that opens the Plan content in the shared workspace. The Pane's own chrome remains responsible for docking, moving, maximizing, and closing the view. This package never registers a second conversation sidebar or a page-covering fullscreen overlay.
++
++The contextual Plan Pane is organized for execution scanning rather than long-form reading first: plan status/title/round/mode, task completion and localized task states, selectable plan options, plan Markdown, linked goal, then a collapsed revision history. Option selection reports pending, failure, and selected states locally while `/plan-select` remains the durable owner. The view removes a leading Markdown heading when it repeats the plan title, so the shared Pane tab and the plan content do not produce stacked duplicate chrome.
++
+ ## Model Experience
+ 
+-Indirectly, through the `/plan off` command line the chip dispatches: `@deepseek-ai/dsh-plan-mode` owns the model-visible policy section, the exit-tool schema, and the logged state that line drives, while this package only renders the projection and sends what a user could equally type.
++Indirectly, through the `/plan` and `/plan off` command lines the chips dispatch: `@deepseek-ai/dsh-plan-mode` owns the model-visible policy section, the exit-tool schema, and the logged state those lines drive, while this package only renders the projection and sends what a user could equally type.
+ 
+ #### KV Cache effect
+ 
+@@ -20,6 +24,6 @@ Entering or leaving plan mode changes the active `plan:policy` system-prompt sec
+ 
+ ## Known Limitations and Deferred Work
+ 
+-- **Plan mode is guidance, not an execution sandbox** — deployments that require enforced read-only planning must compose the independent sandbox and approval policies.
++- **Plan mode is guidance, not an execution sandbox** — deployments that require enforced read-only planning must compose the independent sandbox and approval policies; the optional `/plan-readonly` bridge switches both once when `dsh-permission-presets` is composed.
+ - **The chip belongs to the default composer** — a pending whole-composer interaction such as plan review temporarily replaces the InputBar and its chip.
+-- **No inactive plan control** — entry uses the shared Command source; a session with the capability but inactive mode shows no plan affordance in the tool row.
++- **The plan-document dock is compact** — full markdown appears only when expanded; the dock hides while no `plan/document` exists. The richer Plan view is an optional contextual Pane and remains unavailable when no compatible Pane provider is installed. Pane layout commands such as maximize belong to the shared workbench chrome, not to duplicate controls in the dock.
+diff --git a/packages/client/ui-plan/README.zh.md b/packages/client/ui-plan/README.zh.md
+index f512d4056..a989f645b 100644
+--- a/packages/client/ui-plan/README.zh.md
++++ b/packages/client/ui-plan/README.zh.md
+@@ -2,17 +2,21 @@
+ 
+ [English](README.md) | 中文
+ 
+-Plan mode 状态徽章，纯浏览器 surface 插件。浏览器侧占用会话声明的 `conversation.input.plan` 单实例 seat（位于 access 模式控件右侧）；node 侧是空 apply（roster 行）。plan 行为本身——`/plan` 命令、边界或空闲即时提交的 `plan/mode` 状态、`plan` 投影单元与 policy 段——归 [`@deepseek-ai/dsh-plan-mode`](../../plan/plan-mode/README.md) 所有，由 host roster 独立组合。
++Plan mode 状态控件与计划文档 dock，纯浏览器 surface 插件。浏览器侧占用会话声明的 `conversation.input.plan` 单实例 seat（位于 access 模式控件右侧），并在 `conversation.input.dock` 列表注册可折叠的计划文档条；node 侧是空 apply（roster 行）。plan 行为本身——`/plan` 命令、边界或空闲即时提交的 `plan/mode` 状态、`plan` 投影单元与 policy 段——归 [`@deepseek-ai/dsh-plan-mode`](../../plan/plan-mode/README.md) 所有，由 host roster 独立组合。
+ 
+-plan mode 经 `/plan` 命令路径进入：用户可以从 composer 的 `+` Command 菜单选择 Plan，也可以输入 `/plan`，而本包不渲染未激活态 plan 控件。当 host 计算的 `plan` 投影有效目标为 plan mode 时（`pending ? !active : active`——折叠的 host 值而非客户端乐观态，帧到达即自动纠正），座位渲染 warn 色的 "Plan ×" 状态按钮，该按钮经 `command.execute` 执行 `/plan off`；否则座位保持为空——未组合 plan-mode 的 host（或尚无会话的 Draft）不显示任何内容。plan mode 为有效目标期间，composer 文本框的 placeholder 切换为 plan 任务提示——"describe your task to generate plan"（中文「描述你的任务以生成计划」），经 ui-conversation 的 `conversation` locale 命名空间（`placeholder.plan` / `hint.plan` 键）本地化，并与已认领 `/plan` 命令的提示逐字共用同一份文案（由 composer 从同一投影渲染；owner 提供的 placeholder 优先）。
++plan mode 经 `/plan` 命令路径进入：用户可以从 composer 的 `+` Command 菜单选择 Plan、输入 `/plan`，或点击本包渲染的未激活态 Plan 入口 chip。当 host 计算的 `plan` 投影有效目标为 plan mode 时（`pending ? !active : active`——折叠的 host 值而非客户端乐观态，帧到达即自动纠正），座位渲染 warn 色的 "Plan ×" 状态按钮，该按钮经 `command.execute` 执行 `/plan off`。当有效目标是稳定的默认模式时，座位渲染中性的 "Plan" 入口按钮，执行 `/plan`；待处理的退出会使座位保持为空，直到投影确认切换。未组合 plan-mode 的 host（或尚无会话的 Draft）不显示任何内容。plan mode 为有效目标期间，composer 文本框的 placeholder 切换为 plan 任务提示——"describe your task to generate plan"（中文「描述你的任务以生成计划」），经 ui-conversation 的 `conversation` locale 命名空间（`placeholder.plan` / `hint.plan` 键）本地化，并与已认领 `/plan` 命令的提示逐字共用同一份文案（由 composer 从同一投影渲染；owner 提供的 placeholder 优先）。
+ 
+-chip 携带无障碍描述 "Plan mode on, press to turn off"。准入失败（`matched: false`、业务错误、传输故障）以内联错误呈现，chip 保持显示直至投影确认退出。
++激活态 chip 携带无障碍描述 "Plan mode on, press to turn off"；入口 chip 携带 "Plan mode off, press to turn on"。准入失败（`matched: false`、业务错误、传输故障）以内联错误呈现，chip 保持显示直至投影确认切换。
+ 
+ 模型通过稳定的 `exit_plan_mode` 工具退出 plan mode；其 plan 评审走已组合的 Web question 通道。
+ 
++计划文档 dock 支持内联编辑：点击编辑按钮进入 Markdown 编辑器，保存时通过 `/plan-edit` 命令把新标题/正文持久化为新的 `plan/document` 修订；若当前计划已批准/执行/完成，旧文档会先标记为 `superseded`。当存在兼容的 Pane Workbench 服务时，dock 只提供一个“在工作区打开”入口；停靠、移动、最大化与关闭统一由 Pane 自身的 chrome 负责。本包不注册第二套会话侧边栏，也不会挂载覆盖整页的 fullscreen overlay。
++
++上下文 Plan Pane 按执行扫描顺序组织信息，而不是先展示长文：计划状态、标题、轮次与模式 → 任务完成度和已本地化的任务状态 → 可选择方案 → 计划 Markdown → 关联目标 → 折叠的修订记录。方案选择在本地明确显示等待、失败和已选状态，持久化仍由 `/plan-select` 负责。若 Markdown 首个标题与计划标题相同，视图会去掉重复标题，避免 Pane 标签和内容区形成层层重复的 chrome。
++
+ ## 模型体验
+ 
+-间接地，通过 chip 派发的 `/plan off` 命令行：`@deepseek-ai/dsh-plan-mode` 拥有该命令行驱动的模型可见 policy 段、退出工具 schema 与已记录状态，本包只渲染投影并发送用户同样可以手敲的内容。
++间接地，通过 chip 派发的 `/plan` 与 `/plan off` 命令行：`@deepseek-ai/dsh-plan-mode` 拥有这些命令行驱动的模型可见 policy 段、退出工具 schema 与已记录状态，本包只渲染投影并发送用户同样可以手敲的内容。
+ 
+ #### KV Cache 影响
+ 
+@@ -20,6 +24,6 @@ chip 携带无障碍描述 "Plan mode on, press to turn off"。准入失败（`m
+ 
+ ## 已知局限与延后工作
+ 
+-- **Plan mode 是引导而非执行沙箱**：需要强制只读规划的部署必须组合独立的沙箱与审批策略。
++- **Plan mode 是引导而非执行沙箱**：需要强制只读规划的部署必须组合独立的沙箱与审批策略；当组合 `dsh-permission-presets` 时，可选的 `/plan-readonly` 桥接命令会一次切换两者。
+ - **chip 属于默认编辑器**：待处理的整编辑器交互（如 plan 评审）会临时取代 InputBar 及其 chip。
+-- **无未激活态 plan 控件**——入口使用共享 Command source；有能力但 mode 未激活的会话在工具行不显示 plan 入口。
++- **计划文档 dock 是紧凑条**：完整 markdown 仅在展开后显示；没有 `plan/document` 时 dock 隐藏。更完整的计划视图是可选上下文 Pane，未安装兼容 Pane provider 时不可用。最大化等布局命令归共享 workbench chrome 所有，不在 dock 中重复提供。
+diff --git a/packages/client/ui-plan/package.json b/packages/client/ui-plan/package.json
+index cf5477e30..6e2e99157 100644
+--- a/packages/client/ui-plan/package.json
++++ b/packages/client/ui-plan/package.json
+@@ -49,6 +49,7 @@
+     "@deepseek-ai/dsh-client-locale": "workspace:^",
+     "@deepseek-ai/dsh-client-runtime": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-conversation": "workspace:^",
++    "@deepseek-ai/dsh-goal": "workspace:^",
+     "@deepseek-ai/dsh-invariants": "workspace:^",
+     "@deepseek-ai/dsh-plan-mode": "workspace:^",
+     "@deepseek-ai/cordis": "workspace:^"
+@@ -61,6 +62,7 @@
+     "@deepseek-ai/dsh-client-ui-conversation": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
++    "@deepseek-ai/dsh-goal": "workspace:^",
+     "@deepseek-ai/dsh-invariants": "workspace:^",
+     "@deepseek-ai/dsh-plan-mode": "workspace:^",
+     "@types/react": "~18.3.1",
+diff --git a/packages/client/ui-plan/src/client/PlanDocumentPanel.module.css b/packages/client/ui-plan/src/client/PlanDocumentPanel.module.css
+new file mode 100644
+index 000000000..435fdf722
+--- /dev/null
++++ b/packages/client/ui-plan/src/client/PlanDocumentPanel.module.css
+@@ -0,0 +1,253 @@
++/* Plan-document dock strip: compact status line above the composer, expanding
++   into the latest markdown, inline editing, and the revision list. The card
++   follows the GoalBar/TodoPanel composer dock family (tip surface, 36px
++   collapsed row, 12px radius, shared dock column width). */
++
++.frame {
++  box-sizing: border-box;
++  flex: none;
++  overflow: hidden;
++  margin: 0 auto;
++  width: calc(
++    100% -
++    var(--dsh-composer-side-clearance) -
++    var(--dsh-composer-side-clearance) -
++    var(--dsh-composer-dock-inset) -
++    var(--dsh-composer-dock-inset) -
++    var(--dsh-composer-dock-inset) -
++    var(--dsh-composer-dock-inset)
++  );
++  max-width: calc(
++    var(--dsh-composer-card-max-width) -
++    var(--dsh-composer-dock-inset) -
++    var(--dsh-composer-dock-inset) -
++    var(--dsh-composer-dock-inset) -
++    var(--dsh-composer-dock-inset)
++  );
++  border: 1px solid var(--dsw-alias-border-l1);
++  border-radius: 12px;
++  background: var(--dsw-specific-tip);
++  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
++  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
++}
++
++.header {
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  min-width: 0;
++  height: 36px;
++  padding: 4px 5px 4px 12px;
++}
++
++.dot {
++  width: 8px;
++  height: 8px;
++  flex: 0 0 auto;
++  border-radius: 50%;
++  background: var(--dsw-alias-label-tertiary);
++}
++
++.title {
++  flex: none;
++  color: var(--dsw-alias-label-primary);
++  font-size: 13px;
++  line-height: 24px;
++  font-weight: 500;
++}
++
++.status {
++  flex: none;
++  color: var(--dsw-alias-label-secondary);
++  font-size: 12px;
++  line-height: 18px;
++  font-weight: 600;
++}
++
++.frame[data-status='proposed'] .dot {
++  background: var(--dsw-alias-state-warn-label);
++}
++
++.frame[data-status='proposed'] .status {
++  color: var(--dsw-alias-state-warn-label);
++}
++
++.frame[data-status='approved'] .dot,
++.frame[data-status='executing'] .dot {
++  background: var(--dsw-alias-state-business-primary);
++}
++
++.frame[data-status='approved'] .status,
++.frame[data-status='executing'] .status {
++  color: var(--dsw-alias-state-business-primary);
++}
++
++.frame[data-status='completed'] .dot {
++  background: var(--dsw-alias-state-success-primary);
++}
++
++.frame[data-status='completed'] .status {
++  color: var(--dsw-alias-state-success-primary);
++}
++
++.frame[data-status='rejected'] .dot {
++  background: var(--dsw-alias-state-error-primary);
++}
++
++.frame[data-status='rejected'] .status {
++  color: var(--dsw-alias-state-error-primary);
++}
++
++.planTitle {
++  min-width: 0;
++  flex: 1;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++  color: var(--dsw-alias-label-primary-dimmed);
++  font-size: 13px;
++  line-height: 20px;
++}
++
++.actions {
++  display: flex;
++  align-items: center;
++  gap: 6px;
++  flex: none;
++}
++
++.iconBtn {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  width: 28px;
++  height: 28px;
++  padding: 0;
++  border: none;
++  border-radius: 999px;
++  background: transparent;
++  color: var(--dsw-alias-label-tertiary);
++  cursor: pointer;
++}
++
++.iconBtn:hover {
++  background: var(--dsw-alias-interactive-bg-hover);
++  color: var(--dsw-alias-label-secondary);
++}
++
++.iconBtn:focus-visible,
++.titleInput:focus-visible,
++.markdownEditor:focus-visible {
++  outline: 2px solid var(--dsw-alias-state-business-primary);
++  outline-offset: 2px;
++}
++
++.iconBtn:disabled {
++  opacity: 0.4;
++  cursor: default;
++}
++
++.titleInput {
++  flex: 1;
++  min-width: 0;
++  height: 26px;
++  padding: 0 8px;
++  border: 1px solid var(--dsw-alias-border-l2);
++  border-radius: 6px;
++  background: var(--dsw-alias-bg-base);
++  font-size: 13px;
++  line-height: 20px;
++  color: var(--dsw-alias-label-primary);
++  outline: none;
++}
++
++.titleInput:focus {
++  border-color: var(--dsw-alias-state-business-primary);
++}
++
++.body {
++  display: flex;
++  flex-direction: column;
++  gap: 8px;
++  padding: 6px 12px 12px;
++  border-top: 1px solid var(--dsw-alias-border-l2);
++}
++
++.markdown {
++  max-height: 240px;
++  overflow: auto;
++  color: var(--dsw-alias-label-primary);
++  font-size: 13px;
++  line-height: 20px;
++}
++
++.markdownEditor {
++  box-sizing: border-box;
++  width: 100%;
++  min-height: 160px;
++  padding: 8px 10px;
++  border: 1px solid var(--dsw-alias-border-l2);
++  border-radius: 8px;
++  background: var(--dsw-alias-bg-base);
++  font: inherit;
++  font-size: 13px;
++  line-height: 20px;
++  color: var(--dsw-alias-label-primary);
++  outline: none;
++  resize: vertical;
++}
++
++.markdownEditor:focus {
++  border-color: var(--dsw-alias-state-business-primary);
++}
++
++.error {
++  color: var(--dsw-alias-state-error-primary);
++  font-size: 12px;
++  line-height: 20px;
++}
++
++.historyTitle {
++  color: var(--dsw-alias-label-secondary);
++  font-size: 12px;
++  line-height: 18px;
++}
++
++.revisions {
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++  margin: 0;
++  padding: 0;
++  list-style: none;
++}
++
++.revision {
++  display: flex;
++  align-items: baseline;
++  gap: 6px;
++  min-width: 0;
++}
++
++.revisionStatus {
++  flex: 0 0 auto;
++  color: var(--dsw-alias-label-secondary);
++  font-size: 12px;
++  line-height: 18px;
++}
++
++.revisionTitle {
++  min-width: 0;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++  color: var(--dsw-alias-label-primary);
++  font-size: 13px;
++  line-height: 20px;
++}
++
++.feedback {
++  color: var(--dsw-alias-state-error-primary);
++  font-size: 12px;
++  line-height: 18px;
++}
+diff --git a/packages/client/ui-plan/src/client/PlanDocumentPanel.tsx b/packages/client/ui-plan/src/client/PlanDocumentPanel.tsx
+new file mode 100644
+index 000000000..0423b07b8
+--- /dev/null
++++ b/packages/client/ui-plan/src/client/PlanDocumentPanel.tsx
+@@ -0,0 +1,225 @@
++import { useState } from 'react'
++import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
++import {
++  IconCheckOutline16, IconChevronDownOutline14, IconChevronUpOutline14,
++  IconCloseOutline16, IconEditOutline16, IconPanelLeftOutline16, MarkdownText,
++  Tooltip,
++} from '@deepseek-ai/dsh-client-ui-primitives'
++// Type-only: the `plan-document` projection key merge (host-computed value).
++import type {} from '@deepseek-ai/dsh-plan-mode/client'
++import type { PlanDocumentProjectionValue } from '@deepseek-ai/dsh-plan-mode/client'
++import css from './PlanDocumentPanel.module.css'
++
++/** Result of a user-initiated plan document update. */
++export type PlanEditResult = { ok: true } | { ok: false; error: string }
++
++/** User actions exposed to the plan-document dock entry. */
++export interface PlanDocumentActions {
++  /** Persist an edited plan title/markdown and return success or a user-visible failure. */
++  onUpdate: (title: string, markdown: string) => Promise<PlanEditResult>
++  /** Open the contextual Plan Pane; its own chrome owns layout controls. */
++  onOpenWorkspace?: () => void
++}
++
++/** Full dock-entry props: InputZone owner share + session standard kit + injected actions + the locale seat. */
++export type PlanDocumentDockProps = PropsRuntime<'conversation.input.dock'> & PlanDocumentActions & PropsLocale<'plan'>
++
++/** Dock adapter: reads the host-computed `plan-document` projection; absent renders nothing. */
++export function PlanDocumentDock({ useProjection, t, onUpdate, onOpenWorkspace }: PlanDocumentDockProps) {
++  const value = useProjection('plan-document')
++  if (value?.latest === undefined) return null
++  return <PlanDocumentPanel
++    value={value}
++    t={t}
++    onUpdate={onUpdate}
++    {...(onOpenWorkspace === undefined ? {} : { onOpenWorkspace })}
++  />
++}
++
++/** Localized status labels over the closed plan-document status union. */
++function statusLabel(status: 'proposed' | 'approved' | 'executing' | 'completed' | 'superseded' | 'rejected', t: PlanDocumentDockProps['t']): string {
++  switch (status) {
++    case 'proposed': return t('status.proposed')
++    case 'approved': return t('status.approved')
++    case 'executing': return t('status.executing')
++    case 'completed': return t('status.completed')
++    case 'superseded': return t('status.superseded')
++    case 'rejected': return t('status.rejected')
++  }
++}
++
++/** First markdown heading, used as the title when the user leaves it blank. */
++function firstHeading(markdown: string): string | undefined {
++  for (const line of markdown.split('\n')) {
++    const match = /^#{1,6}\s+(.+?)\s*$/.exec(line)
++    if (match) return match[1]
++  }
++  return undefined
++}
++
++/**
++ * Compact plan-document strip in the input dock: latest status + title, with
++ * an expandable body showing the latest markdown, inline editing, and the
++ * full revision list.
++ */
++export function PlanDocumentPanel({
++  value, t, onUpdate, onOpenWorkspace,
++}: { value: PlanDocumentProjectionValue } & Pick<PlanDocumentDockProps, 't' | 'onUpdate' | 'onOpenWorkspace'>) {
++  const [open, setOpen] = useState(false)
++  const [editing, setEditing] = useState(false)
++  const [draftTitle, setDraftTitle] = useState('')
++  const [draftMarkdown, setDraftMarkdown] = useState('')
++  const [saving, setSaving] = useState(false)
++  const [editError, setEditError] = useState<string | null>(null)
++  const latest = value.latest
++  if (latest === undefined) return null
++  const revisions = [...value.revisions].reverse()
++
++  const startEditing = () => {
++    setDraftTitle(latest.title)
++    setDraftMarkdown(latest.markdown)
++    setEditError(null)
++    setEditing(true)
++    setOpen(true)
++  }
++
++  const save = async () => {
++    if (draftMarkdown.trim() === '') return
++    setSaving(true)
++    setEditError(null)
++    const result = await onUpdate(draftTitle.trim() || (firstHeading(draftMarkdown) ?? 'Plan'), draftMarkdown)
++    setSaving(false)
++    if (result.ok) {
++      setEditing(false)
++    } else {
++      setEditError(result.error)
++    }
++  }
++
++  return (
++    <section className={css.frame} data-plan-document-key={latest.planId} data-status={latest.status}>
++      <div className={css.header}>
++        <span className={css.dot} aria-hidden />
++        <span className={css.title}>{t('document.title')}</span>
++        {editing ? (
++          <input
++            className={css.titleInput}
++            type="text"
++            aria-label={t('edit.title.aria')}
++            value={draftTitle}
++            onChange={(event) => { setDraftTitle(event.target.value) }}
++            onKeyDown={(event) => {
++              if (event.key === 'Enter') void save()
++              if (event.key === 'Escape') setEditing(false)
++            }}
++            autoFocus
++          />
++        ) : (
++          <>
++            <span className={css.status}>{statusLabel(latest.status, t)}</span>
++            <span className={css.planTitle}>{latest.title}</span>
++          </>
++        )}
++        <div className={css.actions}>
++          {editing ? (
++            <>
++              <Tooltip label={t('action.save')} side="bottom" delayMs={500}>
++                <button
++                  type="button"
++                  className={css.iconBtn}
++                  aria-label={t('action.save')}
++                  disabled={saving || draftMarkdown.trim() === ''}
++                  onClick={() => { void save() }}
++                >
++                  <IconCheckOutline16 size={14} />
++                </button>
++              </Tooltip>
++              <Tooltip label={t('action.cancel')} side="bottom" delayMs={500}>
++                <button
++                  type="button"
++                  className={css.iconBtn}
++                  aria-label={t('action.cancel')}
++                  disabled={saving}
++                  onClick={() => { setEditing(false) }}
++                >
++                  <IconCloseOutline16 size={14} />
++                </button>
++              </Tooltip>
++            </>
++          ) : (
++            <>
++              {onOpenWorkspace !== undefined && (
++                <Tooltip label={t('action.open.sidebar')} side="bottom" delayMs={500}>
++                  <button
++                    type="button"
++                    className={css.iconBtn}
++                    aria-label={t('action.open.sidebar')}
++                    onClick={() => { onOpenWorkspace() }}
++                  >
++                    <IconPanelLeftOutline16 size={14} />
++                  </button>
++                </Tooltip>
++              )}
++              <Tooltip label={t('action.edit')} side="bottom" delayMs={500}>
++                <button
++                  type="button"
++                  className={css.iconBtn}
++                  aria-label={t('action.edit')}
++                  onClick={startEditing}
++                >
++                  <IconEditOutline16 size={14} />
++                </button>
++              </Tooltip>
++              <Tooltip label={open ? t('document.collapse') : t('document.expand')} side="bottom" delayMs={500}>
++                <button
++                  type="button"
++                  className={css.iconBtn}
++                  aria-label={open ? t('document.collapse') : t('document.expand')}
++                  aria-expanded={open}
++                  onClick={() => { setOpen(!open) }}
++                >
++                  {open ? <IconChevronUpOutline14 size={14} /> : <IconChevronDownOutline14 size={14} />}
++                </button>
++              </Tooltip>
++            </>
++          )}
++        </div>
++      </div>
++      {(open || editing) && (
++        <div className={css.body}>
++          {editing ? (
++            <>
++              <textarea
++                className={css.markdownEditor}
++                aria-label={t('edit.markdown.aria')}
++                value={draftMarkdown}
++                onChange={(event) => { setDraftMarkdown(event.target.value) }}
++                onKeyDown={(event) => {
++                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') void save()
++                  if (event.key === 'Escape') setEditing(false)
++                }}
++              />
++              {editError !== null && <span className={css.error} role="alert">{editError}</span>}
++            </>
++          ) : (
++            <>
++              <div className={css.markdown}><MarkdownText text={latest.markdown} /></div>
++              <div className={css.historyTitle}>{t('history.title')}</div>
++              <ol className={css.revisions}>
++                {revisions.map((revision, index) => (
++                  <li key={`${revision.planId}-${revision.status}-${String(index)}`} className={css.revision}>
++                    <span className={css.revisionStatus}>{statusLabel(revision.status, t)}</span>
++                    <span className={css.revisionTitle}>{revision.title}</span>
++                    {revision.feedback !== undefined && (
++                      <span className={css.feedback}>{revision.feedback}</span>
++                    )}
++                  </li>
++                ))}
++              </ol>
++            </>
++          )}
++        </div>
++      )}
++    </section>
++  )
++}
+diff --git a/packages/client/ui-plan/src/client/index.ts b/packages/client/ui-plan/src/client/index.ts
+index a19a028bb..5e958da2d 100644
+--- a/packages/client/ui-plan/src/client/index.ts
++++ b/packages/client/ui-plan/src/client/index.ts
+@@ -1,11 +1,11 @@
+ /**
+  * Plan control plugin, browser half: occupies the composer's named
+- * `conversation.input.plan` seat with an active-state status chip. Plan mode
+- * is entered through the command source; while the projection's effective
+- * target is plan mode the chip renders and executes /plan off through
+- * `command.execute`, otherwise the seat stays empty. Reads ride the generic
+- * projection pair through the standard-kit `useProjection`; zero client-side
+- * plan state.
++ * `conversation.input.plan` seat with an active warn chip and an inactive
++ * entry chip. While the projection's effective target is plan mode the chip
++ * executes /plan off through `command.execute`; while the effective target is
++ * the default mode it executes /plan to enter plan mode directly. Reads ride
++ * the generic projection pair through the standard-kit `useProjection`; zero
++ * client-side plan state.
+  */
+ import type {} from '@deepseek-ai/dsh-api-remotes/client'
+ import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+@@ -16,6 +16,12 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
+ // Type-only: pulls the `plan` SessionProjectionMap merge for useProjection.
+ import type {} from '@deepseek-ai/dsh-plan-mode/client'
+ import { PlanChip } from './PlanModeControl.tsx'
++import { PlanDocumentDock, type PlanDocumentActions } from './PlanDocumentPanel.tsx'
++import {
++  openPlanPane,
++  registerPlanPaneView,
++  type PlanPaneWorkbenchFace,
++} from './PlanPaneView.tsx'
+ import { en, zh, type PlanKey } from './locales.ts'
+ 
+ export type { PlanKey } from './locales.ts'
+@@ -37,11 +43,20 @@ export interface PlanChipInjected {
+    * @returns null on admitted execution; a user-visible failure line otherwise.
+    */
+   exitPlanMode: () => Promise<string | null>
++  /**
++   * Enter plan mode by executing /plan.
++   * @returns null on admitted execution; a user-visible failure line otherwise.
++   */
++  enterPlanMode: () => Promise<string | null>
+ }
+ 
+ /** Required services: the seat's slot registry, commands Remote, and locale registry. */
+ export const inject = ['slots', 'remote', 'remote.commands', 'locale']
+ 
++function paneWorkbench(ctx: ClientContext): PlanPaneWorkbenchFace | undefined {
++  return ctx.get('paneWorkbench') as PlanPaneWorkbenchFace | undefined
++}
++
+ /**
+  * Client plugin body: register the plan chip over the command channel.
+  * @param ctx - client root context.
+@@ -60,6 +75,43 @@ export function apply(ctx: ClientContext): void {
+         if (result.value === undefined) return 'unknown command: /plan off'
+         return null
+       },
++      enterPlanMode: async () => {
++        const result = await ctx.remote.commands.execute(sessionId, '/plan', [])
++        if (!result.ok) return `${result.error.message} (${result.error.code})`
++        if (result.value === undefined) return 'unknown command: /plan'
++        return null
++      },
+     }),
+   }, PlanChip))
++
++  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
++    name: 'conversation.input.dock',
++    id: 'plan-document',
++    order: 1,
++    locale: NS,
++    inject: (sessionId: SessionId): PlanDocumentActions => ({
++      onUpdate: async (title, markdown) => {
++        const result = await ctx.remote.commands.execute(
++          sessionId,
++          `/plan-edit ${JSON.stringify({ title, markdown })}`,
++          [],
++        )
++        if (!result.ok) return { ok: false, error: `${result.error.message} (${result.error.code})` }
++        if (result.value === undefined) return { ok: false, error: 'unknown command: /plan-edit' }
++        return { ok: true }
++      },
++      ...(paneWorkbench(ctx) === undefined ? {} : {
++        onOpenWorkspace: () => {
++          const pane = paneWorkbench(ctx)
++          if (pane !== undefined) openPlanPane(pane)
++        },
++      }),
++    }),
++  }, PlanDocumentDock))
++
++  ctx.inject(['paneWorkbench' as never], (scope: ClientContext) => {
++    const pane = paneWorkbench(scope)
++    if (pane === undefined) return
++    return registerPlanPaneView(scope, pane)
++  })
+ }
+diff --git a/packages/client/ui-plan/src/client/locales.ts b/packages/client/ui-plan/src/client/locales.ts
+index 6410e6489..29dc026c1 100644
+--- a/packages/client/ui-plan/src/client/locales.ts
++++ b/packages/client/ui-plan/src/client/locales.ts
+@@ -6,6 +6,51 @@ export const zh = {
+   'chip.on.title': 'plan mode 已开启 — 点击关闭（/plan off）',
+   'chip.off.aria': 'plan mode 已关闭，按下开启',
+   'chip.off.title': 'plan mode 已关闭 — 点击开启（/plan）',
++  'document.title': '计划文档',
++  'document.content': '计划内容',
++  'document.empty': '暂无补充内容',
++  'document.expand': '展开计划文档',
++  'document.collapse': '收起计划文档',
++  'action.edit': '编辑计划文档',
++  'action.save': '保存计划文档',
++  'action.cancel': '取消编辑',
++  'action.open.sidebar': '在工作区打开计划',
++  'edit.title.aria': '计划标题',
++  'edit.markdown.aria': '计划 Markdown 内容',
++  'status.proposed': '待审',
++  'status.approved': '已批准',
++  'status.executing': '执行中',
++  'status.completed': '已完成',
++  'status.superseded': '已取代',
++  'status.rejected': '已拒绝',
++  'meta.round': '轮次',
++  'meta.mode': '模式',
++  'mode.linear': '线性',
++  'mode.goal': '目标驱动',
++  'mode.dag': 'DAG',
++  'history.title': '修订记录',
++  'goal.title': '关联目标',
++  'goal.phase': '阶段',
++  'goal.rounds': '轮次',
++  'goal.phase.active': '进行中',
++  'goal.phase.paused': '已暂停',
++  'goal.phase.blocked': '受阻',
++  'goal.phase.complete': '已完成',
++  'options.title': '方案',
++  'options.recommended': '推荐',
++  'options.selected': '已选择',
++  'options.select': '选择此方案',
++  'options.selecting': '选择中…',
++  'options.steps': '预计步骤',
++  'options.tradeoffs': '取舍',
++  'tasks.title': '任务',
++  'tasks.progress': '计划任务进度',
++  'tasks.completed': '已完成',
++  'tasks.status.pending': '待处理',
++  'tasks.status.ready': '可开始',
++  'tasks.status.inProgress': '进行中',
++  'tasks.status.blocked': '受阻',
++  'tasks.status.completed': '已完成',
+ } satisfies Record<string, string>
+ 
+ /** The plan namespace key union. */
+@@ -17,4 +62,49 @@ export const en = {
+   'chip.on.title': 'Plan mode on — click to turn off (/plan off)',
+   'chip.off.aria': 'Plan mode off, press to turn on',
+   'chip.off.title': 'Plan mode off — click to turn on (/plan)',
++  'document.title': 'Plan document',
++  'document.content': 'Plan content',
++  'document.empty': 'No additional content',
++  'document.expand': 'Expand plan document',
++  'document.collapse': 'Collapse plan document',
++  'action.edit': 'Edit plan document',
++  'action.save': 'Save plan document',
++  'action.cancel': 'Cancel edit',
++  'action.open.sidebar': 'Open plan in workspace',
++  'edit.title.aria': 'Plan title',
++  'edit.markdown.aria': 'Plan markdown content',
++  'status.proposed': 'Proposed',
++  'status.approved': 'Approved',
++  'status.executing': 'Executing',
++  'status.completed': 'Completed',
++  'status.superseded': 'Superseded',
++  'status.rejected': 'Rejected',
++  'meta.round': 'Round',
++  'meta.mode': 'Mode',
++  'mode.linear': 'Linear',
++  'mode.goal': 'Goal-driven',
++  'mode.dag': 'DAG',
++  'history.title': 'Revision history',
++  'goal.title': 'Linked goal',
++  'goal.phase': 'Phase',
++  'goal.rounds': 'Rounds',
++  'goal.phase.active': 'Active',
++  'goal.phase.paused': 'Paused',
++  'goal.phase.blocked': 'Blocked',
++  'goal.phase.complete': 'Complete',
++  'options.title': 'Options',
++  'options.recommended': 'Recommended',
++  'options.selected': 'Selected',
++  'options.select': 'Select option',
++  'options.selecting': 'Selecting…',
++  'options.steps': 'Estimated steps',
++  'options.tradeoffs': 'Tradeoffs',
++  'tasks.title': 'Tasks',
++  'tasks.progress': 'Plan task progress',
++  'tasks.completed': 'completed',
++  'tasks.status.pending': 'Pending',
++  'tasks.status.ready': 'Ready',
++  'tasks.status.inProgress': 'In progress',
++  'tasks.status.blocked': 'Blocked',
++  'tasks.status.completed': 'Completed',
+ } satisfies Record<PlanKey, string>
+diff --git a/packages/client/ui-plan/tests/browser-plugin.client.spec.ts b/packages/client/ui-plan/tests/browser-plugin.client.spec.ts
+index 347f38d55..3307d164f 100644
+--- a/packages/client/ui-plan/tests/browser-plugin.client.spec.ts
++++ b/packages/client/ui-plan/tests/browser-plugin.client.spec.ts
+@@ -25,7 +25,7 @@ async function bench() {
+     name: 'root',
+     children: { 'conversation.input.plan': { kind: 'single', scope: 'session' } },
+   } as never, () => null)
+-  const execute = vi.fn((_sessionId: SessionId, _line: string) =>
++  const execute = vi.fn((_sessionId: SessionId, _line: string, _images: readonly unknown[]) =>
+     Promise.resolve({ ok: true, value: { commandId: 'c1', result: { kind: 'success' as const } } }))
+   const commandsRemote = { execute }
+   ctx.provide('remote', { commands: commandsRemote })
+diff --git a/packages/client/ui-plan/tests/plan-document-panel.client.spec.tsx b/packages/client/ui-plan/tests/plan-document-panel.client.spec.tsx
+new file mode 100644
+index 000000000..8ceb36def
+--- /dev/null
++++ b/packages/client/ui-plan/tests/plan-document-panel.client.spec.tsx
+@@ -0,0 +1,141 @@
++// @vitest-environment jsdom
++/**
++ * PlanDocumentDock over the `plan-document` projection: absent capability or
++ * no document renders nothing; the latest document renders a status line and
++ * expands into markdown plus the full revision history.
++ */
++import { useSyncExternalStore } from 'react'
++import { afterEach, describe, expect, it, vi } from 'vitest'
++import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
++import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
++import type { PlanDocumentProjectionValue } from '@deepseek-ai/dsh-plan-mode/client'
++import { PlanDocumentDock, PlanDocumentPanel, type PlanDocumentDockProps } from '../src/client/PlanDocumentPanel.tsx'
++import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
++import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
++import { zh } from '../src/client/locales.ts'
++
++afterEach(cleanup)
++
++const t: PlanDocumentDockProps['t'] = makeTranslate(zh, commonZh)
++
++const VALUE: PlanDocumentProjectionValue = {
++  latest: {
++    planId: 'plan-1',
++    title: 'Fix the flaky test',
++    markdown: '# Fix the flaky test\n\nAdd a retry.',
++    status: 'approved',
++    round: 1,
++  },
++  revisions: [
++    {
++      planId: 'plan-1',
++      title: 'Fix the flaky test',
++      markdown: '# Fix the flaky test',
++      status: 'proposed',
++      round: 1,
++    },
++    {
++      planId: 'plan-1',
++      title: 'Fix the flaky test',
++      markdown: '# Fix the flaky test\n\nAdd a retry.',
++      status: 'approved',
++      round: 1,
++    },
++  ],
++}
++
++function setup(value: PlanDocumentProjectionValue | undefined) {
++  const store = createSnapshotStore<{ value: PlanDocumentProjectionValue | undefined }>({ value })
++  const subscribe = (onStoreChange: () => void) => store.subscribe(onStoreChange)
++  const getSnapshot = () => store.getSnapshot().value
++  const useProjection = () => useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
++  const onUpdate = vi.fn<PlanDocumentDockProps['onUpdate']>(async () => ({ ok: true }))
++  const onOpenWorkspace = vi.fn()
++  const props = { useProjection, t, onUpdate, onOpenWorkspace } as unknown as PlanDocumentDockProps
++  const view = render(<PlanDocumentDock {...props} />)
++  return { store, view, onUpdate, onOpenWorkspace }
++}
++
++describe('PlanDocumentDock', () => {
++  it('renders nothing while capability or latest document is absent', () => {
++    const absent = setup(undefined)
++    expect(absent.view.container.innerHTML).toBe('')
++    cleanup()
++    const empty = setup({ latest: undefined, revisions: [] })
++    expect(empty.view.container.innerHTML).toBe('')
++  })
++
++  it('shows the latest document status and title, then expands markdown and revision history', () => {
++    setup(VALUE)
++    expect(screen.getByText('计划文档')).toBeTruthy()
++    expect(screen.getByText('已批准')).toBeTruthy()
++    expect(screen.getByText('Fix the flaky test')).toBeTruthy()
++    expect(screen.queryByText('Add a retry.')).toBeNull()
++
++    fireEvent.click(screen.getByRole('button', { name: '展开计划文档' }))
++
++    expect(screen.getByText('Add a retry.')).toBeTruthy()
++    expect(screen.getByText('修订记录')).toBeTruthy()
++    expect(screen.getAllByText('Fix the flaky test').length).toBeGreaterThanOrEqual(2)
++    expect(screen.getByText('待审')).toBeTruthy()
++    expect(screen.getAllByText('已批准').length).toBeGreaterThanOrEqual(2)
++  })
++
++  it('opens the contextual Plan Pane from one dock action', () => {
++    const { onOpenWorkspace } = setup(VALUE)
++    fireEvent.click(screen.getByRole('button', { name: '在工作区打开计划' }))
++    expect(onOpenWorkspace).toHaveBeenCalledExactlyOnceWith()
++    expect(screen.queryByRole('button', { name: '最大化打开计划' })).toBeNull()
++  })
++
++  it('shows rejection feedback in the revision list', () => {
++    render(
++      <PlanDocumentPanel
++        t={t}
++        onUpdate={async () => ({ ok: true })}
++        value={{
++          latest: { planId: 'plan-2', title: 'Retry', markdown: '# Retry', status: 'rejected', round: 2, feedback: 'narrow the scope' },
++          revisions: [
++            { planId: 'plan-2', title: 'First', markdown: '# First', status: 'proposed', round: 1 },
++            { planId: 'plan-2', title: 'Retry', markdown: '# Retry', status: 'rejected', round: 2, feedback: 'narrow the scope' },
++          ],
++        }}
++      />,
++    )
++    expect(screen.getByText('已拒绝')).toBeTruthy()
++    fireEvent.click(screen.getByRole('button', { name: '展开计划文档' }))
++    expect(screen.getByText('narrow the scope')).toBeTruthy()
++  })
++
++  it('edits the latest plan and calls onUpdate with the new markdown', async () => {
++    const { onUpdate } = setup(VALUE)
++    fireEvent.click(screen.getByRole('button', { name: '编辑计划文档' }))
++
++    const titleInput = screen.getByRole('textbox', { name: '计划标题' }) as HTMLInputElement
++    const markdownInput = screen.getByRole('textbox', { name: '计划 Markdown 内容' }) as HTMLTextAreaElement
++    fireEvent.change(titleInput, { target: { value: 'Retry with backoff' } })
++    fireEvent.change(markdownInput, { target: { value: '# Retry with backoff\n\nAdd exponential backoff.' } })
++    fireEvent.click(screen.getByRole('button', { name: '保存计划文档' }))
++
++    expect(onUpdate).toHaveBeenCalledExactlyOnceWith(
++      'Retry with backoff',
++      '# Retry with backoff\n\nAdd exponential backoff.',
++    )
++    await waitFor(() => {
++      expect(screen.queryByRole('textbox', { name: '计划 Markdown 内容' })).toBeNull()
++    })
++  })
++
++  it('keeps the editor open and surfaces a failed update', async () => {
++    const { onUpdate } = setup(VALUE)
++    onUpdate.mockResolvedValueOnce({ ok: false, error: 'plan.edit failed' })
++    fireEvent.click(screen.getByRole('button', { name: '编辑计划文档' }))
++
++    const markdownInput = screen.getByRole('textbox', { name: '计划 Markdown 内容' }) as HTMLTextAreaElement
++    fireEvent.change(markdownInput, { target: { value: '# Changed' } })
++    fireEvent.click(screen.getByRole('button', { name: '保存计划文档' }))
++
++    expect(await screen.findByText('plan.edit failed')).toBeTruthy()
++    expect(screen.getByRole('textbox', { name: '计划 Markdown 内容' })).toBeTruthy()
++  })
++})
+diff --git a/packages/plan/plan-mode/README.i18n.yaml b/packages/plan/plan-mode/README.i18n.yaml
+index c12c5c248..3ddb28aca 100644
+--- a/packages/plan/plan-mode/README.i18n.yaml
++++ b/packages/plan/plan-mode/README.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write packages/plan/plan-mode/README.md
+-README.md: 3eabe2cb3f04b434b7f908f7beca869f1022a59e
+-README.zh.md: f7d6a1f8e9f5ba95f8aad9457f3dde5fc415fdcf
++README.md: 4331c228a9485513cee871e51bf9831829e65974
++README.zh.md: f0bb0c32d0ae6034b582a564e377c7ce57a52ff8
+diff --git a/packages/plan/plan-mode/README.md b/packages/plan/plan-mode/README.md
+index 3eabe2cb3..4331c228a 100644
+--- a/packages/plan/plan-mode/README.md
++++ b/packages/plan/plan-mode/README.md
+@@ -2,7 +2,7 @@
+ 
+ English | [中文](README.zh.md)
+ 
+-Logged, per-agent plan collaboration state with deployment-owned guidance, direct `/plan [message]` entry and `/plan off` exit commands, and the reviewed `exit_plan_mode` exit. Plan mode is soft guidance; sandbox mode and approval policy enforce restrictions independently and do not read or write plan state.
++Logged, per-agent plan collaboration state with deployment-owned guidance, direct `/plan [message]` entry and `/plan off` exit commands, a structured `plan_form` clarification form, and the reviewed `exit_plan_mode` exit that persists each submitted plan as a whole-value `plan/document` event. Plan mode is soft guidance; sandbox mode and approval policy enforce restrictions independently and do not read or write plan state.
+ 
+ ## Durable state
+ 
+@@ -12,17 +12,21 @@ Logged, per-agent plan collaboration state with deployment-owned guidance, direc
+ 
+ ## Model and human interactions
+ 
+-While active, `plan:policy` renders the configured `section`. The plugin always registers `exit_plan_mode`, keeping tool schemas stable across the transition; its execute path accepts only active plan mode and leaves it only after an exact user approval through `ctx.userQuestions`.
++While active, `plan:policy` renders the configured `section`. The plugin always registers `exit_plan_mode` and `plan_form`, keeping tool schemas stable across the transition. `plan_form` asks the user one structured planning form (one or more questions, options, custom text) and logs the request/answer pair before returning the answers to the model. `exit_plan_mode` accepts only active plan mode, persists the submitted plan as `plan/document` (`proposed`), and leaves plan mode only after an exact user approval through `ctx.userQuestions`; approval or rejection appends the matching `plan/document` status.
+ 
+ The review question declares the `plan-review` presentation intent, naming `Approve` as the label that approves it, so a capable UI presents the plan as a decision instead of a generic question; the answer the tool reads is the same either way. A dismissed review — the user closing the request to speak instead — is reported to the model as such, telling it to stay in plan mode and wait for the message; every other review failure keeps the seam's own message.
+ 
+-When `ctx.commands` is composed, the package registers `/plan [message]` and reserves the exact argument `off` for direct exit. Bare `/plan` selects plan mode; any other non-empty argument selects it first and is then submitted through `agent.steer()`, so it becomes the next step's ordinary logged user message under plan guidance. `/plan off` selects inactive without sending model input; it also cancels a pending entry before plan mode reaches a request. The command declares `input.images`: composer image attachments ride the steered message ahead of its text block. Bare `/plan` with images steers an image-only user message, while `/plan off` with images returns a direct error before any mode change so the composer keeps them.
++When `ctx.commands` is composed, the package registers `/plan [message]` and reserves the exact argument `off` for direct exit. Bare `/plan` selects plan mode; any other non-empty argument selects it first and is then submitted through `agent.steer()`, so it becomes the next step's ordinary logged user message under plan guidance. `/plan off` selects inactive without sending model input; it also cancels a pending entry before plan mode reaches a request.
++
++When `ctx.commands` is composed, the package also registers `/plan-edit <json>` for the Web plan-document dock's inline editor. It accepts JSON `{ title?, markdown }`, reads the latest `plan/document`, and appends a new `proposed` revision; if the current status is `approved`/`executing`/`completed`, the old document is first marked `superseded`.
++
++When both `ctx.commands` and `ctx.permissionPresets` are composed, the package also registers the optional one-key bridge `/plan-readonly [message]`: it selects plan mode, switches the session permission preset to `read-only`, then submits the optional message under plan guidance. The bridge reads/writes permission state through `ctx.permissionPresets`, never through plan state itself.
+ 
+ The Web client consumes the plugin-owned `/plan` command; other entry points may drive the same service directly without defining a second mode vocabulary.
+ 
+ ## Session projection
+ 
+-When the composition mounts `ctx.sessionProjections` ([`@deepseek-ai/dsh-session-projection`](../../session/session-projection/README.md)), this package registers the `plan` projection unit under an injected child. A `command/run` record named `plan` with recorded `args` starts a candidate target (`off` → inactive, anything else → active); its paired `command/done` retains a successful selection and drops an error; `plan/mode` commits the logged state and clears the retained selection. Every other event returns the same state reference. `view` derives `{ active, pending }`, where `pending` is true only while an unsettled or successful selection differs from the logged state. This remains a pure replay quantity, so host restarts, other tabs, and cold reads recover it from the log alone, and a rejected `/plan off` with images cannot leave a pending exit. The key merges into `SessionProjectionMap` from `src/types.ts` (served to host consumers via `./types` and client aggregates via `./client`); the framework drives the unit and carriers serve the value on the history tail page and the `session/projection` push frame. Compositions without the registry are unaffected.
++When the composition mounts `ctx.sessionProjections` ([`@deepseek-ai/dsh-session-projection`](../../session/session-projection/README.md)), this package registers the `plan` and `plan-document` projection units under an injected child. The unit folds two event kinds: a `command/run` record named `plan` with recorded `args` sets the wanted target (`off` → inactive, anything else → active), and `plan/mode` commits the logged state and clears it; every other event returns the same state reference. `view` derives `{ active, pending }`, where `pending` is true only while an outstanding selection differs from the logged state — a pure replay quantity, so host restarts, other tabs, and cold reads all recover it from the log alone (the `/plan` handler calls `set()` before any failing path, so a failed handler cannot leave a recorded command without its plan selection). The key merges into `SessionProjectionMap` from `src/types.ts` (served to host consumers via `./types` and client aggregates via `./client`); the framework drives the unit and carriers serve the value on the history tail page and the `session/projection` push frame. Compositions without the registry are unaffected.
+ 
+ ## Configuration
+ 
+@@ -65,11 +69,11 @@ The section is stable within plan mode, but entering or leaving changes the syst
+ 
+ #### What the model sees
+ 
+-`/plan`, `/plan off`, and their terminal results stay outside model history. A non-empty suffix other than the exact `off` argument becomes one user message through `agent.steer()` after plan mode is selected: any admitted image attachments as leading image blocks, then the trimmed text block. Bare `/plan` with admitted images steers one user message containing only those image blocks. An active `/plan off` selection contributes the standard logged user-switch notice only when the last request header described plan mode; cancelling a pending entry contributes none because no request observed it.
++`/plan`, `/plan off`, and their terminal results stay outside model history. A non-empty suffix other than the exact `off` argument becomes one trimmed user text block through `agent.steer()` after plan mode is selected. An active `/plan off` selection contributes the standard logged user-switch notice only when the last request header described plan mode; cancelling a pending entry contributes none because no request observed it.
+ 
+ #### Token effect
+ 
+-The optional message costs the same history tokens as submitting that content separately. Bare `/plan` without images and `/plan off` add none; bare `/plan` with images has the normal image-prompt cost. A narrated active exit adds the small retained switch notice.
++The optional message costs the same history tokens as submitting that text separately; bare `/plan` and `/plan off` add none. A narrated active exit adds the small retained switch notice.
+ 
+ #### KV Cache effect
+ 
+@@ -81,6 +85,12 @@ The user block is append-only conversation growth. Entering or leaving plan mode
+ 
+ The [`exit_plan_mode` schema](../../../docs/tool-catalog.md#deepseek-aidsh-plan-mode) remains available in both states; execution outside plan mode fails, while an approved in-mode review returns the canonical `{ approved: true }` value and renders the existing confirmation text. Rejection remains a failed call carrying review feedback, and a dismissed review a failed call naming the user's takeover.
+ 
++### Planning form
++
++#### What the model sees
++
++The [`plan_form` schema](../../../docs/tool-catalog.md#deepseek-aidsh-plan-form) is available in both states; execution outside plan mode fails. In plan mode it sends one form of questions to the user and returns the structured answers. Every form round is logged as `plan/form/request` + `plan/form/answer`; the final `plan/document` cites their event seqs in `sourceEventSeqs`.
++
+ #### Token effect
+ 
+ The stable schema is paid according to ToolRuntime mode, and each plan argument and review result remains in conversation history.
+diff --git a/packages/plan/plan-mode/README.zh.md b/packages/plan/plan-mode/README.zh.md
+index f7d6a1f8e..f0bb0c32d 100644
+--- a/packages/plan/plan-mode/README.zh.md
++++ b/packages/plan/plan-mode/README.zh.md
+@@ -2,7 +2,7 @@
+ 
+ [English](README.md) | 中文
+ 
+-按 agent（智能体）分别记录到日志的 plan 协作状态，提供由部署方配置的引导内容、用于直接进入的 `/plan [message]` 命令、用于直接退出的 `/plan off` 命令，以及经用户评审的 `exit_plan_mode` 退出方式。Plan mode 是软引导；沙箱模式和批准策略各自强制执行限制，且不读写 plan 状态。
++按 agent（智能体）分别记录到日志的 plan 协作状态，提供由部署方配置的引导内容、用于直接进入的 `/plan [message]` 命令、用于直接退出的 `/plan off` 命令、结构化澄清表单 `plan_form`，以及经用户评审的 `exit_plan_mode` 退出方式；每次提交的计划都会以完整值 `plan/document` 事件持久化。Plan mode 是软引导；沙箱模式和批准策略各自强制执行限制，且不读写 plan 状态。
+ 
+ ## 持久状态
+ 
+@@ -12,17 +12,21 @@
+ 
+ ## 模型与人类交互
+ 
+-激活时，`plan:policy` 会渲染已配置的 `section`。插件始终注册 `exit_plan_mode`，使工具 schema 在转换期间保持稳定；其 execute 路径只接受已激活的 plan mode，且只有通过 `ctx.userQuestions` 获得用户明确批准后才退出。
++激活时，`plan:policy` 会渲染已配置的 `section`。插件始终注册 `exit_plan_mode` 与 `plan_form`，使工具 schema 在转换期间保持稳定。`plan_form` 向用户发送一张结构化规划表单（一个或多个问题、选项、自定义文本），在把答案返回模型之前先记录请求/答案事件对。`exit_plan_mode` 只接受已激活的 plan mode，把提交的计划持久化为 `plan/document`（`proposed`），且只有通过 `ctx.userQuestions` 获得用户明确批准后才退出；批准或拒绝都会追加对应状态的 `plan/document`。
+ 
+ 评审问题声明 `plan-review` 呈现意图，并指名 `Approve` 为表示批准的标签，因此有能力的 UI 会把计划呈现为一次决定而非通用问题；两种情况下该工具读到的回答完全相同。放弃审阅——用户关闭请求，转而发言——会如实报告给模型，要求它留在 plan mode 中等待那条消息；其余每一种评审失败都保留 seam 自身的消息。
+ 
+-组合 `ctx.commands` 时，该包会注册 `/plan [message]`，并将参数恰好为 `off` 的情况保留给直接退出。不带参数的 `/plan` 会启用 plan mode；任何其他非空参数都会先启用 plan mode，再通过 `agent.steer()` 提交，因此它会在 plan 引导下成为下一步骤的常规已记录用户消息。`/plan off` 会选择停用状态，不发送模型输入；它还可以在启用 plan mode 的待处理选择由轮内 pre-step 追加之前将其取消。该命令声明了 `input.images`：composer 图片附件会随被 steer 的消息一起提交，位于文本块之前。不带参数的 `/plan` 若附有图片，会 steer 一条只含图片的用户消息；`/plan off` 若附有图片，会在任何模式变更前直接返回错误，composer 保留图片。
++组合 `ctx.commands` 时，该包会注册 `/plan [message]`，并将参数恰好为 `off` 的情况保留给直接退出。不带参数的 `/plan` 会启用 plan mode；任何其他非空参数都会先启用 plan mode，再通过 `agent.steer()` 提交，因此它会在 plan 引导下成为下一步骤的常规已记录用户消息。`/plan off` 会选择停用状态，不发送模型输入；它还可以在启用 plan mode 的待处理选择由轮内 pre-step 追加之前将其取消。
++
++组合 `ctx.commands` 时还会注册 `/plan-edit <json>`，供 Web 计划文档 dock 的内联编辑使用。它以 JSON 接收 `{ title?, markdown }`，读取最新 `plan/document` 并追加一条新的 `proposed` 修订；如果当前状态是 `approved`/`executing`/`completed`，会先把旧文档标记为 `superseded`。
++
++当同时组合 `ctx.commands` 与 `ctx.permissionPresets` 时，该包还会注册可选的一键桥接命令 `/plan-readonly [message]`：它先选择 plan mode，再把会话权限预设切换为 `read-only`，然后提交可选消息。桥接命令通过 `ctx.permissionPresets` 读写权限状态，而绝不通过 plan 状态本身。
+ 
+ Web 客户端使用该插件提供的 `/plan` 命令；其他入口可以直接驱动同一服务，无需定义第二套 mode 词汇。
+ 
+ ## 会话投影
+ 
+-当组合挂载 `ctx.sessionProjections`（[`@deepseek-ai/dsh-session-projection`](../../session/session-projection/README.md)）时，本包会在一个注入的子插件中注册 `plan` 投影单元。名为 `plan` 且携带已记录 `args` 的 `command/run` 记录会开始一个候选目标（`off` → 未激活，其余 → 激活）；与它配对的 `command/done` 保留成功选择并丢弃错误选择；`plan/mode` 提交已记录状态并清除已保留的选择。其他任何事件都返回同一个状态引用。`view` 推导 `{ active, pending }`，其中 `pending` 仅在未结算或已成功的选择与已记录状态不同时为 true。该值仍完全由日志回放得出，因此 host 重启、其他标签页和冷读都能仅凭日志恢复它，被拒绝的带图 `/plan off` 也不会留下待退出状态。key 由 `src/types.ts` 通过声明合并加入 `SessionProjectionMap`：host 消费方经 `./types` 获取，client 聚合经 `./client` 获取。框架负责驱动该单元，载体通过历史尾页和 `session/projection` 推送帧提供其值。未挂载注册表的组合不受影响。
++当组合挂载 `ctx.sessionProjections`（[`@deepseek-ai/dsh-session-projection`](../../session/session-projection/README.md)）时，本包会在一个注入的子插件中注册 `plan` 与 `plan-document` 投影单元。该单元折叠两类事件：名为 `plan` 且携带已记录 `args` 的 `command/run` 记录会设置目标状态（`off` → 未激活，其余 → 激活），`plan/mode` 会提交已记录状态并清除该目标；其他任何事件都返回同一个状态引用。`view` 推导 `{ active, pending }`，其中 `pending` 仅在尚未落实的选择与已记录状态不同时为 true。该值完全由日志回放得出，因此 host 重启、其他标签页和冷读都能仅凭日志恢复它。`/plan` 处理器会在任何可能失败的路径之前调用 `set()`，因此处理器失败时不会留下缺少对应 plan 选择的已记录命令。key 由 `src/types.ts` 通过声明合并加入 `SessionProjectionMap`：host 消费方经 `./types` 获取，client 聚合经 `./client` 获取。框架负责驱动该单元，载体通过历史尾页和 `session/projection` 推送帧提供其值。未挂载注册表的组合不受影响。
+ 
+ ## 配置
+ 
+@@ -65,11 +69,11 @@ You are in plan mode. Explore and design before presenting the complete plan thr
+ 
+ #### 模型所见内容
+ 
+-`/plan`、`/plan off` 及其终端结果留在模型历史之外。除恰好为 `off` 以外的非空后缀会在选择 plan mode 后，通过 `agent.steer()` 成为一条用户消息：任何已准入的图片附件作为前置图片块，之后是已去除首尾空白的文本块。不带参数的 `/plan` 若带有已准入图片，会 steer 一条只含这些图片块的用户消息。plan mode 已激活时，选择 `/plan off` 只会在最后一个请求头描述了 plan mode 的情况下追加标准的已记录用户切换通知；取消待生效进入不会贡献通知，因为没有请求观测到它。
++`/plan`、`/plan off` 及其终端结果留在模型历史之外。除恰好为 `off` 以外的非空后缀会在选择 plan mode 后，通过 `agent.steer()` 成为一个已去除首尾空白的用户文本块。plan mode 已激活时，选择 `/plan off` 只会在最后一个请求头描述了 plan mode 的情况下追加标准的已记录用户切换通知；取消待生效进入不会贡献通知，因为没有请求观测到它。
+ 
+ #### Token 影响
+ 
+-可选消息的历史 token 成本与单独提交该内容相同。不带图片和参数的 `/plan` 与 `/plan off` 不增加 token；不带参数但带图的 `/plan` 产生常规图片提示词成本。一次带有切换通知的已激活状态退出会追加一条简短且会保留的通知。
++可选消息的历史 token 成本与单独提交该文本相同；不带参数的 `/plan` 和 `/plan off` 不增加 token。一次带有切换通知的已激活状态退出会追加一条简短且会保留的通知。
+ 
+ #### KV Cache 影响
+ 
+@@ -81,6 +85,12 @@ You are in plan mode. Explore and design before presenting the complete plan thr
+ 
+ [`exit_plan_mode` schema](../../../docs/tool-catalog.md#deepseek-aidsh-plan-mode) 在两种状态下均可用；在 plan mode 外执行会失败，而 plan mode 内经批准的评审会返回规范的 `{ approved: true }` 值，并渲染既有的确认文本。拒绝仍是携带评审反馈的失败调用，放弃审阅则是一次指明用户接手的失败调用。
+ 
++### 规划表单
++
++#### 模型所见内容
++
++[`plan_form` schema](../../../docs/tool-catalog.md#deepseek-aidsh-plan-form) 在两种状态下均可用；在 plan mode 外执行会失败。plan mode 内它向用户发送一张表单并返回结构化答案。每轮表单都会记录为 `plan/form/request` + `plan/form/answer`；最终 `plan/document` 通过 `sourceEventSeqs` 引用这些事件 seq。
++
+ #### Token 影响
+ 
+ 稳定 schema 的成本取决于 ToolRuntime mode，每次传入的 plan 参数和评审结果都会保留在对话历史中。
+diff --git a/packages/plan/plan-mode/package.json b/packages/plan/plan-mode/package.json
+index 91319304d..9089e9ad1 100644
+--- a/packages/plan/plan-mode/package.json
++++ b/packages/plan/plan-mode/package.json
+@@ -45,6 +45,7 @@
+     "@deepseek-ai/dsh-commands": "workspace:^",
+     "@deepseek-ai/dsh-invariants": "workspace:^",
+     "@deepseek-ai/dsh-llm": "workspace:^",
++    "@deepseek-ai/dsh-permission-presets": "workspace:^",
+     "@deepseek-ai/dsh-session": "workspace:^",
+     "@deepseek-ai/dsh-session-projection": "workspace:^",
+     "@deepseek-ai/dsh-system-prompt": "workspace:^",
+@@ -55,6 +56,9 @@
+   "peerDependenciesMeta": {
+     "@deepseek-ai/dsh-commands": {
+       "optional": true
++    },
++    "@deepseek-ai/dsh-permission-presets": {
++      "optional": true
+     }
+   },
+   "dependencies": {
+@@ -67,6 +71,7 @@
+     "@deepseek-ai/dsh-commands": "workspace:^",
+     "@deepseek-ai/dsh-invariants": "workspace:^",
+     "@deepseek-ai/dsh-llm": "workspace:^",
++    "@deepseek-ai/dsh-permission-presets": "workspace:^",
+     "@deepseek-ai/dsh-session": "workspace:^",
+     "@deepseek-ai/dsh-session-projection": "workspace:^",
+     "@deepseek-ai/dsh-system-prompt": "workspace:^",
+diff --git a/packages/plan/plan-mode/src/index.ts b/packages/plan/plan-mode/src/index.ts
+index b3d093325..0a1c146ff 100644
+--- a/packages/plan/plan-mode/src/index.ts
++++ b/packages/plan/plan-mode/src/index.ts
+@@ -32,12 +32,18 @@ import type { Session, SessionEvent, UserMessage } from '@deepseek-ai/dsh-sessio
+ import { defineTool } from '@deepseek-ai/dsh-tools'
+ import type {} from '@deepseek-ai/dsh-system-prompt'
+ import { UserQuestionError } from '@deepseek-ai/dsh-user-questions'
++import type { AskUserQuestionAnswerItem, AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions'
+ // Type-only edge: resolves `ctx.commands` for the optional command child.
+ import type {} from '@deepseek-ai/dsh-commands'
+-import type { CommandId } from '@deepseek-ai/dsh-commands/brand'
+ // Type-only: resolves ctx.sessionProjections for the optional unit child.
+ import type {} from '@deepseek-ai/dsh-session-projection'
+-import type { PlanProjection } from './types.ts'
++// Type-only: resolves ctx.permissionPresets for the optional /plan-readonly bridge.
++import type {} from '@deepseek-ai/dsh-permission-presets'
++import type {
++  PlanDocumentProjection, PlanDocumentProjectionValue, PlanMode, PlanOption,
++  PlanOptionsProjection, PlanOptionsProjectionValue, PlanProjection, PlanTask,
++  PlanTasksProjection, PlanTasksProjectionValue,
++} from './types.ts'
+ // The `plan` projection-key declaration lives in src/types.ts (its one home);
+ // this re-export projects the type face onto the package root AND keeps the
+ // module edge in the emitted index.d.ts, so aggregate programs consuming the
+@@ -52,6 +58,74 @@ declare module '@deepseek-ai/dsh-session/types' {
+      * inactive through {@link foldPlanMode}.
+      */
+     'plan/mode': { active: boolean }
++
++    /**
++     * One planning-form request sent by `plan_form`: log-only, append-only
++     * interaction record. `requestId` is stable and echoed by its answer.
++     */
++    'plan/form/request': {
++      requestId: string
++      /** The plan document this form contributes to, once one exists. */
++      planId?: string
++      /** 1-based clarification round. */
++      round: number
++      questions: AskUserQuestionItem[]
++    }
++
++    /**
++     * The final outcome of one planning form: log-only, append-only. Its
++     * `requestId` pairs it with the matching `plan/form/request`.
++     */
++    'plan/form/answer': {
++      requestId: string
++      planId?: string
++      outcome: 'answered' | 'dismissed' | 'aborted'
++      answers: AskUserQuestionAnswerItem[]
++      feedback?: string
++    }
++
++    /**
++     * The current plan document, whole-value replace. The latest event wins;
++     * earlier events of the same `planId` retain the submit/review history.
++     */
++    'plan/document': {
++      planId: string
++      title: string
++      markdown: string
++      status: 'proposed' | 'approved' | 'executing' | 'completed' | 'superseded' | 'rejected'
++      round: number
++      /** Seqs of the `plan/form/request` and `plan/form/answer` events this plan cites. */
++      sourceEventSeqs: number[]
++      /** The `exit_plan_mode` tool call that submitted this document, when known. */
++      sourceToolCallId?: string
++      feedback?: string
++      mode?: PlanMode
++      goalId?: string
++      selectedOptionId?: string
++    }
++
++    /**
++     * One candidate option set for the current plan, whole-value replace.
++     * The latest event wins; a selected option is promoted into
++     * `plan/document` by the UI/host command.
++     */
++    'plan/options': {
++      planId: string
++      round: number
++      options: PlanOption[]
++      selectedOptionId?: string
++      status: 'proposed' | 'selected' | 'superseded'
++    }
++
++    /**
++     * One DAG snapshot for the current plan, whole-value replace. The latest
++     * event wins; task status changes append a fresh snapshot.
++     */
++    'plan/tasks': {
++      planId: string
++      round: number
++      nodes: PlanTask[]
++    }
+   }
+ }
+ 
+@@ -67,6 +141,12 @@ declare module '@deepseek-ai/cordis' {
+  */
+ export const EXIT_PLAN_MODE = 'exit_plan_mode'
+ 
++/** The model-facing planning-form tool's name. Always registered; execute only in plan mode. */
++export const PLAN_FORM_TOOL = 'plan_form'
++
++/** The model-facing plan-completion tool's name. Always registered; execute only when a plan is executing. */
++export const PLAN_COMPLETE_TOOL = 'plan_complete'
++
+ /** Deployment-owned plan guidance. */
+ export interface PlanModeConfig {
+   /** Guidance rendered as the `plan:policy` prompt section while plan mode is active. */
+@@ -139,17 +219,182 @@ export function foldPlanMode(events: readonly SessionEvent[], end = events.lengt
+ }
+ 
+ /**
+- * Projection unit state: the logged mode, the latest successful `/plan`
+- * selection not yet resolved by a `plan/mode` commit, and an execution whose
+- * paired `command/done` has not settled. Plain JSON (persisted-cache
+- * precondition).
++ * Fold the latest persisted plan document from the first `end` events, or
++ * `undefined` before the first `plan/document`. The latest whole-value event
++ * wins, so the fold is pure replay.
++ *
++ * @param events The session log or any prefix of it.
++ * @param end Fold `events[0, end)`; defaults to the whole log.
++ * @returns The latest plan document, or `undefined`.
++ */
++export function foldPlanDocument(events: readonly SessionEvent[], end = events.length): PlanDocumentProjection | undefined {
++  let document: PlanDocumentProjection | undefined
++  let index = 0
++  for (const event of events) {
++    if (index >= end) break
++    index++
++    if (event.type === 'plan/document') {
++      document = {
++        planId: event.data.planId,
++        title: event.data.title,
++        markdown: event.data.markdown,
++        status: event.data.status,
++        round: event.data.round,
++        ...event.data.feedback === undefined ? {} : { feedback: event.data.feedback },
++        ...event.data.mode === undefined ? {} : { mode: event.data.mode },
++        ...event.data.goalId === undefined ? {} : { goalId: event.data.goalId },
++        ...event.data.selectedOptionId === undefined ? {} : { selectedOptionId: event.data.selectedOptionId },
++      }
++    }
++  }
++  return document
++}
++
++/**
++ * Fold the latest persisted plan options from the first `end` events, or
++ * `undefined` before the first `plan/options`. The latest whole-value event
++ * wins, so the fold is pure replay.
++ *
++ * @param events The session log or any prefix of it.
++ * @param end Fold `events[0, end)`; defaults to the whole log.
++ * @returns The latest plan options, or `undefined`.
++ */
++export function foldPlanOptions(events: readonly SessionEvent[], end = events.length): PlanOptionsProjection | undefined {
++  let options: PlanOptionsProjection | undefined
++  let index = 0
++  for (const event of events) {
++    if (index >= end) break
++    index++
++    if (event.type === 'plan/options') {
++      options = {
++        planId: event.data.planId,
++        round: event.data.round,
++        options: event.data.options,
++        ...event.data.selectedOptionId === undefined ? {} : { selectedOptionId: event.data.selectedOptionId },
++        status: event.data.status,
++      }
++    }
++  }
++  return options
++}
++
++/**
++ * Fold the latest persisted plan DAG from the first `end` events, or
++ * `undefined` before the first `plan/tasks`. The latest whole-value event
++ * wins, so the fold is pure replay.
++ *
++ * @param events The session log or any prefix of it.
++ * @param end Fold `events[0, end)`; defaults to the whole log.
++ * @returns The latest plan DAG, or `undefined`.
++ */
++export function foldPlanTasks(events: readonly SessionEvent[], end = events.length): PlanTasksProjection | undefined {
++  let tasks: PlanTasksProjection | undefined
++  let index = 0
++  for (const event of events) {
++    if (index >= end) break
++    index++
++    if (event.type === 'plan/tasks') {
++      tasks = {
++        planId: event.data.planId,
++        round: event.data.round,
++        nodes: event.data.nodes,
++      }
++    }
++  }
++  return tasks
++}
++
++/**
++ * The stable plan id for a session's current planning flow. The first
++ * submitted document owns `plan-<seq>` (its append-time seq); later
++ * submissions reuse the log's first `plan/document` id, so the id survives
++ * resume and fork as pure log derivation.
++ *
++ * @param events The session log before the next append.
++ * @returns The existing plan id, or the id the next document would own.
++ */
++export function planIdForSession(events: readonly SessionEvent[]): string {
++  let planId: string | undefined
++  for (const event of events) {
++    if (event.type === 'plan/mode') {
++      // Leaving plan mode closes the planning session; the next entry owns a
++      // fresh plan id derived from its own append-time seq.
++      if (!event.data.active) planId = undefined
++    } else if (event.type === 'plan/document') {
++      planId = event.data.planId
++    }
++  }
++  return planId ?? `plan-${events.length}`
++}
++
++/**
++ * The 1-based planning round for the current planning session: one plus the
++ * number of `plan/document` events since the latest `plan/mode` entry.
++ * Leaving plan mode resets the round for the next session.
++ *
++ * @param events The session log before the next submit.
++ * @returns The round number for the next proposed plan document.
++ */
++export function planRoundForSession(events: readonly SessionEvent[]): number {
++  let round = 0
++  for (const event of events) {
++    if (event.type === 'plan/mode') {
++      round = 0
++    } else if (event.type === 'plan/document') {
++      round += 1
++    }
++  }
++  return round + 1
++}
++
++/**
++ * Seqs of every planning-form interaction and prior plan document this plan
++ * cites, in ascending log order. A later revision keeps earlier form rounds:
++ * they shaped the current plan too. Pure log derivation keeps the association
++ * reconstructable after resume.
++ *
++ * @param events The session log before the next document append.
++ * @returns Cited event seqs, in ascending log order.
++ */
++export function planSourceEventSeqs(events: readonly SessionEvent[]): number[] {
++  const seqs: number[] = []
++  for (const event of events) {
++    if (event.type === 'plan/form/request'
++      || event.type === 'plan/form/answer'
++      || event.type === 'plan/document') {
++      seqs.push(event.seq)
++    }
++  }
++  return seqs
++}
++
++/**
++ * Projection unit state: the logged mode plus the latest logged `/plan`
++ * selection (`command/run`) not yet resolved by a `plan/mode` commit. Plain
++ * JSON (persisted-cache precondition).
+  */
+ interface PlanUnitState {
+   active: boolean
+   /** The selection's target mode; null when no selection is outstanding. */
+   wanted: boolean | null
+-  /** The latest plan command awaiting its paired settlement. */
+-  running: { commandId: CommandId; wanted: boolean } | null
++}
++
++/** Projection unit state for the `plan-document` key: latest plus full revision history. */
++interface PlanDocumentUnitState {
++  latest: PlanDocumentProjection | undefined
++  revisions: PlanDocumentProjection[]
++}
++
++/** Projection unit state for the `plan-options` key: latest plus full revision history. */
++interface PlanOptionsUnitState {
++  latest: PlanOptionsProjection | undefined
++  revisions: PlanOptionsProjection[]
++}
++
++/** Projection unit state for the `plan-tasks` key: latest plus full revision history. */
++interface PlanTasksUnitState {
++  latest: PlanTasksProjection | undefined
++  revisions: PlanTasksProjection[]
+ }
+ 
+ /** Wire payload schema of the `plan` projection. */
+@@ -158,6 +403,75 @@ const planProjectionSchema: ZodType<PlanProjection> = zod.object({
+   pending: zod.boolean(),
+ })
+ 
++/** Wire payload schema of the `plan-document` projection. */
++const planDocumentSchema = zod.object({
++  planId: zod.string(),
++  title: zod.string(),
++  markdown: zod.string(),
++  status: zod.union([zod.literal('proposed'), zod.literal('approved'), zod.literal('executing'), zod.literal('completed'), zod.literal('superseded'), zod.literal('rejected')]),
++  round: zod.number(),
++  feedback: zod.string().optional(),
++  mode: zod.union([zod.literal('linear'), zod.literal('goal'), zod.literal('dag')]).optional(),
++  goalId: zod.string().optional(),
++  selectedOptionId: zod.string().optional(),
++})
++
++/** Wire payload schema of one plan option. */
++const planOptionSchema = zod.object({
++  optionId: zod.string(),
++  title: zod.string(),
++  summary: zod.string(),
++  markdown: zod.string(),
++  tradeoffs: zod.array(zod.string()).optional(),
++  estimatedSteps: zod.number().optional(),
++  recommended: zod.boolean().optional(),
++})
++
++/** Wire payload schema of a plan options projection. */
++const planOptionsSchema = zod.object({
++  planId: zod.string(),
++  round: zod.number(),
++  options: zod.array(planOptionSchema),
++  selectedOptionId: zod.string().optional(),
++  status: zod.union([zod.literal('proposed'), zod.literal('selected'), zod.literal('superseded')]),
++})
++
++/** Wire payload schema of the `plan-document` projection. */
++const planDocumentProjectionSchema: ZodType<PlanDocumentProjectionValue> = zod.object({
++  latest: planDocumentSchema.optional(),
++  revisions: zod.array(planDocumentSchema),
++})
++
++/** Wire payload schema of the `plan-options` projection. */
++const planOptionsProjectionSchema: ZodType<PlanOptionsProjectionValue> = zod.object({
++  latest: planOptionsSchema.optional(),
++  revisions: zod.array(planOptionsSchema),
++})
++
++/** Wire payload schema of one plan task node. */
++const planTaskSchema = zod.object({
++  id: zod.string(),
++  title: zod.string(),
++  description: zod.string().optional(),
++  status: zod.union([zod.literal('pending'), zod.literal('ready'), zod.literal('in_progress'), zod.literal('blocked'), zod.literal('completed')]),
++  dependencies: zod.array(zod.string()),
++  lane: zod.string().optional(),
++  result: zod.string().optional(),
++})
++
++/** Wire payload schema of a plan tasks projection. */
++const planTasksSchema = zod.object({
++  planId: zod.string(),
++  round: zod.number(),
++  nodes: zod.array(planTaskSchema),
++})
++
++/** Wire payload schema of the `plan-tasks` projection. */
++const planTasksProjectionSchema: ZodType<PlanTasksProjectionValue> = zod.object({
++  latest: planTasksSchema.optional(),
++  revisions: zod.array(planTasksSchema),
++})
++
+ /** Whether the log holds an opened turn without its closing `turn/end`. */
+ function hasOpenTurn(events: readonly SessionEvent[]): boolean {
+   let open = false
+@@ -198,6 +512,9 @@ export class PlanModeController extends Service {
+    */
+   private readonly pendingIntents = new WeakMap<Session, { active: boolean; narrate: boolean }>()
+ 
++  /** Last turn in which the plan-mode forced-output reminder was injected. */
++  private readonly lastReminderTurn = new WeakMap<Session, number>()
++
+   constructor(ctx: Context, config: PlanModeConfig = { section: '' }) {
+     super(ctx, 'planMode')
+     this.section = resolveConfig(config).section
+@@ -207,22 +524,40 @@ export class PlanModeController extends Service {
+     // A failed append remains pending for a later accepted in-turn pre-step,
+     // and policy cannot block the step.
+     ctx.on('agent/pre-step', async (
+-      { agent, signal },
++      { agent, signal, turn },
+       next,
+     ): Promise<PreStepDecision> => {
+       const decision = await next()
++      if (decision.kind === 'reject' || signal.aborted) return decision
+       const pending = this.pendingIntents.get(agent.session)
+-      if (decision.kind === 'reject' || signal.aborted || pending === undefined) return decision
+-      const narration = this.narration(agent.session, pending.active)
+-      try {
+-        this.onBoundary(agent.session)
+-      } catch (error) {
+-        ctx.logger.warn('dsh-plan-mode: failed to append selected plan mode at step start: %o', error)
+-        return decision
++      let result = decision
++      if (pending !== undefined) {
++        const narration = this.narration(agent.session, pending.active)
++        try {
++          this.onBoundary(agent.session)
++        } catch (error) {
++          ctx.logger.warn('dsh-plan-mode: failed to append selected plan mode at step start: %o', error)
++          return decision
++        }
++        if (pending.narrate && narration !== undefined) {
++          result = { ...result, messages: [...result.messages, narration] }
++        }
+       }
+-      return !pending.narrate || narration === undefined
+-        ? decision
+-        : { ...decision, messages: [...decision.messages, narration] }
++      // Forced-output check: in plan mode, if no submittable plan document has
++      // been created (or the latest was rejected), remind the model once per
++      // turn that prose is not a plan.
++      const active = foldPlanMode(agent.session.events)
++      const latest = foldPlanDocument(agent.session.events)
++      const needsReminder = active && (latest === undefined || latest.status === 'rejected')
++      if (needsReminder && this.lastReminderTurn.get(agent.session) !== turn) {
++        this.lastReminderTurn.set(agent.session, turn)
++        const reminder = createUserMessage({
++          content: [{ type: 'text', text: 'You are still in plan mode. Submit a complete plan through exit_plan_mode; prose is not a plan.' }],
++          source: { kind: 'plugin', plugin: 'plan-mode', form: 'notice', summary: 'Submit a complete plan through exit_plan_mode.' },
++        })
++        result = { ...result, messages: [...result.messages, reminder] }
++      }
++      return result
+     })
+     ctx.effect(() => () => { disposed = true }, 'dsh-plan-mode: close service lifetime')
+ 
+@@ -236,11 +571,12 @@ export class PlanModeController extends Service {
+       },
+     })
+ 
+-    // The plan projection unit (session-projection RFC): a pure event fold
+-    // serving clients the whole {active, pending} value. `command/run`
+-    // records the user's logged /plan selection, its paired `command/done`
+-    // keeps only successful selections, and `plan/mode` records that
+-    // selection and clears it. Pending is thereby a pure
++    // The plan projection unit (session-projection RFC): a pure double-event
++    // fold serving clients the whole {active, pending} value. `command/run`
++    // records the user's logged /plan selection (the handler calls `set()`
++    // before any failing path, so a failed handler cannot leave the recorded
++    // command without its plan selection); `plan/mode` records that selection
++    // and clears it. Pending is thereby a pure
+     // replay quantity: host restarts, other tabs, and cold reads all recover
+     // it from the log alone. The unit child activates only when a projection
+     // registry is composed (headless assemblies stay unaffected).
+@@ -248,29 +584,108 @@ export class PlanModeController extends Service {
+       projectionCtx.sessionProjections.register<'plan', PlanUnitState>({
+         key: 'plan',
+         schema: planProjectionSchema,
+-        init: () => ({ active: false, wanted: null, running: null }),
++        init: () => ({ active: false, wanted: null }),
+         apply: (state, event) => {
+           if (event.type === 'command/run' && event.data.name === 'plan') {
+             if (event.data.args === undefined) return state
+             const wanted = event.data.args.trim() !== 'off'
+-            return { ...state, running: { commandId: event.data.commandId, wanted } }
++            return wanted === state.wanted ? state : { active: state.active, wanted }
+           }
+-          if (event.type === 'command/done' && event.data.commandId === state.running?.commandId) {
+-            const wanted = event.data.kind === 'success' && state.running.wanted !== state.active
+-              ? state.running.wanted
+-              : null
+-            return { ...state, wanted, running: null }
++          if (event.type === 'command/done' && event.data.kind === 'error' && state.wanted !== null) {
++            return { active: state.active, wanted: null }
+           }
+           if (event.type === 'plan/mode') {
+-            return { ...state, active: event.data.active, wanted: null }
++            return { active: event.data.active, wanted: null }
+           }
+           return state
+         },
+-        view: (state) => {
+-          const wanted = state.running?.wanted ?? state.wanted
+-          return { active: state.active, pending: wanted !== null && wanted !== state.active }
+-        },
+-        stateVersion: 2,
++        view: state => ({
++          active: state.active,
++          pending: state.wanted !== null && state.wanted !== state.active,
++        }),
++        stateVersion: 1,
++      })
++
++      projectionCtx.sessionProjections.register<'plan-document', PlanDocumentUnitState>({
++        key: 'plan-document',
++        schema: planDocumentProjectionSchema,
++        init: () => ({ latest: undefined, revisions: [] }),
++        apply: (state, event) => event.type === 'plan/document'
++          ? {
++            latest: {
++              planId: event.data.planId,
++              title: event.data.title,
++              markdown: event.data.markdown,
++              status: event.data.status,
++              round: event.data.round,
++              ...event.data.feedback === undefined ? {} : { feedback: event.data.feedback },
++              ...event.data.mode === undefined ? {} : { mode: event.data.mode },
++              ...event.data.goalId === undefined ? {} : { goalId: event.data.goalId },
++              ...event.data.selectedOptionId === undefined ? {} : { selectedOptionId: event.data.selectedOptionId },
++            },
++            revisions: [...state.revisions, {
++              planId: event.data.planId,
++              title: event.data.title,
++              markdown: event.data.markdown,
++              status: event.data.status,
++              round: event.data.round,
++              ...event.data.feedback === undefined ? {} : { feedback: event.data.feedback },
++              ...event.data.mode === undefined ? {} : { mode: event.data.mode },
++              ...event.data.goalId === undefined ? {} : { goalId: event.data.goalId },
++              ...event.data.selectedOptionId === undefined ? {} : { selectedOptionId: event.data.selectedOptionId },
++            }],
++          }
++          : state,
++        view: state => ({ latest: state.latest, revisions: state.revisions }),
++        stateVersion: 3,
++      })
++
++      projectionCtx.sessionProjections.register<'plan-options', PlanOptionsUnitState>({
++        key: 'plan-options',
++        schema: planOptionsProjectionSchema,
++        init: () => ({ latest: undefined, revisions: [] }),
++        apply: (state, event) => event.type === 'plan/options'
++          ? {
++            latest: {
++              planId: event.data.planId,
++              round: event.data.round,
++              options: event.data.options,
++              ...event.data.selectedOptionId === undefined ? {} : { selectedOptionId: event.data.selectedOptionId },
++              status: event.data.status,
++            },
++            revisions: [...state.revisions, {
++              planId: event.data.planId,
++              round: event.data.round,
++              options: event.data.options,
++              ...event.data.selectedOptionId === undefined ? {} : { selectedOptionId: event.data.selectedOptionId },
++              status: event.data.status,
++            }],
++          }
++          : state,
++        view: state => ({ latest: state.latest, revisions: state.revisions }),
++        stateVersion: 1,
++      })
++
++      projectionCtx.sessionProjections.register<'plan-tasks', PlanTasksUnitState>({
++        key: 'plan-tasks',
++        schema: planTasksProjectionSchema,
++        init: () => ({ latest: undefined, revisions: [] }),
++        apply: (state, event) => event.type === 'plan/tasks'
++          ? {
++            latest: {
++              planId: event.data.planId,
++              round: event.data.round,
++              nodes: event.data.nodes,
++            },
++            revisions: [...state.revisions, {
++              planId: event.data.planId,
++              round: event.data.round,
++              nodes: event.data.nodes,
++            }],
++          }
++          : state,
++        view: state => ({ latest: state.latest, revisions: state.revisions }),
++        stateVersion: 1,
+       })
+     })
+ 
+@@ -279,12 +694,9 @@ export class PlanModeController extends Service {
+       commandCtx.commands.register({
+         name: 'plan',
+         description: 'Enter or leave plan mode',
+-        input: { hint: '[off|message]', images: true },
+-        handler: ({ agent, rawInput, attachments }) => {
++        input: { hint: '[off|message]' },
++        handler: ({ agent, rawInput }) => {
+           const message = rawInput.trim()
+-          if (message === 'off' && attachments.length > 0) {
+-            return { kind: 'error', text: 'Image attachments cannot accompany /plan off.' }
+-          }
+           if (message === 'off') {
+             switch (this.set(agent, false)) {
+               case 'committed':
+@@ -303,15 +715,7 @@ export class PlanModeController extends Service {
+             }
+           }
+           const outcome = this.set(agent, true)
+-          if (message !== '' || attachments.length > 0) {
+-            agent.steer(createUserMessage({
+-              content: [
+-                ...attachments,
+-                ...(message === '' ? [] : [{ type: 'text' as const, text: message }]),
+-              ],
+-              source: { kind: 'user' },
+-            }))
+-          }
++          if (message !== '') agent.steer(createUserMessage({ content: [{ type: 'text', text: message }], source: { kind: 'user' } }))
+           return {
+             kind: 'success',
+             text: outcome === 'committed'
+@@ -320,6 +724,48 @@ export class PlanModeController extends Service {
+           }
+         },
+       })
++
++      commandCtx.commands.register({
++        name: 'plan-edit',
++        description: 'Edit the current plan document from JSON input',
++        input: { hint: '<json>' },
++        handler: ({ agent, rawInput }) => this.editDocument(agent, rawInput),
++      })
++
++      commandCtx.commands.register({
++        name: 'plan-select',
++        description: 'Select one proposed plan option from JSON input',
++        input: { hint: '<json>' },
++        handler: ({ agent, rawInput }) => this.selectOption(agent, rawInput),
++      })
++    })
++
++    // Optional one-key bridge: register /plan-readonly only when both the
++    // command registry and the permission-presets service are composed. Plan
++    // state still comes from `this.set`; the file policy comes from the
++    // permission-presets owner, never from plan state itself.
++    ctx.inject(['commands', 'permissionPresets'], (commandCtx) => {
++      commandCtx.commands.register({
++        name: 'plan-readonly',
++        description: 'Enter plan mode with read-only file policy',
++        input: { hint: '[message]' },
++        handler: ({ agent, rawInput }) => {
++          const message = rawInput.trim()
++          const outcome = this.set(agent, true)
++          try {
++            commandCtx.permissionPresets.set(agent.session, 'read-only')
++          } catch (error) {
++            return { kind: 'error', text: `plan-readonly: ${error instanceof Error ? error.message : String(error)}` }
++          }
++          if (message !== '') agent.steer(createUserMessage({ content: [{ type: 'text', text: message }], source: { kind: 'user' } }))
++          return {
++            kind: 'success',
++            text: outcome === 'committed'
++              ? 'Plan mode on with read-only file policy. Use /plan off to leave plan mode; use /permission workspace-write to restore writes.'
++              : 'Entering plan mode with read-only file policy (applies from the next step).',
++          }
++        },
++      })
+     })
+ 
+     ctx.tools.register(defineTool({
+@@ -327,6 +773,7 @@ export class PlanModeController extends Service {
+       description: EXIT_DESCRIPTION,
+       parameters: {
+         plan: { type: 'string', required: true, description: 'The complete plan, as markdown, starting with a # heading that names it.' },
++        mode: { type: 'string', enum: ['linear', 'goal', 'dag'], description: 'Execution mode: linear (default), goal, or dag.' },
+       },
+       output: {
+         schema: {
+@@ -351,6 +798,21 @@ export class PlanModeController extends Service {
+         if (interaction === undefined) {
+           throw new Error('no user-questions channel is available to review the plan; ask the user to switch the session mode instead')
+         }
++        const planId = planIdForSession(agent.session.events)
++        const round = planRoundForSession(agent.session.events)
++        const sourceEventSeqs = planSourceEventSeqs(agent.session.events)
++        const mode: PlanMode = args.mode === undefined ? 'linear' : args.mode
++        const document = {
++          planId,
++          title: firstHeading(args.plan) ?? 'Plan',
++          markdown: args.plan,
++          status: 'proposed' as const,
++          round,
++          sourceEventSeqs,
++          sourceToolCallId: String(exec.callId),
++          ...mode === 'linear' ? {} : { mode },
++        }
++        agent.session.append('plan/document', document)
+         const answer = await interaction.ask({
+           questions: [{
+             id: REVIEW_ID,
+@@ -375,6 +837,7 @@ export class PlanModeController extends Service {
+           // never called. An abort (turn cancel, provider teardown) keeps its
+           // own message — there is no user to wait for.
+           if (cause instanceof UserQuestionError && cause.code === 'ASK_CANCELLED') {
++            agent.session.append('plan/document', { ...document, status: 'rejected', sourceEventSeqs: planSourceEventSeqs(agent.session.events), feedback: 'review dismissed' })
+             throw new Error('The user dismissed the plan review to speak instead; '
+               + 'stay in plan mode, stop here, and wait for their message.')
+           }
+@@ -389,14 +852,38 @@ export class PlanModeController extends Service {
+         const item = reviewItems.length === 1 ? reviewItems[0] : undefined
+         if (item?.selected.length !== 1 || item.selected[0] !== APPROVE_LABEL || item.custom !== undefined) {
+           const feedback = item?.custom ?? ''
++          agent.session.append('plan/document', { ...document, status: 'rejected', sourceEventSeqs: planSourceEventSeqs(agent.session.events), ...feedback === '' ? {} : { feedback } })
+           throw new Error(feedback === ''
+             ? 'The user chose to keep planning; revise the plan and present it again.'
+             : `The user chose to keep planning; their feedback: ${feedback}`)
+         }
++        const approved = {
++          ...document,
++          status: 'approved' as const,
++          sourceEventSeqs: planSourceEventSeqs(agent.session.events),
++        }
++        agent.session.append('plan/document', approved)
++        let goalId: string | undefined
++        if (mode === 'goal') {
++          const goals = ctx.get('goals') as { create(agent: Agent, request: { objective: string }): { id: string } } | undefined
++          if (goals !== undefined) {
++            const goal = goals.create(agent, { objective: approved.title })
++            goalId = goal.id
++          }
++        }
++        agent.session.append('plan/document', {
++          ...approved,
++          status: 'executing' as const,
++          ...goalId === undefined ? {} : { goalId },
++        })
+         // Keep plan guidance for the rest of this assistant tool batch. The
+         // silent selection is appended at the next accepted in-turn pre-step,
+         // before its request assembly.
+         this.pendingIntents.set(agent.session, { active: false, narrate: false })
++        agent.steer(createUserMessage({
++          content: [{ type: 'text', text: 'Execute the approved plan. Start with the first task.' }],
++          source: { kind: 'plugin', plugin: 'plan-mode', form: 'notice', summary: 'Execute the approved plan.' },
++        }))
+         return { approved: true }
+       },
+       presentCall: args => ({
+@@ -411,6 +898,301 @@ export class PlanModeController extends Service {
+         content: result.content,
+       }),
+     }))
++
++    ctx.tools.register(defineTool({
++      name: PLAN_FORM_TOOL,
++      description:
++        'Use only in plan mode. Ask the user a structured planning form before drafting or revising a plan. '
++        + 'Send one or more questions in a single form; prefer grouped, decision-relevant questions over repeated small prompts. '
++        + 'The answers come back as structured text for the next step.',
++      parameters: {
++        questions: {
++          type: 'array',
++          required: true,
++          description: 'Questions to ask the user before continuing the plan.',
++          items: {
++            type: 'object',
++            additionalProperties: true,
++            properties: {
++              id: { type: 'string', required: true, description: 'Stable id for this question; echoed in the answer.' },
++              question: { type: 'string', required: true, description: 'The specific question to ask the user.' },
++              header: { type: 'string', description: 'Optional short heading for the question.' },
++              detail: { type: 'string', description: 'Optional supporting detail rendered with the question.' },
++              options: {
++                type: 'array',
++                description: 'Optional choices to show the user.',
++                items: {
++                  type: 'object',
++                  additionalProperties: true,
++                  properties: {
++                    label: { type: 'string', required: true, description: 'Short user-facing option label.' },
++                    description: { type: 'string', description: 'One sentence explaining the tradeoff or impact.' },
++                  },
++                },
++              },
++              multi_select: { type: 'boolean', description: 'Whether the user may select more than one option. Defaults to false.' },
++            },
++          },
++        },
++        header: { type: 'string', description: 'Optional form title; defaults to "Planning form".' },
++      },
++      output: {
++        schema: {
++          type: 'object',
++          additionalProperties: false,
++          properties: {
++            requestId: { type: 'string', required: true },
++            answers: {
++              type: 'array',
++              required: true,
++              items: {
++                type: 'object',
++                additionalProperties: false,
++                properties: {
++                  id: { type: 'string', required: true },
++                  selected: { type: 'array', required: true, items: { type: 'string' } },
++                  custom: { type: 'string' },
++                },
++              },
++            },
++          },
++        },
++        render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
++      },
++      execute: async (args, exec) => {
++        const agent = exec.agent
++        if (agent === undefined) throw new Error(`${PLAN_FORM_TOOL} requires a calling agent (no session to ask)`)
++        if (!foldPlanMode(agent.session.events)) {
++          throw new Error(`${PLAN_FORM_TOOL} is only available in plan mode`)
++        }
++        const interaction = ctx.get('userQuestions')
++        if (interaction === undefined) {
++          throw new Error('no user-questions channel is available for the planning form; ask the user to switch the session mode instead')
++        }
++        const form = args as { questions: AskUserQuestionItem[]; header?: string }
++        if (!Array.isArray(form.questions) || form.questions.length === 0) {
++          throw new Error(`${PLAN_FORM_TOOL} requires at least one question`)
++        }
++        const requestId = `plan-form-${agent.session.events.length}`
++        const existing = foldPlanDocument(agent.session.events)
++        const planId = existing?.planId
++        const round = planRoundForSession(agent.session.events)
++        const questions = form.questions
++        agent.session.append('plan/form/request', {
++          requestId,
++          ...planId === undefined ? {} : { planId },
++          round,
++          questions,
++        })
++        try {
++          const answer = await interaction.ask({ questions, agent, signal: exec.signal })
++          agent.session.append('plan/form/answer', {
++            requestId,
++            ...planId === undefined ? {} : { planId },
++            outcome: 'answered',
++            answers: answer.answers,
++          })
++          return { requestId, answers: answer.answers }
++        } catch (cause) {
++          if (cause instanceof UserQuestionError && cause.code === 'ASK_CANCELLED') {
++            agent.session.append('plan/form/answer', {
++              requestId,
++              ...planId === undefined ? {} : { planId },
++              outcome: 'dismissed',
++              answers: [],
++            })
++            throw new Error('The user dismissed the planning form to speak instead; '
++              + 'stay in plan mode, stop here, and wait for their message.')
++          }
++          agent.session.append('plan/form/answer', {
++            requestId,
++            ...planId === undefined ? {} : { planId },
++            outcome: 'aborted',
++            answers: [],
++          })
++          throw cause
++        }
++      },
++      presentCall: (args) => {
++        const form = args as { questions: AskUserQuestionItem[]; header?: string }
++        return {
++          card: 'generic',
++          title: form.header ?? 'Planning form',
++          kind: 'other',
++          content: [{ type: 'text', text: `${form.questions.length} question(s) to answer before drafting the plan.` }],
++        }
++      },
++      presentResult: (_args, result) => ({
++        card: 'generic',
++        title: 'Planning form answers',
++        content: result.content,
++      }),
++    }))
++
++    ctx.tools.register(defineTool({
++      name: PLAN_COMPLETE_TOOL,
++      description:
++        'Mark the currently executing plan as completed. Use only after the approved plan has been fully carried out.',
++      parameters: {},
++      output: {
++        schema: {
++          type: 'object',
++          additionalProperties: false,
++          properties: {
++            planId: { type: 'string', required: true },
++            completed: { type: 'boolean', const: true, required: true },
++          },
++        },
++        render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
++      },
++      execute: async (_args, exec) => {
++        const agent = exec.agent
++        if (agent === undefined) throw new Error(`${PLAN_COMPLETE_TOOL} requires a calling agent (no session to complete)`)
++        const latest = foldPlanDocument(agent.session.events)
++        if (latest === undefined || latest.status !== 'executing') {
++          throw new Error(`${PLAN_COMPLETE_TOOL} is only available while a plan is executing`)
++        }
++        agent.session.append('plan/document', {
++          planId: latest.planId,
++          title: latest.title,
++          markdown: latest.markdown,
++          status: 'completed',
++          round: latest.round,
++          sourceEventSeqs: [],
++          ...latest.feedback === undefined ? {} : { feedback: latest.feedback },
++        })
++        return { planId: latest.planId, completed: true }
++      },
++      presentCall: () => ({
++        card: 'generic',
++        title: 'Plan completion',
++        kind: 'other',
++        content: [],
++      }),
++      presentResult: (_args, result) => ({
++        card: 'generic',
++        title: 'Plan completed',
++        content: result.content,
++      }),
++    }))
++  }
++
++  /**
++   * Edit the latest plan document from the `/plan-edit` command.
++   *
++   * @param agent The agent whose session owns the plan.
++   * @param rawInput JSON input with `markdown` and optional `title`.
++   * @returns A command result describing the update or the parse/state error.
++   */
++  private editDocument(
++    agent: Agent,
++    rawInput: string,
++  ): { kind: 'success'; text: string } | { kind: 'error'; text: string } {
++    let input: unknown
++    try {
++      input = JSON.parse(rawInput.trim())
++    } catch {
++      return { kind: 'error', text: 'plan-edit requires a JSON object with a markdown string.' }
++    }
++    if (typeof input !== 'object' || input === null || Array.isArray(input)) {
++      return { kind: 'error', text: 'plan-edit requires a JSON object with a markdown string.' }
++    }
++    const record = input as { title?: unknown; markdown?: unknown }
++    if (typeof record.markdown !== 'string' || record.markdown.trim() === '') {
++      return { kind: 'error', text: 'plan-edit requires a non-empty markdown string.' }
++    }
++    const latest = foldPlanDocument(agent.session.events)
++    if (latest === undefined) {
++      return { kind: 'error', text: 'No plan document exists to edit.' }
++    }
++    const title = typeof record.title === 'string' && record.title.trim() !== ''
++      ? record.title.trim()
++      : firstHeading(record.markdown) ?? 'Plan'
++    if (latest.status === 'approved' || latest.status === 'executing' || latest.status === 'completed') {
++      agent.session.append('plan/document', {
++        planId: latest.planId,
++        title: latest.title,
++        markdown: latest.markdown,
++        status: 'superseded',
++        round: latest.round,
++        sourceEventSeqs: planSourceEventSeqs(agent.session.events),
++        ...latest.feedback === undefined ? {} : { feedback: latest.feedback },
++      })
++    }
++    agent.session.append('plan/document', {
++      planId: latest.planId,
++      title,
++      markdown: record.markdown,
++      status: 'proposed',
++      round: planRoundForSession(agent.session.events),
++      sourceEventSeqs: planSourceEventSeqs(agent.session.events),
++      ...latest.feedback === undefined ? {} : { feedback: latest.feedback },
++    })
++    return { kind: 'success', text: 'Plan updated.' }
++  }
++
++  /**
++   * Select one proposed plan option from the `/plan-select` command.
++   *
++   * @param agent The agent whose session owns the plan.
++   * @param rawInput JSON input with `optionId`.
++   * @returns A command result describing the selection or the parse/state error.
++   */
++  private selectOption(
++    agent: Agent,
++    rawInput: string,
++  ): { kind: 'success'; text: string } | { kind: 'error'; text: string } {
++    let input: unknown
++    try {
++      input = JSON.parse(rawInput.trim())
++    } catch {
++      return { kind: 'error', text: 'plan-select requires a JSON object with an optionId string.' }
++    }
++    if (typeof input !== 'object' || input === null || Array.isArray(input)) {
++      return { kind: 'error', text: 'plan-select requires a JSON object with an optionId string.' }
++    }
++    const record = input as { optionId?: unknown }
++    if (typeof record.optionId !== 'string' || record.optionId.trim() === '') {
++      return { kind: 'error', text: 'plan-select requires a non-empty optionId string.' }
++    }
++    const options = foldPlanOptions(agent.session.events)
++    if (options === undefined || options.status === 'superseded') {
++      return { kind: 'error', text: 'No active plan options exist to select.' }
++    }
++    const option = options.options.find(candidate => candidate.optionId === record.optionId)
++    if (option === undefined) {
++      return { kind: 'error', text: `Unknown plan option "${record.optionId}".` }
++    }
++    const latest = foldPlanDocument(agent.session.events)
++    if (latest !== undefined && (latest.status === 'approved' || latest.status === 'executing' || latest.status === 'completed')) {
++      agent.session.append('plan/document', {
++        planId: latest.planId,
++        title: latest.title,
++        markdown: latest.markdown,
++        status: 'superseded',
++        round: latest.round,
++        sourceEventSeqs: planSourceEventSeqs(agent.session.events),
++        ...latest.feedback === undefined ? {} : { feedback: latest.feedback },
++      })
++    }
++    const planId = latest?.planId ?? options.planId
++    agent.session.append('plan/options', {
++      planId,
++      round: options.round,
++      options: options.options,
++      selectedOptionId: option.optionId,
++      status: 'selected',
++    })
++    agent.session.append('plan/document', {
++      planId,
++      title: option.title,
++      markdown: option.markdown,
++      status: 'proposed',
++      round: planRoundForSession(agent.session.events),
++      sourceEventSeqs: planSourceEventSeqs(agent.session.events),
++      selectedOptionId: option.optionId,
++    })
++    return { kind: 'success', text: 'Plan option selected.' }
+   }
+ 
+   /**
+diff --git a/packages/plan/plan-mode/src/types.ts b/packages/plan/plan-mode/src/types.ts
+index 8efd32f22..59db00397 100644
+--- a/packages/plan/plan-mode/src/types.ts
++++ b/packages/plan/plan-mode/src/types.ts
+@@ -11,19 +11,102 @@
+ /**
+  * The plan projection's wire value. `active` is the logged state in force
+  * (the last `plan/mode`, inactive before the first); `pending` is true while
+- * a logged `/plan` selection targets a state other than `active`, has not
+- * failed through its paired `command/done`, and no later `plan/mode` event has
+- * recorded that state. Capability absence (plan-mode not composed) is the
+- * key's absence, never a value.
++ * a logged `/plan` selection (`command/run`) targets a state other than
++ * `active` and no later `plan/mode` event has recorded that state. Capability
++ * absence (plan-mode not composed) is the key's absence, never a value.
+  */
+ export interface PlanProjection {
+   active: boolean
+   pending: boolean
+ }
+ 
++/** Execution mode selected for an approved plan. */
++export type PlanMode = 'linear' | 'goal' | 'dag'
++
++/** One candidate plan option proposed by the model. */
++export interface PlanOption {
++  optionId: string
++  title: string
++  summary: string
++  markdown: string
++  tradeoffs?: string[] | undefined
++  estimatedSteps?: number | undefined
++  recommended?: boolean | undefined
++}
++
++/** One persisted plan document's projection view (the latest `plan/document`). */
++export interface PlanDocumentProjection {
++  planId: string
++  title: string
++  markdown: string
++  status: 'proposed' | 'approved' | 'executing' | 'completed' | 'superseded' | 'rejected'
++  round: number
++  feedback?: string | undefined
++  mode?: PlanMode | undefined
++  goalId?: string | undefined
++  selectedOptionId?: string | undefined
++}
++
++/** The `plan-document` projection's wire value. */
++export interface PlanDocumentProjectionValue {
++  /** Latest persisted plan document, or absent before the first one. */
++  latest?: PlanDocumentProjection | undefined
++  /** Every persisted plan document in log order (proposed/approved/rejected revisions included). */
++  revisions: PlanDocumentProjection[]
++}
++
++/** One persisted candidate-option set for a plan. */
++export interface PlanOptionsProjection {
++  planId: string
++  round: number
++  options: PlanOption[]
++  selectedOptionId?: string | undefined
++  status: 'proposed' | 'selected' | 'superseded'
++}
++
++/** The `plan-options` projection's wire value. */
++export interface PlanOptionsProjectionValue {
++  /** Latest persisted options, or absent before the first proposal. */
++  latest?: PlanOptionsProjection | undefined
++  /** Every persisted options set in log order. */
++  revisions: PlanOptionsProjection[]
++}
++
++/** One task node in a plan DAG. */
++export interface PlanTask {
++  id: string
++  title: string
++  description?: string | undefined
++  status: 'pending' | 'ready' | 'in_progress' | 'blocked' | 'completed'
++  dependencies: string[]
++  lane?: string | undefined
++  result?: string | undefined
++}
++
++/** One persisted DAG snapshot for a plan. */
++export interface PlanTasksProjection {
++  planId: string
++  round: number
++  nodes: PlanTask[]
++}
++
++/** The `plan-tasks` projection's wire value. */
++export interface PlanTasksProjectionValue {
++  /** Latest persisted DAG snapshot, or absent before the first write. */
++  latest?: PlanTasksProjection | undefined
++  /** Every persisted DAG snapshot in log order. */
++  revisions: PlanTasksProjection[]
++}
++
+ declare module '@deepseek-ai/dsh-session-projection/types' {
+   interface SessionProjectionMap {
+-    /** Plan collaboration state folded from the plan command lifecycle and `plan/mode` events. */
++    /** Plan collaboration state folded from `command/run` (name `plan`) and `plan/mode` events. */
+     plan: PlanProjection
++    /** Latest persisted plan document folded from whole-value `plan/document` events. */
++    'plan-document': PlanDocumentProjectionValue
++    /** Latest persisted candidate plan options folded from `plan/options` events. */
++    'plan-options': PlanOptionsProjectionValue
++    /** Latest persisted plan DAG folded from `plan/tasks` events. */
++    'plan-tasks': PlanTasksProjectionValue
+   }
+ }
+diff --git a/packages/plan/plan-mode/tests/integration.spec.ts b/packages/plan/plan-mode/tests/integration.spec.ts
+index 77efc3beb..905e63e94 100644
+--- a/packages/plan/plan-mode/tests/integration.spec.ts
++++ b/packages/plan/plan-mode/tests/integration.spec.ts
+@@ -82,7 +82,7 @@ describe('plan mode through the agent loop', () => {
+     const header = findEvent(log, 'request/header')
+     expect(planMode.seq).toBeLessThan(header.seq)
+     expect(header.data.reason).toBe('initial')
+-    expect(header.data.header.tools?.map(tool => tool.name)).toEqual(['exit_plan_mode', 'read', 'write'])
++    expect(header.data.header.tools?.map(tool => tool.name)).toEqual(['exit_plan_mode', 'plan_complete', 'plan_form', 'read', 'write'])
+     expect(header.data.header.system).toContain('plan mode')
+ 
+     // No tool gate: the write RUNS — plan restrains by the section's
+@@ -91,7 +91,9 @@ describe('plan mode through the agent loop', () => {
+     const result = findEvent(log, 'tool/result')
+     expect(result.data.message.content[0].isError).toBe(false)
+     expect(foldPlanMode(log)).toBe(true)
+-    expect(log.some(event => event.type === 'user/message' && event.data.source.kind === 'plugin')).toBe(false)
++    expect(log.some(event => event.type === 'user/message' && event.data.source.kind === 'plugin'
++      && event.data.content[0]?.type === 'text'
++      && event.data.content[0].text?.startsWith('You are still in plan mode'))).toBe(true)
+   })
+ 
+   it('a user flip between turns lands at the boundary: one notice and a changed header with stable tool schemas', async () => {
+@@ -106,7 +108,7 @@ describe('plan mode through the agent loop', () => {
+     await waitForIdle(ctx, agent)
+     expect(foldPlanMode(agent.session.events)).toBe(false)
+     const first = findEvent(agent.session.events, 'request/header')
+-    expect(first.data.header.tools?.map(tool => tool.name)).toEqual(['exit_plan_mode', 'read', 'write'])
++    expect(first.data.header.tools?.map(tool => tool.name)).toEqual(['exit_plan_mode', 'plan_complete', 'plan_form', 'read', 'write'])
+ 
+     ctx.planMode.set(agent, true)
+     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'now plan' }], source: { kind: 'user' } }))
+@@ -115,14 +117,15 @@ describe('plan mode through the agent loop', () => {
+     const log = agent.session.events
+     expect(foldPlanMode(log)).toBe(true)
+     const notices = log.filter(event => event.type === 'user/message' && event.data.source.kind === 'plugin')
+-    expect(notices).toHaveLength(1)
+-    expect(notices[0]?.type === 'user/message' && notices[0].data.content).toEqual([
+-      { type: 'text', text: 'The user switched this session to plan mode.' },
+-    ])
++    expect(notices).toHaveLength(2)
++    const noticeTexts = notices.map(event =>
++      (event.type === 'user/message' && event.data.content[0]?.type === 'text' ? event.data.content[0].text : ''))
++    expect(noticeTexts).toContain('The user switched this session to plan mode.')
++    expect(noticeTexts.some(text => text?.startsWith('You are still in plan mode'))).toBe(true)
+     // The changed request is logged as a complete snapshot.
+     const second = findEvent(log, 'request/header', 'last')
+     expect(second.data.reason).toBe('change')
+-    expect(second.data.header.tools?.map(tool => tool.name)).toEqual(['exit_plan_mode', 'read', 'write'])
++    expect(second.data.header.tools?.map(tool => tool.name)).toEqual(['exit_plan_mode', 'plan_complete', 'plan_form', 'read', 'write'])
+     expect(second.data.header.tools).toEqual(first.data.header.tools)
+     expect(second.data.header.system).toContain('plan mode')
+   })
+diff --git a/packages/plan/plan-mode/tests/plan-mode.spec.ts b/packages/plan/plan-mode/tests/plan-mode.spec.ts
+index 828514795..a87beb3fe 100644
+--- a/packages/plan/plan-mode/tests/plan-mode.spec.ts
++++ b/packages/plan/plan-mode/tests/plan-mode.spec.ts
+@@ -11,7 +11,7 @@ import UserQuestionService, {
+ } from '@deepseek-ai/dsh-user-questions'
+ import CommandRuntime from '@deepseek-ai/dsh-commands'
+ import { CodeRuntime, type CodeRunRequest, type CodeRunResult } from '@deepseek-ai/dsh-code-runtime'
+-import PlanModeController, { EXIT_PLAN_MODE, foldPlanMode, resolveConfig } from '../src/index.ts'
++import PlanModeController, { EXIT_PLAN_MODE, PLAN_COMPLETE_TOOL, PLAN_FORM_TOOL, foldPlanDocument, foldPlanMode, planIdForSession, planRoundForSession, resolveConfig } from '../src/index.ts'
+ import type { PlanModeConfig } from '../src/index.ts'
+ 
+ const TEST_PLAN_SECTION = 'Test plan mode instructions.'
+@@ -40,6 +40,7 @@ async function agentWithSession(
+     inject(message: UserMessage) {
+       session.append('user/message', message, { surfaceOp: 'append' })
+     },
++    steer: vi.fn(),
+   } as unknown as Agent & { session: Session }
+   let scoped!: Context
+   await ctx.plugin(Object.assign((inner: Context) => { scoped = createScope(inner, agent).ctx }, {
+@@ -120,6 +121,18 @@ function noticeTexts(session: Session): string[] {
+     .map(event => (event.data as { content: { type: string; text?: string }[] }).content.map(block => block.text ?? '').join(''))
+ }
+ 
++/** Seed a submitted plan so the forced-output reminder does not fire in narration tests. */
++function seedSubmittedPlan(session: Session): void {
++  session.append('plan/document', {
++    planId: 'plan-1',
++    title: 'P',
++    markdown: '# P',
++    status: 'proposed',
++    round: 1,
++    sourceEventSeqs: [],
++  })
++}
++
+ function registerNamedTools(ctx: Context, names: string[]): void {
+   for (const name of names) {
+     ctx.tools.register(defineContentToolFixture({
+@@ -194,6 +207,28 @@ describe('foldPlanMode', () => {
+   })
+ })
+ 
++describe('planIdForSession / planRoundForSession', () => {
++  it('derives a fresh plan id and round after leaving and re-entering plan mode', () => {
++    const session = Session.create(SessionId('plan-session-reset'))
++    expect(planIdForSession(session.events)).toBe(`plan-${session.events.length}`)
++    expect(planRoundForSession(session.events)).toBe(1)
++    session.append('plan/mode', { active: true })
++    session.append('plan/document', {
++      planId: 'plan-1',
++      title: 'First', markdown: '# First', status: 'proposed', round: 1, sourceEventSeqs: [],
++    })
++    expect(planIdForSession(session.events)).toBe('plan-1')
++    expect(planRoundForSession(session.events)).toBe(2)
++
++    session.append('plan/mode', { active: false })
++    expect(planIdForSession(session.events)).toBe(`plan-${session.events.length}`)
++    expect(planRoundForSession(session.events)).toBe(1)
++    session.append('plan/mode', { active: true })
++    expect(planIdForSession(session.events)).toBe(`plan-${session.events.length}`)
++    expect(planRoundForSession(session.events)).toBe(1)
++  })
++})
++
+ describe('ctx.planMode: get/set', () => {
+   it('reads the folded state', async () => {
+     const ctx = await setup()
+@@ -315,6 +350,7 @@ describe('the boundary flush', () => {
+     const ctx = await setup()
+     const agent = await agentWithSession(ctx)
+     ctx.planMode.set(agent, true)
++    seedSubmittedPlan(agent.session)
+     await boundary(ctx, agent, 'pre-step')
+     expect(noticeTexts(agent.session)).toEqual([])
+   })
+@@ -324,6 +360,7 @@ describe('the boundary flush', () => {
+     const agent = await agentWithSession(ctx)
+     header(agent.session)
+     ctx.planMode.set(agent, true)
++    seedSubmittedPlan(agent.session)
+     await boundary(ctx, agent, 'step-start')
+     expect(noticeTexts(agent.session)).toEqual(['The user switched this session to plan mode.'])
+     await boundary(ctx, agent, 'step-start')
+@@ -347,6 +384,7 @@ describe('the boundary flush', () => {
+     header(agent.session)
+     agent.session.append('plan/mode', { active: false })
+     ctx.planMode.set(agent, true)
++    seedSubmittedPlan(agent.session)
+     await boundary(ctx, agent, 'step-start')
+     expect(foldPlanMode(agent.session.events)).toBe(true)
+     expect(noticeTexts(agent.session)).toEqual([])
+@@ -403,7 +441,7 @@ describe('the soft layer', () => {
+     registerNamedTools(ctx, ['read', 'write'])
+     const agent = await agentWithSession(ctx)
+     const defaultAssembly = await assembleFor(ctx, agent)
+-    expect(defaultAssembly.tools.map(tool => tool.name)).toEqual([EXIT_PLAN_MODE, 'read', 'write'])
++    expect(defaultAssembly.tools.map(tool => tool.name)).toEqual([EXIT_PLAN_MODE, PLAN_COMPLETE_TOOL, PLAN_FORM_TOOL, 'read', 'write'])
+     expect(defaultAssembly.sections.find(section => section.name === 'plan:policy')?.text).toBe('')
+ 
+     agent.session.append('plan/mode', { active: true })
+@@ -416,7 +454,7 @@ describe('the soft layer', () => {
+     const ctx = await setup()
+     registerNamedTools(ctx, ['read'])
+     const assembly = await ctx.systemPrompt.assemble()
+-    expect(assembly.tools.map(tool => tool.name)).toEqual([EXIT_PLAN_MODE, 'read'])
++    expect(assembly.tools.map(tool => tool.name)).toEqual([EXIT_PLAN_MODE, PLAN_COMPLETE_TOOL, PLAN_FORM_TOOL, 'read'])
+     expect(assembly.sections.find(section => section.name === 'plan:policy')?.text).toBe('')
+   })
+ 
+@@ -425,7 +463,7 @@ describe('the soft layer', () => {
+     registerNamedTools(ctx, ['read', 'write', 'todo_write'])
+     const agent = await agentWithSession(ctx, 'agent-1', { active: true })
+     const assembly = await assembleFor(ctx, agent)
+-    expect(assembly.tools.map(tool => tool.name).sort()).toEqual([EXIT_PLAN_MODE, 'read', 'todo_write', 'write'])
++    expect(assembly.tools.map(tool => tool.name).sort()).toEqual([EXIT_PLAN_MODE, PLAN_COMPLETE_TOOL, PLAN_FORM_TOOL, 'read', 'todo_write', 'write'])
+     expect(assembly.sections.find(section => section.name === 'plan:policy')?.text).toBe(TEST_PLAN_SECTION)
+   })
+ 
+@@ -443,10 +481,10 @@ describe('the soft layer', () => {
+     registerNamedTools(ctx, ['read'])
+     const planning = await agentWithSession(ctx, 'planning', { active: true })
+     expect((await assembleFor(ctx, planning)).tools.map(tool => tool.name))
+-      .toEqual(['exit_plan_mode', 'read', 'added-later'])
++      .toEqual(['exit_plan_mode', 'plan_complete', 'plan_form', 'read', 'added-later'])
+     const defaulted = await agentWithSession(ctx, 'defaulted')
+     expect((await assembleFor(ctx, defaulted)).tools.map(tool => tool.name))
+-      .toEqual(['exit_plan_mode', 'read', 'added-later'])
++      .toEqual(['exit_plan_mode', 'plan_complete', 'plan_form', 'read', 'added-later'])
+   })
+ 
+   it('keeps run_code the only wire tool in plan mode under the registry Code Mode; the SDK gains the exit binding', async () => {
+@@ -488,7 +526,7 @@ describe('the soft layer', () => {
+     const assembly = await assembleFor(ctx, agent)
+     // The stable registry contribution reaches both model interfaces: the exit tool
+     // is present on the wire AND in the SDK alongside the untouched toolset.
+-    expect(assembly.tools.map(tool => tool.name).sort()).toEqual(['exit_plan_mode', 'read', 'run_code', 'write'])
++    expect(assembly.tools.map(tool => tool.name).sort()).toEqual(['exit_plan_mode', 'plan_complete', 'plan_form', 'read', 'run_code', 'write'])
+     const sdk = assembly.sections.find(section => section.name === 'tools:sdk')?.text ?? ''
+     expectPlanCodeSdkBindings(sdk)
+   })
+@@ -561,7 +599,9 @@ describe('/plan', () => {
+     const plainSteer = vi.fn()
+     ;(plainAgent as unknown as { steer: typeof plainSteer }).steer = plainSteer
+     expect(ctx.commands.list(plainAgent)).toEqual([
+-      { name: 'plan', description: 'Enter or leave plan mode', input: { hint: '[off|message]', images: true } },
++      { name: 'plan', description: 'Enter or leave plan mode', input: { hint: '[off|message]' } },
++      { name: 'plan-edit', description: 'Edit the current plan document from JSON input', input: { hint: '<json>' } },
++      { name: 'plan-select', description: 'Select one proposed plan option from JSON input', input: { hint: '<json>' } },
+     ])
+ 
+     const signal = new AbortController().signal
+@@ -631,6 +671,32 @@ describe('/plan', () => {
+     expect(ctx.planMode.get(active)).toEqual({ active: false })
+   })
+ 
++  it('registers /plan-readonly only when permission-presets is composed, and switches both knobs', async () => {
++    const bare = await setup()
++    await bare.plugin(CommandRuntime)
++    await new Promise(resolve => setImmediate(resolve))
++    const bareAgent = await agentWithSession(bare, 'bare-plan-readonly')
++    expect(bare.commands.list(bareAgent).map(command => command.name)).toEqual(['plan', 'plan-edit', 'plan-select'])
++
++    const ctx = await setup()
++    const set = vi.fn()
++    ctx.provide('permissionPresets', { set })
++    await ctx.plugin(CommandRuntime)
++    await new Promise(resolve => setImmediate(resolve))
++    const agent = await agentWithSession(ctx, 'plan-readonly-agent')
++    openTurn(agent.session)
++    expect(ctx.commands.list(agent).map(command => command.name)).toEqual(['plan', 'plan-edit', 'plan-readonly', 'plan-select'])
++
++    const signal = new AbortController().signal
++    const result = await ctx.commands.execute(agent, '/plan-readonly', [], signal)
++    expect(result?.result).toEqual({
++      kind: 'success',
++      text: 'Entering plan mode with read-only file policy (applies from the next step).',
++    })
++    expect(ctx.planMode.get(agent)).toEqual({ active: false, pending: true })
++    expect(set).toHaveBeenCalledExactlyOnceWith(agent.session, 'read-only')
++  })
++
+   it('idle sessions get the immediate-commit copy on both /plan and /plan off', async () => {
+     const ctx = await setup()
+     await ctx.plugin(CommandRuntime)
+@@ -645,70 +711,50 @@ describe('/plan', () => {
+     expect(foldPlanMode(agent.session.events)).toBe(false)
+   })
+ 
+-  it('steers image attachments with or without text and refuses them on /plan off', async () => {
++  it('edits the latest plan document from JSON and supersedes an executing plan', async () => {
+     const ctx = await setup()
+     await ctx.plugin(CommandRuntime)
+     await new Promise(resolve => setImmediate(resolve))
+-    let saved = 0
+-    const saveImage = (input: { mediaType: string }) => {
+-      saved += 1
+-      return Promise.resolve({
+-        attachmentId: `att-${saved}`, mediaType: input.mediaType, bytes: 3, width: 1, height: 1,
+-      })
+-    }
+-    ctx.provide('attachments', {
+-      imageLimits: {
+-        maxImageBytes: 1024, maxImagesPerMessage: 4, maxMessageImageBytes: 1024,
+-        maxImagePixels: 1_000_000, mediaTypes: ['image/png'],
+-      },
+-      validateImage: () => Promise.resolve(),
+-      saveImage,
+-      async saveImages(inputs: readonly { mediaType: string }[]) {
+-        const refs = []
+-        for (const input of inputs) refs.push(await saveImage(input))
+-        return refs
+-      },
+-    })
+-    const signal = new AbortController().signal
+-    const images = [{ mediaType: 'image/png' as const, data: 'AAAA' }]
+-
+-    const agent = await agentWithSession(ctx, 'imaged-plan-command')
+-    openTurn(agent.session)
+-    const steer = vi.fn()
+-    ;(agent as unknown as { steer: typeof steer }).steer = steer
+-    const withMessage = await ctx.commands.execute(agent, '/plan sketch the layout', images, signal)
+-    expect(withMessage?.result.kind).toBe('success')
+-    expect(steer).toHaveBeenCalledExactlyOnceWith({
+-      id: expect.any(String) as unknown,
+-      role: 'user',
+-      content: [
+-        { type: 'image', attachment: expect.objectContaining({ attachmentId: 'att-1' }) as unknown },
+-        { type: 'text', text: 'sketch the layout' },
+-      ],
+-      source: { kind: 'user' },
++    const agent = await agentWithSession(ctx, 'edit-plan-command')
++    agent.session.append('plan/document', {
++      planId: 'plan-1',
++      title: 'Old',
++      markdown: '# Old',
++      status: 'executing',
++      round: 1,
++      sourceEventSeqs: [],
+     })
+ 
+-    const bareAgent = await agentWithSession(ctx, 'imaged-bare-plan-command')
+-    openTurn(bareAgent.session)
+-    const bareSteer = vi.fn()
+-    ;(bareAgent as unknown as { steer: typeof bareSteer }).steer = bareSteer
+-    expect((await ctx.commands.execute(bareAgent, '/plan', images, signal))?.result)
+-      .toEqual({ kind: 'success', text: 'Entering plan mode (applies from the next step). Use /plan off to leave.' })
+-    expect(bareSteer).toHaveBeenCalledExactlyOnceWith({
+-      id: expect.any(String) as unknown,
+-      role: 'user',
+-      content: [{ type: 'image', attachment: expect.objectContaining({ attachmentId: 'att-2' }) as unknown }],
+-      source: { kind: 'user' },
+-    })
+-    expect(ctx.planMode.get(bareAgent)).toEqual({ active: false, pending: true })
+-
+-    const activeAgent = await agentWithSession(ctx, 'imaged-off-plan-command', { active: true })
+-    const offSteer = vi.fn()
+-    ;(activeAgent as unknown as { steer: typeof offSteer }).steer = offSteer
+-    expect((await ctx.commands.execute(activeAgent, '/plan off', images, signal))?.result)
+-      .toEqual({ kind: 'error', text: 'Image attachments cannot accompany /plan off.' })
+-    expect(offSteer).not.toHaveBeenCalled()
+-    expect(ctx.planMode.get(activeAgent)).toEqual({ active: true })
++    const signal = new AbortController().signal
++    const result = await ctx.commands.execute(
++      agent,
++      `/plan-edit ${JSON.stringify({ title: 'New', markdown: '# New\n\nChanged.' })}`,
++      [],
++      signal,
++    )
++    expect(result?.result).toEqual({ kind: 'success', text: 'Plan updated.' })
++
++    const documents = agent.session.events.filter(event => event.type === 'plan/document')
++    expect(documents).toHaveLength(3)
++    expect(documents[0]?.type === 'plan/document' && documents[0].data.status).toBe('executing')
++    expect(documents[1]?.type === 'plan/document' && documents[1].data.status).toBe('superseded')
++    expect(documents[2]?.type === 'plan/document' && documents[2].data.status).toBe('proposed')
++    expect(documents[2]?.type === 'plan/document' && documents[2].data.title).toBe('New')
++    expect(documents[2]?.type === 'plan/document' && documents[2].data.markdown).toBe('# New\n\nChanged.')
++  })
++
++  it('rejects malformed plan-edit JSON and missing plan documents', async () => {
++    const ctx = await setup()
++    await ctx.plugin(CommandRuntime)
++    await new Promise(resolve => setImmediate(resolve))
++    const signal = new AbortController().signal
++    const agent = await agentWithSession(ctx, 'edit-plan-error-command')
++    expect((await ctx.commands.execute(agent, '/plan-edit not-json', [], signal))?.result)
++      .toEqual({ kind: 'error', text: 'plan-edit requires a JSON object with a markdown string.' })
++    expect((await ctx.commands.execute(agent, '/plan-edit {}', [], signal))?.result)
++      .toEqual({ kind: 'error', text: 'plan-edit requires a non-empty markdown string.' })
++    expect((await ctx.commands.execute(agent, '/plan-edit {"markdown":"# X"}', [], signal))?.result)
++      .toEqual({ kind: 'error', text: 'No plan document exists to edit.' })
+   })
+ 
+   it('removes the contributed command when the plan-mode plugin is disposed', async () => {
+@@ -719,7 +765,7 @@ describe('/plan', () => {
+     const fiber = await ctx.plugin(PlanModeController, PLAN_CONFIG)
+     await new Promise(resolve => setImmediate(resolve))
+     const agent = await agentWithSession(ctx)
+-    expect(ctx.commands.list(agent).map(command => command.name)).toEqual(['plan'])
++    expect(ctx.commands.list(agent).map(command => command.name)).toEqual(['plan', 'plan-edit', 'plan-select'])
+ 
+     await fiber.dispose()
+ 
+@@ -727,6 +773,137 @@ describe('/plan', () => {
+   })
+ })
+ 
++describe('plan_form', () => {
++  async function setupWithProvider(answer?: { selected: string[]; custom?: string }) {
++    const ctx = await setup()
++    await ctx.plugin(AgentRegistry)
++    await ctx.plugin(UserQuestionService)
++    const asked: AskUserQuestionRequest[] = []
++    if (answer !== undefined) {
++      ctx.userQuestions.registerProvider({
++        ask: (request) => {
++          asked.push(request)
++          return Promise.resolve({ answers: request.questions.map(question => ({ id: question.id, ...answer })) })
++        },
++      })
++    }
++    const agent = await agentWithSession(ctx, 'plan-form-agent', { active: true })
++    return { ctx, agent, asked }
++  }
++
++  const FORM_ARGS = {
++    questions: [{
++      id: 'goal',
++      question: 'What should the plan accomplish?',
++      header: 'Goal',
++      options: [{ label: 'Fix the flaky test', description: 'Narrow fix' }],
++    }],
++    header: 'Plan form',
++  }
++
++  it('registers the tool with a questions parameter and a planning form output', async () => {
++    const ctx = await setup()
++    const schema = ctx.tools.schemas().find(entry => entry.name === PLAN_FORM_TOOL)
++    const parameters = schema?.parameters as { required?: string[]; properties?: Record<string, unknown> }
++    expect(schema?.description).toMatch(/^Use only in plan mode\./)
++    expect(parameters.required).toEqual(['questions'])
++    expect(Object.keys(parameters.properties ?? {})).toEqual(['questions', 'header'])
++  })
++
++  it('rejects a call outside plan mode while remaining advertised', async () => {
++    const ctx = await setup()
++    const agent = await agentWithSession(ctx)
++    const result = await ctx.tools.execute({
++      callId: CallId('plan-form-inactive'),
++      name: PLAN_FORM_TOOL,
++      arguments: FORM_ARGS,
++      signal: new AbortController().signal,
++      agent,
++    })
++    expect(result.isError).toBe(true)
++    expect(result.content).toEqual([{ type: 'text', text: 'Error: plan_form is only available in plan mode' }])
++  })
++
++  it('logs the request and answer and returns the structured answers', async () => {
++    const { ctx, agent, asked } = await setupWithProvider({ selected: ['Fix the flaky test'] })
++    const result = await ctx.tools.execute({
++      callId: CallId('plan-form-answered'),
++      name: PLAN_FORM_TOOL,
++      arguments: FORM_ARGS,
++      signal: new AbortController().signal,
++      agent,
++    })
++    expect(result.isError).toBe(false)
++    if (result.isError) throw new Error('expected answered plan form')
++    expect(result.value).toEqual({
++      requestId: expect.any(String) as unknown,
++      answers: [{ id: 'goal', selected: ['Fix the flaky test'] }],
++    })
++    const request = agent.session.events.findLast(event => event.type === 'plan/form/request')
++    const answer = agent.session.events.findLast(event => event.type === 'plan/form/answer')
++    expect(request?.type === 'plan/form/request' && request.data).toMatchObject({
++      requestId: expect.any(String) as unknown,
++      round: 1,
++      questions: FORM_ARGS.questions,
++    })
++    expect(answer?.type === 'plan/form/answer' && answer.data).toMatchObject({
++      requestId: request?.type === 'plan/form/request' ? request.data.requestId : '',
++      outcome: 'answered',
++      answers: [{ id: 'goal', selected: ['Fix the flaky test'] }],
++    })
++    expect(asked).toHaveLength(1)
++  })
++
++  it('logs a dismissed form and tells the model to wait for the user', async () => {
++    const ctx = await setup()
++    await ctx.plugin(AgentRegistry)
++    await ctx.plugin(UserQuestionService)
++    ctx.userQuestions.registerProvider({
++      ask: () => Promise.reject(new UserQuestionError('the user cancelled ask_user_question', 'ASK_CANCELLED')),
++    })
++    const agent = await agentWithSession(ctx, 'plan-form-dismissed', { active: true })
++    const result = await ctx.tools.execute({
++      callId: CallId('plan-form-dismiss'),
++      name: PLAN_FORM_TOOL,
++      arguments: FORM_ARGS,
++      signal: new AbortController().signal,
++      agent,
++    })
++    expect(result.isError).toBe(true)
++    expect(result.content).toEqual([{ type: 'text', text: 'Error: The user dismissed the planning form to speak instead; stay in plan mode, stop here, and wait for their message.' }])
++    expect(agent.session.events.findLast(event => event.type === 'plan/form/answer')?.type === 'plan/form/answer').toBe(true)
++  })
++})
++
++describe('plan_complete', () => {
++  it('completes only an executing plan and updates the projection', async () => {
++    const ctx = await setup()
++    const agent = await agentWithSession(ctx, 'plan-complete-agent', { active: true })
++    agent.session.append('plan/document', {
++      planId: 'plan-1',
++      title: 'P',
++      markdown: '# P',
++      status: 'executing',
++      round: 1,
++      sourceEventSeqs: [],
++    })
++
++    const result = await execute(ctx, PLAN_COMPLETE_TOOL, agent)
++    expect(result.isError).toBe(false)
++    if (result.isError) throw new Error('expected plan_complete success')
++    expect(result.value).toEqual({ planId: 'plan-1', completed: true })
++    expect(foldPlanDocument(agent.session.events)?.status).toBe('completed')
++  })
++
++  it('rejects completion when no executing plan exists', async () => {
++    const ctx = await setup()
++    const agent = await agentWithSession(ctx, 'plan-complete-noop', { active: true })
++    const result = await execute(ctx, PLAN_COMPLETE_TOOL, agent)
++    expect(result.isError).toBe(true)
++    expect(result.content).toEqual([{ type: 'text', text: 'Error: plan_complete is only available while a plan is executing' }])
++  })
++})
++
+ describe('exit_plan_mode', () => {
+   async function setupWithReview(answer?: { selected: string[]; custom?: string }) {
+     const ctx = await setup()
+@@ -760,7 +937,7 @@ describe('exit_plan_mode', () => {
+     const schema = ctx.tools.schemas().find(entry => entry.name === EXIT_PLAN_MODE)
+     const parameters = schema?.parameters as { required?: string[]; properties?: Record<string, unknown> }
+     expect(schema?.description).toMatch(/^Use only in plan mode\./)
+-    expect(Object.keys(parameters.properties ?? {})).toEqual(['plan'])
++    expect(Object.keys(parameters.properties ?? {})).toEqual(['plan', 'mode'])
+     expect(parameters.required).toEqual(['plan'])
+   })
+ 
+@@ -841,6 +1018,12 @@ describe('exit_plan_mode', () => {
+     expect(ctx.planMode.get(agent)).toEqual({ active: true, pending: false })
+     await boundary(ctx, agent, 'step-start')
+     expect(foldPlanMode(agent.session.events)).toBe(false)
++    const documents = agent.session.events.filter(event => event.type === 'plan/document')
++    expect(documents).toHaveLength(3)
++    expect(documents[0]?.type === 'plan/document' && documents[0].data.status).toBe('proposed')
++    expect(documents[1]?.type === 'plan/document' && documents[1].data.status).toBe('approved')
++    expect(documents[2]?.type === 'plan/document' && documents[2].data.status).toBe('executing')
++    expect(foldPlanDocument(agent.session.events)?.status).toBe('executing')
+     expect(asked).toHaveLength(1)
+     expect(asked[0]?.agent).toBe(agent)
+     expect(asked[0]?.questions[0]?.detail).toBe('# The plan\n\ndo things')
+@@ -989,10 +1172,12 @@ describe('exit_plan_mode', () => {
+     const { ctx, agent, asked } = await setupWithReview({ selected: ['Approve'] })
+     await callExit(ctx, agent)
+     const question = asked[0]?.questions[0]
+-    expect(question?.intent).toEqual({ kind: 'plan-review', approve: 'Approve' })
++    const intent = question?.intent
++    expect(intent).toEqual({ kind: 'plan-review', approve: 'Approve' })
+     // The named label is one this same question offers, so a UI honouring the
+     // intent answers a choice this tool accepts.
+-    expect(question?.options?.map(option => option.label)).toContain(question?.intent?.approve)
++    expect(question?.options?.map(option => option.label)).toContain(
++      intent?.kind === 'plan-review' ? intent.approve : undefined)
+   })
+ 
+   it('reads a dismissed review as the user taking the turn back, not as a failure', async () => {
+diff --git a/packages/plan/plan-mode/tests/projection.spec.ts b/packages/plan/plan-mode/tests/projection.spec.ts
+index e0ad20148..ac611389a 100644
+--- a/packages/plan/plan-mode/tests/projection.spec.ts
++++ b/packages/plan/plan-mode/tests/projection.spec.ts
+@@ -74,7 +74,12 @@ function commitPlanMode(session: Session, active: boolean, turn: number): void {
+ describe('plan projection unit', () => {
+   it('serves inactive/not-pending for the empty log', async () => {
+     const bench = await harness(true)
+-    expect(bench.values()).toEqual({ plan: { active: false, pending: false } })
++    expect(bench.values()).toEqual({
++      plan: { active: false, pending: false },
++      'plan-document': { latest: undefined, revisions: [] },
++      'plan-options': { latest: undefined, revisions: [] },
++      'plan-tasks': { latest: undefined, revisions: [] },
++    })
+   })
+ 
+   it('a logged /plan selection reads pending until plan/mode records it', async () => {
+diff --git a/packages/plan/plan-mode/tsconfig.json b/packages/plan/plan-mode/tsconfig.json
+index 2886c4da1..b97f18d1d 100644
+--- a/packages/plan/plan-mode/tsconfig.json
++++ b/packages/plan/plan-mode/tsconfig.json
+@@ -32,6 +32,9 @@
+     {
+       "path": "../../interaction/commands"
+     },
++    {
++      "path": "../../interaction/permission-presets"
++    },
+     {
+       "path": "../../session/session-projection"
+     },
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index 02e155576..d7a6a6ea4 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -2387,6 +2387,9 @@ importers:
+       '@deepseek-ai/dsh-client-ui-slots':
+         specifier: workspace:^
+         version: link:../ui-slots
++      '@deepseek-ai/dsh-goal':
++        specifier: workspace:^
++        version: link:../../goal/goal
+       '@deepseek-ai/dsh-invariants':
+         specifier: workspace:^
+         version: link:../../runtime-diagnostics/invariants
+@@ -5799,6 +5802,9 @@ importers:
+       '@deepseek-ai/dsh-llm':
+         specifier: workspace:^
+         version: link:../../llm/llm
++      '@deepseek-ai/dsh-permission-presets':
++        specifier: workspace:^
++        version: link:../../interaction/permission-presets
+       '@deepseek-ai/dsh-session':
+         specifier: workspace:^
+         version: link:../../core/session

@@ -1,0 +1,372 @@
+diff --git a/.agents/notes/proposed/feature/2026-08-20-conversation-user-actions-slot.i18n.yaml b/.agents/notes/proposed/feature/2026-08-20-conversation-user-actions-slot.i18n.yaml
+new file mode 100644
+index 0000000000..b20f997219
+--- /dev/null
++++ b/.agents/notes/proposed/feature/2026-08-20-conversation-user-actions-slot.i18n.yaml
+@@ -0,0 +1,6 @@
++# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
++# side as of the last confirmed-consistent state. Both languages carry equal authority;
++# after editing either side, bring the other along and re-record with:
++#   pnpm run verify-translation-pairing --write .agents/notes/proposed/feature/2026-08-20-conversation-user-actions-slot.md
++2026-08-20-conversation-user-actions-slot.md: 11ad804ecbba1fee9176ae12dd7c198e645b7593
++2026-08-20-conversation-user-actions-slot.zh.md: c3507b2e273869cb8af438d525f3b75fb12a4717
+diff --git a/.agents/notes/proposed/feature/2026-08-20-conversation-user-actions-slot.md b/.agents/notes/proposed/feature/2026-08-20-conversation-user-actions-slot.md
+new file mode 100644
+index 0000000000..11ad804ecb
+--- /dev/null
++++ b/.agents/notes/proposed/feature/2026-08-20-conversation-user-actions-slot.md
+@@ -0,0 +1,53 @@
++# Agent Note: Conversation user-actions slot
++
++Status: proposed
++
++English | [中文](2026-08-20-conversation-user-actions-slot.zh.md)
++
++## Problem
++
++The conversation chat surface exposes exactly one per-message action slot, `conversation.chat.assistant-actions`, addressed by a finalized assistant `messageId`. User messages have no equivalent extension point: their IconActions row is hard-wired to copy + clock, so a plugin cannot contribute actions addressing a specific user message — the primitives needed for "edit and resend this message", "retry from before this message", or per-message provenance affordances. The historical result was either a dead UI stub (an edit button with no backend) or no surface at all.
++
++## Proposal
++
++Add the symmetric slot in `packages/client/ui-conversation`:
++
++```ts
++'conversation.chat.user-actions': {
++  kind: 'list'
++  scope: 'session'
++  owner: UserActionOwnerProps
++}
++```
++
++```ts
++export interface UserActionOwnerProps {
++  /** Stable identity carried from the `user/message` event; absent on plain user nodes. */
++  messageId?: MessageId | undefined
++  /** Engine-owned node seq; the durable fork-addressing currency for user nodes. */
++  seq: number
++}
++```
++
++`UserMessageNodeView` (keys `user` and `steering`) declares the slot as a child and renders it into `MessageIconActions.extraActions`, between the built-in copy and clock controls — the same site discipline as the assistant strip. Two addressing facts fall out of the event grammar and are frozen into the owner type:
++
++- Plain user nodes carry no durable `messageId`; the engine-owned `seq` is the addressing currency (it is also what session forking addresses).
++- Admitted steering nodes do carry the `user/message` id, so `messageId` is optional and present only for them.
++
++### Alternatives considered
++
++- **Addressing by `messageId` only**: impossible for plain user nodes, which have none; would force contributors to guess or re-derive seqs.
++- **A single message-agnostic slot with a `role` field**: widens every existing contributor's match surface for no current consumer; the assistant strip's "finalized message" invariant would be diluted.
++- **No slot; ship edit/retry inside dsh core**: the mutation semantics (fork-and-resend) are already composable from `session.fork` + `session.prompt` by an independent plugin; only the render site is missing, and that is exactly what a slot is for.
++
++## Consequences
++
++- Additive only: the slot declaration, the two registrations, and the render wiring in `UserMessageNodeView`. No existing slot, event, or component semantics change; with zero contributors the rendered output is byte-identical (empty list renders nothing).
++- Plugins can now ship per-user-message actions without importing the conversation implementation, mirroring the assistant-actions contract.
++- Contributors must treat an in-flight turn as non-addressable (disable, do not hide silently) — same policy as assistant actions.
++
++## Verification
++
++- `packages/client/ui-conversation/tests/user-actions-slot.client.spec.tsx`: contributed action renders inside the user actions row; plain user owner is `{ seq }`; steering owner is `{ messageId, seq }`; empty list renders no markup and keeps copy/clock.
++- Existing `chat-branch-tails.client.spec.tsx` user IconActions tests unchanged except a null `renderSlot` stub in the fixture adapter.
++- Package typecheck and full `ui-conversation` client suite green.
+diff --git a/.agents/notes/proposed/feature/2026-08-20-conversation-user-actions-slot.zh.md b/.agents/notes/proposed/feature/2026-08-20-conversation-user-actions-slot.zh.md
+new file mode 100644
+index 0000000000..c3507b2e27
+--- /dev/null
++++ b/.agents/notes/proposed/feature/2026-08-20-conversation-user-actions-slot.zh.md
+@@ -0,0 +1,53 @@
++# Agent Note：会话 user-actions 插槽
++
++Status: proposed
++
++[English](2026-08-20-conversation-user-actions-slot.md) | 中文
++
++## 问题
++
++会话聊天面目前只有一条按消息寻址的动作插槽 `conversation.chat.assistant-actions`，以已定稿的 assistant `messageId` 寻址。用户消息没有对等扩展点：其 IconActions 行被硬编码为复制 + 时钟，插件无法贡献针对某条用户消息的动作——而这正是"编辑本条消息后重发""从本条消息之前重试""按消息查看来源"等能力所需的挂载面。历史后果只有两种：无后端的死按钮 stub，或干脆没有入口。
++
++## 提案
++
++在 `packages/client/ui-conversation` 增加对称插槽：
++
++```ts
++'conversation.chat.user-actions': {
++  kind: 'list'
++  scope: 'session'
++  owner: UserActionOwnerProps
++}
++```
++
++```ts
++export interface UserActionOwnerProps {
++  /** Stable identity carried from the `user/message` event; absent on plain user nodes. */
++  messageId?: MessageId | undefined
++  /** Engine-owned node seq; the durable fork-addressing currency for user nodes. */
++  seq: number
++}
++```
++
++`UserMessageNodeView`（`user` 与 `steering` 两个 key）将该插槽声明为 child，渲染进 `MessageIconActions.extraActions`，位于内建复制与时钟控件之间——与 assistant 动作条同一落点纪律。事件语法决定了两条寻址事实，并冻结进 owner 类型：
++
++- 普通用户节点没有持久 `messageId`；引擎持有的 `seq` 是寻址货币（会话 fork 同样以它寻址）。
++- 已采纳的 steering 节点携带 `user/message` id，因此 `messageId` 为可选，仅在该类节点出现。
++
++### 备选方案
++
++- **仅以 `messageId` 寻址**：普通用户节点没有该字段，不可行；会迫使贡献者猜测或自行推导 seq。
++- **单一消息无关插槽加 `role` 字段**：为不存在的消费方扩大所有现存贡献者的匹配面；assistant 动作条"已定稿消息"的不变量也会被稀释。
++- **不做插槽，把编辑/重试做进 dsh core**：变更语义（fork 后重发）已可由独立插件用 `session.fork` + `session.prompt` 组合出来；缺的只是渲染落点，而插槽正是为此存在。
++
++## 后果
++
++- 纯增量：插槽声明、两处注册、`UserMessageNodeView` 的渲染接线。不改变任何现存插槽、事件或组件语义；零贡献者时渲染输出逐字节不变（空列表不渲染）。
++- 插件无需 import 会话实现即可提供按用户消息的动作，与 assistant-actions 合同对齐。
++- 贡献者必须把进行中的轮次视为不可寻址（禁用而非静默隐藏）——与 assistant 动作同一策略。
++
++## 验证
++
++- `packages/client/ui-conversation/tests/user-actions-slot.client.spec.tsx`：贡献动作渲染进用户动作行；普通用户 owner 为 `{ seq }`；steering owner 为 `{ messageId, seq }`；空列表不渲染标记且复制/时钟保留。
++- 现存 `chat-branch-tails.client.spec.tsx` 的用户 IconActions 测试不变，仅在 fixture 适配器补一个返回 null 的 `renderSlot` 桩。
++- 包 typecheck 与 `ui-conversation` client 全量套件通过。
+diff --git a/packages/client/ui-conversation/src/client/chat/MessageItem.tsx b/packages/client/ui-conversation/src/client/chat/MessageItem.tsx
+index 8a882a70c5..007a3429d0 100644
+--- a/packages/client/ui-conversation/src/client/chat/MessageItem.tsx
++++ b/packages/client/ui-conversation/src/client/chat/MessageItem.tsx
+@@ -9,7 +9,10 @@ import type {
+   ModelRetryNode, TurnErrorNode, UserMessageNode,
+ } from '@deepseek-ai/dsh-client-runtime/client'
+ import { JsonBlock, MessageText, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+-import type { ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps } from '../contract/slots.ts'
++import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
++import type {
++  ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps, UserActionOwnerProps,
++} from '../contract/slots.ts'
+ import { ReferenceIcon } from '../reference/ReferenceIcon.tsx'
+ import { CompactionItem } from './CompactionItem.tsx'
+ import { ContextInjectionRow } from './ContextInjectionRow.tsx'
+@@ -279,9 +282,14 @@ export function PendingSteeringBubble({ content, renderMessageImages, t }: {
+ 
+ /** User and admitted-steering keyed Chat renderer. */
+ export const UserMessageNodeView = memo(function UserMessageNodeView({
+-  node, renderMessageImages, t,
+-}: ChatNodeViewProps<'user' | 'steering'>) {
++  node, renderMessageImages, renderSlot, t,
++}: ChatNodeViewProps<'user' | 'steering'>
++  & PropsRenderSlots<'conversation.chat.user-actions'>) {
+   const data = node.data
++  // Plain user nodes address by seq alone; admitted steering carries a durable id.
++  const owner: UserActionOwnerProps = data.kind === 'steering'
++    ? { messageId: data.messageId, seq: data.seq }
++    : { seq: data.seq }
+   return (
+     <UserStyleBubble
+       content={data.content}
+@@ -294,6 +302,7 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
+           time={data.time}
+           clock="start"
+           className={css.actions}
++          extraActions={renderSlot('conversation.chat.user-actions', owner)}
+           t={t}
+         />
+       )}
+diff --git a/packages/client/ui-conversation/src/client/chat/register-node-renderers.ts b/packages/client/ui-conversation/src/client/chat/register-node-renderers.ts
+index ed311e4b74..8894b2d2f9 100644
+--- a/packages/client/ui-conversation/src/client/chat/register-node-renderers.ts
++++ b/packages/client/ui-conversation/src/client/chat/register-node-renderers.ts
+@@ -13,10 +13,22 @@ import { TurnTailNodeView } from './TurnTailNodeView.tsx'
+  * @param ctx - owning UI Conversation context.
+  */
+ export function registerChatNodeRenderers(ctx: Context): void {
+-  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+-    { name: 'conversation.chat.node', key: 'user', locale: NS }, UserMessageNodeView))
+-  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+-    { name: 'conversation.chat.node', key: 'steering', locale: NS }, UserMessageNodeView))
++  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
++    name: 'conversation.chat.node',
++    key: 'user',
++    locale: NS,
++    children: {
++      'conversation.chat.user-actions': { kind: 'list', scope: 'session' },
++    },
++  }, UserMessageNodeView))
++  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
++    name: 'conversation.chat.node',
++    key: 'steering',
++    locale: NS,
++    children: {
++      'conversation.chat.user-actions': { kind: 'list', scope: 'session' },
++    },
++  }, UserMessageNodeView))
+   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+     { name: 'conversation.chat.node', key: 'context', locale: NS }, ContextMessageNodeView))
+   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+diff --git a/packages/client/ui-conversation/src/client/contract/slots.ts b/packages/client/ui-conversation/src/client/contract/slots.ts
+index 4ea0c79402..bc40ff3b4b 100644
+--- a/packages/client/ui-conversation/src/client/contract/slots.ts
++++ b/packages/client/ui-conversation/src/client/contract/slots.ts
+@@ -140,6 +140,22 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
+       scope: 'session'
+       owner: AssistantActionOwnerProps
+     }
++    /**
++     * Action strip attached to one admitted user message, rendered inside
++     * that message's IconActions row. Mirrors
++     * {@link 'conversation.chat.assistant-actions'}: the chat entry owns the
++     * render site and passes the addressed message identity; contributors add
++     * per-message actions (edit-and-resend, retry-from-here) without
++     * importing the conversation implementation. Plain user nodes carry no
++     * durable `messageId`, so the engine-owned `seq` is the addressing
++     * currency and `messageId` appears only on admitted steering nodes.
++     * Entries render by ascending `order`.
++     */
++    'conversation.chat.user-actions': {
++      kind: 'list'
++      scope: 'session'
++      owner: UserActionOwnerProps
++    }
+     /**
+      * The body of the details panel for the tool call the user selected —
+      * one occupant, so taking it means rendering every tool's output, not just
+@@ -380,6 +396,18 @@ export interface AssistantActionOwnerProps {
+   messageId: MessageId
+ }
+ 
++/**
++ * Owner currency of the user-message action strip. Plain user nodes address
++ * by engine-owned `seq` only; admitted steering nodes additionally carry the
++ * durable `user/message` id.
++ */
++export interface UserActionOwnerProps {
++  /** Stable identity carried from the `user/message` event; absent on plain user nodes. */
++  messageId?: MessageId | undefined
++  /** Engine-owned node seq; the durable fork-addressing currency for user nodes. */
++  seq: number
++}
++
+ /** Hook constrained to business data published on the current Chat Node's Turn. */
+ export type UseChatNodeTurnData = <Key extends Extract<keyof ConversationTurnDataMap, string>>(
+   key: Key,
+diff --git a/packages/client/ui-conversation/tests/chat-branch-tails.client.spec.tsx b/packages/client/ui-conversation/tests/chat-branch-tails.client.spec.tsx
+index ce8c10016d..31d0604ee5 100644
+--- a/packages/client/ui-conversation/tests/chat-branch-tails.client.spec.tsx
++++ b/packages/client/ui-conversation/tests/chat-branch-tails.client.spec.tsx
+@@ -72,7 +72,10 @@ function MessageItem({ node, t: translate, referenceLabels }: MessageItemProps)
+   switch (node.kind) {
+     case 'user':
+     case 'steering':
+-      return <UserMessageNodeView {...props as ChatNodeViewProps<'user' | 'steering'>} />
++      return <UserMessageNodeView
++        {...props as ChatNodeViewProps<'user' | 'steering'>}
++        renderSlot={() => null}
++      />
+     case 'context':
+       return <ContextMessageNodeView {...props as ChatNodeViewProps<'context'>} />
+     case 'compaction':
+diff --git a/packages/client/ui-conversation/tests/user-actions-slot.client.spec.tsx b/packages/client/ui-conversation/tests/user-actions-slot.client.spec.tsx
+new file mode 100644
+index 0000000000..6d41d93d68
+--- /dev/null
++++ b/packages/client/ui-conversation/tests/user-actions-slot.client.spec.tsx
+@@ -0,0 +1,102 @@
++// @vitest-environment jsdom
++// Focused coverage for the `conversation.chat.user-actions` slot: the render
++// site lives in UserMessageNodeView's IconActions row, the owner addresses a
++// plain user node by `seq` alone and an admitted steering node by
++// `messageId` + `seq`, and an empty contributor list renders nothing without
++// disturbing the built-in copy/clock chrome.
++
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
++import { cleanup, render, screen } from '@testing-library/react'
++import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
++import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
++import type { ChatNodeViewProps, UserActionOwnerProps } from '../src/client/contract/slots.ts'
++import { UserMessageNodeView } from '../src/client/chat/MessageItem.tsx'
++import { zh } from '../src/client/locales.ts'
++
++beforeEach(() => { vi.stubGlobal('ResizeObserver', class { observe(): void {} unobserve(): void {} disconnect(): void {} }) })
++afterEach(() => { cleanup(); vi.unstubAllGlobals() })
++
++const t: ChatNodeViewProps['t'] = makeTranslate(zh, commonZh)
++const renderMessageImages: ChatNodeViewProps['renderMessageImages'] = () => null
++
++/** Chat-view node envelope over a raw conversation node, mirroring the fixture adapters. */
++function viewNodeOf(data: Record<string, unknown>): ChatNodeViewProps<'user' | 'steering'>['node'] {
++  return {
++    key: `fixture:${String(data.kind)}:${String(data.seq)}`,
++    kind: data.kind,
++    id: String(data.seq),
++    target: 'chat',
++    anchorSeq: data.seq,
++    location: { kind: 'session' },
++    visibility: 'visible',
++    data,
++  } as unknown as ChatNodeViewProps<'user' | 'steering'>['node']
++}
++
++const userNode = viewNodeOf({
++  kind: 'user',
++  seq: 7,
++  time: 1_000,
++  content: [{ type: 'text', text: 'hello there' }],
++  source: null,
++})
++
++const steeringNode = viewNodeOf({
++  kind: 'steering',
++  messageId: 'msg-42',
++  seq: 9,
++  time: 2_000,
++  content: [{ type: 'text', text: 'steered mid-turn' }],
++  source: null,
++})
++
++describe('conversation.chat.user-actions slot', () => {
++  it('renders contributed actions inside the user bubble actions row', () => {
++    const owners: UserActionOwnerProps[] = []
++    render(
++      <UserMessageNodeView
++        node={userNode}
++        renderMessageImages={renderMessageImages}
++        t={t}
++        renderSlot={(key, owner) => {
++          expect(key).toBe('conversation.chat.user-actions')
++          owners.push(owner)
++          return <button type="button" data-user-action-edit>编辑</button>
++        }}
++      />,
++    )
++    expect(owners).toEqual([{ seq: 7 }])
++    expect(screen.getByText('编辑')).toBeTruthy()
++    // Built-in chrome remains alongside the contributed action.
++    expect(screen.getByText('hello there')).toBeTruthy()
++  })
++
++  it('addresses admitted steering by messageId and seq', () => {
++    const owners: UserActionOwnerProps[] = []
++    render(
++      <UserMessageNodeView
++        node={steeringNode}
++        renderMessageImages={renderMessageImages}
++        t={t}
++        renderSlot={(_key, owner) => {
++          owners.push(owner)
++          return null
++        }}
++      />,
++    )
++    expect(owners).toEqual([{ messageId: 'msg-42', seq: 9 }])
++  })
++
++  it('renders no extra action markup when no contributor declares one', () => {
++    const view = render(
++      <UserMessageNodeView
++        node={userNode}
++        renderMessageImages={renderMessageImages}
++        t={t}
++        renderSlot={() => null}
++      />,
++    )
++    expect(view.container.querySelector('[data-user-action-edit]')).toBeNull()
++    expect(screen.getByText('hello there')).toBeTruthy()
++  })
++})

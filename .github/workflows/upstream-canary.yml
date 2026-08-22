@@ -1,0 +1,105 @@
+name: Upstream canary
+
+# Daily automated upstream tracking for the dsh plugin workspace: install
+# every bundle into the newest released dsh CLI, then run the full gates with
+# every @deepseek-ai/* dependency forced to its latest publish. On failure a
+# canary issue collects the report; on success a dependency-bump PR lands the
+# new lockfile. Nobody tracks upstream by hand.
+on:
+  schedule:
+    - cron: '30 1 * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Optional @deepseek-ai/dsh version to canary (default: latest)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    name: dsh ${{ github.event.inputs.version || 'latest' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Resolve upstream version
+        id: version
+        run: |
+          version='${{ github.event.inputs.version }}'
+          [ -n "$version" ] || version="$(scripts/upstream-canary.sh resolve)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "canarying $version"
+
+      - name: Bundle install smoke against released CLI
+        run: scripts/upstream-canary.sh install-smoke '${{ steps.version.outputs.version }}'
+
+      - name: Gates against latest published @deepseek-ai/*
+        run: scripts/upstream-canary.sh overrides-test
+
+      - name: Report failure as canary issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = '${{ steps.version.outputs.version }}';
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.RUN_ID}`;
+            const label = 'canary';
+            const title = `canary: upstream ${version} broke the plugin workspace`;
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: label,
+            });
+            const body = `Upstream \`${version}\` failed the canary on ${runUrl}.\n\nReproduce locally:\n\n\`\`\`\nscripts/upstream-canary.sh install-smoke ${version}\nscripts/upstream-canary.sh overrides-test\n\`\`\`\n\nClose this issue once a fix lands and the canary is green again.`;
+            const existing = issues.data.find(i => i.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: [label],
+              });
+            }
+
+      - name: Land dependency bump PR on success
+        if: success()
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          pnpm update --latest '/@deepseek-ai\/.*/'
+          if git diff --quiet; then
+            echo "no @deepseek-ai/* drift to land"
+            exit 0
+          fi
+          branch="canary/bump-upstream"
+          git checkout -b "$branch"
+          git commit -am "chore(canary): bump @deepseek-ai/* to latest published"
+          git push --force-with-lease origin "$branch"
+          gh pr create --repo "$GITHUB_REPOSITORY" --head "$branch" --base develop \
+            --title "chore(canary): bump @deepseek-ai/* to latest published" \
+            --body "Automated canary bump. Verified against upstream \`${{ steps.version.outputs.version }}\` by the upstream-canary workflow run ${GITHUB_RUN_ID}." \
+            --label canary || gh pr edit --repo "$GITHUB_REPOSITORY" --head "$branch" \
+            --body "Automated canary bump (updated). Verified against upstream \`${{ steps.version.outputs.version }}\`."
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -33,8 +33,18 @@ preview patch row。完整运行仍取决于 DSH core 发布 composition preview
     # 或发布后按包名安装
     dsh plugin --profile web add @yeisme/dsh-ordo-agent-ops
 
-    # 安装 Pane Workbench overlay
+    # 安装 Pane 与桌面工具工作台
     dsh plugin --profile web add ./packages/bundle/pane-workbench
+    dsh plugin --profile web add ./packages/bundle/dsh-desktop-workbench
+
+    # 安装 Creator Studio：文字、图像、音频、视频/短剧、资料、分析与审阅
+    dsh plugin --profile web add ./packages/bundle/dsh-creator-studio
+
+Creator Studio 复用 Pane Workbench 的 right/bottom region 与 Desktop Workbench
+的工具生态，不创建第二侧栏或调度器。Eikona、Scaena、Sonora、Auctra、Pinax、
+Anatomia 仍分别拥有其 canonical state、动作、审批和 receipt；未连接 owner adapter
+时面板会显示安全的离线/合同状态。详见
+`packages/bundle/dsh-creator-studio/README.md`。
 
 ### Anchored Standard 预设
 

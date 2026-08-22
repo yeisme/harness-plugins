@@ -1,0 +1,19 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "schedule": ["before 6am on monday"],
+  "rangeStrategy": "bump",
+  "packageRules": [
+    {
+      "description": "Group dsh upstream packages so one PR covers one upstream release train",
+      "matchPackagePrefixes": ["@deepseek-ai/"],
+      "groupName": "dsh upstream",
+      "labels": ["canary"]
+    },
+    {
+      "description": "Bun/Node engine bumps are manual — engines fields are contract surface",
+      "matchPackageNames": ["bun"],
+      "enabled": false
+    }
+  ]
+}
