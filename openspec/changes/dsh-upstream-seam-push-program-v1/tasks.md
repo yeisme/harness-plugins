@@ -6,7 +6,7 @@
 
 ## 1. Wave A：已有完整 patch 的系列（按解锁价值排序）
 
-- [ ] 1.1 推送 user-actions-slot：PR staging worktree apply + dsh 仓测试全绿 → 推 `yeisme/deepseek-harness` 分支 → 上游 PR。验收：PR 链接登记进 `upstream-prs/user-actions-slot/README.md`。（progress 2026-08-22：staging 验证 upstream/master `b150a551b8d` apply clean + 46/46 spec 绿；typecheck 7 错与 note-format 缺 Risks/Alternatives 为系列固有（base 上同样红），推 PR 前需修——见 `upstream-prs/staging-verify-2026-08-22.md`）
+- [x] 1.1 推送 user-actions-slot：PR staging worktree apply + dsh 仓测试全绿 → 推 `yeisme/deepseek-harness` 分支 → 上游 PR。验收：PR 链接登记进 `upstream-prs/user-actions-slot/README.md`。（progress 2026-08-22：修 typecheck/note 后 rebase 到 `b150a551b8d`。`tsc -b tsconfig.client.json` 绿；聚焦 spec 98/98；note-format + pairing 绿。分支 `yeisme:pr/user-actions-slot` `593ba0cae`；fork review PR https://github.com/yeisme/deepseek-harness/pull/1。当前 PAT 不能对 `deepseek-ai/deepseek-harness` 调 `createPullRequest`，上游入口是 compare https://github.com/deepseek-ai/deepseek-harness/compare/master...yeisme:deepseek-harness:pr/user-actions-slot）
 - [ ] 1.2 推送 pane-workspace-layout、plan-dock、login-token-auth（同一流程；可并行 staging 验证）。验收：三个 PR 链接登记。
 - [ ] 1.3 user-actions-slot 合入后：conversation-rewrite 6.2/6.3 解锁并完成，摘除降级提示；`upstream-prs/user-actions-slot/` 归档标记 merged。
 
