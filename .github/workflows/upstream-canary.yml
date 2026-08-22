@@ -93,9 +93,12 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          pnpm update --latest '/@deepseek-ai\/.*/'
-          if git diff --quiet; then
+          # pnpm 11 rejects --latest together with a package spec. Update the
+          # whole workspace, then keep the bump only when @deepseek-ai/* moved.
+          pnpm update --latest
+          if ! git diff -- package.json pnpm-lock.yaml | grep -q '@deepseek-ai/'; then
             echo "no @deepseek-ai/* drift to land"
+            git checkout -- .
             exit 0
           fi
           branch="canary/bump-upstream"
