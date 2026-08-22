@@ -46,7 +46,7 @@ describe('PaneWorkspace projection and presentation persistence', () => {
     const compact = projectPaneWorkspace(state, 900)
     const sheet = projectPaneWorkspace(state, 430)
     expect(wide.mode).toBe('wide')
-    expect(wide.visibleGroupIds).toContain('group:right:content')
+    expect(wide.visibleGroupIds).not.toContain('group:right:content')
     expect(wide.visibleGroupIds).toContain('group:bottom:utility')
     expect(compact.mode).toBe('compact')
     expect(compact.visibleGroupIds.every(id => id.startsWith('group:bottom') || id.startsWith('group:right'))).toBe(true)
@@ -72,13 +72,32 @@ describe('PaneWorkspace projection and presentation persistence', () => {
       },
     }).state
     const persisted = serializePaneWorkspace(state)
-    expect(persisted.schema).toBe('pane.workspace.persisted.v1alpha1')
+    expect(persisted.schema).toBe('pane.workspace.persisted.v2')
     expect(JSON.stringify(persisted)).not.toContain('rawPrompt')
     expect(JSON.stringify(persisted)).not.toContain('history')
     const restored = restorePaneWorkspace(persisted, 10)
     expect(restored.generation).toBe(10)
     expect(Object.values(restored.views).map(view => view.resourceKey)).toEqual(['file:README.md'])
     expect(Object.values(restored.views)[0]?.pinned).toBe(true)
+    expect(restored.maximizedGroupId).toBeUndefined()
+  })
+
+  it('migrates a V1 envelope and discards transient maximize state', () => {
+    const state = openTerminal(createPaneWorkspace())
+    const v2 = serializePaneWorkspace(state)
+    const legacyRightRoot = v2.regions.right.root.type === 'split'
+      ? { ...v2.regions.right.root, orientation: 'horizontal' as const }
+      : v2.regions.right.root
+    const restored = restorePaneWorkspace({
+      ...v2,
+      schema: 'pane.workspace.persisted.v1alpha1',
+      regions: { ...v2.regions, right: { ...v2.regions.right, root: legacyRightRoot } },
+      maximizedGroupId: 'group:bottom:utility',
+    }, 11)
+    expect(restored.regions.bottom.visible).toBe(true)
+    expect(restored.maximizedGroupId).toBeUndefined()
+    expect(restored.regions.right.root.type).toBe('split')
+    if (restored.regions.right.root.type === 'split') expect(restored.regions.right.root.orientation).toBe('horizontal')
   })
 
   it('falls back to the default preset for unknown persistence schema', () => {

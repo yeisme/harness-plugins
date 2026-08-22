@@ -1,0 +1,52 @@
+{
+  "name": "@yeisme/dsh-client-ui-desktop-workbench",
+  "version": "0.1.0-rc.1",
+  "description": "Self-maintained DSH desktop workbench client: session sidebar and multi-pane shell composition",
+  "license": "MIT",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.json && tsdown"
+  },
+  "dependencies": {
+    "@yeisme/dsh-file-document": "workspace:*",
+    "@yeisme/dsh-file-host": "workspace:*",
+    "@yeisme/dsh-notify-host": "workspace:*",
+    "@yeisme/dsh-session-manager": "workspace:*",
+    "@yeisme/dsh-terminal": "workspace:*",
+    "@yeisme/dsh-terminal-host": "workspace:*",
+    "@yeisme/dsh-workbench-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "~18.3.31",
+    "@testing-library/react": "^16.1.0",
+    "jsdom": "^30.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1"
+  }
+}

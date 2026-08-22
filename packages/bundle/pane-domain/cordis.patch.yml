@@ -1,0 +1,7 @@
+# Domain Pane adapters. Install with:
+#   dsh plugin --profile web add @yeisme/dsh-pane-domain
+# from checkout:
+#   dsh plugin --profile web add ./packages/bundle/pane-domain
+- insert:
+    - id: pane-domain
+      name: '@yeisme/dsh-pane-domain'

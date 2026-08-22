@@ -5,12 +5,15 @@ import {
   type PaneProjectionStateV1,
 } from '@yeisme/dsh-pane-protocol'
 import { applyPaneEvent, createPaneProjectionState } from './event-runtime.js'
+import type { PaneCommandHandler, PaneIntentHandlerRegistrationV1 } from './composition.js'
 
-export type PaneViewFactory = () => unknown
+export type PaneViewFactory = (props?: unknown) => unknown
 
 export interface PaneRuntimePluginV1 {
   readonly definition: PanePluginDefinitionV1
   readonly viewFactories: Readonly<Record<string, PaneViewFactory>>
+  readonly commandHandlers?: Readonly<Record<string, PaneCommandHandler>>
+  readonly intentHandlers?: readonly PaneIntentHandlerRegistrationV1[]
 }
 
 export interface PaneRegistryEnvironment {

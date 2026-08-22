@@ -1,0 +1,36 @@
+{
+  "name": "@yeisme/dsh-yeisme-commands",
+  "description": "Installable DSH Web profile bundle for Yeisme slash commands including yeismo-notice",
+  "version": "0.1.0-rc.1",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "index.mjs",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dependencies": {
+    "@yeisme/dsh-host-yeisme-commands": "workspace:*"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-commands": ">=0.1.0-rc.6 <0.2.0"
+  },
+  "scripts": {
+    "test": "node --test tests/bundle-smoke.test.mjs"
+  },
+  "license": "MIT"
+}

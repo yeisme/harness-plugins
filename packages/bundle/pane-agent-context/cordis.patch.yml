@@ -1,0 +1,10 @@
+# Yeisme Agent Context + Terminal probe bundle.
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-pane-agent-context
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/pane-agent-context
+#
+# Depends on the Pane Workbench row. Subagent remains a separate bundle.
+- insert:
+    - id: pane-agent-context
+      name: '@yeisme/dsh-pane-agent-context'

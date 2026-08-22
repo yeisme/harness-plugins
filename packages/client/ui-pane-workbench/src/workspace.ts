@@ -157,10 +157,6 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, Number.isFinite(value) ? value : (min + max) / 2))
 }
 
-function regionOrientation(region: PaneRegionId): PaneSplitOrientation {
-  return region === 'right' ? 'horizontal' : 'vertical'
-}
-
 function defaultGroup(id: string, region: PaneRegionId, role: PaneGroupV1['role'], locked = false): PaneGroupV1 {
   return { id, region, role, locked, tabs: [] }
 }
@@ -173,21 +169,21 @@ function defaultSnapshot(): MutableSnapshot {
     regions: {
       right: {
         id: 'right',
-        visible: true,
+        visible: false,
         size: 0.32,
         root: {
           type: 'split',
           id: 'split:right:root',
           orientation: 'horizontal',
-          ratio: 0.32,
-          first: { type: 'group', groupId: navigator.id },
-          second: { type: 'group', groupId: content.id },
+          ratio: 0.68,
+          first: { type: 'group', groupId: content.id },
+          second: { type: 'group', groupId: navigator.id },
         },
       },
       bottom: {
         id: 'bottom',
         visible: false,
-        size: 0.35,
+        size: 0.34,
         root: { type: 'group', groupId: utility.id },
       },
     },
@@ -427,7 +423,16 @@ function normalizeTree(
   const second = normalizeTree(input.second, region, groups, seen, depth + 1)
   if (first === undefined) return second
   if (second === undefined) return first
-  const orientation = input.orientation === 'vertical' ? 'vertical' : 'horizontal'
+  const defaultRightRoot = region === 'right'
+    && depth === 0
+    && input.id === 'split:right:root'
+    && first.type === 'group'
+    && first.groupId === 'group:right:content'
+    && second.type === 'group'
+    && second.groupId === 'group:right:navigator'
+  const orientation = defaultRightRoot
+    ? 'horizontal'
+    : input.orientation === 'vertical' ? 'vertical' : 'horizontal'
   return {
     type: 'split',
     id: input.id,
@@ -639,16 +644,15 @@ function createOpenGroup(snapshot: MutableSnapshot, request: PaneViewSpecV1): Pa
   const target = Object.values(snapshot.groups).find(candidate => candidate.id !== id && candidate.region === region && candidate.role === request.role)
   if (target === undefined) {
     const root = snapshot.regions[region].root
-    const orientation = regionOrientation(region)
     snapshot.regions[region] = {
       ...snapshot.regions[region],
       root: {
         type: 'split',
         id: nextId(`split:${region}`, collectNodeIds(root)),
-        orientation,
-        ratio: 0.5,
-        first: root,
-        second: { type: 'group', groupId: id },
+        orientation: region === 'right' ? 'horizontal' : 'vertical',
+        ratio: 0.68,
+        first: request.role === 'navigator' ? root : { type: 'group', groupId: id },
+        second: request.role === 'navigator' ? { type: 'group', groupId: id } : root,
       },
     }
   } else if (!insertSplit(snapshot, region, target.id, id, region === 'right' ? 'right' : 'bottom')) {
@@ -802,7 +806,7 @@ export function reducePaneWorkspace(state: PaneWorkspaceV1, intent: PaneWorkspac
         root: {
           type: 'split',
           id: nextId(`split:${intent.targetRegion}`, collectNodeIds(targetRegion.root)),
-          orientation: regionOrientation(intent.targetRegion),
+          orientation: 'vertical',
           ratio: 0.5,
           first: targetRegion.root,
           second: { type: 'group', groupId: group.id },

@@ -1,0 +1,70 @@
+{
+  "name": "@yeisme/dsh-client-ui-creator-studio",
+  "version": "0.1.0-rc.1",
+  "description": "Task-first Creator Studio views for Eikona, Scaena, Sonora, Auctra, Pinax, and Anatomia",
+  "license": "MIT",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.mts",
+      "default": "./lib/index.mjs"
+    },
+    "./client": {
+      "types": "./lib/client.d.mts",
+      "default": "./lib/client.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ],
+      "platform": "web"
+    }
+  },
+  "files": [
+    "lib/**",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "pnpm --filter @yeisme/dsh-pane-protocol run build && pnpm --filter @yeisme/dsh-client-ui-pane-workbench run build && pnpm --filter @yeisme/dsh-creator-studio-host run build && tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "build": "pnpm --filter @yeisme/dsh-pane-protocol run build && pnpm --filter @yeisme/dsh-client-ui-pane-workbench run build && pnpm --filter @yeisme/dsh-creator-studio-host run build && tsc -p tsconfig.json && tsdown src/index.ts src/client.ts --out-dir lib --format esm --dts --clean"
+  },
+  "dependencies": {
+    "@yeisme/dsh-client-ui-pane-workbench": "workspace:^",
+    "@yeisme/dsh-creator-studio-host": "workspace:^",
+    "@yeisme/dsh-pane-protocol": "workspace:^",
+    "@yeisme/dsh-rich-media": "workspace:*"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-api-remotes": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-api-remotes": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
+    "@testing-library/react": "^16.1.0",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.1",
+    "jsdom": "^30.0.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

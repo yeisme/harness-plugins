@@ -4,9 +4,10 @@
 # or from this checkout:
 #   dsh plugin --profile web add ./packages/bundle/pane-workbench
 #
-# The client package owns the official shell.overlay registration. This bundle
-# only adds one independently identifiable profile row and never patches the
-# DSH sidebar, conversation, details, or DOM layout.
+# The client package attaches one official workspace owner and registers the
+# shell.workspace.right / shell.workspace.bottom occupants. This bundle only
+# adds one profile row and never patches the DSH sidebar, conversation,
+# details, overlay, or DOM layout.
 - insert:
     - id: pane-workbench
       name: '@yeisme/dsh-pane-workbench'

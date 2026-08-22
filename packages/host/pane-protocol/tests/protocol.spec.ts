@@ -2,11 +2,16 @@ import { describe, expect, it } from 'vitest'
 import {
   ArtifactIntentSchema,
   ArtifactRefSchema,
+  PANE_ACTION_DESCRIPTOR_SCHEMA,
+  PANE_ACTION_REQUEST_SCHEMA,
   PANE_ARTIFACT_SCHEMA,
   PANE_EVENT_SCHEMA,
   PANE_INTENT_SCHEMA,
   PANE_PLUGIN_SCHEMA,
   PaneEventEnvelopeSchema,
+  PaneActionDescriptorSchema,
+  PaneActionRequestSchema,
+  PaneActionReceiptSchema,
   PanePluginDefinitionSchema,
 } from '../src/index.js'
 
@@ -132,5 +137,52 @@ describe('pane protocol', () => {
       sequence: 0,
       payload: { value: { providerPayload: 'private' } },
     }).success).toBe(false)
+  })
+
+  it('validates server-authored action descriptors and ephemeral request values', () => {
+    const descriptor = PaneActionDescriptorSchema.parse({
+      schema: PANE_ACTION_DESCRIPTOR_SCHEMA,
+      descriptorRef: 'action:eikona:preview:1',
+      owner: 'eikona',
+      actionId: 'generate.preview',
+      label: 'Generate preview',
+      targetRef: 'project:one',
+      targetVersion: '7',
+      context: { ...context, tenantRef: 'tenant:one', membershipRevision: '3', installationRef: 'install:web', pluginDigest: 'digest:creator', policyRevision: '5', runtimeGeneration: 'runtime:1' },
+      risk: 'medium',
+      confirmation: 'confirm',
+      expiresAt: '2026-08-22T00:00:00Z',
+      preview: { summary: 'Creates a bounded image preview.', cost: { currency: 'USD', amount: 0.04, estimate: true } },
+      fields: [{ key: 'prompt', label: 'Prompt', kind: 'textarea', required: true, maxLength: 2000 }],
+      presentation: { task: 'image', owner: 'eikona', group: 'create', order: 20 },
+    })
+    expect(descriptor.fields[0]?.key).toBe('prompt')
+
+    const request = PaneActionRequestSchema.parse({
+      schema: PANE_ACTION_REQUEST_SCHEMA,
+      descriptorRef: descriptor.descriptorRef,
+      owner: descriptor.owner,
+      actionId: descriptor.actionId,
+      expectedTargetRef: descriptor.targetRef,
+      expectedTargetVersion: descriptor.targetVersion,
+      context: descriptor.context,
+      idempotencyKey: 'generate-preview-0001',
+      values: { prompt: 'A quiet painted city after rain' },
+    })
+    expect(request.values.prompt).toBe('A quiet painted city after rain')
+    expect(PaneActionDescriptorSchema.safeParse({ ...descriptor, rawPrompt: 'private' }).success).toBe(false)
+  })
+
+  it('accepts extended owner receipts without dropping legacy statuses', () => {
+    expect(PaneActionReceiptSchema.parse({
+      status: 'completed',
+      receiptRef: 'receipt:eikona:1',
+      owner: 'eikona',
+      actionId: 'generate.preview',
+      summary: 'Preview completed.',
+      outputArtifacts: [artifact],
+      evidenceRefs: ['evidence:render:1'],
+    }).status).toBe('completed')
+    expect(PaneActionReceiptSchema.parse({ status: 'accepted', receiptRef: 'receipt:legacy:1' }).status).toBe('accepted')
   })
 })

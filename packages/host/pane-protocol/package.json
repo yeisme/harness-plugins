@@ -12,6 +12,10 @@
       "types": "./lib/index.d.mts",
       "default": "./lib/index.mjs"
     },
+    "./conformance": {
+      "types": "./lib/conformance.d.mts",
+      "default": "./lib/conformance.mjs"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -21,7 +25,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit --strict --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext src/index.ts",
     "test": "vitest run",
-    "build": "tsdown src/index.ts --out-dir lib --format esm --dts --clean"
+    "build": "tsdown src/index.ts src/conformance.ts --out-dir lib --format esm --dts --clean"
   },
   "dependencies": {
     "zod": "^4.4.3"

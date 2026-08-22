@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { PANE_CONFORMANCE_CASES } from '@yeisme/dsh-pane-protocol/conformance'
 import { applyPaneEvent, createPaneProjectionState } from '../src/index.js'
 import { event } from './fixtures.js'
 
@@ -68,5 +69,24 @@ describe('pane event runtime', () => {
     const snapshot = applyPaneEvent(createPaneProjectionState(1), event('snapshot', -1, { entities: [] }))
     const invalid = applyPaneEvent(snapshot, event('append', 0, { value: { rawPrompt: 'private' } }))
     expect(invalid.status).toBe('contract_mismatch')
+  })
+})
+describe('shared pane conformance fixtures', () => {
+  it('folds every shared case to the same status as owner adapters', () => {
+    for (const item of PANE_CONFORMANCE_CASES) {
+      let state = createPaneProjectionState(1)
+      let previous = state
+      for (const nextEvent of item.events) {
+        previous = state
+        state = applyPaneEvent(state, nextEvent)
+      }
+      expect(state.status, item.id).toBe(item.expectedStatus)
+      if (item.expectedReconcileReason !== undefined) {
+        expect(state.reconcileReason, item.id).toBe(item.expectedReconcileReason)
+      }
+      if (item.expectSameReferenceOnLast === true) {
+        expect(state, item.id).toBe(previous)
+      }
+    }
   })
 })

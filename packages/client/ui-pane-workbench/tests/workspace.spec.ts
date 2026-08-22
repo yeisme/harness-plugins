@@ -30,13 +30,19 @@ function viewByResource(state: PaneWorkspaceV1, resourceKey: string) {
 }
 
 describe('PaneWorkspaceV1 core reducer', () => {
-  it('creates the bounded right navigator/content preset and hidden bottom utility region', () => {
+  it('creates bounded contextual groups with both workspace regions initially closed', () => {
     const state = createPaneWorkspace(7)
     expect(state.schema).toBe('pane.workspace.v1alpha1')
     expect(state.generation).toBe(7)
     expect(state.regions.right.root.type).toBe('split')
+    if (state.regions.right.root.type === 'split') {
+      expect(state.regions.right.root.orientation).toBe('horizontal')
+      expect(state.regions.right.root.first).toEqual({ type: 'group', groupId: 'group:right:content' })
+      expect(state.regions.right.root.second).toEqual({ type: 'group', groupId: 'group:right:navigator' })
+    }
     expect(state.groups['group:right:navigator']?.locked).toBe(true)
     expect(state.groups['group:right:content']?.role).toBe('content')
+    expect(state.regions.right.visible).toBe(false)
     expect(state.regions.bottom.visible).toBe(false)
   })
 
@@ -110,6 +116,17 @@ describe('PaneWorkspaceV1 core reducer', () => {
     expect(Object.values(state.groups).filter(group => group.region === 'right')).toHaveLength(2)
     expect(state.regions.right.root.type).toBe('split')
     if (state.regions.right.root.type === 'split') expect(state.regions.right.root.ratio).toBeGreaterThan(0)
+  })
+
+  it('recreates automatic Right semantic groups horizontally after cross-region cleanup', () => {
+    let state = createPaneWorkspace()
+    state = apply(state, { type: 'open_view', request: view({ kind: 'file.editor', resourceKey: 'file:one', preview: false, pinned: true }) })
+    const opened = viewByResource(state, 'file:one')!
+    state = apply(state, { type: 'move_view', viewId: opened.id, targetGroupId: 'group:bottom:utility' })
+    expect(state.groups['group:right:content']).toBeUndefined()
+    state = apply(state, { type: 'open_view', request: view({ kind: 'file.editor', resourceKey: 'file:two', preview: false, pinned: true }) })
+    expect(state.regions.right.root.type).toBe('split')
+    if (state.regions.right.root.type === 'split') expect(state.regions.right.root.orientation).toBe('horizontal')
   })
 
   it('requires owner confirmation before closing dirty views', () => {

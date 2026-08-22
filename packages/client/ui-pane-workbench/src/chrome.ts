@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react'
 import { PaneDragSession, PaneResizeSession, type PaneDragTargetV1 } from './interactions.js'
+import { PaneWorkbenchController } from './controller.js'
 import { projectPaneWorkspace, type PaneWorkspaceProjectionV1 } from './projection.js'
 import { markOrphanedPaneViews, type PaneViewRegistry } from './view-registry.js'
 import {
@@ -27,6 +28,9 @@ export interface PaneWorkbenchChromeProps {
   readonly registry: PaneViewRegistry
   readonly width?: number
   readonly onStateChange?: (state: PaneWorkspaceV1) => void
+  readonly controller?: PaneWorkbenchController
+  /** Start collapsed instead of expanded. Defaults to false. */
+  readonly defaultVisible?: boolean
 }
 
 interface ViewBoundaryProps {
@@ -234,7 +238,11 @@ function PaneGroupChrome(props: {
       : createElement(ViewBoundary, {
         view: active,
         onClose: () => props.onCloseView(active.id),
-      }, createElement(registration.component as never, { view: active, retry: () => props.dispatch({ type: 'activate_view', viewId: active.id }) }))
+      }, createElement(registration.component as never, {
+        view: active,
+        projection: active.metadata,
+        retry: () => props.dispatch({ type: 'activate_view', viewId: active.id }),
+      }))
   return createElement('section', {
     'data-pane-group': props.group.id,
     'data-pane-region': props.group.region,
@@ -293,7 +301,7 @@ function PaneGroupChrome(props: {
 }
 
 /** Accessible chrome over the pure reducer; it does not read DSH DOM or client stores. */
-export function PaneWorkbenchChrome({ initialState = createPaneWorkspace(), registry, width = 1400, onStateChange }: PaneWorkbenchChromeProps): ReactNode {
+export function PaneWorkbenchChrome({ initialState = createPaneWorkspace(), registry, width = 1400, onStateChange, controller, defaultVisible = false }: PaneWorkbenchChromeProps): ReactNode {
   const [state, setState] = useState(() => markOrphanedPaneViews(initialState, registry))
   const [announcement, setAnnouncement] = useState('')
   const [resizing, setResizing] = useState(false)
@@ -301,8 +309,10 @@ export function PaneWorkbenchChrome({ initialState = createPaneWorkspace(), regi
   const [moveMode, setMoveMode] = useState<PaneMoveModeState>()
   const [focusTabId, setFocusTabId] = useState<string>()
   const [dragTarget, setDragTarget] = useState<PaneDragTargetV1>()
+  const [workbenchVisible, setWorkbenchVisible] = useState(() => controller?.isVisible ?? defaultVisible)
   const lastDragAnnouncement = useRef('')
   const moveDialog = useRef<HTMLElement>()
+  const workbenchToggleRef = useRef<HTMLButtonElement>()
   const drag = useMemo(() => new PaneDragSession(), [])
   const projection = projectPaneWorkspace(state, width)
   const dispatch = (intent: PaneWorkspaceIntentV1): void => {
@@ -313,6 +323,9 @@ export function PaneWorkbenchChrome({ initialState = createPaneWorkspace(), regi
     setAnnouncement(reduced.effects[0]?.message ?? (reduced.accepted ? 'Layout updated.' : reduced.reason ?? 'Layout action was not available.'))
   }
   useEffect(() => registry.subscribe(() => setState(current => markOrphanedPaneViews(current, registry))), [registry])
+  const dispatchRef = useRef(dispatch)
+  dispatchRef.current = dispatch
+  useEffect(() => controller?.attach(intent => dispatchRef.current(intent)), [controller])
   useEffect(() => () => drag.cancel(), [drag])
   useEffect(() => {
     const cancelDrag = (): void => {
@@ -329,6 +342,14 @@ export function PaneWorkbenchChrome({ initialState = createPaneWorkspace(), regi
     document.getElementById(`pane-tab-${focusTabId}`)?.focus()
     setFocusTabId(undefined)
   }, [focusTabId, state])
+  useEffect(() => {
+    if (!workbenchVisible) workbenchToggleRef.current?.focus()
+  }, [workbenchVisible])
+  useEffect(() => {
+    if (controller === undefined) return
+    const unsubscribe = controller.subscribe(() => setWorkbenchVisible(controller.isVisible))
+    return unsubscribe
+  }, [controller])
 
   const resize = useMemo(() => new PaneResizeSession(
     ratio => { setResizing(true); setResizePreview(ratio) },
@@ -416,12 +437,31 @@ export function PaneWorkbenchChrome({ initialState = createPaneWorkspace(), regi
     }
   }
   const snapGuide = resizePreview === undefined ? undefined : [0.25, 0.5, 0.75].find(snap => Math.abs(snap - resizePreview) <= 0.08)
+  if (!workbenchVisible) {
+    return createElement('aside', {
+      'aria-label': 'Pane Workbench',
+      'data-pane-workbench-visible': 'false',
+      style: { pointerEvents: 'none' },
+    },
+    createElement('button', {
+      ref: workbenchToggleRef,
+      type: 'button',
+      'aria-expanded': false,
+      style: { pointerEvents: 'auto' },
+      onClick: () => {
+        if (controller !== undefined) controller.show()
+        else setWorkbenchVisible(true)
+      },
+    }, 'Show Pane Workbench'),
+    )
+  }
   return createElement('aside', {
     'aria-label': 'Pane Workbench',
     'data-pane-workbench-mode': projection.mode,
+    'data-pane-workbench-visible': 'true',
     'data-pane-resizing': resizing || undefined,
     'data-pane-resize-preview': resizePreview,
-    style: resizing ? { transition: 'none' } : undefined,
+    style: { pointerEvents: 'auto', ...(resizing ? { transition: 'none' } : {}) },
     onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
       if (event.key !== 'Escape' || drag.state.status === 'idle') return
       event.preventDefault()
@@ -432,6 +472,10 @@ export function PaneWorkbenchChrome({ initialState = createPaneWorkspace(), regi
   },
   createElement('div', { role: 'status', 'aria-live': 'polite', 'aria-atomic': true }, announcement),
   createElement('header', null,
+    createElement('button', { ref: workbenchToggleRef, type: 'button', 'aria-expanded': true, onClick: () => {
+      if (controller !== undefined) controller.hide()
+      else setWorkbenchVisible(false)
+    } }, 'Hide Pane Workbench'),
     createElement('button', { type: 'button', onClick: () => dispatch({ type: 'set_region_visibility', region: 'right', visible: !state.regions.right.visible }) }, state.regions.right.visible ? 'Hide Right' : 'Show Right'),
     createElement('button', { type: 'button', onClick: () => dispatch({ type: 'set_region_visibility', region: 'bottom', visible: !state.regions.bottom.visible }) }, state.regions.bottom.visible ? 'Hide Bottom' : 'Show Bottom'),
     createElement('button', { type: 'button', onClick: () => dispatch({ type: 'reset_layout' }) }, 'Reset Layout'),

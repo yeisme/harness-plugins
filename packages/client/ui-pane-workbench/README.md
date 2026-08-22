@@ -1,8 +1,16 @@
 # @yeisme/dsh-client-ui-pane-workbench
 
-Experimental Yeisme DSH Pane Workbench client. This package contains the plugin registry, generation-safe lifecycle, measured per-kind retention, safe session/preset persistence, event reducer, typed artifact intent builder, the pure `PaneWorkspaceV1` layout reducer, and accessible local chrome with keyboard and pointer move modes. The installable Web profile layer is `@yeisme/dsh-pane-workbench` in `packages/bundle/pane-workbench/`.
+Yeisme 的 DSH 双区域 Pane Workbench client。生产插件通过官方
+`shell.workspace.right` 与 `shell.workspace.bottom` slot 挂载两个 React root，二者以
+`useSyncExternalStore` 读取同一个 `PaneWorkbenchController`。DSH AppFrame 拥有尺寸、
+Sheet、Tool Details 竞争与最大化边界；本包只拥有 Pane tree、Tab/group、选择、拖拽和
+安全视图元数据。
 
-No timer polling is used. A stream must start from an owner snapshot; gaps, context changes, and contract mismatches enter `reconcile_required` and keep the last safe projection.
+生产路径不会注册 `shell.overlay`，不会覆盖 DSH 左侧会话栏，也不会读取或 patch Web
+Shell DOM。旧 `PaneWorkbenchChrome` / `PaneWorkbenchLauncher` 仅作为一个 RC 的 story 与
+迁移测试兼容导出。
+
+## 开发
 
 ```bash
 pnpm --filter @yeisme/dsh-client-ui-pane-workbench run typecheck
@@ -11,49 +19,57 @@ pnpm --filter @yeisme/dsh-client-ui-pane-workbench run build
 pnpm --filter @yeisme/dsh-client-ui-pane-workbench run test:integration
 ```
 
-The integration command writes redacted evidence to `temp/integration-test-runs/<run-id>/`.
+集成测试将脱敏证据写入 `temp/integration-test-runs/<run-id>/`。
 
-The profile bundle conformance command is:
+## 布局与生命周期
 
-```bash
-pnpm --filter @yeisme/dsh-pane-workbench run test
-```
+- 首次安装时 Right 与 Bottom 都保持关闭；DSH 只显示 44px 工作区轨道。
+- `ctx.paneWorkbench.openView(request)` 根据 `preferredRegion` 自动展开目标区域；终端默认
+  Bottom，文件、文档、媒体和 Plan/Artifact 默认 Right。
+- Right/Bottom slot occupant 共用一份 controller generation；provider unload、session
+  切换、持久化恢复和跨区移动会原子地反映到两个 root。
+- `ctx.workspaceLayout.attach()` 只有一个 live owner。卸载时会依次释放两个 slot、layout
+  handle、drag coordinator、session/persistence subscriptions，不留下轨道或网格预留。
+- DSH 缺少两个 workspace slot 或 `ctx.workspaceLayout` 时加载明确失败，不回退 overlay。
 
-It uses a disposable `DSH_HOME` to verify packed members, `dsh plugin
---profile web add`, one `shell.overlay` profile row, real Web profile Loader
-startup, and remove rollback. Raw profile dumps are not persisted.
+## 导航与交互
 
-## Configuration and interaction
+- 轨道只显示已经打开的上下文视图；`+` 打开区域内 popover view provider 选择器，不生成固定七模块栏，也不会覆盖 DSH 左侧会话栏。
+- Tab 旁提供语义图标、更多操作、最大化/恢复和关闭按钮；更多菜单支持固定、跨区域移动和边缘拆分。
+- Tab 支持 Arrow/Home/End 导航、Delete 关闭、Shift+F10 菜单、键盘跨区移动和 split。
+- Pointer drag 可同组排序、跨 group/region 移动或从边缘拆分；无效 drop、Escape、blur、
+  pointer cancel、source unmount 与 HMR 都会回滚且保留源 Tab。
+- split 深度最大 2，同时可见 group 最大 4，Pane 最小 280×180px；不支持浮窗或拖入左侧栏。
+- region/split separator 同时支持 pointer 与键盘，并通过 ARIA live 区域播报布局结果。
 
-The client face is local-only and receives safe typed view descriptors through
-`ctx.paneWorkbench.registerView`. It does not accept component URLs, module
-names, arbitrary iframes, raw tool output, or domain mutations. The host owns
-view facts, permissions, actions, and receipts.
+## 持久化与安全边界
 
-- Tab/Arrow/Home/End navigate the visible tabs; Enter or Space activates a tab.
-- Delete closes a view and returns focus to the nearest remaining tab.
-- Shift+F10 opens the tab menu; `Move by Keyboard` uses Arrow keys, Enter, and
-  Escape with a live announcement.
-- Pointer drag reorders tabs or docks them into Right/Bottom edge zones. Escape,
-  blur, pointer cancel, HMR, and unmount cancel an incomplete drag.
-- The divider supports pointer preview and keyboard 1%/5%/Home/End changes.
-- `Reset Layout` restores the bounded default projection. Session/preset
-  persistence stores only the safe `PaneWorkspaceV1` projection; reset/delete
-  local layout never touches canonical task, session, or run data.
+`PaneWorkspacePersistenceAdapter` 写入 `pane.workspace.persisted.v2`，保存 region 可见性与
+比例、split/group/Tab、活动视图和 provider 批准的安全 metadata。它不保存临时最大化、
+旧 overlay 状态、终端输出、绝对路径、credential、raw prompt、provider payload 或私有
+tool arguments。V1 envelope 会迁移安全布局字段并丢弃临时最大化。
 
-For an inspect flow, the host should dispatch an explicit typed view intent with
-an opaque resource ref and owner version. The pane only renders the resulting
-safe projection. It must remain orphaned and actionable when its provider is
-removed, rather than retaining a stale component or retrying a domain action.
+`registerView()` 只接受当前 client 已加载的本地 component factory 与类型化 descriptor；
+component URL、任意 module、iframe 和远端代码入口会被拒绝。provider 卸载后已打开 Tab
+进入 orphaned 恢复态，而不是继续持有过期组件。
 
-If the pane is missing, first verify the bundle row with `dsh --profile web
---dump-config`, then check the profile Loader and the package typecheck/test
-commands above. A browser DOM/ARIA failure must be reproduced in the official
-DSH browser runner; jsdom or a Host boot is not a substitute for that gate.
+设计与变更依据：
 
-`createPaneWorkspace()` returns the bounded right Navigator/Content and bottom Utility preset. `reducePaneWorkspace(state, intent)` is the only layout transition entrypoint; it covers semantic `open_view` routing, preview/pinned/dirty state, split/move/resize, visibility, maximize/restore, reset, and bounded undo. `PaneRetentionManager` gates size-sensitive activation until two visible non-zero frames and applies per-kind active/retained LRU budgets. `PaneWorkspacePersistenceAdapter` writes only `serializePaneWorkspace()` output, catches storage failures, normalizes restores, supports named presets, and exposes reset/delete-local-layout. The reducer owns layout and selection only; host services remain the owner of domain facts, permissions, mutations, and receipts.
-
-Design authorities:
-
+- `openspec/changes/dsh-pane-workspace-docking-v2/`
 - `openspec/changes/dsh-pane-workbench-interaction-v1/`
 - `openspec/changes/dsh-pane-plugin-platform-v1/`
+
+## External openView
+
+```ts
+ctx.get('paneWorkbench')?.openView?.({
+  kind: 'subagent.monitor',
+  resourceKey: 'subagent:root',
+  role: 'navigator',
+  preferredRegion: 'right',
+  retention: 'keep-alive',
+  singleton: true,
+  pinned: true,
+  title: 'Agents',
+})
+```

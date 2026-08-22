@@ -1,0 +1,11 @@
+# Yeisme DSH Creator Studio bundle.
+# Install the Pane and desktop composition layers first:
+#   dsh plugin --profile web add ./packages/bundle/pane-workbench
+#   dsh plugin --profile web add ./packages/bundle/dsh-desktop-workbench
+#   dsh plugin --profile web add ./packages/bundle/dsh-creator-studio
+#
+# This patch owns one profile row only. It does not insert another Pane shell,
+# desktop workbench, sidebar, scheduler, task ledger, or domain owner.
+- insert:
+    - id: dsh-creator-studio
+      name: '@yeisme/dsh-creator-studio'

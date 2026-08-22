@@ -1,6 +1,6 @@
 {
   "name": "@yeisme/dsh-pane-workbench",
-  "description": "Installable DSH Web profile bundle for the safe Pane Workbench overlay",
+  "description": "Installable DSH Web profile bundle for the shared Right/Bottom Pane Workbench",
   "version": "0.1.0-rc.1",
   "publishConfig": {
     "access": "public"
@@ -15,7 +15,7 @@
   "exports": {
     ".": "./index.mjs",
     "./cordis.patch.yml": "./cordis.patch.yml",
-    "./client": "./client.mjs",
+    "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
   "dsh": {
@@ -25,7 +25,8 @@
     "client": {
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
-        "@deepseek-ai/dsh-client-ui-slots"
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-layout"
       ],
       "platform": "web"
     }
@@ -33,7 +34,7 @@
   "files": [
     "index.mjs",
     "cordis.patch.yml",
-    "client.mjs",
+    "lib/client.js",
     "README.md"
   ],
   "dependencies": {
@@ -42,11 +43,17 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-layout": ">=0.1.0-rc.9 <0.2.0",
     "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6",
-    "react": "^18.2.0"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "scripts": {
+    "build": "tsdown",
     "test": "node scripts/run-profile-conformance.mjs"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@deepseek-ai/dsh-client-ui-layout": "0.1.0-rc.8"
+  }
 }

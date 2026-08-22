@@ -1,0 +1,11 @@
+# Yeisme Pane Subagent Monitor bundle.
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-pane-subagent
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/pane-subagent
+#
+# The client package owns Pane view registration and the header action.
+# This bundle only adds one profile row and depends on the Pane Workbench row.
+- insert:
+    - id: pane-subagent
+      name: '@yeisme/dsh-pane-subagent'

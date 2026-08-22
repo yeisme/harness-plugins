@@ -1,0 +1,15 @@
+# Yeisme DSH Desktop Workbench bundle.
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-desktop-workbench
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/dsh-desktop-workbench
+#
+# This bundle registers contextual Pane view providers. The canonical DSH
+# sidebar remains the sole conversation browser; no shell.overlay or second
+# sidebar is mounted. If paneWorkbench is missing at apply time, the client
+# bootstraps the Pane shell in-process. Do not insert a second
+# pane-workbench loader id here — that duplicates a separately installed
+# @yeisme/dsh-pane-workbench row and fails boot.
+- insert:
+    - id: dsh-desktop-workbench
+      name: '@yeisme/dsh-desktop-workbench'

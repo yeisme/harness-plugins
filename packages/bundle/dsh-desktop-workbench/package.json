@@ -1,0 +1,90 @@
+{
+  "name": "@yeisme/dsh-desktop-workbench",
+  "version": "0.1.0-rc.1",
+  "description": "DSH Pane view providers for files, documents, media, search, notifications, and terminal",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.json && tsdown"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-layout"
+      ],
+      "platform": "web"
+    }
+  },
+  "dependencies": {
+    "@yeisme/dsh-client-ui-conversation-rewrite": "workspace:*",
+    "@yeisme/dsh-client-ui-desktop-workbench": "workspace:*",
+    "@yeisme/dsh-file-document": "workspace:*",
+    "@yeisme/dsh-file-host": "workspace:*",
+    "@yeisme/dsh-notify-host": "workspace:*",
+    "@yeisme/dsh-client-ui-pane-workbench": "workspace:*",
+    "@yeisme/dsh-client-ui-pane-subagent": "workspace:*",
+    "@yeisme/dsh-pane-workbench": "workspace:*",
+    "@yeisme/dsh-rich-media": "workspace:*",
+    "@yeisme/dsh-session-manager": "workspace:*",
+    "@yeisme/dsh-terminal": "workspace:*",
+    "@yeisme/dsh-terminal-host": "workspace:*",
+    "@yeisme/dsh-workbench-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-layout": "0.1.0-rc.8",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.0-rc.6",
+    "@testing-library/react": "^16.1.0",
+    "@types/react": "~18.3.31",
+    "@yeisme/dsh-client-ui-desktop-workbench": "workspace:*",
+    "@yeisme/dsh-workbench-core": "workspace:*",
+    "jsdom": "^30.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-layout": ">=0.1.0-rc.9 <0.2.0",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.0-rc.6",
+    "@yeisme/dsh-client-ui-desktop-workbench": "workspace:*",
+    "@yeisme/dsh-workbench-core": "workspace:*",
+    "react": "^18.3.1"
+  }
+}

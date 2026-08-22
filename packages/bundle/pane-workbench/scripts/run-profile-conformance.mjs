@@ -1,33 +1,51 @@
 #!/usr/bin/env node
 
-import { mkdtemp, readFile, readdir, mkdir, writeFile } from 'node:fs/promises'
+import { access, mkdtemp, readFile, readdir, mkdir, writeFile } from 'node:fs/promises'
 import { spawn, spawnSync } from 'node:child_process'
 import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const bundleRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const projectRoot = resolve(bundleRoot, '../../..')
+const dshSourceRoot = process.env.DSH_SOURCE_ROOT ?? resolve(projectRoot, '../../client/deepseek-harness')
 const startedAt = new Date()
 const runId = `${startedAt.toISOString().replace(/[:.]/gu, '-')}-${process.pid}-pane-profile`
 const evidenceRoot = resolve(projectRoot, 'temp/integration-test-runs', runId)
 const artifactsRoot = resolve(evidenceRoot, 'artifacts')
+// workspace seam peer floor: >=0.1.0-rc.9 <0.2.0（prerelease rc 按序数比较）
+function satisfiesWorkspacePeer(version) {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$/u.exec(version)
+  if (!match) return false
+  const [major, minor, patch, rc] = [Number(match[1]), Number(match[2]), Number(match[3]), match[4] === undefined ? Infinity : Number(match[4])]
+  const floor = { major: 0, minor: 1, patch: 0, rc: 9 }
+  const ceiling = { major: 0, minor: 2, patch: 0 }
+  const below = major < ceiling.major || (major === ceiling.major && (minor < ceiling.minor || (minor === ceiling.minor && patch < ceiling.patch)))
+  const above = major > floor.major
+    || (major === floor.major && (minor > floor.minor
+      || (minor === floor.minor && (patch > floor.patch || (patch === floor.patch && rc >= floor.rc)))))
+  return below && above
+}
+
 const commandLog = []
 const structuralLog = []
 let status = 'passed'
 let failure
 let dshHome
 let packRoot
+let layoutPackRoot
 
 await mkdir(artifactsRoot, { recursive: true })
 
 try {
   run('pnpm', ['--filter', '@yeisme/dsh-client-ui-pane-workbench', 'run', 'build'], projectRoot)
+  run('pnpm', ['--filter', '@yeisme/dsh-pane-workbench', 'run', 'build'], projectRoot)
 
   const manifest = JSON.parse(await readFile(resolve(bundleRoot, 'package.json'), 'utf8'))
   const patch = await readFile(resolve(bundleRoot, 'cordis.patch.yml'), 'utf8')
   assert(manifest.dsh?.bundle?.patch === './cordis.patch.yml', 'bundle manifest does not declare its patch')
   assert(manifest.dsh?.client?.platform === 'web', 'bundle manifest does not declare the Web client face')
   assert(manifest.dependencies?.['@yeisme/dsh-client-ui-pane-workbench'] === '0.1.0-rc.1', 'client dependency is not direct and versioned')
+  assert(manifest.peerDependencies?.['@deepseek-ai/dsh-client-ui-layout'] === '>=0.1.0-rc.9 <0.2.0', 'layout peer floor was not raised for the workspace seam')
   assert(countLines(patch, "id: pane-workbench") === 1, 'patch must contain one pane-workbench row')
   assert(countLines(patch, "name: '@yeisme/dsh-pane-workbench'") === 1, 'patch must mount the bundle node face')
   const patchNames = [...patch.matchAll(/^\s*name:\s*['"]([^'"]+)['"]\s*$/gmu)].map(match => match[1])
@@ -39,7 +57,7 @@ try {
   assert(tarballs.length === 1, 'expected exactly one Pane Workbench tarball')
   const tarball = resolve(packRoot, tarballs[0])
   const members = tarMembers(tarball)
-  for (const member of ['package/index.mjs', 'package/client.mjs', 'package/cordis.patch.yml', 'package/README.md', 'package/package.json']) {
+  for (const member of ['package/index.mjs', 'package/lib/client.js', 'package/cordis.patch.yml', 'package/README.md', 'package/package.json']) {
     assert(members.includes(member), `packed bundle is missing ${member}`)
   }
   assert(!members.some(member => member.startsWith('package/src/')), 'source tree leaked into packed bundle')
@@ -47,16 +65,33 @@ try {
     package: manifest.name,
     version: manifest.version,
     member_count: members.length,
-    required_members: ['package/index.mjs', 'package/client.mjs', 'package/cordis.patch.yml', 'package/README.md'],
+    required_members: ['package/index.mjs', 'package/lib/client.js', 'package/cordis.patch.yml', 'package/README.md'],
     source_tree_leaked: false,
   })
 
   const faceProbe = run('node', [
     '--input-type=module',
     '-e',
-    "const face = await import('./client.mjs'); if (typeof face.apply !== 'function' || !Array.isArray(face.inject)) throw new Error('client face export contract failed'); console.log('client-face-ok')",
+    "const fs = await import('node:fs'); const code = fs.readFileSync('./lib/client.js', 'utf8'); if (!code.startsWith('window.__ModuleLoader__.load({')) throw new Error('client bundle is not a __ModuleLoader__.load registration'); if (!code.includes('id: \"@yeisme/dsh-pane-workbench\"')) throw new Error('client bundle registers the wrong id'); if (!code.includes('factory: (require)')) throw new Error('client bundle is missing the factory face'); if (!code.includes('shell.workspace.right') || !code.includes('shell.workspace.bottom') || !code.includes('workspaceLayout')) throw new Error('client bundle is missing the V2 workspace seams'); if (/\\.inject\\(\\s*[\"\']shell\\.overlay/u.test(code)) throw new Error('client bundle still registers shell.overlay'); console.log('client-bundle-v2-ok')",
   ], bundleRoot)
-  assert(faceProbe.stdout.includes('client-face-ok'), 'thin client face did not resolve')
+  assert(faceProbe.stdout.includes('client-bundle-v2-ok'), 'client bundle is not a DSH V2 workspace face')
+  structuralLog.push({ stage: 'client_bundle_face', loader_registration: true, id: '@yeisme/dsh-pane-workbench', workspace_slots: 2, overlay_registration: false })
+
+  // fork 退役后 DSH_SOURCE_ROOT 通常不存在：优先本地 staging 源，否则回退
+  // npm 发布版做 layout canary（与 upstream-canary 的发布版口径一致）。
+  const hasLocalDshSource = await access(dshSourceRoot)
+    .then(() => true, () => false)
+  let layoutTarball
+  let layoutFromLocalSource = hasLocalDshSource
+  if (hasLocalDshSource) {
+    layoutPackRoot = await mkdtemp('/tmp/dsh-layout-pack-')
+    const layoutRoot = resolve(dshSourceRoot, 'packages/client/ui-layout')
+    run('pnpm', ['--filter', '@deepseek-ai/dsh-client-ui-layout', 'run', 'bundle'], dshSourceRoot)
+    run('pnpm', ['pack', '--pack-destination', layoutPackRoot], layoutRoot)
+    const layoutTarballs = (await readdir(layoutPackRoot)).filter(name => name.endsWith('.tgz'))
+    assert(layoutTarballs.length === 1, 'expected exactly one local DSH ui-layout tarball')
+    layoutTarball = resolve(layoutPackRoot, layoutTarballs[0])
+  }
 
   dshHome = await mkdtemp('/tmp/pane-workbench-dsh-home-')
   const env = { ...process.env, DSH_HOME: dshHome }
@@ -65,6 +100,20 @@ try {
   const installed = JSON.parse(await readFile(resolve(profileDir, 'package.json'), 'utf8'))
   assert(installed.dependencies?.[manifest.name] !== undefined, 'profile dependency missing after install')
   assert(installed.dsh?.profile?.bundles?.includes(manifest.name), 'profile bundle row missing after install')
+  if (layoutFromLocalSource) {
+    run('pnpm', ['add', '--save-exact', layoutTarball], profileDir, env)
+  } else {
+    // npm 发布版 canary：解析 peer 范围内最高已发布版（fork 退役后 rc.9 只存在于
+    // staging 源，发布线以 0.1.1-rc.x 延续）。
+    const published = run('pnpm', ['view', '@deepseek-ai/dsh-client-ui-layout', 'versions', '--json'], projectRoot, env)
+    const versions = JSON.parse(published.stdout).filter(satisfiesWorkspacePeer)
+    assert(versions.length > 0, 'no published ui-layout satisfies the workspace peer range')
+    const latest = versions[versions.length - 1]
+    run('pnpm', ['add', '--save-exact', `@deepseek-ai/dsh-client-ui-layout@${latest}`], profileDir, env)
+  }
+  const installedLayout = JSON.parse(await readFile(resolve(profileDir, 'node_modules/@deepseek-ai/dsh-client-ui-layout/package.json'), 'utf8'))
+  assert(satisfiesWorkspacePeer(installedLayout.version), `profile resolved incompatible ui-layout ${installedLayout.version}`)
+  structuralLog.push({ stage: 'layout_canary', package: installedLayout.name, version: installedLayout.version, local_source: layoutFromLocalSource })
 
   const addedConfig = run('dsh', ['--profile', 'web', '--dump-config'], projectRoot, env)
   const addedRowCount = countLines(addedConfig.stdout, 'id: pane-workbench')

@@ -35,14 +35,14 @@ export function createPaneProjectionState(generation: number): PaneProjectionSta
 }
 
 function contextIdentity(event: PaneEventEnvelopeV1): string {
-  const { workspaceRef, sessionRef, principalRef, revision } = event.context
-  return `${workspaceRef}\u0000${sessionRef ?? ''}\u0000${principalRef ?? ''}\u0000${revision}`
+  const { tenantRef, workspaceRef, sessionRef, principalRef, revision, membershipRevision, installationRef, pluginDigest, policyRevision, runtimeGeneration } = event.context
+  return `${tenantRef ?? ''}\u0000${workspaceRef}\u0000${sessionRef ?? ''}\u0000${principalRef ?? ''}\u0000${revision}\u0000${membershipRevision ?? ''}\u0000${installationRef ?? ''}\u0000${pluginDigest ?? ''}\u0000${policyRevision ?? ''}\u0000${runtimeGeneration ?? ''}`
 }
 
 function stateContextIdentity(state: PaneProjectionStateV1): string | undefined {
   if (state.context === undefined) return undefined
-  const { workspaceRef, sessionRef, principalRef, revision } = state.context
-  return `${workspaceRef}\u0000${sessionRef ?? ''}\u0000${principalRef ?? ''}\u0000${revision}`
+  const { tenantRef, workspaceRef, sessionRef, principalRef, revision, membershipRevision, installationRef, pluginDigest, policyRevision, runtimeGeneration } = state.context
+  return `${tenantRef ?? ''}\u0000${workspaceRef}\u0000${sessionRef ?? ''}\u0000${principalRef ?? ''}\u0000${revision}\u0000${membershipRevision ?? ''}\u0000${installationRef ?? ''}\u0000${pluginDigest ?? ''}\u0000${policyRevision ?? ''}\u0000${runtimeGeneration ?? ''}`
 }
 
 function reconcile(state: PaneProjectionStateV1, reason: string, status: PaneStatus = 'reconcile_required'): PaneProjectionStateV1 {
@@ -52,10 +52,15 @@ function reconcile(state: PaneProjectionStateV1, reason: string, status: PaneSta
 
 function receiptStatus(receipt: PaneActionReceiptV1): PaneStatus {
   switch (receipt.status) {
+    case 'pending': return 'running'
     case 'accepted': return 'ready'
+    case 'completed': return 'ready'
+    case 'partial': return 'partial'
+    case 'failed': return 'attention_required'
     case 'approval_required': return 'approval_required'
     case 'rejected': return 'attention_required'
     case 'unknown': return 'unknown'
+    case 'reconcile_required': return 'reconcile_required'
   }
 }
 

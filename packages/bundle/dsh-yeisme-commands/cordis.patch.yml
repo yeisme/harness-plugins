@@ -1,0 +1,8 @@
+# Yeisme slash-command example bundle.
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-yeisme-commands
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/dsh-yeisme-commands
+- insert:
+    - id: yeisme-commands
+      name: '@yeisme/dsh-yeisme-commands'

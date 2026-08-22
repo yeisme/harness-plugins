@@ -1,0 +1,11 @@
+# Yeisme DSH Conversation Rewrite bundle.
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-conversation-rewrite
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/dsh-conversation-rewrite
+#
+# This bundle adds one independently identifiable profile row. Session logs,
+# fork boundary validation, and prompt admission remain with DSH Host.
+- insert:
+    - id: dsh-conversation-rewrite
+      name: '@yeisme/dsh-conversation-rewrite'

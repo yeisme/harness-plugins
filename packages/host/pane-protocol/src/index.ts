@@ -5,6 +5,8 @@ export const PANE_EVENT_SCHEMA = 'pane.event.v1alpha1' as const
 export const PANE_PROJECTION_SCHEMA = 'pane.projection.v1alpha1' as const
 export const PANE_ARTIFACT_SCHEMA = 'pane.artifact.v1alpha1' as const
 export const PANE_INTENT_SCHEMA = 'pane.intent.v1alpha1' as const
+export const PANE_ACTION_DESCRIPTOR_SCHEMA = 'pane.action-descriptor.v1alpha1' as const
+export const PANE_ACTION_REQUEST_SCHEMA = 'pane.action-request.v1alpha1' as const
 
 export const PANE_PROTOCOL_LIMITS = Object.freeze({
   artifactSummaryChars: 2_048,
@@ -14,6 +16,8 @@ export const PANE_PROTOCOL_LIMITS = Object.freeze({
   timelineItems: 1_000,
   entities: 5_000,
   receipts: 100,
+  actionFields: 32,
+  actionValueChars: 16_384,
 })
 
 const SAFE_IDENTIFIER = /^[a-z0-9][a-z0-9._:/-]*$/i
@@ -100,6 +104,7 @@ function inspectSafeJson(value: unknown, ctx: z.RefinementCtx, path: PropertyKey
 export const PaneStatusSchema = z.enum([
   'ready',
   'running',
+  'partial',
   'attention_required',
   'approval_required',
   'stale',
@@ -107,15 +112,22 @@ export const PaneStatusSchema = z.enum([
   'permission_denied',
   'contract_mismatch',
   'unknown',
+  'cancel_unknown',
   'reconcile_required',
 ])
 export type PaneStatus = z.infer<typeof PaneStatusSchema>
 
 export const PaneContextSchema = z.object({
+  tenantRef: OpaqueRefSchema.optional(),
   workspaceRef: OpaqueRefSchema,
   sessionRef: OpaqueRefSchema.optional(),
   principalRef: OpaqueRefSchema.optional(),
   revision: z.string().min(1).max(160),
+  membershipRevision: z.string().min(1).max(160).optional(),
+  installationRef: OpaqueRefSchema.optional(),
+  pluginDigest: z.string().min(1).max(160).optional(),
+  policyRevision: z.string().min(1).max(160).optional(),
+  runtimeGeneration: OpaqueRefSchema.optional(),
 }).strict()
 export type PaneContextV1 = z.infer<typeof PaneContextSchema>
 
@@ -123,6 +135,18 @@ const PaneFaceSchema = z.object({
   provided: z.boolean(),
   capabilities: z.array(IdentifierSchema).max(64),
 }).strict()
+
+export const PanePresentationSchema = z.object({
+  icon: IdentifierSchema.optional(),
+  group: IdentifierSchema.optional(),
+  task: IdentifierSchema.optional(),
+  owner: IdentifierSchema.optional(),
+  description: SummarySchema.optional(),
+  keywords: z.array(z.string().min(1).max(80)).max(24).optional(),
+  order: z.number().int().min(-10_000).max(10_000).optional(),
+  launcher: z.boolean().optional(),
+}).strict()
+export type PanePresentationV1 = z.infer<typeof PanePresentationSchema>
 
 export const PaneViewDescriptorSchema = z.object({
   kind: IdentifierSchema,
@@ -132,6 +156,7 @@ export const PaneViewDescriptorSchema = z.object({
   preferredRegion: z.enum(['right', 'bottom', 'either']),
   retention: z.enum(['keep-alive', 'snapshot', 'recreate']),
   singleton: z.boolean(),
+  presentation: PanePresentationSchema.optional(),
 }).strict()
 export type PaneViewDescriptorV1 = z.infer<typeof PaneViewDescriptorSchema>
 
@@ -139,6 +164,7 @@ export const PaneCommandDescriptorSchema = z.object({
   id: IdentifierSchema,
   label: LabelSchema,
   permission: IdentifierSchema.optional(),
+  presentation: PanePresentationSchema.optional(),
 }).strict()
 export type PaneCommandDescriptorV1 = z.infer<typeof PaneCommandDescriptorSchema>
 
@@ -204,6 +230,90 @@ export const ArtifactIntentSchema = z.object({
 })
 export type ArtifactIntentV1 = z.infer<typeof ArtifactIntentSchema>
 
+export const PaneActionFieldOptionSchema = z.object({
+  value: z.string().min(1).max(160),
+  label: LabelSchema,
+}).strict()
+export type PaneActionFieldOptionV1 = z.infer<typeof PaneActionFieldOptionSchema>
+
+export const PaneActionFieldDescriptorSchema = z.object({
+  key: IdentifierSchema,
+  label: LabelSchema,
+  kind: z.enum(['text', 'textarea', 'number', 'select', 'multiselect', 'boolean', 'artifact_ref']),
+  required: z.boolean(),
+  placeholder: z.string().max(240).optional(),
+  min: z.number().finite().optional(),
+  max: z.number().finite().optional(),
+  minLength: z.number().int().nonnegative().max(PANE_PROTOCOL_LIMITS.actionValueChars).optional(),
+  maxLength: z.number().int().positive().max(PANE_PROTOCOL_LIMITS.actionValueChars).optional(),
+  options: z.array(PaneActionFieldOptionSchema).max(128).optional(),
+  artifactKinds: z.array(IdentifierSchema).max(32).optional(),
+}).strict().superRefine((field, ctx) => {
+  if ((field.kind === 'select' || field.kind === 'multiselect') && (field.options?.length ?? 0) === 0) {
+    ctx.addIssue({ code: 'custom', path: ['options'], message: `${field.kind} fields require options` })
+  }
+  if (field.min !== undefined && field.max !== undefined && field.min > field.max) {
+    ctx.addIssue({ code: 'custom', path: ['min'], message: 'min must not exceed max' })
+  }
+  if (field.minLength !== undefined && field.maxLength !== undefined && field.minLength > field.maxLength) {
+    ctx.addIssue({ code: 'custom', path: ['minLength'], message: 'minLength must not exceed maxLength' })
+  }
+})
+export type PaneActionFieldDescriptorV1 = z.infer<typeof PaneActionFieldDescriptorSchema>
+
+export const PaneActionDescriptorSchema = z.object({
+  schema: z.literal(PANE_ACTION_DESCRIPTOR_SCHEMA),
+  descriptorRef: OpaqueRefSchema,
+  owner: IdentifierSchema,
+  actionId: IdentifierSchema,
+  label: LabelSchema,
+  targetRef: OpaqueRefSchema,
+  targetVersion: z.string().min(1).max(160),
+  context: PaneContextSchema,
+  risk: z.enum(['low', 'medium', 'high']),
+  confirmation: z.enum(['none', 'confirm', 'approval']),
+  expiresAt: z.string().min(1).max(80).refine(value => Number.isFinite(Date.parse(value)), 'expiresAt must be an ISO timestamp'),
+  preview: z.object({
+    summary: SummarySchema,
+    cost: z.object({ currency: z.string().min(1).max(16), amount: z.number().finite().nonnegative(), estimate: z.boolean() }).strict().optional(),
+    rights: z.object({ status: z.enum(['clear', 'review_required', 'blocked', 'unknown']), summary: SummarySchema }).strict().optional(),
+    evidenceRefs: z.array(OpaqueRefSchema).max(64).optional(),
+  }).strict(),
+  fields: z.array(PaneActionFieldDescriptorSchema).max(PANE_PROTOCOL_LIMITS.actionFields),
+  presentation: PanePresentationSchema.optional(),
+}).strict().superRefine((value, ctx) => {
+  inspectSafeJson(value, ctx)
+  const keys = value.fields.map(field => field.key)
+  if (new Set(keys).size !== keys.length) ctx.addIssue({ code: 'custom', path: ['fields'], message: 'action field keys must be unique' })
+})
+export type PaneActionDescriptorV1 = z.infer<typeof PaneActionDescriptorSchema>
+
+export const PaneActionValueSchema = z.union([
+  z.string().max(PANE_PROTOCOL_LIMITS.actionValueChars),
+  z.number().finite(),
+  z.boolean(),
+  z.array(z.string().max(512)).max(64),
+  ArtifactRefSchema,
+])
+export type PaneActionValueV1 = z.infer<typeof PaneActionValueSchema>
+
+export const PaneActionRequestSchema = z.object({
+  schema: z.literal(PANE_ACTION_REQUEST_SCHEMA),
+  descriptorRef: OpaqueRefSchema,
+  owner: IdentifierSchema,
+  actionId: IdentifierSchema,
+  expectedTargetRef: OpaqueRefSchema,
+  expectedTargetVersion: z.string().min(1).max(160),
+  context: PaneContextSchema,
+  idempotencyKey: z.string().min(8).max(160),
+  values: z.record(IdentifierSchema, PaneActionValueSchema),
+}).strict().superRefine((value, ctx) => {
+  if (Object.keys(value.values).length > PANE_PROTOCOL_LIMITS.actionFields) {
+    ctx.addIssue({ code: 'custom', path: ['values'], message: 'too many action values' })
+  }
+})
+export type PaneActionRequestV1 = z.infer<typeof PaneActionRequestSchema>
+
 export const PaneProjectionEntitySchema = z.object({
   ref: OpaqueRefSchema,
   version: z.number().int().nonnegative(),
@@ -212,11 +322,25 @@ export const PaneProjectionEntitySchema = z.object({
 export type PaneProjectionEntityV1 = z.infer<typeof PaneProjectionEntitySchema>
 
 export const PaneActionReceiptSchema = z.object({
-  status: z.enum(['accepted', 'approval_required', 'rejected', 'unknown']),
+  status: z.enum([
+    'pending',
+    'accepted',
+    'completed',
+    'partial',
+    'failed',
+    'approval_required',
+    'rejected',
+    'unknown',
+    'reconcile_required',
+  ]),
   receiptRef: OpaqueRefSchema,
   actionId: IdentifierSchema.optional(),
+  owner: IdentifierSchema.optional(),
   summary: SummarySchema.optional(),
-}).strict()
+  outputArtifacts: z.array(ArtifactRefSchema).max(64).optional(),
+  evidenceRefs: z.array(OpaqueRefSchema).max(64).optional(),
+  reconcileReason: SummarySchema.optional(),
+}).strict().superRefine((value, ctx) => inspectSafeJson(value, ctx))
 export type PaneActionReceiptV1 = z.infer<typeof PaneActionReceiptSchema>
 
 const EventCommonSchema = z.object({
@@ -326,4 +450,16 @@ export function parseArtifactRef(input: unknown): ArtifactRefV1 {
 
 export function parseArtifactIntent(input: unknown): ArtifactIntentV1 {
   return ArtifactIntentSchema.parse(input)
+}
+
+export function parsePaneActionDescriptor(input: unknown): PaneActionDescriptorV1 {
+  return PaneActionDescriptorSchema.parse(input)
+}
+
+export function parsePaneActionRequest(input: unknown): PaneActionRequestV1 {
+  return PaneActionRequestSchema.parse(input)
+}
+
+export function parsePaneActionReceipt(input: unknown): PaneActionReceiptV1 {
+  return PaneActionReceiptSchema.parse(input)
 }

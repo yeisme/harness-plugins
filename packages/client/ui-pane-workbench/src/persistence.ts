@@ -9,7 +9,8 @@ import {
   type PaneWorkspaceV1,
 } from './workspace.js'
 
-export const PANE_WORKSPACE_PERSISTED_SCHEMA = 'pane.workspace.persisted.v1alpha1' as const
+export const PANE_WORKSPACE_PERSISTED_V1_SCHEMA = 'pane.workspace.persisted.v1alpha1' as const
+export const PANE_WORKSPACE_PERSISTED_SCHEMA = 'pane.workspace.persisted.v2' as const
 export const PANE_WORKSPACE_STORAGE_NAMESPACE = 'yeisme.dsh.pane-workbench' as const
 
 export interface PaneWorkspaceStorageV1 {
@@ -36,7 +37,7 @@ export interface PanePersistedViewV1 {
   readonly status: PaneViewInstanceV1['status']
 }
 
-export interface PaneWorkspacePersistedV1 {
+export interface PaneWorkspacePersistedV2 {
   readonly schema: typeof PANE_WORKSPACE_PERSISTED_SCHEMA
   readonly sourceSchema: typeof PANE_WORKSPACE_SCHEMA
   readonly regions: Readonly<Record<PaneRegionId, { readonly id: PaneRegionId; readonly visible: boolean; readonly size: number; readonly root: PaneSplitNodeV1 }>>
@@ -44,11 +45,16 @@ export interface PaneWorkspacePersistedV1 {
   readonly views: Readonly<Record<string, PanePersistedViewV1>>
   readonly activeRegion: PaneRegionId
   readonly activeGroupId?: string
+}
+
+/** Deprecated V1 envelope accepted only at the migration ingress. */
+export interface PaneWorkspacePersistedV1 extends Omit<PaneWorkspacePersistedV2, 'schema'> {
+  readonly schema: typeof PANE_WORKSPACE_PERSISTED_V1_SCHEMA
   readonly maximizedGroupId?: string
 }
 
 /** Serialize presentation state only; history, metadata, and domain payloads are intentionally omitted. */
-export function serializePaneWorkspace(state: PaneWorkspaceV1): PaneWorkspacePersistedV1 {
+export function serializePaneWorkspace(state: PaneWorkspaceV1): PaneWorkspacePersistedV2 {
   return {
     schema: PANE_WORKSPACE_PERSISTED_SCHEMA,
     sourceSchema: PANE_WORKSPACE_SCHEMA,
@@ -76,17 +82,19 @@ export function serializePaneWorkspace(state: PaneWorkspaceV1): PaneWorkspacePer
     }])),
     activeRegion: state.activeRegion,
     activeGroupId: state.activeGroupId,
-    maximizedGroupId: state.maximizedGroupId,
   }
 }
 
 /** Restore through the normalizer so stale/invalid local layout never blocks the workbench. */
 export function restorePaneWorkspace(input: unknown, generation = 1): PaneWorkspaceV1 {
-  if (input === null || typeof input !== 'object' || (input as { schema?: unknown }).schema !== PANE_WORKSPACE_PERSISTED_SCHEMA) {
+  if (input === null || typeof input !== 'object') {
     return normalizePaneWorkspace(undefined, generation)
   }
+  const schema = (input as { schema?: unknown }).schema
+  if (schema !== PANE_WORKSPACE_PERSISTED_SCHEMA && schema !== PANE_WORKSPACE_PERSISTED_V1_SCHEMA) return normalizePaneWorkspace(undefined, generation)
   try {
-    return normalizePaneWorkspace(input, generation)
+    const migrated = { ...(input as Record<string, unknown>), maximizedGroupId: undefined }
+    return normalizePaneWorkspace(migrated, generation)
   } catch {
     return createPaneWorkspace(generation)
   }
@@ -139,6 +147,11 @@ export class PaneWorkspacePersistenceAdapter {
   loadPreset(name: string, generation = 1): PaneWorkspaceV1 {
     const key = this.presetKey(name)
     return restorePaneWorkspace(key === undefined ? undefined : this.read(key), generation)
+  }
+
+  hasPreset(name: string): boolean {
+    const key = this.presetKey(name)
+    return key !== undefined && this.read(key) !== undefined
   }
 
   deletePreset(name: string): boolean {

@@ -1,0 +1,38 @@
+{
+  "name": "@yeisme/dsh-file-host",
+  "version": "0.1.0-rc.1",
+  "description": "Self-maintained DSH file host: safe file tree and owner-authorized preview projection adapter",
+  "license": "MIT",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.mts",
+      "default": "./lib/index.mjs"
+    },
+    "./node": {
+      "types": "./lib/node.d.mts",
+      "default": "./lib/node.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.json && tsdown src/index.ts src/node.ts --out-dir lib --format esm --dts --clean"
+  },
+  "dependencies": {
+    "@yeisme/dsh-file-document": "workspace:*"
+  },
+  "devDependencies": {
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}
