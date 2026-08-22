@@ -24,11 +24,17 @@ Harness Plugins 做产品功能。DeepSeek Harness 只提供 typed 协议面。�
 
 1. 在 `upstream-prs/<slug>/` 固化 patch、new-files、apply.sh、README。
 2. 在 staging worktree 对干净上游 checkout apply，并跑该系列 focused 测试。
-3. 推 `yeisme/deepseek-harness` 的 `pr/<slug>`，开 **fork review PR**。
-4. README 登记 fork PR 与 compare URL，状态写 `fork-ready`。
+3. 推 `yeisme/deepseek-harness` 的 `pr/<slug>`。
+4. README 登记分支名与 compare URL，状态写 `fork-ready`。
 5. 插件继续 probe。官方合入后才把 README 改为 `merged`。
 
-不要向 `deepseek-ai/deepseek-harness` 开官方 PR。fork 的 `master` 必须跟踪上游 `master`，否则 fork PR 会把整个版本差显示成自己的 diff。
+不要向 `deepseek-ai/deepseek-harness` 开官方 PR。也不要在 `yeisme/deepseek-harness` 的 `master` 上开审查 PR：`master` 只跟踪上游，开 PR 会误触发上游 CI，并把版本差显示成自己的 diff。handoff 是分支 + compare URL。
+
+同步 fork master：
+
+```bash
+gh repo sync yeisme/deepseek-harness --source deepseek-ai/deepseek-harness
+```
 
 ## OpenSpec
 
@@ -41,7 +47,8 @@ Harness Plugins 做产品功能。DeepSeek Harness 只提供 typed 协议面。�
 
 | 错误 | 正确 |
 | --- | --- |
-| 「等官方合入再勾任务」 | fork review PR + 插件 probe 即可勾 |
+| 「等官方合入再勾任务」 | 分支 + compare + 插件 probe 即可勾 |
+| 在 `yeisme/deepseek-harness` 的 `master` 上开审查 PR | 只推 `pr/<slug>`，登记 compare URL |
 | 「真实 DSH profile Playwright 才算完成」 | 包测试 + 协议 conformance 算完成 |
 | `MODIFIED` 一个还不存在的 spec | 先 ADDED，或先归档产生该 spec 的 change |
 | 插件实现四列两行几何 | 探测 `workspaceLayout`，缺席则失败可见 |

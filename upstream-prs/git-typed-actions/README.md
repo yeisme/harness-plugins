@@ -4,7 +4,6 @@
 
 - Rebased onto upstream/master: `b150a551b8d`
 - 来源分支：`yeisme/deepseek-harness` `pr/git-typed-actions`（commit `28ec98cc5`）
-- Fork review PR：https://github.com/yeisme/deepseek-harness/pull/9
 - 上游 compare：https://github.com/deepseek-ai/deepseek-harness/compare/master...yeisme:deepseek-harness:pr/git-typed-actions
-- Status: fork-ready（不向 deepseek-ai 开官方 PR）
+- Status: fork-ready（分支 + compare；不开官方 PR，也不在 fork master 上开审查 PR）
 - Verify: `vitest run packages/host/git/tests/typed-actions.spec.ts` 3/3

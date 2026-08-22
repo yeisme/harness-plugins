@@ -5,8 +5,8 @@ dsh pane workspace layout (right/bottom docking geometry, AppFrame service, tool
 - Archived: 2026-08-20T15:44:01Z
 - Rebased onto upstream/master: `b150a551b8d`（dsh 0.1.1-rc.2）
 - 来源分支：`yeisme/deepseek-harness` `pr/pane-workspace-layout`（commit `ed708fc43`）
-- Fork review PR：https://github.com/yeisme/deepseek-harness/pull/3
-- 上游 compare（当前 token 不能对 `deepseek-ai/deepseek-harness` 开 PR）：https://github.com/deepseek-ai/deepseek-harness/compare/master...yeisme:deepseek-harness:pr/pane-workspace-layout
+- Status: fork-ready（分支 + compare；不开官方 PR，也不在 fork master 上开审查 PR）
+- 上游 compare：https://github.com/deepseek-ai/deepseek-harness/compare/master...yeisme:deepseek-harness:pr/pane-workspace-layout
 - `changes.patch`：相对 upstream/master 的 tracked diff（AppFrame 四列两行、conversation Details 接线、package description）。归档损坏的 hunk 计数已重生，不再依赖 `--recount`。
 - `new-files/`：workspace geometry/layout + 聚焦 spec + implemented Agent Note。
 - Apply: `./apply.sh <clean-checkout>`；验证：聚焦 vitest 97/97 + `verify-agent-note-format` 绿。

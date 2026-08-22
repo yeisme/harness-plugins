@@ -6,8 +6,8 @@ DSH Plan dock, durable plan-mode contracts, and the shared Pane workspace inform
 - Design refinement: 2026-08-20
 - Rebased onto upstream/master: `b150a551b8d`（dsh 0.1.1-rc.2）
 - 来源分支：`yeisme/deepseek-harness` `pr/plan-dock`（commit `c8be752b6`）
-- Fork review PR：https://github.com/yeisme/deepseek-harness/pull/4
-- 上游 compare（当前 token 不能对 `deepseek-ai/deepseek-harness` 开 PR）：https://github.com/deepseek-ai/deepseek-harness/compare/master...yeisme:deepseek-harness:pr/plan-dock
+- Status: fork-ready（分支 + compare；不开官方 PR，也不在 fork master 上开审查 PR）
+- 上游 compare：https://github.com/deepseek-ai/deepseek-harness/compare/master...yeisme:deepseek-harness:pr/plan-dock
 - `changes.patch`：相对 upstream/master 的 tracked diff（plan-mode 文档/投影/命令 + ui-plan dock + lockfile）。
 - `new-files/`：PlanSidebar/PlanPaneView/PlanDocumentPanel + 聚焦 spec + Agent Notes。
 - Apply: `./apply.sh <clean-checkout>`；验证：聚焦 vitest 104/104 + pairing + note-format + `tsc -p packages/plan/plan-mode/tsconfig.json --noEmit` 绿。

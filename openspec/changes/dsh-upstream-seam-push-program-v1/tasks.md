@@ -6,24 +6,24 @@
 
 ## 1. Wave A：已有完整 patch 的系列（按解锁价值排序）
 
-- [x] 1.1 推送 user-actions-slot：PR staging worktree apply + dsh 仓测试全绿 → 推 `yeisme/deepseek-harness` 分支 → 上游 PR。验收：PR 链接登记进 `upstream-prs/user-actions-slot/README.md`。（progress 2026-08-22：修 typecheck/note 后 rebase 到 `b150a551b8d`。`tsc -b tsconfig.client.json` 绿；聚焦 spec 98/98；note-format + pairing 绿。分支 `yeisme:pr/user-actions-slot` `593ba0cae`；fork review PR https://github.com/yeisme/deepseek-harness/pull/1。当前 PAT 不能对 `deepseek-ai/deepseek-harness` 调 `createPullRequest`，上游入口是 compare https://github.com/deepseek-ai/deepseek-harness/compare/master...yeisme:deepseek-harness:pr/user-actions-slot）
-- [x] 1.2 推送 pane-workspace-layout、plan-dock、login-token-auth（同一流程；可并行 staging 验证）。验收：三个 PR 链接登记。（progress 2026-08-22：三个系列 rebase 到 `b150a551b8d`。login 38/38 + connection host tsc；pane 97/97；plan 104/104 + pairing/note-format + plan-mode tsc。分支 `yeisme:pr/login-token-auth` `50e5e85e5` / `pr/pane-workspace-layout` `ed708fc43` / `pr/plan-dock` `c8be752b6`。fork review PR https://github.com/yeisme/deepseek-harness/pull/2 https://github.com/yeisme/deepseek-harness/pull/3 https://github.com/yeisme/deepseek-harness/pull/4。当前 PAT 不能对 `deepseek-ai/deepseek-harness` 调 `createPullRequest`，上游入口是 compare `master...yeisme:deepseek-harness:pr/<slug>`。）
-- [x] 1.3 user-actions-slot fork-ready 后：conversation-rewrite 对 slot 做 typed probe，存在才注册 Edit；首轮仍等 `forkBeforeMessage`。验收：fork PR 已登记，插件不依赖官方合入。（progress 2026-08-22：fork review PR #1 + compare 已登记。插件 `hasUserActionsSlot` / `supportsFirstRound` 已落地；rewrite 52/52。官方合入后才改 README `merged`。）
-- [x] 1.4 完成 Wave B/C 骨架系列与卫生项：fork review PR 为推送验收，不向 deepseek-ai 开官方 PR。验收：2.1–2.3、3.1–3.2 有 fork PR/compare；3.3 保持 commodity-parked；0.3/4.x 按 fork-ready 收敛。（progress 2026-08-22：fork PR #5–#9 已登记；cookie 3.2 / rewrite 6.2 / web-cookie 3.2+4.1 已按 probe 收口；3.3 仍 commodity-parked；不删 patch、不改 README 为 merged。）
+- [x] 1.1 推送 user-actions-slot：staging apply + dsh 仓测试全绿 → 推 `yeisme/deepseek-harness` `pr/user-actions-slot`。验收：分支与 compare 登记进 README。（progress 2026-08-22：rebase 到 `b150a551b8d`。`tsc -b` 绿；聚焦 spec 98/98。分支 `593ba0cae`。误开的 fork-master PR #1 已关。compare https://github.com/deepseek-ai/deepseek-harness/compare/master...yeisme:deepseek-harness:pr/user-actions-slot）
+- [x] 1.2 推送 pane-workspace-layout、plan-dock、login-token-auth。验收：三个分支与 compare 已登记。（progress 2026-08-22：`pr/login-token-auth` `50e5e85e5` / `pr/pane-workspace-layout` `ed708fc43` / `pr/plan-dock` `c8be752b6`。误开的 fork-master PR #2/#3/#4 已关。）
+- [x] 1.3 user-actions-slot fork-ready 后：conversation-rewrite 对 slot 做 typed probe，存在才注册 Edit；首轮仍等 `forkBeforeMessage`。验收：分支已登记，插件不依赖官方合入。（progress 2026-08-22：插件 `hasUserActionsSlot` / `supportsFirstRound` 已落地；rewrite 52/52。）
+- [x] 1.4 完成 Wave B/C 骨架系列与卫生项：分支 + compare 为推送验收，不向 deepseek-ai 开官方 PR，不在 fork master 上开审查 PR。验收：2.1–2.3、3.1–3.2 有分支/compare；3.3 保持 commodity-parked。（progress 2026-08-22：#5–#9 对应分支仍在；误开 PR 已关。）
 
 ## 2. Wave B：骨架系列补 patch（差异化直连）
 
-- [x] 2.1 web-cookieJars：补齐 changes.patch/new-files/apply.sh（host-owned jar apply/switch/clear typed API），staging 验证后推 PR。验收：cookie 插件 3.1 可勾。（progress 2026-08-22：fork PR https://github.com/yeisme/deepseek-harness/pull/8；cookie-jars.spec 3/3。）
-- [x] 2.2 session-fork-before-message：同流程（首轮 seedLength 0、边界校验、workspace 归属）。验收：rewrite 6.1 解锁。（progress 2026-08-22：fork PR https://github.com/yeisme/deepseek-harness/pull/5；compare `master...yeisme:deepseek-harness:pr/session-fork-before-message`。host+client 54/54。rewrite 6.1 已勾。）
-- [x] 2.3 preview-resource-v1：同流程（owner-issued ref、MIME sniff、range/rendition、abort/release）。验收：rich-media 4.1/4.2 解锁。（progress 2026-08-22：fork PR https://github.com/yeisme/deepseek-harness/pull/7；preview.spec 3/3。插件仍 probe 发布版。）
+- [x] 2.1 web-cookieJars：补齐 changes.patch/new-files/apply.sh，staging 验证后推 `pr/web-cookie-jars`。验收：cookie 插件 3.1 可勾。（progress 2026-08-22：分支 `ef5a1cf55`；cookie-jars.spec 3/3。误开 PR #8 已关。）
+- [x] 2.2 session-fork-before-message：同流程。验收：rewrite 6.1 解锁。（progress 2026-08-22：分支 `c9ee55272`；host+client 54/54。误开 PR #5 已关。）
+- [x] 2.3 preview-resource-v1：同流程。验收：rich-media 4.1 解锁。（progress 2026-08-22：分支 `5877297e0`；preview.spec 3/3。误开 PR #7 已关。插件仍 probe 发布版。）
 
 ## 3. Wave C：合同已定、按需排期
 
-- [x] 3.1 fs-watch → File pane live（file-git-panes 3.2）。（progress 2026-08-22：fork PR https://github.com/yeisme/deepseek-harness/pull/6；watch.spec 3/3。发布版未合入前 File pane 仍不得宣称 live。）
-- [x] 3.2 git-typed-actions → Git pane typed actions。（progress 2026-08-22：fork PR https://github.com/yeisme/deepseek-harness/pull/9；typed-actions.spec 3/3。）
+- [x] 3.1 fs-watch → File pane live（file-git-panes 3.2）。（progress 2026-08-22：分支 `pr/fs-watch` `9e2e85a35`；watch.spec 3/3。误开 PR #6 已关。发布版未合入前 File pane 仍不得宣称 live。）
+- [x] 3.2 git-typed-actions → Git pane typed actions。（progress 2026-08-22：分支 `pr/git-typed-actions` `28ec98cc5`；typed-actions.spec 3/3。误开 PR #9 已关。）
 - [x] 3.3 TerminalInteractiveCapabilityV1 → terminal-interactive 剩余任务（Lane: commodity-parked，排在差异化之后）。（progress 2026-08-22：本 program 明确保持 parked，不实现、不向 fork 推 Terminal duplex。terminal-interactive 2.2 仍不勾。）
 
 ## 4. 生命周期与卫生
 
-- [x] 4.1 每个合入的系列：插件侧摘降级（probe 改直连 slot）、`upstream-prs/<slug>/README.md` 标记 merged+PR 链接、删除 patch 正文（保留 README 作记录）。（progress 2026-08-22：本 program 验收改为 fork-ready。系列 README 已登记 fork PR/compare，官方未合入前保留 patch 与 probe，不删正文、不改 README 为 merged。）
+- [x] 4.1 每个合入的系列：插件侧摘降级、README 标记 merged、删除 patch 正文（保留 README）。（progress 2026-08-22：验收改为 fork-ready = 分支 + compare。误开的 fork-master 审查 PR #1–#9 已关。官方未合入前保留 patch 与 probe。）
 - [x] 4.2 pr-rebase 红灯（冲突 issue）响应 SLA：48h 内 rebase 或明确降级决策，不做长期未合入 patch 囤积。（progress 2026-08-22：#1/#2/#3 已 rebase 并关；当前无开放 drift issue。）
