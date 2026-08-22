@@ -13,7 +13,7 @@ fork 退役后，core seam 的唯一通道是 `upstream-prs/<slug>/` patch 系�
 | TerminalInteractiveCapabilityV1 | dsh-terminal-interactive-v1 剩余（真实 PTY duplex） |
 | login-token-auth / pane-workspace-layout / plan-dock | 已有完整 patch，fork review PR 已登记 |
 
-seam 不推 → 插件永久降级态 → 差异化护城河只在本地成立。这不是实现问题，是编排问题：需要一个 change 把"推送顺序、staging 验证、上游 PR、合入后插件解锁"固化为可勾选、可验证的任务链。
+seam 不推到 fork → 插件只能永远 probe。这不是实现问题，是编排问题：需要一个 change 把"推送顺序、staging 验证、fork review PR、插件继续 probe"固化为可勾选、可验证的任务链。插件完成仍只看协议对接，不看官方合入。
 
 ## What Changes
 

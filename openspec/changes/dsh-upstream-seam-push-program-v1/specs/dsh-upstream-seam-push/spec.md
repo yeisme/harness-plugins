@@ -29,3 +29,16 @@ Wave A 开始前，ci.yml / upstream-canary.yml / pr-rebase.yml SHALL 已在远�
 #### Scenario: 自动化从未运行时不得开始推 PR
 - **WHEN** workflow 无任何 run 记录
 - **THEN** Wave A 任务不得勾选
+
+### Requirement: 插件完成与 host 推送分离
+插件 change 的完成验收 SHALL 只包含本仓库协议探测、包测试与 bundle 合同。MUST NOT 把官方 DSH 合入、官方 `dsh web`、真实 profile Playwright 或 host 几何实现列为插件 SHALL。fork `master` SHALL 跟踪上游 `master`，避免 fork review PR 把版本差显示成系列 diff。
+
+#### Scenario: 官方未合入仍可完成插件任务
+- **WHEN** fork review PR 已登记且插件 probe 测试通过
+- **THEN** 对应插件解锁任务 SHALL 可勾选
+- **AND** MUST NOT 等待 `deepseek-ai/deepseek-harness` merge
+
+#### Scenario: OpenSpec 不得 MODIFIED 不存在的主 spec
+- **WHEN** 目标 `openspec/specs/<capability>/spec.md` 不存在
+- **THEN** 该 change 的 delta SHALL 只使用 `ADDED`
+- **AND** `openspec archive` MUST NOT 因 MODIFIED 不存在的 spec 而成为插件完成阻塞

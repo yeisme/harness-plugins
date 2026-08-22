@@ -27,6 +27,8 @@ Ordo 是 run/task/session/lease/approval/verification/evidence/closeout 的唯�
 - 不把真实凭据、raw prompt、provider payload、private tool arguments、绝对路径写进源码、patch、fixture、日志或证据。
 - unknown/partial/cancel_unknown/stale cursor 只禁用 mutation 并要求 owner reconcile，绝不自动 retry 或替换 writer。
 - 不手写带 schema/state/audit 语义的 JSON/YAML/JSONL/Markdown metadata（用 openspec CLI 或应用服务生成）。
+- 不把官方 DSH 合入、官方 `dsh web`、真实 profile Playwright 或 host 几何实现写成插件完成条件。详见 `docs/plugin-host-protocol.md`。
+- 新 OpenSpec capability 只写 `ADDED`。目标主 spec 不存在时禁止 `MODIFIED`。
 
 ## Validation
 

@@ -1,7 +1,7 @@
 # dsh-pane-workbench-extension Specification
 
 ## Purpose
-Pane Workbench 插件对 workspace 协议的接入：探测 slot 后注册双宿主，缺席时失败可见，不回退 overlay。
+Pane Workbench 插件对 workspace 协议的接入：探测 slot 后注册双宿主，缺席时失败可见，不回退 overlay。官方 DSH 合入与官方 `dsh web` 不是完成门。
 ## Requirements
 ### Requirement: V2 插件 SHALL 只消费 workspace 协议，不实现 host 布局
 

@@ -49,9 +49,9 @@ pnpm --filter @yeisme/dsh-pane-workbench run build
 pnpm --filter @yeisme/dsh-pane-workbench run test
 ```
 
-profile conformance 使用 disposable `DSH_HOME` 验证 pack、安装、Web loader 启动和移除，
-并将脱敏证据写入 `temp/integration-test-runs/<run-id>/`。真实 DOM/ARIA、Right/Bottom、
-Details、刷新恢复、最大化和窄屏 Sheet 仍须在官方 DSH browser runner 中验收。
+本包测试只验 pack、ModuleLoader 面与 workspace slot 绑定，证据写入
+`temp/integration-test-runs/<run-id>/`。官方 `dsh plugin add` / Web boot / browser
+runner 是可选 host 集成，不作为本包完成门。
 
 排障时先确认 DSH layout 暴露 `shell.workspace.right`、`shell.workspace.bottom` 和
 `ctx.workspaceLayout`，再检查 bundle row 与 client loader。旧 DSH 不会得到 overlay

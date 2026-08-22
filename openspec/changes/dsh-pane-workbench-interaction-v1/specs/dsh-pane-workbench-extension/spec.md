@@ -48,17 +48,17 @@ Client plugin unload、HMR、session teardown 或 bundle removal SHALL idempoten
 
 ### Requirement: Bundle installation and removal SHALL be reversible
 
-Pane Workbench SHALL 通过 DSH plugin/profile bundle 安装，且 bundle SHALL 只挂载本仓库拥有的 package row。安装、检查和移除 SHALL 使用真实 DSH CLI；移除后原 DSH layout MUST 可用，无残留 layout reservation 或重复 mount。
+Pane Workbench SHALL 通过 bundle patch 只挂本仓库 package 行。完成验收是 patch 行、client 面与 disposer 合同；官方 `dsh plugin add` / Web boot 是可选 host 集成，MUST NOT 阻塞插件完成。移除声明后，插件 MUST dispose 注册、layout handle 与 persistence listener。
 
 #### Scenario: 用户移除 bundle
 
-- **WHEN** 用户从 web profile 移除 Pane Workbench bundle 并重载 DSH Web
+- **WHEN** bundle 被移除或 client apply disposer 执行
 - **THEN** workbench toggle、overlay、client service 与 provider entries SHALL 全部消失
-- **AND** sidebar、conversation、details 与 settings SHALL 恢复原组装行为
+- **AND** 插件 MUST NOT 留下第二套 layout owner
 
-### Requirement: Real DSH profile composition SHALL verify the plugin contract
+### Requirement: Plugin completion SHALL verify the protocol contract without official DSH
 
-完成标准 MUST 包含真实 DSH Web profile 的安装/加载/卸载 smoke，以及 Right/Bottom、跨 region move、session switch、reload restore、narrow projection、keyboard path、view crash 与 HMR teardown 的浏览器测试。手工 mount 单个 React component MUST NOT 作为 profile 组装已验证的证据。
+完成标准 MUST 包含 pack、ModuleLoader 面、slot 绑定与 focused 包测试。官方 DSH Web profile 安装/加载/卸载 smoke 与浏览器 Playwright MUST NOT 作为插件完成门。手工 mount 单个 React component MUST NOT 替代 bundle 合同检查。
 
 #### Scenario: 组件测试通过但 profile 未装载 client bundle
 

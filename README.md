@@ -2,6 +2,8 @@
 
 Yeisme 自研 DeepSeek Harness（DSH）插件聚合仓库，打包为可通过 `dsh plugin add` 安装的 bundle 层。
 
+插件完成门是本仓库协议对接：探测公开 slot / capability，缺席则禁用并说明原因。官方 DSH 是否已实现该 seam、能否启动 `dsh web`，都不挡插件验收。需要改 host 时走 `upstream-prs/` 与 `yeisme/deepseek-harness` fork review PR，不开官方 PR。详见 `docs/plugin-host-protocol.md`。
+
 ## Git checkout 开发安装
 
 开发阶段默认从本仓库 checkout 安装，而非依赖尚未发布的 npm 包：

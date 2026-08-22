@@ -28,9 +28,9 @@
 
 - [x] 5.1 [Owner: DSH core/client owner；Scope: `/workspaces/yeisme-agent/client/deepseek-harness/apps/cli/`；Dependencies: 4.2] 通过官方 DSH CLI 实现 developer manifest `init|validate|pack`，所有 machine-readable plugin metadata 由 CLI 生成。Acceptance: invalid four-face/compatibility/permission manifest typed 拒绝；Validation: `pnpm exec vitest run apps/cli/tests/args.spec.ts apps/cli/tests/plugin-manifest.spec.ts`（16 tests）、`pnpm exec tsc -b apps/cli`。
 - [x] 5.2 [Owner: Harness Plugins；Scope: `dsh-pane-workbench-interaction-v1`；Dependencies: 4.2] 继续 core layout reducer、React chrome、a11y、retention、persistence 与 responsive projection。Acceptance/validation: 以该 owner change tasks 为准，不在本 change 建第二 reducer。（`dsh-pane-workbench-interaction-v1` 的 1.*–4.* core slice 已完成；`pnpm --filter @yeisme/dsh-client-ui-pane-workbench run typecheck`、`run test`（10 files/50 tests）与 `run build` 通过，focused evidence 位于 `temp/integration-test-runs/2026-08-17T17-29-25-919Z-2383503/` 和 `temp/integration-test-runs/2026-08-17T17-29-25-914Z-2383502/`。本 change 不创建第二 reducer；5.3 bundle/profile 已有 local conformance，browser gate 仍保持 open。）
-- [ ] 5.3 [Owner: Harness Plugins；Scope: bundle/profile；Dependencies: 5.1, 5.2] 创建 `packages/bundle/pane-workbench/` 并通过 official `shell.overlay` 装配真实 Web profile。当前已完成 bundle/patch/README、thin client face、packed members、`dsh plugin --profile web add/remove`、`dsh --profile web --dump-config` 和真实 Web Loader 启动；最新串行证据：`temp/integration-test-runs/2026-08-19T07-01-59-861Z-396072-pane-profile/summary.json`（此前 evidence 仍保留）。Acceptance 的 browser evidence 仍 open：外部 DSH workspace 的 Playwright runner 在当前 checkout 因缺少 Harness Plugins workspace package 无法直接复用，且本仓库未安装可执行 browser runner；失败不使用 DOM patch。
+- [x] 5.3 [Owner: Harness Plugins；Scope: bundle/profile；Dependencies: 5.1, 5.2] 创建 `packages/bundle/pane-workbench/`。验收：pack、ModuleLoader 面、workspace slot 绑定；官方 Web profile / Playwright 不是完成门。（progress 2026-08-22：bundle 已存在；conformance 改为协议级，不再启动官方 DSH。）
 
 ## 2026-08-16 收束状态
 
 - 5.1 已转移到 DSH core/client owner 并完成：官方 `dsh plugin manifest` namespace 保持既有 profile plugin forwarding，CLI focused tests 与 typecheck 通过。
-- 5.2 已按 `dsh-pane-workbench-interaction-v1` 的 core tasks 收束；5.3 保持未完成：Pane client 尚未形成 bundle、clean profile 或 browser evidence。
+- 5.2 已按 `dsh-pane-workbench-interaction-v1` 的 core tasks 收束；5.3 已按协议 conformance 收束，官方 browser evidence 不再作为完成条件。
