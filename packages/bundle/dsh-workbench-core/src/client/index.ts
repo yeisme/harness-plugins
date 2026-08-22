@@ -12,6 +12,8 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 
 export { WorkbenchShell } from './shell.tsx'
 export type { WorkbenchShellProps } from './shell.tsx'
+export { CommandPalette } from './command-palette.tsx'
+export type { CommandPaletteProps } from './command-palette.tsx'
 
 export const name = 'dsh-workbench-core'
 export const inject = ['slots'] as const

@@ -1,0 +1,11 @@
+# Yeisme DSH Workbench Compose bundle.
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-workbench-compose
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/dsh-workbench-compose
+#
+# This bundle contributes contextual Pane providers. It does not patch the DSH
+# sidebar and requires the shared right/bottom Pane Workbench V2 host.
+- insert:
+    - id: dsh-workbench-compose
+      name: '@yeisme/dsh-workbench-compose'

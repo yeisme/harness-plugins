@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isMediaRefV1, validateMediaRefV1 } from '../src/host/types.ts'
+import { createMediaHost, isMediaHostV1, isMediaRefV1, validateMediaRefV1 } from '../src/host/types.ts'
 
 const base = {
   owner: 'dsh',
@@ -36,5 +36,15 @@ describe('MediaRefV1 validation', () => {
   it('guards the type', () => {
     expect(isMediaRefV1(base)).toBe(true)
     expect(isMediaRefV1({ ...base, ref: 42 })).toBe(false)
+  })
+
+  it('exposes a versioned owner media host seam', async () => {
+    const host = createMediaHost({
+      async listMedia() { return [base] },
+      async resolveUrl() { return { url: 'https://cdn.example/img.png', expiresAt: '2026-08-20T00:00:00.000Z' } },
+    })
+    expect(isMediaHostV1(host)).toBe(true)
+    await expect(host.listMedia()).resolves.toEqual([base])
+    await expect(host.resolveUrl(base)).resolves.toMatchObject({ url: 'https://cdn.example/img.png' })
   })
 })

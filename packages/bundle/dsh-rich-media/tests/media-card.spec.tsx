@@ -46,3 +46,62 @@ describe('RichMediaCard', () => {
     expect(html).not.toContain('<iframe')
   })
 })
+
+
+describe('RichMediaCard playback enhancements', () => {
+  const videoRef: MediaRefV1 = {
+    owner: 'dsh',
+    kind: 'video',
+    ref: 'vid-1',
+    version: 'v1',
+    mediaType: 'video/mp4',
+    title: 'Example video',
+    capabilities: ['play', 'preview'],
+  }
+
+  const audioRef: MediaRefV1 = {
+    owner: 'sonora',
+    kind: 'audio',
+    ref: 'aud-1',
+    version: 'v1',
+    mediaType: 'audio/mpeg',
+    title: 'Example audio',
+    capabilities: ['play'],
+  }
+
+  it('renders a speed control and subtitle tracks for video', () => {
+    const html = renderToStaticMarkup(
+      <RichMediaCard
+        media={videoRef}
+        src="https://cdn.example/safe.mp4"
+        subtitleTracks={[{ src: 'https://cdn.example/safe.vtt', lang: 'zh', label: '中文' }]}
+      />,
+    )
+    expect(html).toContain('<video')
+    expect(html).toContain('kind="subtitles"')
+    expect(html).toContain('srcLang="zh"')
+    expect(html).toContain('role="group"')
+    expect(html).toContain('0.5')
+  })
+
+  it('renders an owner-precomputed waveform for audio', () => {
+    const html = renderToStaticMarkup(
+      <RichMediaCard media={audioRef} src="https://cdn.example/safe.mp3" waveformPeaks={[0.1, 0.5, 0.9, 0.4]} />,
+    )
+    expect(html).toContain('<audio')
+    expect(html).toContain('data-dsh-rich-media-waveform')
+    expect(html).toContain('role="img"')
+  })
+
+  it('keeps the plain player when enhancement inputs are absent', () => {
+    const html = renderToStaticMarkup(<RichMediaCard media={videoRef} src="https://cdn.example/safe.mp4" />)
+    expect(html).toContain('<video')
+    expect(html).not.toContain('data-dsh-rich-media-waveform')
+    expect(html).not.toContain('kind="subtitles"')
+  })
+
+  it('does not render a picture-in-picture action in non-browser rendering', () => {
+    const html = renderToStaticMarkup(<RichMediaCard media={videoRef} src="https://cdn.example/safe.mp4" />)
+    expect(html).not.toContain('Picture in picture')
+  })
+})

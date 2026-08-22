@@ -7,11 +7,26 @@
  * safe preview. It never constructs URLs from raw paths or user-controlled
  * strings.
  *
+ * Playback enhancements are opt-in and dependency-free: waveform peaks and
+ * subtitle URLs arrive as owner-authorized inputs, playback speed and picture
+ * in picture only drive the native element, and every enhancement degrades to
+ * the plain native player when its input is absent.
+ *
  * @module @yeisme/dsh-rich-media/client
  */
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from 'react'
 import type { MediaRefV1 } from '../host/types.ts'
+
+/** Owner-authorized subtitle track for audio/video playback. */
+export interface MediaSubtitleTrack {
+  /** Host-authorized short-lived WebVTT URL. */
+  src: string
+  /** BCP-47 language tag. */
+  lang: string
+  /** Safe display label. */
+  label: string
+}
 
 export interface RichMediaCardLabels {
   loading?: string
@@ -20,6 +35,9 @@ export interface RichMediaCardLabels {
   open?: string
   download?: string
   pdfFallback?: string
+  playbackSpeed?: string
+  pictureInPicture?: string
+  waveform?: string
 }
 
 export interface RichMediaCardProps {
@@ -30,15 +48,37 @@ export interface RichMediaCardProps {
   resolveUrl?: ((media: MediaRefV1) => Promise<string>) | undefined
   /** Localized action/status strings. */
   labels?: RichMediaCardLabels | undefined
+  /** Owner-authorized subtitle tracks for audio/video playback. */
+  subtitleTracks?: readonly MediaSubtitleTrack[] | undefined
+  /** Owner-precomputed normalized waveform peaks (0..1) for audio/video. */
+  waveformPeaks?: readonly number[] | undefined
+  /** Playback rates offered by the speed control. */
+  playbackRates?: readonly number[] | undefined
+  /** Offer picture in picture for video when the runtime supports it. */
+  allowPictureInPicture?: boolean | undefined
 }
 
 const DEFAULT_LABELS: Required<RichMediaCardLabels> = {
-  loading: 'Loading media…',
+  loading: 'Loading media\u2026',
   failed: 'Media failed to load',
   retry: 'Retry',
   open: 'Open',
   download: 'Download',
   pdfFallback: 'Your browser cannot preview this PDF.',
+  playbackSpeed: 'Speed',
+  pictureInPicture: 'Picture in picture',
+  waveform: 'Waveform',
+}
+
+const DEFAULT_PLAYBACK_RATES: readonly number[] = [0.5, 1, 1.25, 1.5, 2]
+
+type PipCapableDocument = Document & { pictureInPictureEnabled?: boolean }
+type PipCapableVideo = HTMLVideoElement & { requestPictureInPicture?: () => Promise<unknown> }
+
+function pictureInPictureSupported(allow: boolean | undefined): boolean {
+  if (allow === false) return false
+  if (typeof document === 'undefined') return false
+  return (document as PipCapableDocument).pictureInPictureEnabled === true
 }
 
 function formatBytes(bytes: number | undefined): string | undefined {
@@ -86,15 +126,103 @@ function useResolvedSrc(
   }
 }
 
+function WaveformBars({ peaks, progress, label }: { peaks: readonly number[]; progress: number; label: string }) {
+  const total = peaks.length
+  const playedRatio = Math.max(0, Math.min(1, progress))
+  return (
+    <div
+      role="img"
+      aria-label={label}
+      data-dsh-rich-media-waveform
+      style={{ display: 'flex', alignItems: 'flex-end', gap: 1, height: 36, padding: '2px 4px', borderRadius: 4, background: 'rgba(127,127,127,0.14)' }}
+    >
+      {peaks.map((peak, index) => {
+        const safePeak = Number.isFinite(peak) ? peak : 0
+        const clamped = Math.max(0.04, Math.min(1, safePeak))
+        const played = total <= 1 ? playedRatio >= 1 : index / total <= playedRatio
+        return (
+          <span
+            key={index}
+            aria-hidden="true"
+            data-played={played || undefined}
+            style={{ flex: 1, minWidth: 1, height: `${Math.round(clamped * 100)}%`, borderRadius: 1, background: played ? 'var(--dsh-color-accent, #4f8cff)' : 'rgba(127,127,127,0.45)' }}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
+function EnhancedMediaPlayer(props: {
+  media: MediaRefV1
+  url: string
+  subtitleTracks: readonly MediaSubtitleTrack[]
+  waveformPeaks: readonly number[] | undefined
+  playbackRates: readonly number[]
+  allowPictureInPicture: boolean | undefined
+  labels: Required<RichMediaCardLabels>
+}) {
+  const { media, url, subtitleTracks, waveformPeaks, playbackRates, allowPictureInPicture, labels } = props
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [rate, setRate] = useState(1)
+  const [progress, setProgress] = useState(0)
+
+  const applyRate = (next: number): void => {
+    setRate(next)
+    const element = media.kind === 'video' ? videoRef.current : audioRef.current
+    if (element !== null) element.playbackRate = next
+  }
+
+  const pipSupported = media.kind === 'video' && pictureInPictureSupported(allowPictureInPicture)
+
+  const enterPictureInPicture = (): void => {
+    const video = videoRef.current as PipCapableVideo | null
+    if (video !== null && video.requestPictureInPicture !== undefined) {
+      void video.requestPictureInPicture().catch(() => {})
+    }
+  }
+
+  const onTimeUpdate = (event: SyntheticEvent<HTMLVideoElement | HTMLAudioElement>): void => {
+    const element = event.currentTarget
+    const duration = element.duration
+    setProgress(Number.isFinite(duration) && duration > 0 ? element.currentTime / duration : 0)
+  }
+
+  return (
+    <div data-dsh-rich-media-player={media.kind} style={{ display: 'grid', gap: 4 }}>
+      {waveformPeaks !== undefined && waveformPeaks.length > 0 && (
+        <WaveformBars peaks={waveformPeaks} progress={progress} label={labels.waveform} />
+      )}
+      {media.kind === 'video' ? (
+        <video ref={videoRef} src={url} controls preload="metadata" aria-label={media.title} onTimeUpdate={onTimeUpdate}>
+          {subtitleTracks.map(track => (
+            <track key={`${track.src}:${track.lang}`} kind="subtitles" src={track.src} srcLang={track.lang} label={track.label} />
+          ))}
+        </video>
+      ) : (
+        <audio ref={audioRef} src={url} controls preload="metadata" aria-label={media.title} onTimeUpdate={onTimeUpdate} />
+      )}
+      <div role="group" aria-label={labels.playbackSpeed} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <span aria-hidden="true">{labels.playbackSpeed}</span>
+          <select value={rate} onChange={event => { applyRate(Number(event.target.value)) }}>
+            {playbackRates.map(option => (
+              <option key={option} value={option}>{option}\u00d7</option>
+            ))}
+          </select>
+        </label>
+        {pipSupported && (
+          <button type="button" onClick={enterPictureInPicture}>{labels.pictureInPicture}</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function MediaElement({ media, url }: { media: MediaRefV1; url: string }) {
   if (media.kind === 'image') {
-    return <img src={url} alt={media.title} width={media.width} height={media.height} />
-  }
-  if (media.kind === 'audio') {
-    return <audio src={url} controls preload="metadata" aria-label={media.title} />
-  }
-  if (media.kind === 'video') {
-    return <video src={url} controls preload="metadata" aria-label={media.title} />
+    return <img src={url} alt={media.title} loading="lazy" style={{ maxWidth: '100%', height: 'auto' }} />
   }
   if (media.kind === 'pdf') {
     return (
@@ -111,13 +239,13 @@ function MediaElement({ media, url }: { media: MediaRefV1; url: string }) {
 }
 
 /** Compact safe media card used by chat, ToolView, and Pane renderers. */
-export function RichMediaCard({ media, src, resolveUrl, labels }: RichMediaCardProps) {
+export function RichMediaCard({ media, src, resolveUrl, labels, subtitleTracks, waveformPeaks, playbackRates, allowPictureInPicture }: RichMediaCardProps) {
   const text = { ...DEFAULT_LABELS, ...labels }
   const { url, failed, retry } = useResolvedSrc(media, src, resolveUrl)
   const size = formatBytes(media.size)
-  const detail = [media.mediaType, size, media.width !== undefined && media.height !== undefined ? `${media.width}×${media.height}` : undefined]
+  const detail = [media.mediaType, size, media.width !== undefined && media.height !== undefined ? `${media.width}\u00d7${media.height}` : undefined]
     .filter((part): part is string => part !== undefined)
-    .join(' · ')
+    .join(' \u00b7 ')
   const canOpen = media.capabilities.includes('open') || media.capabilities.includes('preview')
   const canDownload = media.capabilities.includes('download')
 
@@ -133,6 +261,8 @@ export function RichMediaCard({ media, src, resolveUrl, labels }: RichMediaCardP
     )
   }
 
+  const isPlayback = media.kind === 'audio' || media.kind === 'video'
+
   return (
     <section
       aria-label={media.title}
@@ -140,7 +270,18 @@ export function RichMediaCard({ media, src, resolveUrl, labels }: RichMediaCardP
       data-dsh-rich-media-owner={media.owner}
       style={{ display: 'grid', gap: 8 }}
     >
-      {url !== undefined && !failed && <MediaElement media={media} url={url} />}
+      {url !== undefined && !failed && isPlayback && (
+        <EnhancedMediaPlayer
+          media={media}
+          url={url}
+          subtitleTracks={subtitleTracks ?? []}
+          waveformPeaks={waveformPeaks}
+          playbackRates={playbackRates ?? DEFAULT_PLAYBACK_RATES}
+          allowPictureInPicture={allowPictureInPicture}
+          labels={text}
+        />
+      )}
+      {url !== undefined && !failed && !isPlayback && <MediaElement media={media} url={url} />}
       {failed && (
         <p role="alert">
           {text.failed}{' '}

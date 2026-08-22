@@ -1,14 +1,11 @@
 /**
- * Rich Media Workbench sidebar face.
+ * Legacy Rich Media Workbench story face.
  *
- * This is a reference-sidebar-inspired workbench re-created for the Rich
- * Media plugin. It consumes the Workbench Core (`WorkbenchRegistry` and
- * `WorkbenchShell`) and uses the official `sidebar.footer.action` slot. It
- * does not read the reference project's source, DOM, or private API.
- *
- * The current slice registers the Rich Media module into Workbench Core and
- * provides the media library tab; File/Terminal/Git/Browser tabs are
- * placeholders to be filled through official DSH seams in later phases.
+ * Production uses `MediaPreviewPane` through the Desktop Workbench. This
+ * component remains self-contained for stories and migration tests and does
+ * not read a reference project's source, DOM, or private API. The media tab
+ * additionally exposes the dependency-free gallery extras from
+ * `media-gallery.tsx`: compare for two selected items and a zoom overlay.
  *
  * @module @yeisme/dsh-rich-media/client
  */
@@ -18,9 +15,23 @@ import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { WorkbenchShell } from '@yeisme/dsh-workbench-core/client'
 import { WorkbenchRegistry } from '@yeisme/dsh-workbench-core'
-import type { WorkbenchModuleDefinitionV1, WorkbenchTabV1 } from '@yeisme/dsh-workbench-core'
+import type { WorkbenchTabV1 } from '@yeisme/dsh-workbench-core'
 import type { MediaRefV1 } from '../host/types.ts'
-import { RichMediaCard } from './media-card.tsx'
+import { richMediaWorkbenchModule } from '../module.ts'
+import { RichMediaCard, type RichMediaCardLabels } from './media-card.tsx'
+import {
+  MediaCompareView,
+  MediaZoomOverlay,
+  mediaGalleryKey,
+  type MediaGalleryItem,
+} from './media-gallery.tsx'
+
+export {
+  MediaCompareView,
+  MediaZoomOverlay,
+  mediaGalleryKey,
+  type MediaGalleryItem,
+}
 
 export type RichMediaWorkbenchProps =
   PropsRuntime<'sidebar.footer.action'> & PropsLocale<'richMedia'>
@@ -34,32 +45,13 @@ export interface RichMediaWorkbenchExtraProps {
 
 const MEDIA_TAB_ID = 'media'
 
-const richMediaWorkbenchModule: WorkbenchModuleDefinitionV1 = {
-  id: 'dsh-rich-media',
-  version: '0.1.0-rc.1',
-  title: 'Rich Media',
-  description: 'DSH rich media library and preview workbench',
-  requiredCapabilities: [],
-  tabs: [
-    { id: MEDIA_TAB_ID, moduleId: 'dsh-rich-media', title: '媒体库', order: 0, closable: false, scope: 'session-maybe' },
-    { id: 'files', moduleId: 'dsh-rich-media', title: '文件', order: 10, closable: false, scope: 'session-maybe' },
-    { id: 'terminal', moduleId: 'dsh-rich-media', title: '终端', order: 20, closable: false, scope: 'session-maybe' },
-    { id: 'git', moduleId: 'dsh-rich-media', title: 'Git', order: 30, closable: false, scope: 'session-maybe' },
-    { id: 'browser', moduleId: 'dsh-rich-media', title: '浏览器', order: 40, closable: false, scope: 'session-maybe' },
-  ],
-  commands: [
-    { id: 'media.open', moduleId: 'dsh-rich-media', title: '打开媒体' },
-    { id: 'media.download', moduleId: 'dsh-rich-media', title: '下载媒体' },
-  ],
-}
-
 function createRichMediaRegistry(): WorkbenchRegistry {
   const registry = new WorkbenchRegistry()
   registry.register(richMediaWorkbenchModule)
   return registry
 }
 
-const styles: Record<'layer' | 'panel' | 'header' | 'body' | 'grid' | 'trigger' | 'placeholder' | 'placeholderTitle' | 'placeholderBody', CSSProperties> = {
+const styles: Record<'layer' | 'panel' | 'header' | 'body' | 'grid' | 'trigger' | 'placeholder' | 'placeholderTitle' | 'placeholderBody' | 'cardActions', CSSProperties> = {
   layer: { position: 'relative', display: 'grid', gap: 6, width: '100%', padding: 4 },
   panel: { display: 'grid', gap: 8, padding: 10, borderRadius: 8, border: '1px solid var(--dsh-color-border, #3d4550)', background: 'var(--dsh-color-layer, #18202b)' },
   header: { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 },
@@ -69,35 +61,78 @@ const styles: Record<'layer' | 'panel' | 'header' | 'body' | 'grid' | 'trigger' 
   placeholder: { display: 'grid', gap: 4, padding: 12, borderRadius: 8, border: '1px dashed var(--dsh-color-border, #3d4550)' },
   placeholderTitle: { fontWeight: 600 },
   placeholderBody: { opacity: 0.72 },
+  cardActions: { display: 'flex', gap: 6, marginTop: 4 },
 }
 
 export function RichMediaWorkbench({ wide, t, media, resolveUrl }: RichMediaWorkbenchProps & RichMediaWorkbenchExtraProps) {
   const [open, setOpen] = useState(false)
   const [activeTabId, setActiveTabId] = useState(MEDIA_TAB_ID)
+  const [compareKeys, setCompareKeys] = useState<readonly string[]>([])
+  const [zoomKey, setZoomKey] = useState<string | null>(null)
+  const [zoomScale, setZoomScale] = useState(1)
   const registry = useMemo(createRichMediaRegistry, [])
   const tabs = registry.snapshot().tabs
 
+  const items: readonly MediaGalleryItem[] = useMemo(
+    () => (media ?? []).map(item => ({ key: mediaGalleryKey(item), media: item })),
+    [media],
+  )
+  const zoomItem = zoomKey === null ? undefined : items.find(item => item.key === zoomKey)
+
+  const cardLabels: RichMediaCardLabels = {
+    loading: t('workbench.loading'),
+    failed: t('workbench.failed'),
+    retry: t('workbench.retry'),
+    open: t('workbench.card.open'),
+    download: t('workbench.card.download'),
+    pdfFallback: t('workbench.pdfFallback'),
+  }
+
+  const toggleCompare = (key: string): void => {
+    setCompareKeys(selected => (
+      selected.includes(key)
+        ? selected.filter(entry => entry !== key)
+        : [...selected.slice(-1), key]
+    ))
+  }
+
   const renderTab = (tab: WorkbenchTabV1) => {
     if (tab.id === MEDIA_TAB_ID) {
-      if (media === undefined || media.length === 0) return <p>{t('workbench.empty')}</p>
+      if (items.length === 0) return <p>{t('workbench.empty')}</p>
       return (
-        <div style={styles.grid}>
-          {media.map(item => (
-            <RichMediaCard
-              key={`${item.owner}:${item.ref}`}
-              media={item}
-              src={undefined}
+        <div style={{ display: 'grid', gap: 8 }}>
+          {compareKeys.length === 2 && (
+            <MediaCompareView
+              items={items.filter(item => compareKeys.includes(item.key))}
               resolveUrl={resolveUrl}
-              labels={{
-                loading: t('workbench.loading'),
-                failed: t('workbench.failed'),
-                retry: t('workbench.retry'),
-                open: t('workbench.card.open'),
-                download: t('workbench.card.download'),
-                pdfFallback: t('workbench.pdfFallback'),
-              }}
+              labels={cardLabels}
+              texts={{ aria: t('workbench.compare.aria'), empty: t('workbench.compare.empty') }}
             />
-          ))}
+          )}
+          <div style={styles.grid}>
+            {items.map(item => (
+              <div key={item.key} style={{ display: 'grid', gap: 4 }}>
+                <RichMediaCard media={item.media} src={undefined} resolveUrl={resolveUrl} labels={cardLabels} />
+                <div style={styles.cardActions}>
+                  <button
+                    type="button"
+                    aria-pressed={compareKeys.includes(item.key) || undefined}
+                    aria-label={t('workbench.card.compare')}
+                    onClick={() => { toggleCompare(item.key) }}
+                  >
+                    {t('workbench.card.compare')}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t('workbench.card.zoom')}
+                    onClick={() => { setZoomKey(item.key); setZoomScale(1) }}
+                  >
+                    {t('workbench.card.zoom')}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )
     }
@@ -123,6 +158,23 @@ export function RichMediaWorkbench({ wide, t, media, resolveUrl }: RichMediaWork
               status={`${tabs.length} tabs · ${registry.snapshot().commands.length} commands`}
             />
           </div>
+          {zoomItem !== undefined && (
+            <MediaZoomOverlay
+              item={zoomItem}
+              scale={zoomScale}
+              onZoomIn={() => { setZoomScale(value => Math.min(4, value + 0.5)) }}
+              onZoomOut={() => { setZoomScale(value => Math.max(1, value - 0.5)) }}
+              onClose={() => { setZoomKey(null); setZoomScale(1) }}
+              resolveUrl={resolveUrl}
+              labels={cardLabels}
+              texts={{
+                aria: t('workbench.zoom.aria'),
+                zoomIn: t('workbench.zoom.in'),
+                zoomOut: t('workbench.zoom.out'),
+                close: t('workbench.zoom.close'),
+              }}
+            />
+          )}
         </section>
       )}
       <button
@@ -134,7 +186,7 @@ export function RichMediaWorkbench({ wide, t, media, resolveUrl }: RichMediaWork
         onClick={() => { setOpen(value => !value) }}
       >
         <span>{t('workbench.trigger')}</span>
-        {wide && <span aria-hidden="true">▦</span>}
+        {wide && <span aria-hidden="true">&#9638;</span>}
       </button>
     </div>
   )

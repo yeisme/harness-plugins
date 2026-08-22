@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'tsdown'
 
 const clientExternals = [
@@ -25,6 +26,12 @@ export default defineConfig([
   { ...node, entry: ['lib/types/index.js'] },
   { ...node, entry: ['lib/types/host/types.js'] },
   {
+    // workspace 包经 alias 直连源码并整体内联：ModuleLoader 单文件契约下，
+    // bundle 的 client.js 不得残留对 @yeisme/* 包的外部 require。
+    alias: {
+      '@yeisme/dsh-workbench-core/client': fileURLToPath(new URL('../dsh-workbench-core/src/client/index.ts', import.meta.url)),
+      '@yeisme/dsh-workbench-core': fileURLToPath(new URL('../dsh-workbench-core/src/index.ts', import.meta.url)),
+    },
     entry: { client: 'lib/types/client/index.js' },
     outDir: 'lib',
     format: 'cjs',
@@ -34,6 +41,7 @@ export default defineConfig([
     sourcemap: true,
     clean: false,
     deps: {
+      alwaysBundle: [/^@yeisme\//u],
       neverBundle: [...clientExternals],
     },
     outputOptions: {

@@ -51,6 +51,24 @@ export interface MediaResolveUrl {
   expiresAt: string
 }
 
+/** Optional Cordis context key for an owner-provided media projection service. */
+export const MEDIA_HOST_CONTEXT_KEY = 'dsh.mediaHost' as const
+
+/** Safe owner boundary consumed by the Desktop Workbench media Pane. */
+export interface MediaHostV1 {
+  readonly version: '0.1.0-rc.1'
+  readonly capability: 'media-host'
+  /** Lists media refs visible to the current workspace/session. */
+  listMedia(): Promise<readonly MediaRefV1[]>
+  /** Returns a short-lived browser URL or undefined when the owner denies preview. */
+  resolveUrl(media: MediaRefV1): Promise<MediaResolveUrl | undefined>
+}
+
+export interface DshMediaSeams {
+  listMedia(): Promise<readonly MediaRefV1[]>
+  resolveUrl(media: MediaRefV1): Promise<MediaResolveUrl | undefined>
+}
+
 export type MediaRefValidation =
   | { ok: true; value: MediaRefV1 }
   | { ok: false; error: string }
@@ -151,4 +169,36 @@ export function validateMediaRefV1(value: unknown): MediaRefValidation {
 /** Type guard built on the same validation. */
 export function isMediaRefV1(value: unknown): value is MediaRefV1 {
   return validateMediaRefV1(value).ok
+}
+
+/** Wrap owner callbacks as a versioned media host. */
+export function createMediaHost(seams: DshMediaSeams): MediaHostV1 {
+  return {
+    version: '0.1.0-rc.1',
+    capability: 'media-host',
+    listMedia: seams.listMedia,
+    resolveUrl: seams.resolveUrl,
+  }
+}
+
+/** Placeholder host used when no domain media owner is mounted. */
+export function createMediaHostPlaceholder(): MediaHostV1 {
+  return createMediaHost({
+    async listMedia() {
+      return []
+    },
+    async resolveUrl() {
+      return undefined
+    },
+  })
+}
+
+/** Runtime guard for the optional Cordis media host service. */
+export function isMediaHostV1(value: unknown): value is MediaHostV1 {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate = value as Partial<MediaHostV1>
+  return candidate.version === '0.1.0-rc.1'
+    && candidate.capability === 'media-host'
+    && typeof candidate.listMedia === 'function'
+    && typeof candidate.resolveUrl === 'function'
 }

@@ -18,12 +18,12 @@
 
 ## 4. 后续实现（retain-next）
 
-- [ ] 4.1 确认官方媒体附件 seam 是 `ctx.attachments` 扩展还是 `ctx.media` 新增；验收：有明确 owner 和 typed API。
-- [ ] 4.2 接入聊天/ToolView/Pane 官方 slot，注册 `RichMediaCard` 与媒体节点；验收：使用最窄官方 seam，无 DOM patch。
-- [ ] 4.3 实现文件卡片、PDF/Office/文本预览与图片增强；验收：沙箱、类型嗅探、有界文本。
+- [ ] 4.1 确认官方媒体附件 seam 是 `ctx.attachments` 扩展还是 `ctx.media` 新增；验收：有明确 owner 和 typed API。（blocked: 需要真实 DSH host seam 决策，本环境无法确认）
+- [ ] 4.2 接入聊天/ToolView/Pane 官方 slot，注册 `RichMediaCard` 与媒体节点；验收：使用最窄官方 seam，无 DOM patch。（blocked: 官方 Workbench/Pane/ToolView 宿主 slot 未确认）
+- [ ] 4.3 实现文件卡片、PDF/Office/文本预览与图片增强；验收：沙箱、类型嗅探、有界文本。（blocked: PDF.js/Office 集成需要新增依赖，本 lane 不允许新增依赖）
 - [ ] 4.4 实现音视频播放器、waveform/字幕扩展点与媒体库；验收：懒加载、卸载释放、可访问性。
-- [ ] 4.5 将工作台文件/终端/Git/浏览器 Tab 接入各自官方 owner seam；验收：每个 Tab 只投影 owner 状态，不复制 canonical state。
-- [ ] 4.6 与 Eikona/Sonora/Anatomia 等领域 Pane 集成；验收：跨 Pane 只走 typed artifact intent。
+- [ ] 4.5 将工作台文件/终端/Git/浏览器 Tab 接入各自官方 owner seam；验收：每个 Tab 只投影 owner 状态，不复制 canonical state。（blocked: 需要各自官方 owner seam）
+- [ ] 4.6 与 Eikona/Sonora/Anatomia 等领域 Pane 集成；验收：跨 Pane 只走 typed artifact intent。（blocked: 官方 ArtifactRef/领域 Pane seam 未就绪）
 
 ## 5. Phase 1 媒体预览落地（已开始）
 
@@ -35,3 +35,10 @@
 - [x] 5.6 [Owner: Harness Plugins；Scope: `src/client/index.ts`；Dependencies: 5.5] 注册 `conversationEvents` 与 `conversation.chat.node` keyed renderer。Acceptance: typecheck/build 通过；Validation: `pnpm --filter @yeisme/dsh-rich-media run typecheck && pnpm --filter @yeisme/dsh-rich-media run build`。
 - [x] 5.7 [Owner: Harness Plugins；Scope: `src/client/workbench.tsx`；Dependencies: workbench-core] 将 Rich Media Workbench 改为消费 `WorkbenchRegistry`/`WorkbenchShell`，注册 `dsh-rich-media` Workbench module。Acceptance: typecheck/build 通过；Validation: `pnpm --filter @yeisme/dsh-rich-media run typecheck && pnpm --filter @yeisme/dsh-rich-media run build`。
 - [x] 5.8 [Owner: Harness Plugins；Scope: tests；Dependencies: 5.7] 增加 source-independence scan，确保不依赖参考 sidebar 项目。Acceptance: 12 tests passed；Validation: `pnpm --filter @yeisme/dsh-rich-media run test`。
+
+## 6. 后续推进目标（retain-next）
+
+- [ ] 6.1 [Owner: Harness Plugins；Scope: `src/host/plugin.ts`；Dependencies: 2.2] 接入真实媒体附件 seam（`ctx.attachments` 扩展或 `ctx.media` 新增）。Acceptance: Host 返回真实 MediaRef；Validation: 本地 DSH profile 验证。（blocked: 需要真实 DSH 媒体附件 host seam，本环境无法执行本地 DSH profile）
+- [x] 6.2 [Owner: Harness Plugins；Scope: `src/client/media-card.tsx`；Dependencies: 5.2] 增加音视频播放器增强：waveform、字幕、倍速、画中画。Acceptance: audio/video 播放器可交互；Validation: 组件测试 + demo。
+- [x] 6.3 [Owner: Harness Plugins；Scope: `src/client/media-node.tsx`；Dependencies: 5.6] 支持媒体节点更新/移除事件，而不仅是单次 start。Acceptance: `media/ref/update`、`media/ref/remove` 可折叠；Validation: media-node tests。
+- [x] 6.4 [Owner: Harness Plugins；Scope: `src/client/workbench.tsx`；Dependencies: 5.7] 将 Rich Media Workbench 作为独立模块继续完善 gallery/compare/zoom。Acceptance: gallery/compare/zoom 可测；Validation: component tests。

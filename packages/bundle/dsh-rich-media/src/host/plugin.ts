@@ -1,10 +1,9 @@
 /**
  * DSH Rich Media Host face.
  *
- * This skeleton deliberately registers no production Host seam yet. The next
- * slice should mount a typed media resolver/transport that returns safe
- * `MediaRefV1` values and short-lived browser URLs. Until then, the plugin is
- * an installable bundle with a clean no-op lifecycle.
+ * The Host plugin owns only lifecycle. Domain owners may expose the typed
+ * `MediaHostV1` contract through the `dsh.mediaHost` context key; storage and
+ * transport remain outside this bundle.
  *
  * @module @yeisme/dsh-rich-media/host
  */
