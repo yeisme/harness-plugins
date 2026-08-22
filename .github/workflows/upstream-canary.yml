@@ -61,7 +61,7 @@ jobs:
         with:
           script: |
             const version = '${{ steps.version.outputs.version }}';
-            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.RUN_ID}`;
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
             const label = 'canary';
             const title = `canary: upstream ${version} broke the plugin workspace`;
             const issues = await github.rest.issues.listForRepo({
