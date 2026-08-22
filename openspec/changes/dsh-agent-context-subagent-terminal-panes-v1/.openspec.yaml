@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-08-21
+goal: "Create Wave 1 handoff: Plan+Skills Agent Context, reuse Subagent pane,
+  Terminal capability probe without xterm unpark."

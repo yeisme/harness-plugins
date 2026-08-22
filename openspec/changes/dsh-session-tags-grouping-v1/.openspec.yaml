@@ -1,0 +1,3 @@
+schema: spec-driven
+created: 2026-08-20
+goal: 在不维护 DSH 源码 fork、不替换原生侧栏的前提下，交付可复用的社区会话分组扩展合同与 tags 参考插件规格。

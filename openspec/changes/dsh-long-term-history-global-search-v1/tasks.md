@@ -1,0 +1,28 @@
+## 1. 设计冻结与准入评审
+
+- [ ] 1.1 设计 owner 评审 Required Capability Ledger 与 `split-owner` 决策；范围：确认 DSH Host 拥有日志/标签/索引/授权，Web/TUI 只拥有交互投影；依赖：无；验收：四个 capability spec 与 design 台账逐项对应，无 required 能力被静默删除；验证：`openspec validate dsh-long-term-history-global-search-v1 --strict --no-interactive` 返回 valid；失败复查：任何能力缺失先修正 proposal/spec，不进入 handoff。
+- [ ] 1.2 冻结兼容性判定；范围：`session.search`、`SessionPersistence`、`ctx.sessionQuery`、`session/title`、archive set、CLI/RPC/event/config/plugin ids；依赖：1.1；验收：全部 V1 变更标记为 additive，`session/labels` 规定 `ignorable: true`，rollback 不修改原始日志；验证：设计中包含 affected surfaces、deprecation window（none）、rollback 和 consumer list；失败复查：发现 rename/remove/retype 时先补迁移、兼容窗口与回滚，不允许以 pre-release 为由静默断代。
+- [ ] 1.3 冻结隐私与搜索范围；范围：默认 title/label/workspace/current+shadowed user/assistant，排除 reasoning、hidden prompt、provider payload、credential 与 private tool arguments；依赖：1.1；验收：全局搜索与侧栏搜索的差异、archived 行为、shadowed 标记和 current profile 边界均有 Requirement/Scenario；验证：逐项对照 `dsh-global-history-search/spec.md`；失败复查：任何未分类 payload 先 fail closed。
+
+## 2. DSH Agent Note handoff
+
+- [ ] 2.1 在 DSH PR staging（`upstream-prs/long-term-history-global-search/`，fork 退役后的固定通道）起草 `.agents/notes/proposed/architecture/2026-08-17-long-term-history-global-search.md` 架构 handoff，并生成对应中文文档与 pairing metadata；范围：Persistence、Session Query、document registry、label service、`history.*`、index generation、migration/rollback；依赖：1.2、1.3；验收：Note 继承本 change 的 owner、invariants、data flow、failure modes、performance/security gates，不创建子项目 `openspec/`；验证：在 PR staging worktree（上游 clone + 应用系列）内 `pnpm run verify-agent-note-format && pnpm run verify-translation-pairing` 全绿；失败复查：若本地 DSH policy 或上游差异冲突，回写本 change 的 boundary decision。
+- [ ] 2.2 在同一 PR staging 起草 `.agents/notes/proposed/feature/2026-08-17-history-search-client-plugins.md` 建立 Web/TUI/CLI 体验 handoff；范围：command ids、shortcut、global dialog、TUI plugin states/effects、deep link、CLI projection；依赖：2.1；验收：Web 侧栏保持 v1，TUI `Ctrl+R` 不改义，built-in 使用 public registry，机器输出遵守共享 envelope；验证：PR staging worktree 内 `pnpm run verify-agent-note-format && pnpm run verify-md-wrap` 全绿；失败复查：任何 private renderer/Host bypass 返回架构 Note 处理，不在 feature Note 偷加 seam。
+- [ ] 2.3 在两个 DSH handoff 中写入明确代码 owner 与非重叠阶段；范围：Session/Persistence/Query/Apiproxy、Web client、TUI runtime/app、CLI；依赖：2.1、2.2；验收：一个阶段只冻结一组重叠 contract writer，Web/TUI 在 Host contract 稳定后接入，review 不观察 changing diff；验证：Agent Note delivery DAG 或 task table 能映射到本 change 四个 specs；失败复查：出现路径重叠时串行化 contract writer。
+
+## 3. 验收与证据 handoff
+
+- [ ] 3.1 把合同/迁移测试矩阵写入 DSH 架构 Note；范围：旧 `session.search` golden、label ignorable downgrade、JSONL/SQLite source、index reset/rebuild、cursor stale、archive delegation、cold resume/deep link；依赖：2.1；验收：每个 Requirement 至少映射一个 unit/contract/integration 场景；验证命令由 DSH Note 给出 focused `pnpm exec vitest run <files>` 与最终 `pnpm run test`，预期均为 exit 0；失败复查：区分 introduced、pre-existing、concurrent、environmental、ambiguous 后再修复。
+- [ ] 3.2 把 Web/TUI/CLI 体验测试矩阵写入 DSH feature Note；范围：command menu、`Cmd/Ctrl+G`、`/history`、`/resume`、TUI plugin load/unload/late completion/focus、offline/disabled/reconcile、CLI summary/agent/json/events；依赖：2.2；验收：关键用户流具有 keyless component/process evidence，TUI 仍满足 deterministic update/render 与 terminal cleanup；验证命令包含 focused Web/TUI/CLI tests 以及稳定后一次 `pnpm run test:snapshot`；失败复查：不得通过放宽 schema、删除 snapshot 或改写无关业务逻辑清门。
+- [ ] 3.3 冻结性能与安全证据门；范围：10,000 Session/1,000,000 document、warm p95、unchanged restart、CJK/identifier、index permission、secret canary、authorization leakage；依赖：3.1、3.2；验收：基准 fixture、硬件描述、index/log size ratio、event-loop impact、redaction canary 与 partial coverage 均有记录；验证：DSH Note 给出可运行 benchmark/security commands 和预期门槛；失败复查：只有 profiler 证明同步 SQLite 是瓶颈后才能提议 worker-thread/native 升级。
+- [ ] 3.4 要求所有 integration/component/system/e2e 入口把证据写入 PR staging 侧 `temp/integration-test-runs/<run-id>/`（fork 退役后：实施方 `agent/harness-plugins/temp/integration-test-runs/<run-id>/`，DSH 仓内运行的同目录仅存于 staging worktree 不入 git）；依赖：3.1、3.2；验收：包含 `summary.json`、`command.txt`、`stdout.log`、`stderr.log`、`env.json`、`artifacts/`，失败保留原 exit code，且所有内容完成脱敏；验证：成功与失败各运行一次 evidence harness；失败复查：发现 raw prompt、provider payload、credential、private tool arguments、绝对敏感路径或完整思维链立即阻断发布。
+
+## 4. 文档与体验同步 handoff
+
+- [ ] 4.1 在 DSH handoff 中列出需同步的 owner docs；范围：Session persistence/query、Apiproxy session/history contract、Web workspace search、TUI runtime/plugin authoring、CLI reference、config catalog；依赖：2.1、2.2；验收：每个事实只有一个 owner 文档，其他文档只链接；验证：PR staging worktree 内 `pnpm run doc-sync` 全绿；失败复查：文档 gate 失败先修 owning source，不手改 generated catalog。
+- [ ] 4.2 同步主仓索引或跨项目边界文档（仅在 handoff 路径变化时）；范围：主仓 `docs/README.md`、主仓 `docs/architecture/subproject-product-boundaries.md` 的必要链接，不复制 DSH 内部设计；依赖：2.3；验收：根文档只说明 owner 与 handoff，不保留第二份产品/协议说明；验证：主仓 `scripts/openspec.sh validate` 全绿；失败复查：发现重复项目文档时删除根级副本并链接 DSH owner。
+
+## 5. change 验证与 closeout
+
+- [ ] 5.1 审阅本 change 最终差异；范围：proposal、design、tasks、四个 specs；依赖：1–4；验收：中文、Mermaid、能力账本、研究记录、兼容分类、迁移、回滚、Open Questions 和真实命令齐全，无实现日志或子项目 closeout 混入；验证：`git diff --check` 与 `openspec validate dsh-long-term-history-global-search-v1 --strict --no-interactive` 全绿。
+- [ ] 5.2 DSH Agent Notes accepted 且 handoff 路径稳定后归档本 change；依赖：5.1；验收：本 change 只记录跨模块设计和交接，具体代码状态留在 DSH Agent Notes；验证：`openspec status --change dsh-long-term-history-global-search-v1` 显示四个 artifacts complete，再按仓库 closeout 流程执行 archive；失败复查：任何 required handoff 缺失则保持 active，不以文档存在代替 owner 接受。

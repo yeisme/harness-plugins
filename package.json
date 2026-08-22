@@ -12,7 +12,8 @@
     "build": "pnpm -r run build",
     "doc-sync": "node scripts/doc-sync.mjs",
     "typecheck": "pnpm -r run typecheck",
-    "test": "pnpm -r run test"
+    "test": "pnpm --filter @yeisme/dsh-pane-protocol --filter @yeisme/dsh-client-ui-pane-workbench --filter @yeisme/dsh-creator-studio-host --filter @yeisme/dsh-client-ui-creator-studio --filter @yeisme/dsh-ordo-agent-ops run build && pnpm -r run test",
+    "check:bundles": "node scripts/check-bundle-contracts.mjs"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

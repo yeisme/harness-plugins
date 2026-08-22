@@ -76,5 +76,7 @@ minimumReleaseAgeExclude:
   - '@oh-my-pi/pi-natives@17.3.5'
   - '@oh-my-pi/pi-tui@17.3.5'
   - '@oh-my-pi/pi-utils@17.3.5'
+  - '@deepseek-ai/dsh-client-ui-layout@0.1.0-rc.8'
+  - '@deepseek-ai/dsh-client-ui-theme@0.1.0-rc.8'
 
 storeDir: /workspaces/yeisme-agent/agent/harness-plugins/.pnpm-store

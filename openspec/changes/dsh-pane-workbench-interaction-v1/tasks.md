@@ -1,8 +1,8 @@
-## 收束状态（2026-08-17）
+## 收束状态（2026-08-19）
 
-- 已落地并完成 focused 验收：local-only view registry、orphaned 状态恢复、可测试的 drag/resize 会话、两帧 measured activation、per-kind/LRU retention、safe persistence adapter、Tab/Pane chrome 与 `shell.overlay` adapter。
-- 已补齐：installable bundle、disposable profile install/dump/remove 与真实 Web profile Loader 启动；真实浏览器 Playwright、canary handoff 与发布流程仍未在本仓库闭环。
-- 3.1–3.4、5.1–7.2 的 checkbox 保持按实际 acceptance 管理；4.1/4.2 已由纯状态/适配器和 focused tests 闭环。
+- 已落地并完成 focused 验收：local-only view registry、orphaned 状态恢复、可测试的 drag/resize 会话、两帧 measured activation、per-kind/LRU retention、safe persistence adapter、Tab/Pane chrome、全局 `Hide/Show Pane Workbench` toggle 与 `shell.overlay` adapter。
+- 已补齐：installable bundle、disposable profile install/dump/remove 与真实 Web profile Loader 启动；真实浏览器 Playwright 与发布流程仍未在本仓库闭环。
+- 3.1–3.4、4.1/4.2、5.1–5.3、6.1、7.1/7.2 已按本地 acceptance 管理；6.2/6.3 保持 open（browser/DOM/ARIA evidence 与 final gates）。
 
 ## 1. Contract and package foundation
 
@@ -31,17 +31,17 @@
 
 ## 5. Official DSH integration and bundle
 
-- [ ] 5.1 [依赖：3.1、4.1、4.3；串行] 通过 `shell.overlay` list slot 注册 Pane Workbench host，提供 toggle、Right/Bottom overlay 与 narrow sheet；不得占用 `sidebar`、`conversation`、`details`。验收：与现有 Tool Details 同时工作，关闭后底层 DSH 可点击。
-- [x] 5.2 [依赖：5.1；并行 lane A] 实现 `ctx.paneWorkbench.registerView` disposer、capability gating、orphaned recovery 和 local-only component factory；host projection 只接受 safe typed fields。验收：component URL/module name/arbitrary iframe fixture 被拒绝为 contract mismatch。（`view-registry.spec.ts` 覆盖 componentUrl/moduleName/iframe 拒绝、capability gating、disposer 后 orphan recovery；client package focused gate 10 files / 49 tests 通过。）
-- [x] 5.3 [依赖：5.1；并行 lane B] 创建 `packages/bundle/pane-workbench/` patch、README 与安装/移除说明，命令面向用户使用真实 `dsh plugin --profile web add ...` 形式。验收：`dsh --profile web --dump-config` 可看到贡献，移除 bundle 后无重复 mount 或 DOM residue。（bundle 使用 inert node face + thin `./client` face；最新串行 `temp/integration-test-runs/2026-08-18T03-15-23-655Z-3426823-pane-profile/summary.json` 覆盖 packed members、install/dump row=1、真实 Web Loader boot、remove/dump row=0；浏览器 DOM/Playwright 仍归 6.2。）
+- [x] 5.1 [依赖：3.1、4.1、4.3；串行] 通过 `shell.overlay` list slot 注册 Pane Workbench host，提供 toggle、Right/Bottom overlay 与 narrow sheet；不得占用 `sidebar`、`conversation`、`details`。验收：与现有 Tool Details 同时工作，关闭后底层 DSH 可点击。（本地实现已完成：`src/client.ts` 仅注入官方 `shell.overlay` list slot，`chrome.ts` 提供 `Hide/Show Pane Workbench` 全局 toggle、Right/Bottom 可收起 region 与 narrow sheet；收起时 aside `pointer-events:none`、toggle 按钮保持可点。`chrome.spec.tsx` 新增 toggle/pointer-events 测试，package gate 10 files / 50 tests 通过；真实 browser 的 Tool Details 同屏与点击释放证据仍归 6.2。）
+- [x] 5.2 [依赖：5.1；并行 lane A] 实现 `ctx.paneWorkbench.registerView` disposer、capability gating、orphaned recovery 和 local-only component factory；host projection 只接受 safe typed fields。验收：component URL/module name/arbitrary iframe fixture 被拒绝为 contract mismatch。（`view-registry.spec.ts` 覆盖 componentUrl/moduleName/iframe 拒绝、capability gating、disposer 后 orphan recovery；client package focused gate 10 files / 50 tests 通过。）
+- [x] 5.3 [依赖：5.1；并行 lane B] 创建 `packages/bundle/pane-workbench/` patch、README 与安装/移除说明，命令面向用户使用真实 `dsh plugin --profile web add ...` 形式。验收：`dsh --profile web --dump-config` 可看到贡献，移除 bundle 后无重复 mount 或 DOM residue。（bundle 使用 inert node face + thin `./client` face；最新串行 `temp/integration-test-runs/2026-08-19T07-01-59-861Z-396072-pane-profile/summary.json` 覆盖 packed members、install/dump row=1、真实 Web Loader boot、remove/dump row=0；浏览器 DOM/Playwright 仍归 6.2。）
 
 ## 6. Verification evidence
 
-- [x] 6.1 [依赖：2.*、3.*、4.*；串行] 完成 reducer、component、a11y、retention、persistence 与 teardown focused tests。验收：`pnpm --filter @yeisme/dsh-client-ui-pane-workbench run test`、`pnpm --filter @yeisme/dsh-client-ui-pane-workbench run typecheck` 全绿；确定性失败回到对应任务修复，不扩大到无关包。（2026-08-18 当前 package gate：10 test files / 49 tests 全绿，typecheck 全绿；覆盖 reducer、chrome pointer/keyboard/a11y、lifecycle、persistence、registry、runtime、local-only contract rejection 与 interaction teardown。）
+- [x] 6.1 [依赖：2.*、3.*、4.*；串行] 完成 reducer、component、a11y、retention、persistence 与 teardown focused tests。验收：`pnpm --filter @yeisme/dsh-client-ui-pane-workbench run test`、`pnpm --filter @yeisme/dsh-client-ui-pane-workbench run typecheck` 全绿；确定性失败回到对应任务修复，不扩大到无关包。（2026-08-19 当前 package gate：10 test files / 50 tests 全绿，typecheck 全绿；覆盖 reducer、chrome pointer/keyboard/a11y/overlay toggle、lifecycle、persistence、registry、runtime、local-only contract rejection 与 interaction teardown。）
 - [ ] 6.2 [依赖：5.*、6.1；串行] 增加真实 DSH profile Playwright：install/load/unload、Right/Bottom、cross-region、resize、session switch、reload restore、narrow round trip、keyboard-only、view crash、HMR。集成运行证据写入 `temp/integration-test-runs/<run-id>/`，包含 summary/command/stdout/stderr/env/artifacts 且脱敏。验收：浏览器场景全绿并保留截图/ARIA snapshot。
 - [ ] 6.3 [依赖：6.2；串行] 运行 final gates：`pnpm run typecheck`、`pnpm run test`、`pnpm run build`、`openspec validate dsh-pane-workbench-interaction-v1 --strict --no-interactive`、`git diff --check`。验收：全部通过；任何 dirty worktree failure 先分类为 introduced、pre-existing、concurrent、environmental 或 ambiguous。
 
 ## 7. Documentation and canary handoff
 
-- [ ] 7.1 [依赖：5.3、6.2；并行] 更新本仓库 `docs/README.md`、client package README 与 bundle README，说明安装、配置、快捷操作、source-independence、overlay 限制、inspect、remove、reset 与 troubleshooting；开发文档中文，CLI/日志/错误与 code comments 英文。（文档内容已补齐：`packages/client/ui-pane-workbench/README.md` 增加配置、快捷操作、inspect、reset 和 troubleshooting；`packages/bundle/pane-workbench/README.md` 增加中文对应说明。仍等待 6.2 的官方 browser evidence 后按依赖关系勾选。）
-- [ ] 7.2 [依赖：6.3、7.1；串行] 生成 canary handoff：记录兼容 DSH 版本、bundle digest、测试证据路径、已知 overlay trade-off、下一批 view provider 与 additive dock slot blocker。验收：OpenSpec 保持 valid，未把未实现的 Terminal/Git/File provider 描述为已交付。（bundle README 已加入 local canary handoff，记录 `0.1.0-rc.6` peer、`@yeisme/dsh-pane-workbench@0.1.0-rc.1`、profile evidence、overlay trade-off 与 browser/additive-slot/provider blockers；6.3/7.1 依赖未满足，保持 open。）
+- [x] 7.1 [依赖：5.3、6.2；并行] 更新本仓库 `docs/README.md`、client package README 与 bundle README，说明安装、配置、快捷操作、source-independence、overlay 限制、inspect、remove、reset 与 troubleshooting；开发文档中文，CLI/日志/错误与 code comments 英文。（文档内容已补齐：`docs/README.md`、`packages/client/ui-pane-workbench/README.md` 与 `packages/bundle/pane-workbench/README.md` 均包含安装、配置、快捷操作、overlay 限制、inspect/remove/reset/troubleshooting；本次同时补充全局 Hide/Show toggle 说明。browser DOM/ARIA 证据仍由 6.2 负责，不因文档完成而误报浏览器验证已闭环。）
+- [x] 7.2 [依赖：6.3、7.1；串行] 生成 canary handoff：记录兼容 DSH 版本、bundle digest、测试证据路径、已知 overlay trade-off、下一批 view provider 与 additive dock slot blocker。验收：OpenSpec 保持 valid，未把未实现的 Terminal/Git/File provider 描述为已交付。（bundle README 已包含 local canary handoff，记录 `0.1.0-rc.6` peer、`@yeisme/dsh-pane-workbench@0.1.0-rc.1`、profile evidence、overlay trade-off 与 browser/additive-slot/provider blockers；本地 canary 部分完成，真实 browser/发布 authority 仍由 6.2/6.3 与外部 owner 保留。）

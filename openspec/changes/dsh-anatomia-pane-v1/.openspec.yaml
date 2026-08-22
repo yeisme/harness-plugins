@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-08-21
+goal: Implement the DSH Anatomia Pane in Harness Plugins while preserving
+  Anatomia canonical ownership.
