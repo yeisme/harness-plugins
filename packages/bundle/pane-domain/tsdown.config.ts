@@ -12,6 +12,21 @@ const clientExternals = [
 
 export default defineConfig([
   {
+    // Host 面：为已注入 typed transport 的 owner 挂载 domain.<owner> owner source。
+    entry: { host: 'src/host.ts' },
+    outDir: 'lib',
+    format: 'esm',
+    platform: 'node',
+    target: 'es2024',
+    dts: false,
+    sourcemap: false,
+    clean: false,
+    deps: {
+      neverBundle: ['@deepseek-ai/cordis', /^@yeisme\//u],
+    },
+    outputOptions: { entryFileNames: 'host.js' },
+  },
+  {
     entry: { client: 'src/client.ts' },
     outDir: 'lib',
     format: 'cjs',

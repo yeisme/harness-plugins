@@ -11,7 +11,8 @@
     ".": "./index.mjs",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./client": "./lib/client.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./host": "./lib/host.js"
   },
   "dsh": {
     "bundle": {
@@ -28,6 +29,7 @@
   "files": [
     "index.mjs",
     "cordis.patch.yml",
+    "lib/host.js",
     "lib/client.js",
     "README.md"
   ],

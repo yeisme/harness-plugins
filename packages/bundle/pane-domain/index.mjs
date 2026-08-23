@@ -1,4 +1,2 @@
-export const name = 'pane-domain'
-export const inject = []
-export function apply() {}
-export default { name, inject, apply }
+export { paneDomainOwnerTransportKey, name, inject, apply } from './lib/host.js'
+export { default } from './lib/host.js'
