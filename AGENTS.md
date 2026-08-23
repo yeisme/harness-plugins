@@ -54,7 +54,8 @@ Ordo 是 run/task/session/lease/approval/verification/evidence/closeout 的唯�
 
 ## Skill Triggers
 
-- 设计/实现/评审 Ordo Agent Ops 适配：读取 .agents/skills/dsh-ordo-agent-ops/SKILL.md。
+- 本项目 active skills 由根目录 `.skills/profiles/targets/agent/harness-plugins.txt` 声明，并由 `scripts/skills.sh sync-target agent/harness-plugins` 生成到 `.agents/skills/` 与 `.claude/skills/`；不得再把 runtime 副本当作 skill 源码。
+- 设计/实现/评审 Ordo Agent Ops 适配：使用 `dsh-ordo-agent-ops`。
 - 创建/评审 DSH UI 插件：参考上游 deepseek-ai/deepseek-harness 的 dsh-plugin-experience skill（经 PR staging worktree 或上游仓读取）。
 - 决定 owner 边界：遵循本仓库 openspec/changes/ordo-dsh-plugin-visualization-v1/。
-
+- TypeScript、host transport、safe projection、CLI output、集成证据和稳定合同变更分别使用本 profile 中的 `yeisme-coding-execution-driver`、`backend-system-workflow`、`ai-native-cli-output-contract`、`project-integration-test-evidence` 与 `yeisme-evolutionary-change-policy`。
