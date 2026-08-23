@@ -11,7 +11,7 @@
  * @module @yeisme/dsh-client-ui-session-tags/client/TagEditorOverlay
  */
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
 
 export interface TagEditorOverlayLabels {
   readonly title: string
@@ -193,6 +193,7 @@ export function TagEditorOverlay(props: TagEditorOverlayProps): JSX.Element | nu
 export function createTagEditorOverlayEntry(
   editor: {
     getSnapshot(): TagEditorOverlayProps['state']
+    subscribe(listener: () => void): () => void
     suggestions(): readonly string[]
     toggleTag(tag: string): void
     setInput(input: string): void
@@ -204,9 +205,14 @@ export function createTagEditorOverlayEntry(
 ): () => JSX.Element | null {
   const dictionary = labels ?? TAG_EDITOR_OVERLAY_LABELS_EN
   return function SessionTagsEditorOverlayEntry(): JSX.Element | null {
+    const state = useSyncExternalStore(
+      listener => editor.subscribe(listener),
+      () => editor.getSnapshot(),
+      () => editor.getSnapshot(),
+    )
     return (
       <TagEditorOverlay
-        state={editor.getSnapshot()}
+        state={state}
         suggestions={editor.suggestions()}
         labels={dictionary}
         onToggleTag={tag => { editor.toggleTag(tag) }}

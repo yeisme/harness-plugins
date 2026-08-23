@@ -46,5 +46,5 @@ DSH Web 会话侧栏目前只支持“按工作区”和“单列表”，且 `s
 - 唯一 DSH core 通道：`upstream-prs/session-grouping-provider/`；不直接修改或长期维护 DSH fork。
 - 新公开 TypeScript surface：experimental `SessionGroupingProviderV1Alpha1` 注册合同；分类为 additive。
 - 新 Remote surface：`sessionTags.list`、`sessionTags.set`；分类为 additive、`specVersion: 1.0`。
-- 新持久化 domain：`yeisme.session-tags.v1`，只保存 sidecar，不写 SessionEvent、不进入模型上下文、不改变会话最近更新时间。
+- 新持久化 domain：`yeisme_session_tags_v1`，只保存 sidecar，不写 SessionEvent、不进入模型上下文、不改变会话最近更新时间。
 - Rollback：从 profile 移除 `@yeisme/dsh-session-tags`；DSH 自动回退“按工作区”，sidecar 数据保留以便重装恢复。

@@ -5,7 +5,7 @@
  */
 
 /** Public storage-domain name opened via `ctx.storageDomain`. */
-export const SESSION_TAGS_DOMAIN = 'yeisme.session-tags.v1' as const
+export const SESSION_TAGS_DOMAIN = 'yeisme_session_tags_v1' as const
 
 /** Published host package version. */
 export const SESSION_TAGS_HOST_VERSION = '0.1.0-rc.1' as const

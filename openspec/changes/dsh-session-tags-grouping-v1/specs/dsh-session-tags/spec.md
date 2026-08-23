@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Tags SHALL 存储为插件拥有的 Session sidecar
-`@yeisme/dsh-session-tags-host` SHALL 使用公开 `ctx.storageDomain` 打开 `yeisme.session-tags.v1` domain，并按 SessionId 保存标签行。每行 SHALL 绑定当前持久化 Session 生命周期身份，MUST NOT 写入 `SessionEvent`、Workspace registry 或浏览器 localStorage。
+`@yeisme/dsh-session-tags-host` SHALL 使用公开 `ctx.storageDomain` 打开 `yeisme_session_tags_v1` domain，并按 SessionId 保存标签行。每行 SHALL 绑定当前持久化 Session 生命周期身份，MUST NOT 写入 `SessionEvent`、Workspace registry 或浏览器 localStorage。
 
 #### Scenario: Host 重启后恢复标签
 - **WHEN** 用户给会话设置标签并重启同一 DSH Host

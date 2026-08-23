@@ -88,7 +88,7 @@ describe('sessionTags remote service', () => {
 
 describe('domain spec and plugin face', () => {
   it('declares the additive domain shape', () => {
-    expect(SESSION_TAGS_DOMAIN).toBe('yeisme.session-tags.v1')
+    expect(SESSION_TAGS_DOMAIN).toBe('yeisme_session_tags_v1')
     expect(sessionTagsDomainSpec).toMatchObject({ name: SESSION_TAGS_DOMAIN, version: 1 })
     expect(Object.keys(sessionTagsDomainSpec.tables)).toEqual(['sessions'])
   })

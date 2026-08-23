@@ -162,10 +162,9 @@ describe('tag editor overlay a11y and interaction', () => {
   it('entry component renders the live editor state', async () => {
     const deps = await harness([['s1', ['工作']]])
     const Entry = createTagEditorOverlayEntry(deps.editor, labels)
-    const { rerender } = render(<Entry />)
+    render(<Entry />)
     deps.editor.open('s1')
-    rerender(<Entry />)
-    expect(screen.getByRole('dialog')).toBeDefined()
+    expect(await screen.findByRole('dialog')).toBeDefined()
     expect(screen.getByText('工作')).toBeDefined()
   })
 })

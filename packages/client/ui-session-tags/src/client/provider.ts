@@ -70,6 +70,12 @@ export interface SessionTagsProviderDeps {
   readonly controller: SessionTagsController
   /** 当前全部已知 SessionId（快照式读取；可见性过滤归 Browser）。 */
   readonly allSessionIds: () => readonly string[]
+  /**
+   * 会话集合外部变化通知（可选）：sessions.list 是独立 store，其变化不经
+   * controller 事件；提供者据此触发重投影，避免晚到的会话列表把视图钉死在
+   * 空快照。返回退订函数。
+   */
+  readonly onSessionsChanged?: (listener: () => void) => () => void
   /** BCP-47 locale（缺省用运行时默认）。 */
   readonly locale?: string
   /** 标签文案。 */
@@ -130,13 +136,20 @@ export function createSessionTagsProvider(deps: SessionTagsProviderDeps): Sessio
   }
 
   deps.controller.subscribe(rebuild)
+  deps.onSessionsChanged?.(rebuild)
   rebuild()
 
   return {
     id: SESSION_TAGS_PROVIDER_ID,
     label: () => labels.menuLabel,
     order: 100,
-    getSnapshot: () => projection.snapshot,
+    // 惰性重算：会话列表可能晚于注册到达（sessions.list 是独立 store，
+    // 其变化不触发 controller subscribe）。getSnapshot 时重投影，相等时
+    // 保持引用稳定（projectSnapshot 已做相等性短路），React 不会多余渲染。
+    getSnapshot: () => {
+      rebuild()
+      return projection.snapshot
+    },
     subscribe(listener: () => void): () => void {
       listeners.add(listener)
       return () => {

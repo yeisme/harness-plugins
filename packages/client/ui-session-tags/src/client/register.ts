@@ -21,7 +21,13 @@ import { createSessionTagsController, SessionTagsController } from './controller
 import { createTagEditorController, TagEditorController } from './editor.ts'
 import { createSessionTagsProvider } from './provider.ts'
 import { createTagEditorOverlayEntry, type TagEditorOverlayLabels } from './TagEditorOverlay.tsx'
-import type { SessionTagsRemoteFace } from './wire.ts'
+import { sessionTagsRemoteContribution } from './remote-contribution.ts'
+import type {
+  SessionTagsListAnswerV1,
+  SessionTagsRemoteFace,
+  SessionTagsSetAnswerV1,
+  SessionTagsSetInputV1,
+} from './wire.ts'
 
 /** 分组 seam 的结构形状（`ctx.sessionGroupings`）。 */
 export interface SessionGroupingsRegistryLike {
@@ -43,7 +49,7 @@ type SessionGroupingsRegistryRegister = (provider: {
 /** 注册结果（供测试与诊断；失败时 UI 保持零入口）。 */
 export interface SessionTagsRegistration {
   readonly registered: boolean
-  readonly reason?: 'session-groupings-unavailable'
+  readonly reason?: 'session-groupings-unavailable' | 'session-tags-remote-unavailable'
   readonly controller?: SessionTagsController
   readonly editor?: TagEditorController
 }
@@ -64,46 +70,149 @@ interface SessionTagsProviderLabelsShape {
   readonly manageActionLabel?: string
 }
 
-/** 探测分组 seam：只有存在 register 函数才算可用。 */
+/**
+ * 探测分组 seam：只有存在 register 函数才算可用。
+ *
+ * 浏览器 ModuleLoader 的 guard facade 对未声明 service 的属性访问直接抛错
+ * （denied read），但始终放行 `ctx.get(name)` 可选查找——所以探测顺序：
+ * 1. `ctx.get('sessionGroupings')`（guard/原生 cordis 均支持，可选语义不抛错）；
+ * 2. 直读 `ctx.sessionGroupings`（node 测试与无 guard 宿主）。
+ * 任一路径抛错都视为 seam 不存在（诚实降级），绝不影响插件激活。
+ */
 export function hasSessionGroupingsSeam(ctx: unknown): ctx is { sessionGroupings: SessionGroupingsRegistryLike } {
-  const candidate = ctx as { sessionGroupings?: unknown } | null
-  const registry = candidate?.sessionGroupings
+  let registry: unknown
+  const optionalGet = (ctx as { get?: unknown } | null)?.get
+  if (typeof optionalGet === 'function') {
+    // guard/原生 cordis：只认可选查找结果，undefined 即 seam 缺席。
+    // 不再回退属性直读——那会在 guard 上触发 denied read 并上报噪音错误。
+    try {
+      registry = (optionalGet as (name: string) => unknown).call(ctx, 'sessionGroupings')
+    } catch {
+      return false
+    }
+  } else {
+    // 无 get 通道（node 测试/无 guard 宿主）：直读属性，抛错按缺席处理。
+    try {
+      registry = (ctx as { sessionGroupings?: unknown } | null)?.sessionGroupings
+    } catch {
+      return false
+    }
+  }
   return typeof registry === 'object' && registry !== null
     && typeof (registry as SessionGroupingsRegistryLike).register === 'function'
 }
 
-/** 解析 sessionTags Remote（Typert client 面的形状探测；缺省走 ctx.remote）。 */
-function resolveRemote(ctx: ClientContext, override?: SessionTagsRemoteFace): SessionTagsRemoteFace {
+/**
+ * 命名空间方法的原生返回：`{ok:true,value}` 传输层 + 业务层 ok 双层判别。
+ * 传输层失败（离线/中断/拒绝）在此抛错，由 controller 的错误路径诚实呈现。
+ */
+interface RemoteResultLike<T> {
+  readonly ok: boolean
+  readonly value?: T
+  readonly error?: unknown
+}
+
+/** 解析 sessionTags Remote：优先已挂命名空间，否则经 `$mount` 自挂后取回。 */
+async function resolveRemote(ctx: ClientContext, override?: SessionTagsRemoteFace): Promise<SessionTagsRemoteFace> {
   if (override !== undefined) return override
-  const remote = (ctx as unknown as { remote?: Record<string, unknown> }).remote
-  const sessionTags = remote?.sessionTags
-  if (typeof sessionTags === 'object' && sessionTags !== null
-    && typeof (sessionTags as SessionTagsRemoteFace).list === 'function'
-    && typeof (sessionTags as SessionTagsRemoteFace).set === 'function') {
-    return sessionTags as SessionTagsRemoteFace
+  const remote = optionalLookup(ctx, 'remote')
+  const direct = isRemoteFace(remote?.sessionTags)
+  if (direct) return remote.sessionTags as SessionTagsRemoteFace
+
+  // out-of-tree 命名空间不在 Client assembly 生成清单里：走公开 $mount 自挂。
+  // $mount 失败（旧 runtime 无该 API / 服务端拒绝）→ 诚实降级，返回 undefined。
+  if (remote !== undefined && typeof (remote as { $mount?: unknown }).$mount === 'function') {
+    try {
+      await (remote as {
+        $mount(contribution: unknown): Promise<() => Promise<void>>
+      }).$mount(sessionTagsRemoteContribution)
+    } catch {
+      return undefined as unknown as SessionTagsRemoteFace
+    }
+    const mounted = optionalLookup(ctx, 'remote.sessionTags')
+    if (mounted !== undefined) return unwrapNamespace(mounted as Record<string, unknown>)
   }
-  throw new Error('session-tags client: sessionTags remote is not available (host sidecar missing?)')
+  return undefined as unknown as SessionTagsRemoteFace
+}
+
+/** guard facade 的可选查找（不抛错）；无 get 通道时回退属性直读。 */
+function optionalLookup(ctx: ClientContext, name: string): Record<string, unknown> | undefined {
+  let direct: unknown
+  try {
+    const optionalGet = (ctx as { get?: unknown } | null)?.get
+    if (typeof optionalGet === 'function') {
+      direct = (optionalGet as (n: string) => unknown).call(ctx, name)
+    } else {
+      direct = (ctx as unknown as Record<string, unknown>)[name]
+    }
+  } catch {
+    return undefined
+  }
+  return direct === undefined || direct === null ? undefined : direct as Record<string, unknown>
+}
+
+function isRemoteFace(candidate: unknown): candidate is SessionTagsRemoteFace {
+  return typeof candidate === 'object' && candidate !== null
+    && typeof (candidate as SessionTagsRemoteFace).list === 'function'
+    && typeof (candidate as SessionTagsRemoteFace).set === 'function'
+}
+
+/** 把 `$mount` 后的命名空间服务适配为 SessionTagsRemoteFace（解 RemoteResult 包装）。 */
+function unwrapNamespace(namespace: Record<string, unknown>): SessionTagsRemoteFace {
+  const list = namespace.list as (() => Promise<RemoteResultLike<SessionTagsListAnswerV1>>) | undefined
+  const set = namespace.set as ((input: SessionTagsSetInputV1) => Promise<RemoteResultLike<SessionTagsSetAnswerV1>>) | undefined
+  if (typeof list !== 'function' || typeof set !== 'function') {
+    throw new Error('session-tags client: mounted sessionTags namespace lacks list/set')
+  }
+  return {
+    async list() {
+      const answered = await list()
+      if (!answered.ok) throw new Error(`sessionTags.list transport failure: ${JSON.stringify(answered.error)}`)
+      return answered.value as SessionTagsListAnswerV1
+    },
+    async set(input) {
+      const answered = await set(input)
+      if (!answered.ok) throw new Error(`sessionTags.set transport failure: ${JSON.stringify(answered.error)}`)
+      return answered.value as SessionTagsSetAnswerV1
+    },
+  }
 }
 
 /**
- * 注册 tags provider 与编辑器。seam 缺失时零注册、零 slot、零 DOM 操作。
+ * 注册 tags provider 与编辑器。seam 或 sessionTags Remote 缺失时零注册、
+ * 零 slot、零 DOM 操作（两者都是 mutation 可用性的硬前置：缺 remote 的
+ * provider 只会制造死按钮）。
  */
-export function registerSessionTagsClient(
+export async function registerSessionTagsClient(
   ctx: ClientContext,
   options: RegisterSessionTagsOptions = {},
-): SessionTagsRegistration {
+): Promise<SessionTagsRegistration> {
   if (!hasSessionGroupingsSeam(ctx)) {
     // 诚实降级：不注册 provider、不注入 slot、不写 DOM；Host sidecar 可
     // 独立保持加载（本函数不做任何 host 侧动作）。
     return { registered: false, reason: 'session-groupings-unavailable' }
   }
-  const remote = resolveRemote(ctx, options.remote)
+  const remote = await resolveRemote(ctx, options.remote)
+  if (remote === undefined || !isRemoteFace(remote)) {
+    return { registered: false, reason: 'session-tags-remote-unavailable' }
+  }
   const controller = createSessionTagsController({ remote })
   const editor = createTagEditorController({ remote, controller })
   const allSessionIds = options.allSessionIds ?? defaultAllSessionIds(ctx)
+  // sessions.list 是独立 SnapshotStore：其变化（会话晚到/新增/离线重拉）
+  // 不经 controller 事件——把 store 的 subscribe 接进 provider 的重投影。
+  const sessionsStore = optionalLookup(ctx, 'sessions')?.list
+  const sessionsSubscribe = sessionsStore !== null && typeof sessionsStore === 'object' && sessionsStore !== undefined
+    ? (sessionsStore as { subscribe?: unknown }).subscribe
+    : undefined
+  const onSessionsChanged = typeof sessionsSubscribe === 'function' && options.allSessionIds === undefined
+    ? (listener: () => void) =>
+      (sessionsSubscribe as (fn: () => void) => () => void)(listener)
+    : undefined
   const provider = createSessionTagsProvider({
     controller,
     allSessionIds,
+    ...(onSessionsChanged === undefined ? {} : { onSessionsChanged }),
     ...(options.locale === undefined ? {} : { locale: options.locale }),
     ...(options.labels === undefined ? {} : { labels: options.labels }),
     onManageTags: sessionId => {
@@ -112,17 +221,31 @@ export function registerSessionTagsClient(
   })
 
   const disposers: Array<() => void> = []
-  const groupings = (ctx as unknown as { sessionGroupings: SessionGroupingsRegistryLike }).sessionGroupings
+  // guard facade 下未声明 service 的属性直读会抛错——统一走 optionalLookup。
+  const groupings = optionalLookup(ctx, 'sessionGroupings') as SessionGroupingsRegistryLike | undefined
+  if (groupings === undefined || typeof groupings.register !== 'function') {
+    return { registered: false, reason: 'session-groupings-unavailable' }
+  }
   disposers.push(groupings.register(provider as never))
 
   // shell.overlay 编辑器 seat：列表 slot，常驻注册、空闲零渲染。
   const slots = (ctx as unknown as {
     slots?: {
       inject(name: string, factory: () => unknown): () => void
+      register(
+        options: { name: string; id: string; order?: number; label?: string | (() => string) },
+        component: () => unknown,
+      ): () => void
     }
   }).slots
-  if (slots !== undefined && typeof slots.inject === 'function') {
-    disposers.push(slots.inject('shell.overlay', () => createTagEditorOverlayEntry(editor, options.overlayLabels)))
+  if (slots !== undefined && typeof slots.inject === 'function' && typeof slots.register === 'function') {
+    const Entry = createTagEditorOverlayEntry(editor, options.overlayLabels)
+    disposers.push(slots.inject('shell.overlay', () => slots.register({
+      name: 'shell.overlay',
+      id: 'yeisme.session-tags.editor',
+      order: 100,
+      label: options.overlayLabels?.title ?? 'Manage tags',
+    }, Entry)))
   }
 
   // 首次挂载读取 + 刷新触发（reset/focus 由宿主事件线驱动；此处仅聚焦）。
@@ -140,13 +263,28 @@ export function registerSessionTagsClient(
   return { registered: true, controller, editor }
 }
 
-/** 缺省 SessionId 快照源：ctx.sessions 列表（存在时）。 */
+/**
+ * 缺省 SessionId 快照源：ctx.sessions 列表（存在时）。
+ * 真实浏览器 runtime 的形态是 `sessions.list: SnapshotStore<SessionListState>`
+ * （`getSnapshot().ids`）；测试/宿主注入可能是 `snapshot()`/`list()` 函数——
+ * 依序探测，全都不可用时返回空（Untagged 组为空是诚实投影，不伪造）。
+ */
 function defaultAllSessionIds(ctx: ClientContext): () => readonly string[] {
-  const sessions = (ctx as unknown as {
-    sessions?: { list?(): { ids: readonly string[] } | undefined; snapshot?(): { ids: readonly string[] } | undefined }
-  }).sessions
+  const sessions = (ctx as unknown as { sessions?: { list?: unknown, snapshot?: unknown } } | undefined)?.sessions
   return () => {
-    const snapshot = sessions?.snapshot?.() ?? sessions?.list?.()
+    const list: unknown = sessions?.list
+    if (list !== null && typeof list === 'object' && list !== undefined) {
+      const store = list as { getSnapshot?: unknown }
+      if (typeof store.getSnapshot === 'function') {
+        const state = (store.getSnapshot as () => { ids?: readonly string[] } | undefined)()
+        return state?.ids ?? []
+      }
+    }
+    if (typeof list === 'function') {
+      const called = (list as () => { ids?: readonly string[] } | undefined)()
+      if (called !== undefined) return called.ids ?? []
+    }
+    const snapshot = (sessions?.snapshot as (() => { ids?: readonly string[] } | undefined) | undefined)?.()
     return snapshot?.ids ?? []
   }
 }

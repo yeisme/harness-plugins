@@ -8,7 +8,8 @@
 # editor overlay and the `yeisme.session-tags` grouping provider. The Client
 # provider is capability-probed — without the upstream `ctx.sessionGroupings`
 # seam (SessionGroupingProviderV1Alpha1) nothing is registered and the native
-# sidebar keeps its built-in workspace/flat grouping.
+# sidebar keeps its built-in workspace/flat grouping; a seam arriving later
+# registers via dynamic injection (static inject would pend the entry forever).
 #
 # Compatibility anchor: the first DSH release that ships the grouping seam
 # (upstream-prs/session-grouping-provider/; unreleased at 0.1.1-rc.2). DSH
@@ -16,7 +17,5 @@
 # host sidecar stays loadable, but "By tags" and "Manage tags" do not appear
 # and no sidebar replacement or DOM fallback is used.
 - insert:
-  - id: dsh-session-tags-host
-    name: '@yeisme/dsh-session-tags-host'
   - id: dsh-session-tags
     name: '@yeisme/dsh-session-tags'

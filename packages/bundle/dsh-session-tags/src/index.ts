@@ -2,7 +2,7 @@
  * @yeisme/dsh-session-tags bundle root（Host face）。
  *
  * Host 半边直接组合 `@yeisme/dsh-session-tags-host` 插件：打开
- * `yeisme.session-tags.v1` storage domain 并注册 `sessionTags` Typert
+ * `yeisme_session_tags_v1` storage domain 并注册 `sessionTags` Typert
  * Remote。bundle 不复制任何包实现——host 行挂载本入口，client 行挂载
  * `./client`。
  *

@@ -15,7 +15,7 @@ export interface SessionTagSessionIdentityV1 {
   readonly cwd?: string
 }
 
-/** `yeisme.session-tags.v1` sessions 表的一行（Client 可见的投影）。 */
+/** `yeisme_session_tags_v1` sessions 表的一行（Client 可见的投影）。 */
 export interface SessionTagRowV1 {
   readonly session: SessionTagSessionIdentityV1
   readonly tags: readonly string[]

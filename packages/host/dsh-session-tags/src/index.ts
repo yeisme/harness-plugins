@@ -2,7 +2,7 @@
  * @yeisme/dsh-session-tags-host.
  *
  * Plugin-owned Session tags sidecar. Canonical rows live in the public
- * storage-domain `yeisme.session-tags.v1`; the Typert Remote namespace
+ * storage-domain `yeisme_session_tags_v1`; the Typert Remote namespace
  * `sessionTags` exposes `list`/`set` with full-target + `ifVersion` CAS.
  * The sidecar never touches SessionEvent logs, Workspace state, or
  * browser storage, and never changes Session recency.

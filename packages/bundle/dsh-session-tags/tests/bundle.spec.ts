@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { spawnSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
@@ -13,16 +14,19 @@ const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')) 
   peerDependencies: Record<string, string>
   peerDependenciesMeta: Record<string, { optional?: boolean }>
   dependencies: Record<string, string>
+  scripts: Record<string, string>
 }
 
 describe('dsh-session-tags bundle contract', () => {
-  it('declares one additive patch with host + bundle rows and no replacements', async () => {
+  it('declares one additive patch with a single bundle row and no replacements', async () => {
     const patch = await readFile(join(root, 'cordis.patch.yml'), 'utf8')
     expect(manifest.dsh.bundle.patch).toBe('./cordis.patch.yml')
     expect(manifest.dsh.client.platform).toBe('web')
-    expect(patch).toContain("name: '@yeisme/dsh-session-tags-host'")
+    // 单 bundle 行：根 face 即 Host 插件（re-export），./client face 由 dsh.client 声明挂载。
+    // host+bundle 双行会重复 apply 同一插件（storage-domain 'already open'，5.2 集成证据复现）。
     expect(patch).toContain("name: '@yeisme/dsh-session-tags'")
-    expect((patch.match(/^ {2}- id:/gm) ?? []).length).toBe(2)
+    expect(patch).not.toContain("name: '@yeisme/dsh-session-tags-host'")
+    expect((patch.match(/^ {2}- id:/gm) ?? []).length).toBe(1)
     expect(patch).not.toMatch(/^(replace|delete|update):/m)
   })
 
@@ -48,7 +52,7 @@ describe('dsh-session-tags bundle contract', () => {
 
   it('keeps the host package independently loadable (no client-only imports)', async () => {
     const host = await import('@yeisme/dsh-session-tags-host')
-    expect(host.SESSION_TAGS_DOMAIN).toBe('yeisme.session-tags.v1')
+    expect(host.SESSION_TAGS_DOMAIN).toBe('yeisme_session_tags_v1')
     expect(host.name).toBe('dsh-session-tags-host')
     expect(typeof host.apply).toBe('function')
     // Client 包 node face 可独立加载；client face 是 ModuleLoader 形态
@@ -57,7 +61,25 @@ describe('dsh-session-tags bundle contract', () => {
     expect(clientNode.name).toBe('client-ui-session-tags')
     const clientFace = await loadClientFace()
     expect(typeof clientFace.apply).toBe('function')
-    expect(clientFace.inject).toEqual(['slots'])
+    // 静态 inject 只含官方恒有服务：声明 seam/'effect' 会让 web entry 永久 pending。
+    expect(clientFace.inject).toEqual(['slots', 'sessions', 'remote'])
+  })
+
+  it('ships an executable integration runner with the required evidence contract', async () => {
+    const runner = join(root, 'scripts/run-web-profile-integration.mjs')
+    const syntax = spawnSync(process.execPath, ['--check', runner], { encoding: 'utf8' })
+    expect(syntax.status, syntax.stderr).toBe(0)
+    expect(manifest.scripts['test:integration']).toBe('node scripts/run-web-profile-integration.mjs')
+
+    const source = await readFile(runner, 'utf8')
+    expect(source).toContain("schema_version: 'yeisme.integration_test_evidence.v1'")
+    expect(source).toContain("project: 'agent/harness-plugins'")
+    expect(source).toContain("layer: 'browser-e2e'")
+    for (const file of ['summary.json', 'command.txt', 'stdout.log', 'stderr.log', 'env.json']) {
+      expect(source).toContain(file)
+    }
+    expect(source).toContain("artifacts: relative(projectRoot, artifactsRoot)")
+    expect(source).toContain("policy: 'yeisme.integration-test-redaction.v1'")
   })
 })
 

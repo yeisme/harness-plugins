@@ -12,6 +12,13 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import { registerSessionTagsClient } from './register.ts'
 
 export { hasSessionGroupingsSeam, registerSessionTagsClient } from './register.ts'
+export {
+  sessionTagsRemoteContribution,
+} from './remote-contribution.ts'
+export type {
+  SessionTagsInvocationDescriptor,
+  SessionTagsRemoteContribution,
+} from './remote-contribution.ts'
 export type {
   RegisterSessionTagsOptions,
   SessionGroupingsRegistryLike,
@@ -70,14 +77,37 @@ export { NS, en, zh, overlayLabelsFrom } from './locales.ts'
 export type { SessionTagsKey } from './locales.ts'
 
 export const name = 'client-ui-session-tags'
-export const inject = ['slots'] as const
+// cordis 的静态 inject 是硬依赖：缺任一 service 插件 entry 永久 pending，直接拖死
+// web boot（"entry did not activate"）。因此静态白名单只声明官方 runtime 恒有服务：
+// slots（overlay 注入）、sessions（会话快照）、remote（sessionTags Remote）。
+// - 'sessionGroupings'（上游分组 seam，未进官方发布版）绝不静态声明：apply 时先 probe，
+//   缺失则经动态 ctx.inject 晚绑定——seam 将来出现即自动注册，始终不出现则保持
+//   诚实降级（零注册、零死按钮、无轮询）。若静态声明，官方 runtime 会永久 pending。
+// - 'effect' 是 Context 方法而非 service：声明它等于等待一个永不存在的 service。
+export const inject = ['slots', 'sessions', 'remote'] as const
 
 /**
  * Mount the client face: capability-probe the grouping seam and register the
- * tags provider + editor overlay only when it exists.
+ * tags provider + editor overlay only when it exists. When the seam is not
+ * present yet, schedule a dynamic injection so a later-provided seam still
+ * registers (and an absent seam degrades honestly, forever, without polling).
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): () => void {
-  registerSessionTagsClient(ctx)
+  void registerSessionTagsClient(ctx).then(registration => {
+    if (registration.registered) return
+    // 晚绑定（仅原生 cordis ctx）：seam 到位时 sub-fiber 触发注册；seam 消失时随服务卸载。
+    // 浏览器 ModuleLoader 的 guard facade 未声明时访问 ctx.inject 会抛错，必须先 try 探测。
+    let dynamicInject: ((services: readonly string[], body: (sub: ClientContext) => void) => unknown) | undefined
+    try {
+      const candidate = (ctx as { inject?: unknown }).inject
+      if (typeof candidate === 'function') dynamicInject = candidate as typeof dynamicInject
+    } catch {
+      dynamicInject = undefined // guard facade 拒绝读取：浏览器侧依赖 apply 时探测即可
+    }
+    if (dynamicInject !== undefined) {
+      dynamicInject(['sessionGroupings'], sub => void registerSessionTagsClient(sub))
+    }
+  })
   return () => {}
 }

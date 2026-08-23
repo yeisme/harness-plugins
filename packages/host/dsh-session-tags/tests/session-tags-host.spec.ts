@@ -28,7 +28,7 @@ describe('@yeisme/dsh-session-tags-host', () => {
   it('exports version, capability, and storage-domain constants', () => {
     expect(SESSION_TAGS_HOST_VERSION).toBe('0.1.0-rc.1')
     expect(SESSION_TAGS_CAPABILITY).toBe('session-tags-host')
-    expect(SESSION_TAGS_DOMAIN).toBe('yeisme.session-tags.v1')
+    expect(SESSION_TAGS_DOMAIN).toBe('yeisme_session_tags_v1')
   })
 
   it('exposes a versioned host contract', () => {

@@ -1,5 +1,5 @@
 /**
- * `yeisme.session-tags.v1` storage domain 声明。
+ * `yeisme_session_tags_v1` storage domain 声明（名字须匹配上游 UNIT_NAME_RE：/^[a-z][a-z0-9_]*$/）。
  *
  * 只声明一个 `sessions` 表：key 是 SessionId，value 是 SessionTagRowV1。
  * 不引入全局 tag catalog——可选标签集合由有效行实时去重派生（design 决策 4）。
@@ -39,8 +39,8 @@ export interface SessionTagsDomainSpec extends DomainSpec {
   }
 }
 
-/** storage-domain 对名字的合法字符约束（保守副本；fail-loud 用）。 */
-const NAME_RE = /^[a-z0-9][a-z0-9.-]*$/
+/** storage-domain 名字约束（上游 UNIT_NAME_RE 的本地镜像：小写字母开头，仅 [a-z0-9_]；fail-loud 用）。 */
+const NAME_RE = /^[a-z][a-z0-9_]*$/
 
 /** 组装并校验 domain spec；非法名字在构造期抛出。 */
 function buildSpec(): SessionTagsDomainSpec {
@@ -60,7 +60,7 @@ function buildSpec(): SessionTagsDomainSpec {
 }
 
 /**
- * 打开 `yeisme.session-tags.v1` 的 domain 声明（durable 校验 + backend 投影）。
+ * 打开 `yeisme_session_tags_v1` 的 domain 声明（durable 校验 + backend 投影）。
  * 冻结实例；`Domain<SessionTagsDomainSpec>` 会推导出 sessions 表的行类型。
  */
 export const sessionTagsDomainSpec: SessionTagsDomainSpec = Object.freeze(buildSpec())

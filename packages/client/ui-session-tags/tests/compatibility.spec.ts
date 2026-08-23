@@ -23,9 +23,10 @@ function probeCtx(withSeam: boolean, entries: string[] = []) {
     ? { register: vi.fn(() => () => {}) }
     : undefined
   const slots = {
-    inject: vi.fn((slot: string) => {
+    register: vi.fn(() => () => {}),
+    inject: vi.fn((slot: string, setup: () => () => void) => {
       calls.slots.push(slot)
-      return () => {}
+      return setup()
     }),
   }
   const observer = typeof MutationObserver !== 'undefined'
@@ -44,9 +45,9 @@ function probeCtx(withSeam: boolean, entries: string[] = []) {
 }
 
 describe('capability probe (old-DSH compatibility)', () => {
-  it('does not register the provider, inject slots, or touch the DOM without ctx.sessionGroupings', () => {
+  it('does not register the provider, inject slots, or touch the DOM without ctx.sessionGroupings', async () => {
     const { ctx, calls, disconnect } = probeCtx(false)
-    const result = registerSessionTagsClient(ctx as never)
+    const result = await registerSessionTagsClient(ctx as never)
     expect(result).toMatchObject({ registered: false, reason: 'session-groupings-unavailable' })
     expect(ctx.slots.inject).not.toHaveBeenCalled()
     expect(calls.slots).toEqual([])
@@ -55,36 +56,108 @@ describe('capability probe (old-DSH compatibility)', () => {
     disconnect()
   })
 
-  it('registers the provider and one shell.overlay seat when the seam exists', () => {
+  it('registers the provider and one shell.overlay seat when the seam exists', async () => {
     const { ctx, registry, disconnect } = probeCtx(true)
-    const result = registerSessionTagsClient(ctx as never)
+    const result = await registerSessionTagsClient(ctx as never)
     expect(result.registered).toBe(true)
     expect(registry?.register).toHaveBeenCalledTimes(1)
     expect(ctx.slots.inject).toHaveBeenCalledWith('shell.overlay', expect.any(Function))
+    expect(ctx.slots.register).toHaveBeenCalledWith({
+      name: 'shell.overlay',
+      id: 'yeisme.session-tags.editor',
+      order: 100,
+      label: 'Manage tags',
+    }, expect.any(Function))
     expect(document.body.innerHTML).toBe('') // 空闲 overlay 零渲染
     disconnect()
   })
 
-  it('apply is probe-gated the same way (no dead buttons on old DSH)', () => {
+  it('apply is probe-gated the same way (no dead buttons on old DSH)', async () => {
     const { ctx, disconnect } = probeCtx(false)
     expect(() => apply(ctx as never)).not.toThrow()
+    await new Promise(resolve => { setTimeout(resolve, 0) })
     expect(ctx.slots.inject).not.toHaveBeenCalled()
     expect(name).toBe('client-ui-session-tags')
-    expect(inject).toEqual(['slots'])
+    // 静态 inject 只允许官方恒有服务：声明 seam 或 'effect' 会让 entry 永久 pending。
+    expect(inject).toEqual(['slots', 'sessions', 'remote'])
     disconnect()
   })
 
-  it('throws no runtime crash when even the remote face is missing on old DSH', () => {
+  it('apply schedules dynamic late-binding when the seam is not present yet', async () => {
+    const { ctx, calls, disconnect } = probeCtx(false)
+    const dynamic: { services?: readonly string[] } = {}
+    ;(ctx as { inject?: unknown }).inject = vi.fn((services: readonly string[], body: (sub: unknown) => unknown) => {
+      dynamic.services = services
+      // 模拟 seam 稍后到位：sub-ctx 携带可用 registry 立即触发注册。
+      void body({ ...ctx, sessionGroupings: { register: vi.fn(() => () => {}) } })
+      return undefined
+    })
+    expect(() => apply(ctx as never)).not.toThrow()
+    await new Promise(resolve => { setTimeout(resolve, 0) })
+    // probe 失败当下零注册；晚绑定回调触发后经 sub-ctx 完成注册（overlay seat 注入一次）。
+    expect(calls.slots).toEqual(['shell.overlay'])
+    expect(dynamic.services).toEqual(['sessionGroupings'])
+    disconnect()
+  })
+
+  it('apply does not schedule late-binding twice when the seam already exists', async () => {
+    const { ctx, registry, disconnect } = probeCtx(true)
+    const dynamicInject = vi.fn()
+    ;(ctx as { inject?: unknown }).inject = dynamicInject
+    apply(ctx as never)
+    await new Promise(resolve => { setTimeout(resolve, 0) })
+    expect(registry?.register).toHaveBeenCalledTimes(1)
+    expect(dynamicInject).not.toHaveBeenCalled()
+    disconnect()
+  })
+
+  it('throws no runtime crash when even the remote face is missing on old DSH', async () => {
     const { ctx, disconnect } = probeCtx(false)
     delete (ctx as Partial<typeof ctx>).remote
-    expect(() => registerSessionTagsClient(ctx as never)).not.toThrow()
+    await expect(registerSessionTagsClient(ctx as never)).resolves.toMatchObject({ registered: false })
     disconnect()
   })
 
-  it('refuses to register when the seam exists but the host remote is absent', () => {
-    const { ctx, disconnect } = probeCtx(true)
+  it('degrades honestly (no dead buttons) when the seam exists but the host remote is absent', async () => {
+    const { ctx, calls, disconnect } = probeCtx(true)
     const stripped = { ...ctx, remote: {} }
-    expect(() => registerSessionTagsClient(stripped as never)).toThrow(/sessionTags remote/)
+    const result = await registerSessionTagsClient(stripped as never)
+    // mutation 硬前置缺失 → 零注册（provider 无 set 通道只会制造死按钮）。
+    expect(result).toMatchObject({ registered: false, reason: 'session-tags-remote-unavailable' })
+    expect(calls.slots).toEqual([])
+    disconnect()
+  })
+
+  it('self-mounts the sessionTags namespace via ctx.remote.$mount when not pre-mounted', async () => {
+    const { ctx, registry, disconnect } = probeCtx(true)
+    const wireAnswer = { ok: true as const, specVersion: '1.0' as const, entries: [] }
+    const mounted: Record<string, unknown> = {}
+    const remoteWithMount = {
+      $mount: vi.fn(async (contribution: unknown) => {
+        // 断言自挂 contribution 形状（package + 两个严格 descriptor）。
+        const c = contribution as { package: string, descriptors: { method: string }[] }
+        expect(c.package).toBe('@yeisme/dsh-session-tags-host')
+        expect(c.descriptors.map(d => d.method).sort()).toEqual(['list', 'set'])
+        mounted['remote.sessionTags'] = {
+          list: vi.fn(async () => ({ ok: true, value: wireAnswer })),
+          set: vi.fn(async () => ({ ok: true, value: { ok: true, row: null } })),
+        }
+        return async () => {}
+      }),
+    }
+    const ctxWithMount = {
+      ...ctx,
+      remote: remoteWithMount,
+      get: (key: string) => {
+        if (key === 'remote') return remoteWithMount
+        if (key === 'sessionGroupings') return ctx.sessionGroupings
+        return mounted[key]
+      },
+    }
+    const result = await registerSessionTagsClient(ctxWithMount as never)
+    expect(result.registered).toBe(true)
+    expect(remoteWithMount.$mount).toHaveBeenCalledTimes(1)
+    expect(registry?.register).toHaveBeenCalledTimes(1)
     disconnect()
   })
 })

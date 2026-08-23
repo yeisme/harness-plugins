@@ -32,7 +32,7 @@ flowchart LR
   REG --> CLIENT["@yeisme/dsh-client-ui-session-tags\nprovider + overlay controller"]
   CLIENT --> REMOTE["Typert Remote: sessionTags.list/set"]
   REMOTE --> HOST["@yeisme/dsh-session-tags-host\n校验 + CAS"]
-  HOST --> SIDE["ctx.storageDomain\nyeisme.session-tags.v1"]
+  HOST --> SIDE["ctx.storageDomain\nyeisme_session_tags_v1"]
   HOST -.只读校验.-> SESSION["DSH Session Persistence"]
 ```
 
@@ -85,7 +85,7 @@ Registry 规则：provider id 全局唯一；注册/dispose 归调用 fiber；sn
 
 ### 4. Tags V1 采用每 Session 一行的最小 sidecar
 
-Domain `yeisme.session-tags.v1` 的 `sessions` table 使用 SessionId 为 key：
+Domain `yeisme_session_tags_v1` 的 `sessions` table 使用 SessionId 为 key：
 
 ```ts
 interface SessionTagRowV1 {
@@ -169,7 +169,7 @@ Host 在写前检查持久化 Session 和生命周期身份。sidecar 不创建/
 | DSH public TS API | additive experimental | 新增 `V1Alpha1` type-only export，不改旧 symbol；不上 value export |
 | DSH view persistence | additive | 保留 `workspace`/`flat` 值；外部选择值固定 `provider:<id>` 前缀；未知/已卸载 provider 回退 `workspace`（持久化键 `dsh.workspace.view.v5` 不变） |
 | Typert Remote | additive v1 | 新 service/method（`sessionTags.list/set`，`specVersion: '1.0'`）；字段不复用、不重命名 |
-| storageDomain | additive | 新 domain `yeisme.session-tags.v1`（version 1）；无迁移、无既有数据写回 |
+| storageDomain | additive | 新 domain `yeisme_session_tags_v1`（version 1）；点号旧名不符合 unit 规则且从未可加载，无迁移、无既有数据写回 |
 | Bundle/profile | additive | 新 package row（host + bundle 两行）；移除即回滚 |
 
 ### Alpha 兼容窗口（一个 RC）
@@ -186,7 +186,7 @@ specVersion 而不是静默兼容。
 
 1. 用户侧回滚：`dsh plugin --profile web remove @yeisme/dsh-session-tags` ——
    bundle 行移除后 Client provider 消失，DSH 回退内建 `workspace` 分组；
-   `yeisme.session-tags.v1` sidecar 数据原样保留，重装即恢复（卸载不清数据）。
+   `yeisme_session_tags_v1` sidecar 数据原样保留，重装即恢复（卸载不清数据）。
 2. seam 侧回滚：上游不合并该 PR 时，bundle 永远走 capability probe 降级
    （无“按标签”入口、无死按钮），Host sidecar 独立可加载；不启用任何
    整侧栏/DOM fallback。

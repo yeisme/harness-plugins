@@ -1,7 +1,7 @@
 # @yeisme/dsh-session-tags-host
 
 Harness Plugins 拥有的 Session 标签 sidecar Host。V1 使用公开 `ctx.storageDomain`
-打开 `yeisme.session-tags.v1`（sessions 表，SessionId 为 key），按 Session 生命周期
+打开 `yeisme_session_tags_v1`（sessions 表，SessionId 为 key），按 Session 生命周期
 身份（createdAt + cwd）保存标签行；通过 Typert Remote `sessionTags.list/set`
 暴露只读快照与全量目标值 + `ifVersion` 的 CAS 写入。不得写入
 会话事件日志、Workspace registry 或浏览器存储，不改变会话 recency。
