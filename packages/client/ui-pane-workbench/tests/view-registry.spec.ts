@@ -4,6 +4,7 @@ import {
   PaneViewRegistrationError,
   createPaneWorkspace,
   markOrphanedPaneViews,
+  parsePaneViewRegistration,
   reducePaneWorkspace,
 } from '../src/index.js'
 import { pluginDefinition } from './fixtures.js'
@@ -70,5 +71,41 @@ describe('local pane view registry', () => {
     }).state
     dispose()
     expect(markOrphanedPaneViews(state, admitted).views[Object.keys(state.views)[0]!]?.status).toBe('orphaned')
+  })
+
+  it('keeps existing registrations picker-visible and admits hidden local providers', () => {
+    const registry = new PaneViewRegistry({ capabilities: new Set() })
+    registry.registerView({
+      descriptor: pluginDefinition('pinax.notes-preview').views[0],
+      component: () => null,
+    })
+    registry.registerView({
+      descriptor: pluginDefinition('ordo.hidden-inspector').views[0],
+      component: () => null,
+      showInPicker: false,
+    })
+
+    expect(registry.snapshot().map(registration => registration.showInPicker)).toEqual([false, true])
+    expect(() => registry.registerView({
+      descriptor: pluginDefinition('auctra.invalid-picker').views[0],
+      component: () => null,
+      showInPicker: 'sometimes',
+    })).toThrow(/showInPicker must be a boolean/)
+  })
+
+  it('keeps registrations without i18n and rejects remote i18n injection', () => {
+    const environment = { capabilities: new Set<string>() }
+    const legacy = parsePaneViewRegistration({
+      descriptor: pluginDefinition('pinax.notes-preview').views[0],
+      component: () => null,
+    }, environment)
+    expect(legacy.descriptor.label).toBe('pinax.notes-preview')
+    expect(legacy.i18n).toBeUndefined()
+
+    expect(() => parsePaneViewRegistration({
+      descriptor: pluginDefinition('pinax.notes-preview').views[0],
+      component: () => null,
+      i18n: { namespace: 'https://untrusted.example/i18n', labelKey: 'views.notes.label' },
+    }, environment)).toThrow(PaneViewRegistrationError)
   })
 })

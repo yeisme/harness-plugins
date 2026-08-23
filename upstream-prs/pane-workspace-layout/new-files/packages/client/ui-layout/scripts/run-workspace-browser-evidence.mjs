@@ -32,7 +32,7 @@ try {
     args: ['--no-sandbox'],
   })
   await verifyRightBottomAndReload()
-  await verifyDetailsPriority()
+  await verifyCoreToolDetails()
   await verifyNarrowSheet()
 } catch (error) {
   status = 'failed'
@@ -222,7 +222,7 @@ async function verifyRightBottomAndReload() {
   }
 }
 
-async function verifyDetailsPriority() {
+async function verifyCoreToolDetails() {
   const { context, page, pageErrors } = await pageAt(1440, 900)
   try {
     await page.locator('button[aria-label^="Session actions for "]').first().waitFor({ state: 'attached', timeout: 20_000 })
@@ -242,39 +242,37 @@ async function verifyDetailsPriority() {
         break
       }
     }
-    assert(foundToolSession, 'No loaded session exposed a Tool row for Details verification')
+    assert(foundToolSession, 'No loaded session exposed a Tool row for Core Tool Details verification')
     await page.getByRole('button', { name: '工作区' }).click()
     await page.waitForFunction(() => document.querySelector('[data-right-mode]')?.getAttribute('data-right-mode') === 'dock')
     await page.locator('[data-chat-call-id] [role="button"]').last().click()
-    await page.waitForFunction(() => (document.querySelector('[class*="detailsCol"]')?.getBoundingClientRect().width ?? 0) >= 300)
+    const right = page.locator('.pwr-root[data-region="right"]')
+    const bottom = page.locator('.pwr-root[data-region="bottom"]')
+    await right.getByRole('tab', { name: 'Tool Details' }).waitFor()
     await page.waitForTimeout(250)
-    const detailsPriority = await geometry(page)
-    assertBoundary(detailsPriority, 'Details priority')
-    assert(detailsPriority.rightMode === 'rail', 'Details did not derive the conflicting Right workspace to its rail')
-    await page.screenshot({ path: resolve(artifactsRoot, 'details-priority.png'), fullPage: true })
+    const coreRight = await geometry(page)
+    assertBoundary(coreRight, 'Core Tool Details in Right')
+    assert(coreRight.rightMode === 'dock', 'Core Tool Details did not use the Right workspace dock')
+    assert((coreRight.details?.width ?? 0) <= 1, 'Core Tool Details also mounted the legacy Details column')
+    assert((await page.getByRole('tab', { name: 'Tool Details' }).count()) === 1, 'Core Tool Details mounted more than one Tab')
+    await page.screenshot({ path: resolve(artifactsRoot, 'core-tool-details-right.png'), fullPage: true })
 
-    await page.locator('.pwr-root[data-region="right"]').getByRole('button', { name: /Open 文件/u }).click()
-    await page.waitForFunction(() => document.querySelector('[data-right-mode]')?.getAttribute('data-right-mode') === 'dock')
-    await page.waitForFunction(() => (document.querySelector('[class*="detailsCol"]')?.getBoundingClientRect().width ?? 0) <= 1)
-    const workspacePriority = await geometry(page)
-    assert((workspacePriority.details?.width ?? 0) <= 1, 'Explicit workspace activation did not derive Details closed')
-
-    await page.locator('.pwr-root[data-region="right"]').getByRole('button', { name: 'Hide right workspace' }).click()
-    await page.waitForFunction(() => {
-      const detailsWidth = document.querySelector('[class*="detailsCol"]')?.getBoundingClientRect().width ?? 0
-      const railWidth = document.querySelector('[data-workspace-region="right"]')?.getBoundingClientRect().width ?? Number.POSITIVE_INFINITY
-      return detailsWidth >= 359 && railWidth <= 45
-    })
+    await right.getByRole('tab', { name: 'Tool Details' }).press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Move to Bottom' }).click()
+    await bottom.getByRole('tab', { name: 'Tool Details' }).waitFor()
     await page.waitForTimeout(250)
-    const detailsRestored = await geometry(page)
-    assert(detailsRestored.rightMode === 'rail', 'Hiding Right workspace did not retain the activity rail')
-    assertNoPageErrors(pageErrors, 'Details priority')
-    await writeJson(resolve(artifactsRoot, 'details-aria.json'), {
+    const coreBottom = await geometry(page)
+    assert((coreBottom.details?.width ?? 0) <= 1, 'Moving Core Tool Details to Bottom mounted the legacy Details column')
+    assert((await page.getByRole('tab', { name: 'Tool Details' }).count()) === 1, 'Moving Core Tool Details duplicated its Tab')
+    assertNoPageErrors(pageErrors, 'Core Tool Details')
+    await page.screenshot({ path: resolve(artifactsRoot, 'core-tool-details-bottom.png'), fullPage: true })
+    await writeJson(resolve(artifactsRoot, 'core-tool-details-aria.json'), {
       workspace: await workspaceAria(page),
-      details_heading: await page.locator('[class*="detailsCol"] [class*="title"]').first().textContent(),
+      core_tab: await bottom.getByRole('tab', { name: 'Tool Details' }).textContent(),
+      legacy_details_width: coreBottom.details?.width ?? null,
       raw_tool_payload_persisted: false,
     })
-    checks.push({ scenario: 'details-priority-and-restoration', detailsPriority, workspacePriority, detailsRestored, console_errors: 0 })
+    checks.push({ scenario: 'core-tool-details-single-host-and-cross-region', coreRight, coreBottom, console_errors: 0 })
   } finally {
     await context.close()
   }

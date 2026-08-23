@@ -1,0 +1,3 @@
+schema: spec-driven
+created: 2026-08-22
+goal: 所有右侧与底部工作视图统一通过 ctx.paneWorkbench 注册、打开与渲染。

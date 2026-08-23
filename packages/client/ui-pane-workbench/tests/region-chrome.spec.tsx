@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { createElement, useEffect } from 'react'
+import { createElement, useEffect, type ReactNode } from 'react'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { PaneWorkbenchController } from '../src/controller.js'
+import { openPaneWorkbenchCoreView, registerPaneWorkbenchCoreViews } from '../src/core-pane.js'
 import { PaneRegionChrome } from '../src/region-chrome.js'
 import { PaneViewRegistry } from '../src/view-registry.js'
 
@@ -29,10 +30,10 @@ function fixture() {
   return { registry, controller, getFileMounts: () => fileMounts }
 }
 
-function Regions(props: ReturnType<typeof fixture> & { rightMode?: 'rail' | 'dock' }) {
+function Regions(props: ReturnType<typeof fixture> & { rightMode?: 'rail' | 'dock'; renderCoreView?: (id: 'dsh.tool-details') => ReactNode }) {
   return createElement('div', null,
-    createElement(PaneRegionChrome, { region: 'right', mode: props.rightMode ?? 'dock', width: props.rightMode === 'rail' ? 44 : 480, height: 800, visible: true, maximized: false, registry: props.registry, controller: props.controller }),
-    createElement(PaneRegionChrome, { region: 'bottom', mode: 'dock', width: 900, height: 280, visible: true, maximized: false, registry: props.registry, controller: props.controller }),
+    createElement(PaneRegionChrome, { region: 'right', mode: props.rightMode ?? 'dock', width: props.rightMode === 'rail' ? 44 : 480, height: 800, visible: true, maximized: false, registry: props.registry, controller: props.controller, renderCoreView: props.renderCoreView }),
+    createElement(PaneRegionChrome, { region: 'bottom', mode: 'dock', width: 900, height: 280, visible: true, maximized: false, registry: props.registry, controller: props.controller, renderCoreView: props.renderCoreView }),
   )
 }
 
@@ -103,5 +104,29 @@ describe('PaneRegionChrome shared dual-slot host', () => {
     expect(right.querySelector('style')?.textContent).toContain(
       ".pwr-root[data-region='right'] .pwr-body{left:44px;width:calc(100% - 44px)}",
     )
+  })
+
+  it('hosts hidden DSH Core content once and moves it through the same Right/Bottom chrome', () => {
+    const f = fixture()
+    registerPaneWorkbenchCoreViews(f.registry)
+    openPaneWorkbenchCoreView(f.controller, 'dsh.tool-details')
+    render(createElement(Regions, {
+      ...f,
+      renderCoreView: id => id === 'dsh.tool-details' ? createElement('p', null, 'Bash output owned by DSH') : null,
+    }))
+
+    const right = screen.getByRole('complementary', { name: 'Right workspace' })
+    const bottom = screen.getByRole('complementary', { name: 'Bottom workspace' })
+    expect(within(right).getByRole('tab', { name: 'Tool Details' })).toBeTruthy()
+    expect(screen.getAllByText('Bash output owned by DSH')).toHaveLength(1)
+
+    fireEvent.click(within(right).getAllByRole('button', { name: 'Open workspace view' })[0]!)
+    expect(within(screen.getByRole('dialog', { name: 'Open workspace view' })).queryByRole('button', { name: /Tool Details/ })).toBeNull()
+    fireEvent.keyDown(within(right).getByRole('tab', { name: 'Tool Details' }), { key: 'F10', shiftKey: true })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Bottom' }))
+
+    expect(within(right).queryByRole('tab', { name: 'Tool Details' })).toBeNull()
+    expect(within(bottom).getByRole('tab', { name: 'Tool Details' })).toBeTruthy()
+    expect(screen.getAllByText('Bash output owned by DSH')).toHaveLength(1)
   })
 })

@@ -86,7 +86,9 @@ export function computeWorkspaceGeometry(input: WorkspaceGeometryInput): Workspa
     ? Math.min(WORKSPACE_RIGHT_MAX, Math.max(WORKSPACE_RIGHT_MIN, Math.round(workspace.rightWidth)), maxRightByRatio)
     : rail
   let rightMode: WorkspaceRegionMode = workspace.attached ? (rightPreferredOpen ? 'dock' : 'rail') : 'hidden'
-  let detailsWidth = input.details === 0 ? 0 : clampWidth(input.details, DETAILS_MIN, DETAILS_MAX)
+  let detailsWidth = workspace.corePaneHostAttached || input.details === 0
+    ? 0
+    : clampWidth(input.details, DETAILS_MIN, DETAILS_MAX)
 
   if (rightPreferredOpen && maxRightByRatio < WORKSPACE_RIGHT_MIN) {
     if (workspace.activeRegion === 'right') return covered({ ...input, width, height }, sidebar, 'right', 'sheet')

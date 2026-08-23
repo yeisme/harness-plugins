@@ -1,8 +1,18 @@
 /** Public workspace layout contract and its single-owner external store. */
+import type { ReactNode } from 'react'
 
 export type WorkspaceRegion = 'right' | 'bottom'
 export type WorkspaceRegionMode = 'hidden' | 'rail' | 'dock' | 'sheet' | 'maximized'
 export type WorkspaceAuxiliarySurface = 'workspace' | 'details'
+export const WORKSPACE_CORE_PANE_VERSION = 'workspace.core-pane.v1' as const
+export type WorkspaceCorePaneId = 'dsh.tool-details'
+
+export interface WorkspaceCorePaneHost {
+  open(id: WorkspaceCorePaneId): void
+  close(id: WorkspaceCorePaneId): void
+}
+
+export type WorkspaceCoreViewRenderer = (id: WorkspaceCorePaneId) => ReactNode
 
 export interface WorkspaceLayoutPreference {
   readonly rightVisible?: boolean
@@ -22,6 +32,8 @@ export interface WorkspaceLayoutSnapshot {
   readonly bottomRatio: number
   readonly activeRegion: WorkspaceRegion
   readonly maximizedRegion: WorkspaceRegion | undefined
+  readonly corePaneHostAttached: boolean
+  /** Deprecated after the one-RC legacy Details geometry window. */
   readonly auxiliaryPriority: WorkspaceAuxiliarySurface
 }
 
@@ -39,6 +51,7 @@ export interface WorkspaceRightOwnerProps {
   readonly height: number
   readonly visible: boolean
   readonly maximized: boolean
+  readonly renderCoreView: WorkspaceCoreViewRenderer
 }
 
 export interface WorkspaceBottomOwnerProps {
@@ -48,10 +61,12 @@ export interface WorkspaceBottomOwnerProps {
   readonly height: number
   readonly visible: boolean
   readonly maximized: boolean
+  readonly renderCoreView: WorkspaceCoreViewRenderer
 }
 
 export interface IWorkspaceLayout {
-  attach(ownerId: string, initialPreference?: WorkspaceLayoutPreference): WorkspaceLayoutHandle
+  readonly corePaneVersion: typeof WORKSPACE_CORE_PANE_VERSION
+  attach(ownerId: string, initialPreference?: WorkspaceLayoutPreference, corePaneHost?: WorkspaceCorePaneHost): WorkspaceLayoutHandle
 }
 
 export const WORKSPACE_RIGHT_DEFAULT = 480
@@ -65,6 +80,7 @@ const DETACHED_SNAPSHOT: WorkspaceLayoutSnapshot = Object.freeze({
   bottomRatio: WORKSPACE_BOTTOM_DEFAULT_RATIO,
   activeRegion: 'right',
   maximizedRegion: undefined,
+  corePaneHostAttached: false,
   auxiliaryPriority: 'workspace',
 })
 
@@ -88,6 +104,7 @@ function normalize(
     maximizedRegion: Object.prototype.hasOwnProperty.call(input, 'maximizedRegion')
       ? input.maximizedRegion
       : previous.maximizedRegion,
+    corePaneHostAttached: previous.corePaneHostAttached,
     auxiliaryPriority: previous.auxiliaryPriority,
   })
 }
@@ -100,6 +117,9 @@ export class WorkspaceLayoutController implements IWorkspaceLayout {
   #snapshot: WorkspaceLayoutSnapshot = DETACHED_SNAPSHOT
   #listeners = new Set<() => void>()
   #generation = 0
+  #corePaneHost: WorkspaceCorePaneHost | undefined
+
+  readonly corePaneVersion = WORKSPACE_CORE_PANE_VERSION
 
   readonly getSnapshot = (): WorkspaceLayoutSnapshot => this.#snapshot
 
@@ -108,13 +128,21 @@ export class WorkspaceLayoutController implements IWorkspaceLayout {
     return () => { this.#listeners.delete(listener) }
   }
 
-  attach(ownerId: string, initialPreference: WorkspaceLayoutPreference = {}): WorkspaceLayoutHandle {
+  attach(
+    ownerId: string,
+    initialPreference: WorkspaceLayoutPreference = {},
+    corePaneHost?: WorkspaceCorePaneHost,
+  ): WorkspaceLayoutHandle {
     if (ownerId.trim().length === 0) throw new Error('workspaceLayout: ownerId must be non-empty')
     if (this.#snapshot.attached) {
       throw new Error(`workspaceLayout: owner already attached (${this.#snapshot.ownerId ?? 'unknown'}); dispose it before attaching ${ownerId}`)
     }
     const generation = ++this.#generation
-    this.#snapshot = normalize(ownerId, initialPreference)
+    this.#corePaneHost = corePaneHost
+    this.#snapshot = Object.freeze({
+      ...normalize(ownerId, initialPreference),
+      corePaneHostAttached: corePaneHost !== undefined,
+    })
     this.#emit()
     let disposed = false
     const requireLive = (): boolean => !disposed && generation === this.#generation && this.#snapshot.ownerId === ownerId
@@ -128,6 +156,7 @@ export class WorkspaceLayoutController implements IWorkspaceLayout {
       dispose: () => {
         if (!requireLive()) return
         disposed = true
+        this.#corePaneHost = undefined
         this.#snapshot = DETACHED_SNAPSHOT
         this.#emit()
       },
@@ -138,6 +167,22 @@ export class WorkspaceLayoutController implements IWorkspaceLayout {
   updateGeometry(next: Pick<WorkspaceLayoutPreference, 'rightWidth' | 'bottomRatio'>): void {
     if (!this.#snapshot.attached) return
     this.#update(next, false)
+  }
+
+  /** Routes an allowlisted DSH-owned surface into the attached Core Pane host. */
+  openCorePane(id: WorkspaceCorePaneId): boolean {
+    const host = this.#corePaneHost
+    if (!this.#snapshot.attached || host === undefined) return false
+    host.open(id)
+    return true
+  }
+
+  /** Closes an allowlisted DSH-owned surface in the attached Core Pane host. */
+  closeCorePane(id: WorkspaceCorePaneId): boolean {
+    const host = this.#corePaneHost
+    if (!this.#snapshot.attached || host === undefined) return false
+    host.close(id)
+    return true
   }
 
   /** `ctx.layout.openDetails()` calls this to resolve a constrained frame. */

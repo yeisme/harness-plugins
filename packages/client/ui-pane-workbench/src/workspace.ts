@@ -97,12 +97,17 @@ export interface PaneWorkspaceV1 extends PaneWorkspaceSnapshotV1 {
   readonly history: readonly PaneWorkspaceSnapshotV1[]
 }
 
+export const PANE_WORKSPACE_OPEN_VIEW_INTENT = 'open_view' as const
+export const PANE_WORKSPACE_CLOSE_VIEW_INTENT = 'close_view' as const
+/** Additive Designer batch intent name. The V1 reducer does not apply it yet. */
+export const PANE_WORKSPACE_DRAFT_INTENT = 'apply_workspace_draft' as const
+
 export type PaneWorkspaceIntentV1 =
-  | { readonly type: 'open_view'; readonly request: PaneViewSpecV1 }
+  | { readonly type: typeof PANE_WORKSPACE_OPEN_VIEW_INTENT; readonly request: PaneViewSpecV1 }
   | { readonly type: 'activate_view'; readonly viewId: string }
   | { readonly type: 'pin_view'; readonly viewId: string; readonly pinned?: boolean }
   | { readonly type: 'set_view_dirty'; readonly viewId: string; readonly dirty: boolean }
-  | { readonly type: 'close_view'; readonly viewId: string; readonly decision?: 'allow' | 'confirm' | 'deny' }
+  | { readonly type: typeof PANE_WORKSPACE_CLOSE_VIEW_INTENT; readonly viewId: string; readonly decision?: 'allow' | 'confirm' | 'deny' }
   | { readonly type: 'reorder_view'; readonly viewId: string; readonly targetGroupId: string; readonly index: number }
   | { readonly type: 'move_view'; readonly viewId: string; readonly targetGroupId: string; readonly index?: number }
   | { readonly type: 'split_with_view'; readonly viewId: string; readonly targetGroupId: string; readonly edge: PaneSplitEdge }
@@ -115,6 +120,13 @@ export type PaneWorkspaceIntentV1 =
   | { readonly type: 'restore_layout' }
   | { readonly type: 'reset_layout' }
   | { readonly type: 'undo_layout' }
+
+export type PaneWorkspaceDraftIntentV1 = {
+  readonly type: typeof PANE_WORKSPACE_DRAFT_INTENT
+}
+
+/** Parallel V4 intent surface. Keep the live reducer on PaneWorkspaceIntentV1. */
+export type PaneWorkspaceIntentV1Additive = PaneWorkspaceIntentV1 | PaneWorkspaceDraftIntentV1
 
 export interface PaneWorkspaceEffectV1 {
   readonly type: 'announce'

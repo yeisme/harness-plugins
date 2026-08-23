@@ -1,19 +1,13 @@
 diff --git a/packages/client/ui-conversation/src/client/chat/ChatNodeSeat.tsx b/packages/client/ui-conversation/src/client/chat/ChatNodeSeat.tsx
-index bc9c96fd4..392a1ad68 100644
+index bc9c96f..392a1ad 100644
 --- a/packages/client/ui-conversation/src/client/chat/ChatNodeSeat.tsx
 +++ b/packages/client/ui-conversation/src/client/chat/ChatNodeSeat.tsx
-@@ -1,5 +1,6 @@
+@@ -1 +1 @@
 -import { memo, useMemo } from 'react'
 +import { memo, useMemo, type MouseEvent } from 'react'
- import { JsonBlock } from '@deepseek-ai/dsh-client-ui-primitives'
+@@ -2,0 +3 @@ import { JsonBlock } from '@deepseek-ai/dsh-client-ui-primitives'
 +import type { ToolCallBlock } from '@deepseek-ai/dsh-client-runtime/client'
- import type { ChatNodeOwnerProps, ChatViewSlotProps } from '../contract/slots.ts'
- import type { ChatNode } from '../contract/chat-nodes.ts'
- import css from './ChatView.module.css'
-@@ -15,9 +16,22 @@ type RoutedChatNodeOwner = {
-   [Kind in ChatNode['kind']]: ChatNodeOwnerProps & { readonly node: ChatNode<Kind> }
- }[ChatNode['kind']]
- 
+@@ -17,0 +19,13 @@ type RoutedChatNodeOwner = {
 +function callById(block: ToolCallBlock, callId: string): ToolCallBlock | undefined {
 +  if (block.callId === callId) return block
 +  for (const child of block.subCalls) {
@@ -27,29 +21,15 @@ index bc9c96fd4..392a1ad68 100644
 +  return 'kind' in block ? block.call?.name ?? block.callId : block.name
 +}
 +
- /** Subscribe and dispatch one stable Context key without observing sibling Nodes. */
- export const ChatNodeSeat = memo(function ChatNodeSeat({
+@@ -20 +34 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
 -  nodeKey, selectedCallId, cwd, openFile, inspectCall, forkAt,
 +  nodeKey, selectedCallId, openDetails, cwd, openFile, inspectCall, forkAt,
-   renderMessageImages, fileMentions, useSession, renderSlot, t,
- }: ChatNodeSeatProps) {
-   const node = useSession(snapshot => snapshot.chat.nodes.get(nodeKey))
-@@ -26,6 +40,7 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
-     ? null
-     : {
-       selectedCallId,
+@@ -28,0 +43 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
 +      openDetails,
-       cwd,
-       openFile,
-       inspectCall,
-@@ -33,9 +48,18 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
-       renderMessageImages,
-       fileMentions,
-     }, [
+@@ -36 +51 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
 -    node, selectedCallId, cwd, openFile, inspectCall, forkAt, renderMessageImages, fileMentions,
 +    node, selectedCallId, openDetails, cwd, openFile, inspectCall, forkAt, renderMessageImages, fileMentions,
-   ])
-   if (routedNode === undefined || owner === null) return null
+@@ -38,0 +54,9 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
 +  const revealDetails = (event: MouseEvent<HTMLDivElement>): void => {
 +    if (routedNode.kind !== 'tool-call' || openDetails === undefined) return
 +    const target = event.target
@@ -59,75 +39,33 @@ index bc9c96fd4..392a1ad68 100644
 +    const block = callById(routedNode.data.root, callId) ?? routedNode.data.root
 +    openDetails({ turnSeq: routedNode.anchorSeq, callId: block.callId, toolName: callName(block) })
 +  }
-   // Runtime dispatch owns the correlation: every Node's discriminant is the
-   // keyed-slot entry passed alongside that same Node. TypeScript does not
-   // distribute an object containing a union into a union of objects itself.
-@@ -46,6 +70,7 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
-       data-chat-anchor-key={routedNode.key}
-       data-chat-flow-key={routedNode.key}
-       data-chat-flow-kind={routedNode.kind}
+@@ -48,0 +73 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
 +      onClick={revealDetails}
-     >
-       {renderSlot('conversation.chat.node', routedOwner, {
-         entryKey: routedNode.kind,
 diff --git a/packages/client/ui-conversation/src/client/chat/ChatView.tsx b/packages/client/ui-conversation/src/client/chat/ChatView.tsx
-index 80f9bc2d7..c1262d8da 100644
+index 80f9bc2..c1262d8 100644
 --- a/packages/client/ui-conversation/src/client/chat/ChatView.tsx
 +++ b/packages/client/ui-conversation/src/client/chat/ChatView.tsx
-@@ -156,7 +156,7 @@ function TurnStatus({ startTime, t }: {
-  * ordered business Node crosses the keyed renderer seat.
-  */
- export function ChatView({
+@@ -159 +159 @@ export function ChatView({
 -  useSession, useSessions, useStore, renderSlot, sessionId, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
 +  useSession, useSessions, useStore, renderSlot, sessionId, openDetails, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
-   fileMentions, t,
- }: ChatViewSlotProps) {
-   const order = useSession(s => s.chat.order)
-@@ -435,6 +435,7 @@ export function ChatView({
-               nodeKey={nodeKey}
-               useSession={useSession}
-               selectedCallId={selectedCallId}
+@@ -437,0 +438 @@ export function ChatView({
 +              openDetails={openDetails}
-               cwd={cwd}
-               openFile={requestOpenFile}
-               inspectCall={inspectCall}
 diff --git a/packages/client/ui-conversation/src/client/contract/slots.ts b/packages/client/ui-conversation/src/client/contract/slots.ts
-index 307ac3848..c06d43ee6 100644
+index 307ac38..c06d43e 100644
 --- a/packages/client/ui-conversation/src/client/contract/slots.ts
 +++ b/packages/client/ui-conversation/src/client/contract/slots.ts
-@@ -416,6 +416,8 @@ export interface ChatNodeTurnDataInjected {
- export interface ChatNodeOwnerProps {
-   /** Selected Tool call, when the shared details store names one. */
-   selectedCallId?: CallId | undefined
+@@ -418,0 +419,2 @@ export interface ChatNodeOwnerProps {
 +  /** Select one Tool call and ask the canonical Details surface to reveal it. */
 +  openDetails?: ((target: SelectionTarget) => void) | undefined
-   /** Session workspace root; Tool summaries display paths relative to it. */
-   cwd?: string | undefined
-   openFile: (path: string) => void
 diff --git a/packages/client/ui-conversation/tests/chat-view.client.spec.tsx b/packages/client/ui-conversation/tests/chat-view.client.spec.tsx
-index b81dff8e6..8e574a6e9 100644
+index b81dff8..8e574a6 100644
 --- a/packages/client/ui-conversation/tests/chat-view.client.spec.tsx
 +++ b/packages/client/ui-conversation/tests/chat-view.client.spec.tsx
-@@ -171,6 +171,7 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
-     toolName: string
-     block: ToolCallBlock
-     selectedCallId: string | undefined
+@@ -173,0 +174 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
 +    openDetails: ChatNodeOwnerProps['openDetails']
-     openFile: ChatNodeOwnerProps['openFile']
-     inspectCall: ChatNodeOwnerProps['inspectCall']
-   }> = []
-@@ -241,6 +242,7 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
-           toolName,
-           block,
-           selectedCallId: nodeOwner.selectedCallId,
+@@ -243,0 +245 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
 +          openDetails: nodeOwner.openDetails,
-           openFile: nodeOwner.openFile,
-           inspectCall: nodeOwner.inspectCall,
-         }
-@@ -870,6 +872,13 @@ describe('ChatView', () => {
-     expect(h.toolOwners.at(-1)?.selectedCallId).toBe('a')
-   })
- 
+@@ -872,0 +875,7 @@ describe('ChatView', () => {
 +  it('opens the canonical Details surface from a Tool row gesture', () => {
 +    const h = makeHarness({ nodes: [toolResult(3, 'a')] })
 +    const view = render(<h.ChatView {...h.props} />)
@@ -135,164 +73,111 @@ index b81dff8e6..8e574a6e9 100644
 +    expect(h.openDetails).toHaveBeenCalledWith({ turnSeq: 3, callId: 'a', toolName: 'bash' })
 +  })
 +
-   it('hands running calls to a live Tool group', () => {
-     const h = makeHarness({ runningCalls: [runningCall('r1')], running: true })
-     const view = render(<h.ChatView {...h.props} />)
-@@ -970,6 +979,7 @@ describe('ChatView', () => {
-     expect(owner.openFile).not.toBe(h.openFile)
-     owner.openFile('src/a.ts')
-     expect(h.openFile).toHaveBeenCalledWith('src/a.ts')
+@@ -972,0 +982 @@ describe('ChatView', () => {
 +    expect(owner.openDetails).toBe(h.openDetails)
-     expect(owner.inspectCall).toBe(h.inspectCall)
-   })
- 
 diff --git a/packages/client/ui-layout/README.i18n.yaml b/packages/client/ui-layout/README.i18n.yaml
-index d52d995ca..60ce25f1d 100644
+index d52d995..2cd2d60 100644
 --- a/packages/client/ui-layout/README.i18n.yaml
 +++ b/packages/client/ui-layout/README.i18n.yaml
-@@ -2,5 +2,5 @@
- # side as of the last confirmed-consistent state. Both languages carry equal authority;
- # after editing either side, bring the other along and re-record with:
- #   pnpm run verify-translation-pairing --write packages/client/ui-layout/README.md
+@@ -5,2 +5,2 @@
 -README.md: 7c9d64b9ca7a5fada492c37200a283904466c36d
 -README.zh.md: a2604d865977c495d2a3d2362b25f05e34142c97
-+README.md: db22ee7ac9435dd3f003ba7f4ab368b37ebe0171
-+README.zh.md: 5a0ff95cc5901361a0440d73e48b0f46f53a6417
++README.md: cfc2f452c23ffc68c11c87fcaafae51179c2364b
++README.zh.md: b4d80c437f4b0ae908774a49f4037993a5ec282c
 diff --git a/packages/client/ui-layout/README.md b/packages/client/ui-layout/README.md
-index 7c9d64b9c..db22ee7ac 100644
+index 7c9d64b..cfc2f45 100644
 --- a/packages/client/ui-layout/README.md
 +++ b/packages/client/ui-layout/README.md
-@@ -2,11 +2,15 @@
- 
- English | [中文](README.zh.md)
- 
+@@ -5 +5 @@ English | [中文](README.zh.md)
 -Shell plugin: three-column AppFrame (drag handles and concession chain) plus the `ctx.layout` panel-geometry service; it registers into the runtime-owned `root` slot and declares `sidebar`, `conversation`, `details`, and `conversation.empty`. The sidebar resize boundary is an invisible hit strip, while the details boundary retains its floating pill; only details shrinks during concession and then auto-closes. A closed sidebar retains a 56px control rail while details closes to zero width. The package also seats the theme presenter: it consumes resolved `ctx.theme` snapshots and projects them onto the document (`html { color-scheme }` for native UA chrome, `body[data-ds-dark-theme]` from the active color scheme, the theme's alias tokens as inline variables on body, and one owned `<meta name="theme-color">` whose content follows the computed body background). Measuring after palette and token application keeps the rendered background as the single color authority; disposing the presenter removes its metadata node with its other global writes.
-+Shell plugin: four-column/two-row AppFrame plus the existing `ctx.layout` panel-geometry service and additive `ctx.workspaceLayout` service. It registers into the runtime-owned `root` slot and declares `sidebar`, `conversation`, `details`, `shell.workspace.right`, `shell.workspace.bottom`, and `shell.overlay`. Sidebar spans both rows; Bottom exists only below Conversation; Right and Details span both rows. The sidebar resize boundary is an invisible hit strip, while Details and workspace separators expose accessible resize handles. A closed sidebar retains its control rail, an attached closed workspace retains a 44px rail, and Details closes to zero width.
- 
++Shell plugin: four-column/two-row AppFrame plus the existing `ctx.layout` panel-geometry service and additive `ctx.workspaceLayout` service. It registers into the runtime-owned `root` slot and declares `sidebar`, `conversation`, `details`, `shell.workspace.right`, `shell.workspace.bottom`, and `shell.overlay`. Sidebar spans both rows and Bottom exists only below Conversation. The independent Details column remains a one-RC compatibility fallback; an attached `workspace.core-pane.v1` host renders Tool Details through the same Right/Bottom Pane owner and forces the legacy track to zero.
+@@ -7 +7 @@ Shell plugin: three-column AppFrame (drag handles and concession chain) plus the
 -AppFrame always mounts the conversation and details columns; a connected Session renders through `SessionProvider`. The transient layout store starts the sidebar at its default width and details closed, and it never reads or writes `localStorage`. Hero and other unselected states also derive a zero rendered details width without changing that stored preference. AppFrame retains the last non-blank Session id across those states: the first Session remains closed, an explicit details action opens the contract default width, returning to the same Session restores its unchanged width, and selecting a different Session closes details before paint. The conversation owner share is empty, while the sidebar owner share contains only `collapsed` and `width`; registrants obtain business data from standard hooks and actions from their own inject faces.
 +The package also seats the theme presenter: it consumes resolved `ctx.theme` snapshots and projects them onto the document (`html { color-scheme }` for native UA chrome, `body[data-ds-dark-theme]` from the active color scheme, the theme's alias tokens as inline variables on body, and one owned `<meta name="theme-color">` whose content follows the computed body background). Measuring after palette and token application keeps the rendered background as the single color authority; disposing the presenter removes its metadata node with its other global writes.
- 
+@@ -9 +9,5 @@ AppFrame always mounts the conversation and details columns; a connected Session
 -The `/client` exports are the plugin body (`apply`/`inject`), `LayoutController`, and the four owner-share interfaces. AppFrame, the panel store, and the concession solver remain package-internal.
-+AppFrame keeps Conversation, both workspace occupants, and Details mounted across dock concessions, Sheet projection, and Pane maximization. A connected Session renders through `SessionProvider`. `ctx.workspaceLayout.attach(ownerId, preference)` admits exactly one live owner and returns an update/subscribe/dispose handle; owner disposal removes the 44px rail and every workspace reservation.
++AppFrame keeps Conversation and both workspace occupants mounted across dock concessions, Sheet projection, and Pane maximization. A connected Session renders through `SessionProvider`. `ctx.workspaceLayout.attach(ownerId, preference, corePaneHost?)` admits exactly one live owner and returns an update/subscribe/dispose handle; owner disposal removes the 44px rail, the Core host adapter, and every workspace reservation. Right/Bottom owner props expose `renderCoreView(id)`, which is the only path for DSH-owned React content to enter the attached Pane.
 +
-+Right defaults to 480px (360–840px and at most 60% of the main region), Bottom defaults to 34% (180px–65%), and Conversation targets a 420×320px readable floor. If docking cannot preserve that floor, the active Pane becomes a Sheet whose left edge remains at or to the right of the actual sidebar. Right and Details use last-explicit-open priority and recover their stored preferences when space returns. Pane maximization hides but does not unmount other surfaces, and Escape restores the prior layout.
++Right defaults to 480px (360–840px and at most 60% of the main region), Bottom defaults to 34% (180px–65%), and Conversation targets a 420×320px readable floor. If docking cannot preserve that floor, the active Pane becomes a Sheet whose left edge remains at or to the right of the actual sidebar. With no Core host, Right and legacy Details retain last-explicit-open priority. With a Core host, `ctx.layout.openDetails()` routes the closed `dsh.tool-details` id to that host and no independent Details geometry competes for width. Pane maximization hides but does not unmount other Pane surfaces, and Escape restores the prior layout.
 +
-+The `/client` exports are the plugin body (`apply`/`inject`), `LayoutController`, `WorkspaceLayoutController`, the two layout service faces, workspace preference/snapshot/handle types, and the owner-share interfaces. AppFrame and the panel store remain package-internal; the pure workspace solver is available from its `/src` test/development path.
- 
- ## Model Experience
- 
-@@ -18,6 +22,8 @@ None; this package neither assembles nor sends a provider request.
- 
- ## Known Limitations and Deferred Work
- 
++The `/client` exports are the plugin body (`apply`/`inject`), `LayoutController`, `WorkspaceLayoutController`, `WORKSPACE_CORE_PANE_VERSION`, the two layout service faces, Core host/id/renderer contracts, workspace preference/snapshot/handle types, and the owner-share interfaces. AppFrame and the panel store remain package-internal; the pure workspace solver is available from its `/src` test/development path.
+@@ -21,2 +25,4 @@ None; this package neither assembles nor sends a provider request.
 -- **Panel geometry is transient** — reload restores the sidebar default and details closed; switching between distinct Session ids also closes details and forgets its dragged width, while unselected surfaces render details at zero width without modifying geometry.
 -- **Concession-chain auto-close derives a zero width without touching the preferred width** — the panel restores itself when the window widens; consumers must not read the stored details width as the rendered truth.
-+- **Panel geometry is transient** — reload restores the sidebar default and Details closed; switching between distinct Session ids also closes Details and forgets its dragged width, while unselected surfaces render Details at zero width without modifying geometry.
-+- **Concession auto-close is derived** — Right and Details restore when space returns; consumers must not treat stored preferences as rendered truth.
++- **Panel geometry is transient** — reload restores the sidebar default and legacy Details closed; switching between distinct Session ids closes the active Core Tool Details view, or the legacy Details column when no Core host is attached.
++- **Legacy Details is deprecated for one RC** — it remains available only when no Core host is attached; a later removal requires a separate contract change.
 +- **Workspace persistence belongs to the attached owner** — `ctx.workspaceLayout` itself is transient; a Pane owner must persist only its safe canonical presentation state and must not restore temporary maximization.
 +- **Only one workspace owner may attach** — competing docking runtimes fail during load rather than sharing or replacing the current tracks.
- - **No scroll anchoring during squeeze reflow** — layout changes may move the reader's viewport.
 diff --git a/packages/client/ui-layout/README.zh.md b/packages/client/ui-layout/README.zh.md
-index a2604d865..5a0ff95cc 100644
+index a2604d8..b4d80c4 100644
 --- a/packages/client/ui-layout/README.zh.md
 +++ b/packages/client/ui-layout/README.zh.md
-@@ -2,11 +2,15 @@
- 
- [English](README.md) | 中文
- 
+@@ -5 +5 @@
 -外壳插件：三栏 AppFrame（拖动手柄与让步链）加 `ctx.layout` 面板几何服务；它注册到运行时拥有的 `root` slot，并声明 `sidebar`、`conversation`、`details` 和 `conversation.empty`。侧边栏的缩放边界是不可见命中条带，详情栏边界则保留其浮动胶囊；让步期间只有详情栏会收缩并随后自动关闭。关闭的侧边栏仍保留 56px 控制栏，详情栏则关闭到零宽度。该包还提供主题呈现器：它消费解析后的 `ctx.theme` 快照，并将其投影到 document（用 `html { color-scheme }` 驱动原生 UA 控件，依据当前配色方案设置 `body[data-ds-dark-theme]`，并将主题的别名 token 设为 body 上的内联变量，同时拥有一个 `<meta name="theme-color">`，其内容随计算后的 body 背景色更新）。在应用调色板和 token 后进行测量，可确保渲染后的背景成为唯一的颜色依据；呈现器在 dispose（资源释放）时会移除其自有的元数据节点，并一并清除其写入的其他全局状态。
-+外壳插件：四栏两行 AppFrame，加既有 `ctx.layout` 面板几何服务与 additive `ctx.workspaceLayout` 服务。它注册到运行时拥有的 `root` slot，并声明 `sidebar`、`conversation`、`details`、`shell.workspace.right`、`shell.workspace.bottom` 与 `shell.overlay`。Sidebar 跨两行，Bottom 只位于 Conversation 下方，Right 与 Details 跨两行。侧边栏缩放边界仍是不可见命中条带，Details 与工作区 separator 提供可访问的缩放手柄。关闭的侧边栏保留控制轨道，已 attach 但关闭的工作区保留 44px 轨道，Details 则关闭到零宽度。
- 
++外壳插件：四栏两行 AppFrame，加既有 `ctx.layout` 面板几何服务与 additive `ctx.workspaceLayout` 服务。它注册到运行时拥有的 `root` slot，并声明 `sidebar`、`conversation`、`details`、`shell.workspace.right`、`shell.workspace.bottom` 与 `shell.overlay`。Sidebar 跨两行，Bottom 只位于 Conversation 下方。独立 Details 列仅保留一个 RC 作为兼容回退；attach `workspace.core-pane.v1` host 后，Tool Details 通过同一个 Right/Bottom Pane owner 渲染，legacy track 固定为零宽度。
+@@ -7 +7 @@
 -AppFrame 始终挂载会话栏和详情栏；已连接 Session 通过 `SessionProvider` 渲染。布局 store 是瞬时状态，侧边栏以默认宽度启动，详情栏则保持关闭，且该 store 从不读写 `localStorage`。hero 和其他未选中状态也会将详情栏的渲染宽度派生为零，但不会改变存储的宽度偏好。AppFrame 会跨越这些状态保留最后一个非 blank 会话 id：首个会话保持关闭；显式打开详情栏的操作会使用约定默认宽度；返回同一会话时恢复其未改变的宽度；选择不同会话时，详情栏会在绘制前关闭。会话 owner share 为空，侧边栏 owner share 只包含 `collapsed` 和 `width`；注册方通过标准钩子获取业务数据，并从各自的 inject 接口获取操作。
 +该包还提供主题呈现器：它消费解析后的 `ctx.theme` 快照，并将其投影到 document（用 `html { color-scheme }` 驱动原生 UA 控件，依据当前配色方案设置 `body[data-ds-dark-theme]`，并将主题的别名 token 设为 body 上的内联变量，同时拥有一个 `<meta name="theme-color">`，其内容随计算后的 body 背景色更新）。在应用调色板和 token 后进行测量，可确保渲染后的背景成为唯一的颜色依据；呈现器在 dispose 时会移除其自有的元数据节点，并一并清除其他全局写入。
- 
+@@ -9 +9,5 @@ AppFrame 始终挂载会话栏和详情栏；已连接 Session 通过 `SessionPr
 -`/client` 导出表层包含插件主体（`apply`／`inject`）、`LayoutController` 和四个 owner-share 接口。AppFrame、面板 store 与让步求解器仍属于包内部。
-+AppFrame 在 dock 让步、Sheet 投影和 Pane 最大化期间始终保持 Conversation、两个 workspace occupant 与 Details 挂载；已连接 Session 通过 `SessionProvider` 渲染。`ctx.workspaceLayout.attach(ownerId, preference)` 同一时刻只允许一个 live owner，并返回 update/subscribe/dispose 句柄；owner dispose 后 44px 轨道与全部工作区预留立即消失。
++AppFrame 在 dock 让步、Sheet 投影和 Pane 最大化期间始终保持 Conversation 与两个 workspace occupant 挂载；已连接 Session 通过 `SessionProvider` 渲染。`ctx.workspaceLayout.attach(ownerId, preference, corePaneHost?)` 同一时刻只允许一个 live owner，并返回 update/subscribe/dispose 句柄；owner dispose 后 44px 轨道、Core host adapter 与全部工作区预留立即消失。Right/Bottom owner props 暴露 `renderCoreView(id)`，这是 DSH 自有 React 内容进入统一 Pane 的唯一路径。
 +
-+Right 默认 480px（限制 360–840px，且不超过主区域 60%），Bottom 默认 34%（限制 180px–65%），Conversation 目标最低可读尺寸为 420×320px。若 dock 无法保住该下限，活动 Pane 投影为 Sheet，其左边界始终不越过真实 sidebar。Right 与 Details 采用最后一次显式打开优先级，空间恢复后按原偏好自动恢复。Pane 最大化只隐藏而不卸载其他表面，Escape 可恢复原布局。
++Right 默认 480px（限制 360–840px，且不超过主区域 60%），Bottom 默认 34%（限制 180px–65%），Conversation 目标最低可读尺寸为 420×320px。若 dock 无法保住该下限，活动 Pane 投影为 Sheet，其左边界始终不越过真实 sidebar。未 attach Core host 时，Right 与 legacy Details 继续采用最后一次显式打开优先级；attach 后，`ctx.layout.openDetails()` 将封闭的 `dsh.tool-details` id 路由到 Core host，不再产生独立 Details 几何竞争。Pane 最大化只隐藏而不卸载其他 Pane 表面，Escape 可恢复原布局。
 +
-+`/client` 导出插件主体（`apply`／`inject`）、`LayoutController`、`WorkspaceLayoutController`、两个 layout service face、workspace preference/snapshot/handle 类型与 owner-share 接口。AppFrame 和面板 store 仍属于包内部；纯 workspace solver 可从其 `/src` 测试／开发路径使用。
- 
- ## 模型体验
- 
-@@ -18,6 +22,8 @@ AppFrame 始终挂载会话栏和详情栏；已连接 Session 通过 `SessionPr
- 
- ## 已知限制与暂缓事项
- 
++`/client` 导出插件主体（`apply`／`inject`）、`LayoutController`、`WorkspaceLayoutController`、`WORKSPACE_CORE_PANE_VERSION`、两个 layout service face、Core host/id/renderer 合同、workspace preference/snapshot/handle 类型与 owner-share 接口。AppFrame 和面板 store 仍属于包内部；纯 workspace solver 可从其 `/src` 测试／开发路径使用。
+@@ -21,2 +25,4 @@ AppFrame 始终挂载会话栏和详情栏；已连接 Session 通过 `SessionPr
 -- **面板几何信息是瞬时状态**：重新加载会恢复侧边栏默认值，并使详情栏保持关闭；在不同会话 id 之间切换同样会关闭详情栏，并忘记拖动后的宽度，而未选中表面会以零宽度渲染详情栏，但不会修改几何信息。
 -- **让步链自动关闭通过推导零宽度实现，不会改动宽度偏好**：窗口变宽时面板会自行恢复；消费方禁止把 store 中的详情宽度当作实际渲染状态。
-+- **面板几何信息是瞬时状态**：重新加载会恢复侧边栏默认值并关闭 Details；在不同 Session id 之间切换同样会关闭 Details，并忘记拖动后的宽度，而未选中表面会以零宽度渲染 Details，但不会修改几何偏好。
-+- **让步自动关闭是派生结果**：空间恢复后 Right 与 Details 会自行恢复；消费方不得把存储偏好当作实际渲染状态。
++- **面板几何信息是瞬时状态**：重新加载会恢复侧边栏默认值并关闭 legacy Details；切换不同 Session id 时关闭活动 Core Tool Details，未 attach Core host 时则关闭 legacy Details 列。
++- **Legacy Details 仅保留一个 RC**：它只在 Core host 缺席时回退；后续删除必须另开合同变更。
 +- **工作区持久化归 attach owner 所有**：`ctx.workspaceLayout` 自身是瞬时服务；Pane owner 只能持久化安全 canonical 展示状态，且不得恢复临时最大化。
 +- **同一时刻只能 attach 一个工作区 owner**：竞争的 docking runtime 会在加载阶段失败，而不是共享或替换当前 tracks。
- - **挤压重排期间不提供滚动锚定**：布局变化可能移动读者的 viewport。
 diff --git a/packages/client/ui-layout/package.json b/packages/client/ui-layout/package.json
-index 3b2bf0da9..b6bb90b17 100644
+index 3b2bf0d..f37b7e9 100644
 --- a/packages/client/ui-layout/package.json
 +++ b/packages/client/ui-layout/package.json
-@@ -1,6 +1,6 @@
- {
-   "name": "@deepseek-ai/dsh-client-ui-layout",
+@@ -3 +3 @@
 -  "description": "Shell plugin: three-column AppFrame with drag handles, ctx.layout viewing-state service (navigation + panels)",
-+  "description": "Shell plugin: four-column/two-row AppFrame with official right and bottom workspace slots",
-   "version": "0.1.1-rc.2",
-   "publishConfig": {
-     "access": "public"
++  "description": "Shell plugin: unified Core Pane host with right and bottom workspace slots",
 diff --git a/packages/client/ui-layout/src/client/AppFrame.module.css b/packages/client/ui-layout/src/client/AppFrame.module.css
-index ae5678013..e3c42bd00 100644
+index ae56780..e3c42bd 100644
 --- a/packages/client/ui-layout/src/client/AppFrame.module.css
 +++ b/packages/client/ui-layout/src/client/AppFrame.module.css
-@@ -1,108 +1,172 @@
- .frame {
+@@ -2 +2 @@
 -  position: relative; /* anchors the drag handles, which straddle column borders */
 +  position: relative;
-   display: grid;
+@@ -4 +3,0 @@
 -  grid-template-rows: 100%;
-   height: 100%;
-   overflow: hidden;
-   background: var(--dsw-alias-bg-base);
+@@ -8,3 +7,3 @@
 -  /* Collapse/expand animates the tracks on the deepsuite sider curve
 -     (--ds-ease-in-out / --ds-transition-duration-slow, ui-theme base.css). */
 -  transition: grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out);
 +  transition:
 +    grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out),
 +    grid-template-rows var(--ds-transition-duration-slow) var(--ds-ease-in-out);
- }
- 
+@@ -13,5 +12 @@
 -/* Dragging writes widths at pointer cadence; easing them would detach the
 -   column from the handle. */
 -.frame[data-dragging] {
 -  transition: none;
 -}
 +.frame[data-dragging] { transition: none; }
- 
- @media (prefers-reduced-motion: reduce) {
+@@ -20,3 +15 @@
 -  .frame {
 -    transition: none;
 -  }
 +  .frame { transition: none; }
- }
- 
- .sidebarCol {
+@@ -25,0 +19,2 @@
 +  grid-column: 1;
 +  grid-row: 1 / -1;
-   min-width: 0;
-   overflow: hidden;
-   background: var(--dsw-specific-sidebar-fill);
-   border-right: 1px solid var(--dsw-alias-border-l1);
+@@ -29,0 +25 @@
 +  z-index: 12;
- }
- 
- .centerCol {
+@@ -32,0 +29,2 @@
 +  grid-column: 2;
 +  grid-row: 1;
-   min-width: 0;
+@@ -33,0 +32 @@
 +  min-height: 0;
-   display: flex;
-   flex-direction: column;
-   overflow: hidden;
- }
- 
+@@ -38,0 +38,27 @@
 +.rightWorkspaceCol {
 +  grid-column: 3;
 +  grid-row: 1 / -1;
@@ -320,15 +205,12 @@ index ae5678013..e3c42bd00 100644
 +  border-top: 1px solid var(--dsw-alias-border-l2);
 +}
 +
- .detailsCol {
+@@ -39,0 +66,2 @@
 +  grid-column: 4;
 +  grid-row: 1 / -1;
-   min-width: 0;
+@@ -40,0 +69 @@
 +  min-height: 0;
-   overflow: hidden;
-   border-left: 1px solid var(--dsw-alias-border-l2);
- }
- 
+@@ -45,4 +74,29 @@
 -/* The details subtree stays mounted at zero width, so its border must not paint
 -   a 1px seam. The collapsed sidebar instead retains a bordered compact rail. */
 -.frame[data-details-collapsed] .detailsCol {
@@ -362,31 +244,23 @@ index ae5678013..e3c42bd00 100644
 +.frame[data-workspace-cover='bottom'] .bottomWorkspaceCol {
 +  visibility: visible;
 +  pointer-events: auto;
- }
- 
+@@ -51,3 +104,0 @@
 -/* Drag handles are frame children (columns clip overflow): an 8px hit strip
 -   centered on the column border via inline left, above column content. Details
 -   adds a visible 12x32 pill at vertical center; sidebar keeps only the hit strip. */
- .handle {
-   position: absolute;
+@@ -55,0 +107,6 @@
 +  z-index: 14;
 +  touch-action: none;
 +  outline: none;
 +}
 +
 +.handle[data-axis='x'] {
-   top: 0;
-   bottom: 0;
-   width: 8px;
-   margin-left: -4px;
-   cursor: col-resize;
+@@ -61,4 +117,0 @@
 -  z-index: 2;
 -  touch-action: none;
 -  /* Rides the same curve as the tracks so the pill stays on the moving
 -     border during collapse/expand; paused while dragging (frame rule). */
-   transition: left var(--ds-transition-duration-slow) var(--ds-ease-in-out);
- }
- 
+@@ -68,2 +121,5 @@
 -.frame[data-dragging] .handle {
 -  transition: none;
 +.handle[data-axis='y'] {
@@ -394,42 +268,33 @@ index ae5678013..e3c42bd00 100644
 +  margin-top: -4px;
 +  cursor: row-resize;
 +  transition: top var(--ds-transition-duration-slow) var(--ds-ease-in-out);
- }
- 
+@@ -71,0 +128,2 @@
 +.frame[data-dragging] .handle { transition: none; }
 +
- @media (prefers-reduced-motion: reduce) {
+@@ -73,3 +131 @@
 -  .handle {
 -    transition: none;
 -  }
 +  .handle { transition: none; }
- }
- 
+@@ -78 +134,4 @@
 -.handle[data-side='details']::after {
 +.handle:focus-visible::after,
 +.handle[data-side='right']::after,
 +.handle[data-side='details']::after,
 +.handle[data-side='bottom']::after {
-   content: '';
-   position: absolute;
+@@ -81,6 +139,0 @@
 -  top: 50%;
 -  left: 50%;
 -  transform: translate(-50%, -50%);
 -  width: 12px;
 -  height: 32px;
 -  border-radius: 10px;
-   box-sizing: border-box;
+@@ -87,0 +141 @@
 +  border-radius: 10px;
-   background: var(--dsw-alias-button-floating-fill);
-   border: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
+@@ -90,2 +143,0 @@
 -  /* Hover affordance: the details pill hides until the pointer is over its
 -     column, the strip itself, or a drag. */
-   opacity: 0;
-   transition:
-     opacity var(--ds-transition-duration-slow) var(--ds-ease-in-out),
-     background var(--ds-transition-duration-slow) var(--ds-ease-in-out);
- }
- 
+@@ -98,4 +150,14 @@
 -.detailsCol:hover ~ .handle[data-side='details']::after,
 -.handle[data-side='details']:hover::after,
 -.handle[data-side='details'][data-dragging='true']::after {
@@ -448,30 +313,23 @@ index ae5678013..e3c42bd00 100644
 +  transform: translate(-50%, -50%);
 +  width: 32px;
 +  height: 12px;
- }
- 
+@@ -104,2 +166,4 @@
 -.handle[data-side='details']:hover::after,
 -.handle[data-side='details'][data-dragging='true']::after {
 +.handle:hover::after,
 +.handle:focus-visible::after,
 +.handle[data-dragging='true']::after {
 +  opacity: 1;
-   background: var(--dsw-alias-button-floating-hover);
-   border-color: var(--dsw-alias-border-l3);
- }
-@@ -114,6 +178,4 @@
-   pointer-events: none;
- }
- 
+@@ -117,3 +181 @@
 -.overlayLayer > * {
 -  pointer-events: auto;
 -}
 +.overlayLayer > * { pointer-events: auto; }
 diff --git a/packages/client/ui-layout/src/client/AppFrame.tsx b/packages/client/ui-layout/src/client/AppFrame.tsx
-index 2696dc91f..212106deb 100644
+index 2696dc9..7c24bc7 100644
 --- a/packages/client/ui-layout/src/client/AppFrame.tsx
 +++ b/packages/client/ui-layout/src/client/AppFrame.tsx
-@@ -1,201 +1,275 @@
+@@ -1,14 +1,3 @@
 -/**
 - * Three-column shell frame, registered into the built-in 'root' slot (the web
 - * shell renders only 'root'). Owns the grid tracks (sidebar | center |
@@ -489,33 +347,25 @@ index 2696dc91f..212106deb 100644
 +/** Four-column/two-row DSH frame with official right and bottom workspaces. */
 +import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 +import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
- import type { PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
+@@ -16 +5 @@ import type { PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/ds
 -import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
 +import { SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
- import type { createLayoutStore } from './stores.ts'
+@@ -17,0 +7,3 @@ import type { createLayoutStore } from './stores.ts'
 +import { computeWorkspaceGeometry } from './workspace-geometry.ts'
-+import type { WorkspaceBottomOwnerProps, WorkspaceRightOwnerProps } from './workspace-layout.ts'
++import type { WorkspaceBottomOwnerProps, WorkspaceCoreViewRenderer, WorkspaceRightOwnerProps } from './workspace-layout.ts'
 +import { WorkspaceLayoutController } from './workspace-layout.ts'
- import css from './AppFrame.module.css'
- 
+@@ -20 +11,0 @@ import css from './AppFrame.module.css'
 -/** Full composed props: runtime share + child-slot render share + store share. */
- export type AppFrameProps =
-   & PropsRuntime<'root'>
+@@ -23 +14 @@ export type AppFrameProps =
 -  & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay'>
 +  & PropsRenderSlots<'sidebar' | 'conversation' | 'shell.workspace.right' | 'shell.workspace.bottom' | 'details' | 'shell.overlay'>
-   & PropsStore<ReturnType<typeof createLayoutStore>>
+@@ -24,0 +16 @@ export type AppFrameProps =
 +  & { workspaceLayout: WorkspaceLayoutController }
- 
+@@ -26 +17,0 @@ export type AppFrameProps =
 -/** Center column grid item (session-body building block). */
- function CenterColumn(props: { children?: ReactNode }) {
-   return <div className={css.centerCol}>{props.children}</div>
- }
- 
+@@ -31 +21,0 @@ function CenterColumn(props: { children?: ReactNode }) {
 -/** Details column grid item; width 0 keeps the subtree mounted (never unmount on close). */
- function DetailsColumn(props: { children?: ReactNode }) {
-   return <div className={css.detailsCol}>{props.children}</div>
- }
- 
+@@ -36,5 +26,17 @@ function DetailsColumn(props: { children?: ReactNode }) {
 -/**
 - * One drag handle: pointer capture, rAF-throttled dx reports against the drag-start origin.
 - * `side` keys the hover-reveal CSS to the owning column.
@@ -538,10 +388,7 @@ index 2696dc91f..212106deb 100644
 +
 +/** Pointer/rAF and keyboard-equivalent separator shared by every AppFrame track. */
 +function ResizeHandle(props: ResizeHandleProps) {
-   const [dragging, setDragging] = useState(false)
-   const origin = useRef(0)
-   const latest = useRef(0)
-   const frame = useRef<number | null>(null)
+@@ -45,8 +47,21 @@ function DragHandle(props: { side: 'sidebar' | 'details'; left: number; onStart:
 -  const callbacks = useRef({ onStart: props.onStart, onDrag: props.onDrag, onEnd: props.onEnd })
 -  callbacks.current = { onStart: props.onStart, onDrag: props.onDrag, onEnd: props.onEnd }
 -
@@ -571,8 +418,7 @@ index 2696dc91f..212106deb 100644
 +    const next = coordinate(event)
 +    origin.current = next
 +    latest.current = next
-     callbacks.current.onStart()
-     setDragging(true)
+@@ -55,4 +70,4 @@ function DragHandle(props: { side: 'sidebar' | 'details'; left: number; onStart:
 -  }, [])
 -  const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
 -    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
@@ -581,10 +427,7 @@ index 2696dc91f..212106deb 100644
 +  const onPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
 +    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
 +    latest.current = coordinate(event)
-     frame.current ??= requestAnimationFrame(() => {
-       frame.current = null
-       callbacks.current.onDrag(latest.current - origin.current)
-     })
+@@ -63,8 +78,27 @@ function DragHandle(props: { side: 'sidebar' | 'details'; left: number; onStart:
 -  }, [])
 -  const onPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
 -    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
@@ -620,16 +463,12 @@ index 2696dc91f..212106deb 100644
 +
 +  useEffect(() => () => {
 +    if (frame.current !== null) cancelAnimationFrame(frame.current)
-   }, [])
- 
-   return (
-     <div
-       className={css.handle}
+@@ -76 +110 @@ function DragHandle(props: { side: 'sidebar' | 'details'; left: number; onStart:
 -      style={{ left: props.left }}
 +      style={style}
-       data-side={props.side}
+@@ -77,0 +112 @@ function DragHandle(props: { side: 'sidebar' | 'details'; left: number; onStart:
 +      data-axis={props.axis}
-       data-dragging={dragging || undefined}
+@@ -78,0 +114,7 @@ function DragHandle(props: { side: 'sidebar' | 'details'; left: number; onStart:
 +      role="separator"
 +      aria-orientation={props.axis === 'x' ? 'vertical' : 'horizontal'}
 +      aria-valuemin={props.min}
@@ -637,14 +476,9 @@ index 2696dc91f..212106deb 100644
 +      aria-valuenow={Math.round(props.value)}
 +      tabIndex={0}
 +      onKeyDown={onKeyDown}
-       onPointerDown={onPointerDown}
-       onPointerMove={onPointerMove}
-       onPointerUp={onPointerUp}
+@@ -81,0 +124 @@ function DragHandle(props: { side: 'sidebar' | 'details'; left: number; onStart:
 +      onPointerCancel={onPointerCancel}
-     />
-   )
- }
- 
+@@ -86,11 +129,7 @@ function DragHandle(props: { side: 'sidebar' | 'details'; left: number; onStart:
 -/** The three-column frame (see module doc). */
 -export function AppFrame({
 -  useStore,
@@ -659,50 +493,57 @@ index 2696dc91f..212106deb 100644
 +export function AppFrame({ useStore, useSessions, actions, renderSlot, workspaceLayout }: AppFrameProps) {
 +  const panels = useStore(state => state)
 +  const workspace = useSyncExternalStore(workspaceLayout.subscribe, workspaceLayout.getSnapshot, workspaceLayout.getSnapshot)
++  const currentSession = useSessions(state => state.current)
 +  const detailsSession = useSessions((state) => {
 +    const current = state.current
 +    return current !== undefined && state.byId[current]?.blank === false ? current : undefined
-   })
-   const frameRef = useRef<HTMLDivElement | null>(null)
+@@ -99 +138,5 @@ export function AppFrame({
 -  const [viewport, setViewport] = useState(() => window.innerWidth)
 +  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }))
- 
-   const lastSession = useRef(detailsSession)
-   useLayoutEffect(() => {
-     if (detailsSession === undefined) return
++  const renderCoreView = useCallback<WorkspaceCoreViewRenderer>(
++    () => renderSlot('details', {}),
++    [renderSlot],
++  )
+@@ -104 +147,3 @@ export function AppFrame({
 -    if (lastSession.current !== undefined && lastSession.current !== detailsSession) {
--      actions.closeDetails()
--    }
-+    if (lastSession.current !== undefined && lastSession.current !== detailsSession) actions.closeDetails()
-     lastSession.current = detailsSession
-   }, [actions, detailsSession])
- 
++    if (!workspace.corePaneHostAttached
++      && lastSession.current !== undefined
++      && lastSession.current !== detailsSession) {
+@@ -108 +153,15 @@ export function AppFrame({
+-  }, [actions, detailsSession])
++  }, [actions, detailsSession, workspace.corePaneHostAttached])
++
++  const lastCoreSession = useRef(currentSession)
++  useLayoutEffect(() => {
++    if (workspace.corePaneHostAttached
++      && lastCoreSession.current !== undefined
++      && lastCoreSession.current !== currentSession) {
++      workspaceLayout.closeCorePane('dsh.tool-details')
++    }
++    lastCoreSession.current = currentSession
++  }, [currentSession, workspace.corePaneHostAttached, workspaceLayout])
++
++  useEffect(() => {
++    if (workspace.corePaneHostAttached) actions.closeDetails()
++  }, [actions, workspace.corePaneHostAttached])
+@@ -110 +168,0 @@ export function AppFrame({
 -  // Track the frame's own box (not the window): rAF-throttled ResizeObserver.
-   useEffect(() => {
+@@ -112,3 +170,3 @@ export function AppFrame({
 -    const el = frameRef.current
 -    /* v8 ignore next -- the ref is always attached by effect time: the frame div renders unconditionally. */
 -    if (el === null) return
 +    const element = frameRef.current
 +    /* v8 ignore next -- frame is rendered unconditionally. */
 +    if (element === null) return
-     let raf: number | null = null
-     const observer = new ResizeObserver(() => {
-       raf ??= requestAnimationFrame(() => {
-         raf = null
+@@ -119,2 +177,2 @@ export function AppFrame({
 -        const width = el.getBoundingClientRect().width
 -        if (width > 0) setViewport(width)
 +        const rect = element.getBoundingClientRect()
 +        if (rect.width > 0 && rect.height > 0) setViewport({ width: rect.width, height: rect.height })
-       })
-     })
+@@ -123 +181 @@ export function AppFrame({
 -    observer.observe(el)
 +    observer.observe(element)
-     return () => {
-       observer.disconnect()
-       if (raf !== null) cancelAnimationFrame(raf)
-     }
-   }, [])
- 
+@@ -130,7 +188,10 @@ export function AppFrame({
 -  // Narrow viewports auto-collapse the sidebar; the store mirror keeps
 -  // toggleSidebar's semantics right (narrow toggles flip the manual
 -  // re-expand override, stores.ts). Collapsed is decided here, so the
@@ -716,12 +557,11 @@ index 2696dc91f..212106deb 100644
 +      if (event.key === 'Escape') workspaceLayout.restoreMaximized()
 +    }
 +    window.addEventListener('keydown', restore)
-+    return () => window.removeEventListener('keydown', restore)
++    return () => { window.removeEventListener('keydown', restore) }
 +  }, [workspace.maximizedRegion, workspaceLayout])
 +
 +  const narrow = viewport.width < SIDEBAR_AUTO_COLLAPSE
-   useEffect(() => { actions.setNarrow(narrow) }, [actions, narrow])
-   const sidebarCollapsed = narrow ? !panels.narrowExpanded : panels.sidebar === 0
+@@ -139,10 +200,11 @@ export function AppFrame({
 -  const sidebarPreference = sidebarCollapsed
 -    ? 0
 -    : panels.sidebar === 0 ? SIDEBAR_DEFAULT : panels.sidebar
@@ -737,20 +577,18 @@ index 2696dc91f..212106deb 100644
 +    width: viewport.width,
 +    height: viewport.height,
 +    sidebar: sidebarPreference,
-+    details: detailsSession === undefined ? 0 : panels.details,
++    details: workspace.corePaneHostAttached || detailsSession === undefined ? 0 : panels.details,
 +    workspace,
 +  })
 +  const geometryRef = useRef(geometry)
 +  geometryRef.current = geometry
 +
-   const sidebarBase = useRef(0)
-   const detailsBase = useRef(0)
+@@ -151,2 +213,2 @@ export function AppFrame({
 -  // Track-level transitions pause for the whole gesture: eased tracks would
 -  // detach the column edge from the pointer (AppFrame.module.css).
 +  const rightBase = useRef(0)
 +  const bottomBase = useRef(0)
-   const [dragging, setDragging] = useState(false)
-   const onDragEnd = useCallback(() => { setDragging(false) }, [])
+@@ -155,8 +217,19 @@ export function AppFrame({
 -  const onSidebarStart = useCallback(() => { sidebarBase.current = colsRef.current.sidebar; setDragging(true) }, [])
 -  const onDetailsStart = useCallback(() => { detailsBase.current = colsRef.current.details; setDragging(true) }, [])
 -  const onSidebarDrag = useCallback((dx: number) => {
@@ -767,6 +605,7 @@ index 2696dc91f..212106deb 100644
 +    height: viewport.height,
 +    visible: geometry.rightMode !== 'hidden',
 +    maximized: geometry.rightMode === 'maximized',
++    renderCoreView,
 +  }
 +  const bottomOwner: WorkspaceBottomOwnerProps = {
 +    region: 'bottom',
@@ -775,26 +614,22 @@ index 2696dc91f..212106deb 100644
 +    height: geometry.coverRegion === 'bottom' ? viewport.height : geometry.bottomHeight,
 +    visible: geometry.bottomMode !== 'hidden',
 +    maximized: geometry.bottomMode === 'maximized',
++    renderCoreView,
 +  }
- 
-   return (
-     <div
-       ref={frameRef}
-       className={css.frame}
+@@ -168 +241,4 @@ export function AppFrame({
 -      style={{ gridTemplateColumns: `${cols.sidebar}px minmax(0, 1fr) ${cols.details}px` }}
 +      style={{
 +        gridTemplateColumns: `${geometry.sidebar}px minmax(0, ${geometry.conversationWidth}px) ${geometry.rightWidth}px ${geometry.detailsWidth}px`,
 +        gridTemplateRows: `${geometry.conversationHeight}px ${geometry.bottomHeight}px`,
 +      }}
-       data-sidebar-collapsed={sidebarCollapsed || undefined}
+@@ -170 +246,5 @@ export function AppFrame({
 -      data-details-collapsed={cols.details === 0 || undefined}
 +      data-details-collapsed={geometry.detailsWidth === 0 || undefined}
 +      data-right-mode={geometry.rightMode}
 +      data-bottom-mode={geometry.bottomMode}
++      data-core-pane-host={workspace.corePaneHostAttached || undefined}
 +      data-workspace-cover={geometry.coverRegion}
-       data-dragging={dragging || undefined}
-     >
-       <div className={css.sidebarCol}>
+@@ -174,9 +254,5 @@ export function AppFrame({
 -        {/* Render-site slot call with live concession output: a closed
 -            sidebar keeps the mounted slot at the compact-rail width, and the
 -            component sees its rendered state as owner params decided here
@@ -809,7 +644,7 @@ index 2696dc91f..212106deb 100644
 +      <CenterColumn>{renderSlot('conversation', {})}</CenterColumn>
 +      <div className={css.rightWorkspaceCol} data-workspace-region="right" data-mode={geometry.rightMode}>
 +        {renderSlot('shell.workspace.right', rightOwner)}
-       </div>
+@@ -184,11 +260,2 @@ export function AppFrame({
 -      <>
 -        {/* Both column occupants stay at fixed tree positions from first
 -            paint — no loading gate: a bare status line reads worse than
@@ -823,78 +658,71 @@ index 2696dc91f..212106deb 100644
 -        {renderSlot('shell.overlay', {})}
 +      <div className={css.bottomWorkspaceCol} data-workspace-region="bottom" data-mode={geometry.bottomMode}>
 +        {renderSlot('shell.workspace.bottom', bottomOwner)}
-       </div>
+@@ -196,3 +263,44 @@ export function AppFrame({
 -      {/* The collapsed rail is fixed-width: no resize handle while closed. */}
 -      {!sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
 -      {cols.details > 0 && <DragHandle side="details" left={viewport - cols.details} onStart={onDetailsStart} onDrag={onDetailsDrag} onEnd={onDragEnd} />}
-+      <DetailsColumn>{renderSlot('details', {})}</DetailsColumn>
++      <DetailsColumn>{workspace.corePaneHostAttached ? null : renderSlot('details', {})}</DetailsColumn>
 +      <div className={css.overlayLayer} data-shell-overlay>{renderSlot('shell.overlay', {})}</div>
 +
 +      {!sidebarCollapsed && <ResizeHandle
 +        side="sidebar" axis="x" position={geometry.sidebar}
 +        value={geometry.sidebar} min={264} max={420}
 +        onStart={() => { sidebarBase.current = geometryRef.current.sidebar; setDragging(true) }}
-+        onDrag={delta => actions.setSidebar(sidebarBase.current + delta)}
++        onDrag={(delta) => { actions.setSidebar(sidebarBase.current + delta) }}
 +        onEnd={onDragEnd}
-+        onKeyboard={direction => actions.setSidebar(geometryRef.current.sidebar + direction * 16)}
++        onKeyboard={(direction) => { actions.setSidebar(geometryRef.current.sidebar + direction * 16) }}
 +      />}
 +      {geometry.rightMode === 'dock' && <ResizeHandle
 +        side="right" axis="x" position={geometry.sidebar + geometry.conversationWidth}
 +        value={geometry.rightWidth} min={360} max={840}
 +        onStart={() => { rightBase.current = geometryRef.current.rightWidth; setDragging(true) }}
-+        onDrag={delta => workspaceLayout.updateGeometry({ rightWidth: rightBase.current - delta })}
++        onDrag={(delta) => { workspaceLayout.updateGeometry({ rightWidth: rightBase.current - delta }) }}
 +        onEnd={onDragEnd}
-+        onKeyboard={direction => workspaceLayout.updateGeometry({ rightWidth: geometryRef.current.rightWidth - direction * 16 })}
++        onKeyboard={(direction) => {
++          workspaceLayout.updateGeometry({ rightWidth: geometryRef.current.rightWidth - direction * 16 })
++        }}
 +      />}
 +      {geometry.bottomMode === 'dock' && <ResizeHandle
 +        side="bottom" axis="y" position={geometry.conversationHeight}
 +        crossStart={geometry.sidebar} crossSize={geometry.conversationWidth}
 +        value={geometry.bottomHeight} min={180} max={Math.floor(viewport.height * 0.65)}
 +        onStart={() => { bottomBase.current = geometryRef.current.bottomHeight; setDragging(true) }}
-+        onDrag={delta => workspaceLayout.updateGeometry({ bottomRatio: (bottomBase.current - delta) / Math.max(1, viewport.height) })}
++        onDrag={(delta) => {
++          workspaceLayout.updateGeometry({ bottomRatio: (bottomBase.current - delta) / Math.max(1, viewport.height) })
++        }}
 +        onEnd={onDragEnd}
-+        onKeyboard={direction => workspaceLayout.updateGeometry({ bottomRatio: (geometryRef.current.bottomHeight - direction * 16) / Math.max(1, viewport.height) })}
++        onKeyboard={(direction) => {
++          workspaceLayout.updateGeometry({
++            bottomRatio: (geometryRef.current.bottomHeight - direction * 16) / Math.max(1, viewport.height),
++          })
++        }}
 +      />}
 +      {geometry.detailsWidth > 0 && <ResizeHandle
 +        side="details" axis="x" position={viewport.width - geometry.detailsWidth}
 +        value={geometry.detailsWidth} min={300} max={520}
 +        onStart={() => { detailsBase.current = geometryRef.current.detailsWidth; setDragging(true) }}
-+        onDrag={delta => actions.setDetails(detailsBase.current - delta)}
++        onDrag={(delta) => { actions.setDetails(detailsBase.current - delta) }}
 +        onEnd={onDragEnd}
-+        onKeyboard={direction => actions.setDetails(geometryRef.current.detailsWidth - direction * 16)}
++        onKeyboard={(direction) => { actions.setDetails(geometryRef.current.detailsWidth - direction * 16) }}
 +      />}
-     </div>
-   )
- }
 diff --git a/packages/client/ui-layout/src/client/index.ts b/packages/client/ui-layout/src/client/index.ts
-index c56d83bfb..81704327e 100644
+index c56d83b..b64eb76 100644
 --- a/packages/client/ui-layout/src/client/index.ts
 +++ b/packages/client/ui-layout/src/client/index.ts
-@@ -1,7 +1,7 @@
- /**
-  * Layout plugin, browser half: one register() call contributes AppFrame into
-  * the runtime's built-in 'root' slot and, in the same breath, declares the
+@@ -4 +4 @@
 - * four child slots (declaration = exclusive render authority), seats the
 + * six child slots (declaration = exclusive render authority), seats the
-  * layout store (panel geometry), and wires the panel-action service face.
-  * ctx.layout is the cross-plugin panel-action contract; navigation state lives
-  * with the runtime sessions service. A second effect seats the theme
-@@ -14,6 +14,7 @@ import { AppFrame } from './AppFrame.tsx'
- import { createLayoutStore } from './stores.ts'
- import { LayoutController } from './service.ts'
- import { ThemePresenter } from './theme-presenter.ts'
+@@ -16,0 +17 @@ import { ThemePresenter } from './theme-presenter.ts'
 +import { WorkspaceLayoutController } from './workspace-layout.ts'
- 
- // Contract exports only (export-convergence rule: cross-package consumers
- // keep a symbol exported; test-only/package-internal symbols live off /src).
-@@ -22,18 +23,31 @@ import { ThemePresenter } from './theme-presenter.ts'
- // against; the frame components and the store factory are package-internal.
- export { LayoutController } from './service.ts'
- export type { ILayout } from './service.ts'
+@@ -24,0 +26,15 @@ export type { ILayout } from './service.ts'
 +export { WorkspaceLayoutController } from './workspace-layout.ts'
 +export type {
 +  IWorkspaceLayout,
 +  WorkspaceBottomOwnerProps,
++  WorkspaceCorePaneHost,
++  WorkspaceCorePaneId,
++  WorkspaceCoreViewRenderer,
 +  WorkspaceLayoutHandle,
 +  WorkspaceLayoutPreference,
 +  WorkspaceLayoutSnapshot,
@@ -902,225 +730,165 @@ index c56d83bfb..81704327e 100644
 +  WorkspaceRegionMode,
 +  WorkspaceRightOwnerProps,
 +} from './workspace-layout.ts'
- 
- declare module '@deepseek-ai/cordis' {
-   interface Context {
-     /** The outward face only; the concrete service stays inside this plugin. */
-     layout: import('./service.ts').ILayout
++export { WORKSPACE_CORE_PANE_VERSION } from './workspace-layout.ts'
+@@ -29,0 +46,2 @@ declare module '@deepseek-ai/cordis' {
 +    /** Additive single-owner workspace geometry face. */
 +    workspaceLayout: import('./workspace-layout.ts').IWorkspaceLayout
-   }
- }
- 
- declare module '@deepseek-ai/dsh-client-ui-slots' {
-   interface SlotMap {
-     // The 'root' entry itself is the runtime's built-in slot (declared
+@@ -36 +54 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 -    // there); these four are the frame's children, declared by the same
 +  // there); these six are the frame's children, declared by the same
-     // register() call that contributes AppFrame. Session owners never pass
-     // sessionId: the framework injects it as a standard prop.
-     /**
-@@ -70,6 +84,10 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
-      * `session` scope, and `ctx.layout` owns whether the column is open.
-      */
-     'details': { kind: 'single'; scope: 'session'; owner: DetailsOwnerProps }
+@@ -72,0 +91,4 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 +    /** Official full-height workspace to the right of the conversation. */
 +    'shell.workspace.right': { kind: 'single'; scope: 'root'; owner: import('./workspace-layout.ts').WorkspaceRightOwnerProps }
 +    /** Official utility workspace below the conversation only. */
 +    'shell.workspace.bottom': { kind: 'single'; scope: 'root'; owner: import('./workspace-layout.ts').WorkspaceBottomOwnerProps }
-     /**
-      * Frame-wide floating layer, above every column and outside their scroll
-      * containers. Deliberately generic and unowned by any feature: a badge, a
-@@ -109,20 +127,24 @@ export const inject = ['slots', 'theme']
- 
- /**
-  * Client plugin body: provide ctx.layout, then one register() call — AppFrame
+@@ -112 +134 @@ export const inject = ['slots', 'theme']
 - * into 'root' with the four child-slot declarations, the layout store seat,
 + * into 'root' with the six child-slot declarations, the layout store seat,
-  * and the inject hook that hands the store's bound actions to the service.
-  * @param ctx - client root context.
-  */
- export function apply(ctx: ClientContext): void {
+@@ -117 +139,2 @@ export function apply(ctx: ClientContext): void {
 -  const layout = new LayoutController()
 +  const workspaceLayout = new WorkspaceLayoutController()
 +  const layout = new LayoutController(workspaceLayout)
-   ctx.effect(() => {
-     const disposeService = ctx.reflect.provide('layout', layout)
+@@ -119,0 +143 @@ export function apply(ctx: ClientContext): void {
 +    const disposeWorkspaceService = ctx.reflect.provide('workspaceLayout', workspaceLayout)
-     const disposeRegistration = ctx.slots.register({
-       name: 'root',
-       children: {
-         'sidebar': { kind: 'single', scope: 'root' },
-         'conversation': { kind: 'single', scope: 'session-maybe' },
-         'details': { kind: 'single', scope: 'session' },
+@@ -125,0 +150,2 @@ export function apply(ctx: ClientContext): void {
 +        'shell.workspace.right': { kind: 'single', scope: 'root' },
 +        'shell.workspace.bottom': { kind: 'single', scope: 'root' },
-         'shell.overlay': { kind: 'list', scope: 'root' },
-       },
-       // Exclusive store: the factory itself — the framework instantiates per
-@@ -132,12 +154,13 @@ export function apply(ctx: ClientContext): void {
-       // conversation business actions belong to their registrants.
-       inject: (actions: PanelActions) => {
-         layout.attachPanels(actions)
+@@ -135 +161 @@ export function apply(ctx: ClientContext): void {
 -        return {}
 +        return { workspaceLayout }
-       },
-     }, AppFrame)
-     return () => {
-       disposeRegistration()
-       // provide()'s disposer settles asynchronously; teardown is synchronous fire-and-forget.
+@@ -140,0 +167 @@ export function apply(ctx: ClientContext): void {
 +      void disposeWorkspaceService()
-       void disposeService()
-     }
-   }, 'ui-layout: service + root registration')
 diff --git a/packages/client/ui-layout/src/client/service.ts b/packages/client/ui-layout/src/client/service.ts
-index 2b2e50e5d..14c54ed0a 100644
+index 2b2e50e..461bc19 100644
 --- a/packages/client/ui-layout/src/client/service.ts
 +++ b/packages/client/ui-layout/src/client/service.ts
-@@ -10,6 +10,7 @@
-  */
- import type { BoundActions } from '@deepseek-ai/dsh-client-ui-slots'
- import type { createLayoutStore } from './stores.ts'
+@@ -12,0 +13 @@ import type { createLayoutStore } from './stores.ts'
 +import type { WorkspaceLayoutController } from './workspace-layout.ts'
- 
- /** The layout store's bound action set (framework-baked, draft params peeled). */
- export type PanelActions = BoundActions<ReturnType<typeof createLayoutStore>>
-@@ -33,6 +34,8 @@ export interface ILayout {
- export class LayoutController implements ILayout {
-   #panels: PanelActions | undefined
- 
+@@ -35,0 +37,2 @@ export class LayoutController implements ILayout {
 +  constructor(private readonly workspaceLayout?: WorkspaceLayoutController) {}
 +
-   /**
-    * Adopt the root entry's bound store actions. Called from the root
-    * registration's inject hook (a sanctioned assembly side effect), so the
-@@ -51,6 +54,7 @@ export class LayoutController implements ILayout {
- 
-   /** Open the details panel (no-op when already open). */
-   openDetails(): void {
+@@ -53,0 +57,2 @@ export class LayoutController implements ILayout {
++    if (this.workspaceLayout?.openCorePane('dsh.tool-details')) return
 +    this.workspaceLayout?.noteDetailsOpened()
-     this.#require().openDetails()
-   }
- 
+@@ -58,0 +64 @@ export class LayoutController implements ILayout {
++    if (this.workspaceLayout?.closeCorePane('dsh.tool-details')) return
 diff --git a/packages/client/ui-layout/tests/app-frame.client.spec.tsx b/packages/client/ui-layout/tests/app-frame.client.spec.tsx
-index d865a5c18..66b076d83 100644
+index d865a5c..1385b0f 100644
 --- a/packages/client/ui-layout/tests/app-frame.client.spec.tsx
 +++ b/packages/client/ui-layout/tests/app-frame.client.spec.tsx
-@@ -17,6 +17,7 @@ import { AppFrame } from '@deepseek-ai/dsh-client-ui-layout/src/client/AppFrame.
- import type { AppFrameProps } from '@deepseek-ai/dsh-client-ui-layout/src/client/AppFrame.tsx'
- import { SIDEBAR_COLLAPSED } from '@deepseek-ai/dsh-client-ui-layout/src/client/columns.ts'
- import { createLayoutStore } from '@deepseek-ai/dsh-client-ui-layout/src/client/stores.ts'
+@@ -19,0 +20,6 @@ import { createLayoutStore } from '@deepseek-ai/dsh-client-ui-layout/src/client/
 +import { WorkspaceLayoutController } from '@deepseek-ai/dsh-client-ui-layout/src/client/workspace-layout.ts'
- import type {
-   SessionId, SessionListState, WorkspaceListState,
- } from '@deepseek-ai/dsh-client-runtime/client'
-@@ -55,6 +56,7 @@ function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapsho
- function mountFrame() {
-   window.innerWidth = frameWidth // first-render viewport source before the observer fires
-   const instance = createLayoutStore().create()
++import type {
++  WorkspaceBottomOwnerProps,
++  WorkspaceCorePaneHost,
++  WorkspaceRightOwnerProps,
++} from '@deepseek-ai/dsh-client-ui-layout/src/client/workspace-layout.ts'
+@@ -55 +61 @@ function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapsho
+-function mountFrame() {
++function mountFrame(options: { coreHost?: WorkspaceCorePaneHost } = {}) {
+@@ -57,0 +64,4 @@ function mountFrame() {
 +  const workspaceLayout = new WorkspaceLayoutController()
-   const slotCalls: { key: string; props: unknown }[] = []
-   const renderSlot = ((key: string, owner: object) => {
-     slotCalls.push({ key, props: owner })
-@@ -88,15 +90,16 @@ function mountFrame() {
-       useSessions={useSessions}
-       useWorkspaces={((sel: (s: WorkspaceListState) => unknown) => sel(workspaceState)) as never}
-       SessionProvider={SessionProviderStub}
++  const workspaceHandle = options.coreHost === undefined
++    ? undefined
++    : workspaceLayout.attach('pane-workbench', {}, options.coreHost)
+@@ -90,0 +101 @@ function mountFrame() {
 +      workspaceLayout={workspaceLayout}
-     />
-   )
-   const utils = render(element())
-   const frame = utils.container.firstElementChild as HTMLElement
+@@ -95 +106 @@ function mountFrame() {
 -  return { instance, frame, slotCalls, rerenderFrame: () => { utils.rerender(element()) }, ...utils }
-+  return { instance, workspaceLayout, frame, slotCalls, rerenderFrame: () => { utils.rerender(element()) }, ...utils }
- }
- 
- function tracks(frame: HTMLElement): number[] {
++  return { instance, workspaceLayout, workspaceHandle, frame, slotCalls, rerenderFrame: () => { utils.rerender(element()) }, ...utils }
+@@ -99 +110 @@ function tracks(frame: HTMLElement): number[] {
 -  const m = /^(\d+)px minmax\(0, 1fr\) (\d+)px$/.exec(frame.style.gridTemplateColumns)
 +  const m = /^(\d+)px minmax\(0, \d+px\) \d+px (\d+)px$/.exec(frame.style.gridTemplateColumns)
-   if (m === null) throw new Error(`unexpected template: ${frame.style.gridTemplateColumns}`)
-   return [Number(m[1]), Number(m[2])]
- }
-@@ -235,7 +238,7 @@ describe('AppFrame', () => {
-   })
- 
-   it('drag base is the rendered (concession-clamped) width, not the preference', () => {
+@@ -174,0 +186,29 @@ describe('AppFrame', () => {
++  it('hands Details to one Core renderer without mounting the legacy column occupant', () => {
++    const host = { open: vi.fn(), close: vi.fn() }
++    const { frame, slotCalls, queryByTestId } = mountFrame({ coreHost: host })
++    expect(frame.getAttribute('data-core-pane-host')).toBe('true')
++    expect(queryByTestId('details-content')).toBeNull()
++    expect(slotCalls.filter(call => call.key === 'details')).toHaveLength(0)
++
++    const right = slotCalls.filter(call => call.key === 'shell.workspace.right').at(-1)!.props as WorkspaceRightOwnerProps
++    const bottom = slotCalls.filter(call => call.key === 'shell.workspace.bottom').at(-1)!.props as WorkspaceBottomOwnerProps
++    expect(right.renderCoreView).toBe(bottom.renderCoreView)
++    const content = right.renderCoreView('dsh.tool-details')
++    expect(slotCalls.filter(call => call.key === 'details')).toHaveLength(1)
++    const mounted = render(<>{content}</>)
++    expect(mounted.getByTestId('details-content')).toBeTruthy()
++  })
++
++  it('closes Core Tool Details whenever the current Session changes', () => {
++    const host = { open: vi.fn(), close: vi.fn() }
++    const { rerenderFrame } = mountFrame({ coreHost: host })
++    selectedSession.current = 's-next' as SessionId
++    act(() => { rerenderFrame() })
++    expect(host.close).toHaveBeenCalledWith('dsh.tool-details')
++
++    selectedSession.current = 's-blank' as SessionId
++    selectedSessionBlank.current = true
++    act(() => { rerenderFrame() })
++    expect(host.close).toHaveBeenCalledTimes(2)
++  })
++
+@@ -238 +278 @@ describe('AppFrame', () => {
 -    frameWidth = 1250 // step-2 squeeze: details renders 330 while preference is 360
 +    frameWidth = 1030 // conversation floor (420) squeezes details to 330 while preference is 360
-     const { frame, instance } = mountFrame()
-     act(() => { instance.actions.openDetails() })
-     expect(tracks(frame)).toEqual([280, 330])
-@@ -264,7 +267,7 @@ describe('AppFrame', () => {
-   it('viewport shrink triggers the concession chain via ResizeObserver', () => {
-     const { frame, instance } = mountFrame()
-     act(() => { instance.actions.openDetails() })
+@@ -267 +307 @@ describe('AppFrame', () => {
 -    frameWidth = 1250
 +    frameWidth = 1030
-     act(() => { fireResize?.(); vi.advanceTimersByTime(20) })
-     expect(tracks(frame)).toEqual([280, 330])
-     frameWidth = 1920
-@@ -391,7 +394,7 @@ describe('AppFrame — unmount with an in-flight resize frame', () => {
-   it('double resize inside one frame rides the pending rAF (??= guard)', () => {
-     const { frame, instance } = mountFrame()
-     act(() => { instance.actions.openDetails() })
+@@ -394 +434 @@ describe('AppFrame — unmount with an in-flight resize frame', () => {
 -    frameWidth = 1250
 +    frameWidth = 1030
-     act(() => { fireResize?.(); fireResize?.(); vi.advanceTimersByTime(20) })
-     expect(tracks(frame)).toEqual([280, 330])
-   })
 diff --git a/packages/client/ui-layout/tests/apply.client.spec.ts b/packages/client/ui-layout/tests/apply.client.spec.ts
-index 95f8cad43..5c9fb2ee2 100644
+index 95f8cad..74cc49c 100644
 --- a/packages/client/ui-layout/tests/apply.client.spec.ts
 +++ b/packages/client/ui-layout/tests/apply.client.spec.ts
-@@ -12,7 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
- import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
- import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
- import { apply as themeApply, inject as themeInject, ThemeRuntime } from '@deepseek-ai/dsh-client-ui-theme/client'
+@@ -15 +15 @@ import { apply as themeApply, inject as themeInject, ThemeRuntime } from '@deeps
 -import { apply, inject, LayoutController } from '@deepseek-ai/dsh-client-ui-layout/client'
 +import { apply, inject, LayoutController, WorkspaceLayoutController } from '@deepseek-ai/dsh-client-ui-layout/client'
- import { apply as nodeApply } from '@deepseek-ai/dsh-client-ui-layout'
- import * as invariant from '@deepseek-ai/dsh-client-ui-layout/invariant'
- 
-@@ -40,20 +40,23 @@ describe('ui-layout client apply', () => {
-     expect(inject).toEqual(['slots', 'theme'])
-   })
- 
+@@ -43 +43 @@ describe('ui-layout client apply', () => {
 -  it('provides ctx.layout and registers AppFrame into root with the three child declarations', async () => {
 +  it('provides layout services and registers AppFrame with the workspace child declarations', async () => {
-     const { ctx, slots } = await bench()
-     const fiber = ctx.plugin({ inject: [...inject], apply })
-     await fiber.await()
-     expect(ctx.get('layout')).toBeInstanceOf(LayoutController)
+@@ -47,0 +48,2 @@ describe('ui-layout client apply', () => {
 +    expect(ctx.get('workspaceLayout')).toBeInstanceOf(WorkspaceLayoutController)
-     // The one register() call occupied 'root'…
-     expect(slots.entries('root')).toHaveLength(1)
-     // …and declared the three children in the ledger.
-     expect(slots.spec('sidebar')).toEqual({ kind: 'single', scope: 'root' })
-     expect(slots.spec('conversation')).toEqual({ kind: 'single', scope: 'session-maybe' })
-     expect(slots.spec('details')).toEqual({ kind: 'single', scope: 'session' })
++    expect((ctx.get('workspaceLayout') as WorkspaceLayoutController).corePaneVersion).toBe('workspace.core-pane.v1')
+@@ -53,0 +56,2 @@ describe('ui-layout client apply', () => {
 +    expect(slots.spec('shell.workspace.right')).toEqual({ kind: 'single', scope: 'root' })
 +    expect(slots.spec('shell.workspace.bottom')).toEqual({ kind: 'single', scope: 'root' })
-   })
- 
+@@ -56 +60 @@ describe('ui-layout client apply', () => {
 -  it('injects no business face and attaches the layout actions', async () => {
 +  it('injects the workspace geometry face and attaches the layout actions', async () => {
-     const { ctx, slots } = await bench()
-     const fiber = ctx.plugin({ inject: [...inject], apply })
-     await fiber.await()
-@@ -61,7 +64,7 @@ describe('ui-layout client apply', () => {
-       setSidebar: vi.fn(), setDetails: vi.fn(), toggleSidebar: vi.fn(), openDetails: vi.fn(), closeDetails: vi.fn(),
-     }
-     const injected = (slots.entries('root')[0]!.inject as (actions: never) => object)(actions as never)
+@@ -64 +68 @@ describe('ui-layout client apply', () => {
 -    expect(injected).toEqual({})
 +    expect(injected).toEqual({ workspaceLayout: ctx.get('workspaceLayout') })
-     const layout = ctx.get('layout') as LayoutController
-     layout.toggleSidebar()
-     expect(actions.toggleSidebar).toHaveBeenCalledOnce()
-@@ -98,6 +101,7 @@ describe('ui-layout client apply', () => {
-     await fiber.await()
-     await fiber.dispose()
-     expect(ctx.get('layout')).toBeUndefined()
+@@ -69,0 +74,28 @@ describe('ui-layout client apply', () => {
++  it('routes Details through an attached Core Pane host and falls back after disposal', async () => {
++    const { ctx, slots } = await bench()
++    const fiber = ctx.plugin({ inject: [...inject], apply })
++    await fiber.await()
++    const actions = {
++      setSidebar: vi.fn(), setDetails: vi.fn(), toggleSidebar: vi.fn(), openDetails: vi.fn(), closeDetails: vi.fn(),
++    }
++    const injectRoot = slots.entries('root')[0]!.inject as (actions: never) => object
++    injectRoot(actions as never)
++    const layout = ctx.get('layout') as LayoutController
++    const workspaceLayout = ctx.get('workspaceLayout') as WorkspaceLayoutController
++    const host = { open: vi.fn(), close: vi.fn() }
++    const handle = workspaceLayout.attach('pane-workbench', {}, host)
++
++    layout.openDetails()
++    layout.closeDetails()
++    expect(host.open).toHaveBeenCalledWith('dsh.tool-details')
++    expect(host.close).toHaveBeenCalledWith('dsh.tool-details')
++    expect(actions.openDetails).not.toHaveBeenCalled()
++    expect(actions.closeDetails).not.toHaveBeenCalled()
++
++    handle.dispose()
++    layout.openDetails()
++    layout.closeDetails()
++    expect(actions.openDetails).toHaveBeenCalledOnce()
++    expect(actions.closeDetails).toHaveBeenCalledOnce()
++  })
++
+@@ -100,0 +133 @@ describe('ui-layout client apply', () => {
 +    expect(ctx.get('workspaceLayout')).toBeUndefined()
-     expect(slots.entries('root')).toHaveLength(0)
-     expect(slots.spec('sidebar')).toBeUndefined()
-     // The built-in root declaration survives entry teardown (runtime-owned).

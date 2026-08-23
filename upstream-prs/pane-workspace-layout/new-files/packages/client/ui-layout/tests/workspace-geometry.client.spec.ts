@@ -12,6 +12,7 @@ function workspace(overrides: Partial<WorkspaceLayoutSnapshot> = {}): WorkspaceL
     bottomRatio: 0.34,
     activeRegion: 'right',
     maximizedRegion: undefined,
+    corePaneHostAttached: false,
     auxiliaryPriority: 'workspace',
     ...overrides,
   }
@@ -62,6 +63,17 @@ describe('computeWorkspaceGeometry', () => {
       workspace: workspace({ rightVisible: true, auxiliaryPriority: 'workspace' }),
     })
     expect(workspaceWins).toMatchObject({ rightMode: 'dock', rightWidth: 480, detailsWidth: 0, conversationWidth: 483 })
+  })
+
+  it('removes legacy Details geometry whenever a Core Pane host is attached', () => {
+    const result = computeWorkspaceGeometry({
+      width: 1440,
+      height: 900,
+      sidebar: 280,
+      details: 360,
+      workspace: workspace({ rightVisible: true, corePaneHostAttached: true, auxiliaryPriority: 'details' }),
+    })
+    expect(result).toMatchObject({ rightMode: 'dock', rightWidth: 480, detailsWidth: 0, conversationWidth: 680 })
   })
 
   it('docks Bottom when the conversation height floor fits and sheets it otherwise', () => {

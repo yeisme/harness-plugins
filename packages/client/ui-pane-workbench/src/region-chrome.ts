@@ -13,6 +13,7 @@ import {
 import type { PaneDragTargetV1 } from './interactions.js'
 import { PaneResizeSession } from './interactions.js'
 import type { PaneWorkbenchController } from './controller.js'
+import { isPaneCoreViewId, type PaneCoreViewId } from './core-pane.js'
 import type { PaneViewRegistry } from './view-registry.js'
 import { WorkbenchIcon } from './icon.js'
 import type { WorkbenchIconName } from './icon.js'
@@ -43,6 +44,8 @@ export interface PaneRegionChromeProps {
   readonly maximized: boolean
   readonly registry: PaneViewRegistry
   readonly controller: PaneWorkbenchController
+  /** Resolves DSH-owned React content for an allowlisted built-in Core Pane view. */
+  readonly renderCoreView?: (id: PaneCoreViewId) => ReactNode
 }
 
 interface ViewBoundaryProps {
@@ -153,7 +156,7 @@ function iconForView(view: PaneViewInstanceV1): WorkbenchIconName {
 function Picker(props: { registry: PaneViewRegistry; controller: PaneWorkbenchController; onClose: () => void }): ReactNode {
   const [, setRevision] = useState(0)
   useEffect(() => props.registry.subscribe(() => setRevision(value => value + 1)), [props.registry])
-  const registrations = props.registry.snapshot()
+  const registrations = props.registry.snapshot().filter(registration => registration.showInPicker !== false)
   return createElement('section', { className: 'pwr-picker', role: 'dialog', 'aria-modal': false, 'aria-label': 'Open workspace view' },
     createElement('header', null,
       createElement('strong', null, 'Open view'),
@@ -190,6 +193,7 @@ function SplitTree(props: {
   regionWidth: number
   regionHeight: number
   onOpenPicker: () => void
+  renderCoreView?: (id: PaneCoreViewId) => ReactNode
 }): ReactNode {
   if (props.node.type === 'group') {
     const group = props.state.groups[props.node.groupId]
@@ -211,6 +215,7 @@ function SplitBranch(props: {
   regionWidth: number
   regionHeight: number
   onOpenPicker: () => void
+  renderCoreView?: (id: PaneCoreViewId) => ReactNode
 }): ReactNode {
   const [preview, setPreview] = useState<number>()
   const container = useRef<HTMLDivElement>(null)
@@ -259,6 +264,7 @@ function GroupChrome(props: {
   regionWidth: number
   regionHeight: number
   onOpenPicker: () => void
+  renderCoreView?: (id: PaneCoreViewId) => ReactNode
 }): ReactNode {
   const [menuViewId, setMenuViewId] = useState<string>()
   const groupElement = useRef<HTMLElement>(null)
@@ -317,6 +323,7 @@ function GroupChrome(props: {
         createElement(registration.component as never, {
           view: active,
           projection: active.metadata,
+          hostContent: isPaneCoreViewId(active.kind) ? props.renderCoreView?.(active.kind) : undefined,
           retry: () => props.controller.dispatch({ type: 'activate_view', viewId: active.id }),
         }))
 
@@ -467,7 +474,7 @@ export function PaneRegionChrome(props: PaneRegionChromeProps): ReactNode {
   createElement('div', { className: 'pwr-body', 'data-body-visible': bodyVisible },
     createElement('div', { className: 'pwr-tree' },
       hasViews
-        ? createElement(SplitTree, { node: region.root, state, registry: props.registry, controller: props.controller, regionWidth: props.width, regionHeight: props.height, onOpenPicker: () => setPickerOpen(true) })
+        ? createElement(SplitTree, { node: region.root, state, registry: props.registry, controller: props.controller, regionWidth: props.width, regionHeight: props.height, onOpenPicker: () => setPickerOpen(true), renderCoreView: props.renderCoreView })
         : createElement('section', { className: 'pwr-empty' },
           createElement('p', null, 'No views open in this workspace.'),
           createElement('button', { type: 'button', onClick: () => setPickerOpen(true) }, 'Open a view'),

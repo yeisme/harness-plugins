@@ -1,10 +1,12 @@
 # @yeisme/dsh-pane-workbench
 
-可安装的 DSH Web profile bundle，为 DSH 提供共享 Right/Bottom Pane Workbench。
+可安装的 DSH Web profile bundle，为 DSH 提供唯一的共享 Right/Bottom Core Pane。
 
 它通过 `shell.workspace.right`、`shell.workspace.bottom` 和 `ctx.workspaceLayout` 参与
 AppFrame 正式布局；不注册生产 `shell.overlay`，不覆盖 canonical 左侧会话栏，也不占用
-`conversation`、`details` 或第二套 sidebar。工作区最大化只发生在左侧栏右边的主区域。
+`conversation` 或第二套 sidebar。`details` 只作为 DSH 旧宿主的一 RC 回退；支持
+`workspace.core-pane.v1` 时，Tool Details 作为隐藏内置 provider 进入同一个 Pane。
+工作区最大化只发生在左侧栏右边的主区域。
 
 `./client` 由 `tsdown` 构建为 DSH client-modules 所需的
 `window.__ModuleLoader__.load({ id: "@yeisme/dsh-pane-workbench", factory })` 格式，并把
@@ -39,6 +41,8 @@ run 与 domain 数据不会被删除。
 - split 深度最大 2、可见 group 最大 4、Pane 最小 280×180px。
 - V2 persistence 保存安全布局；V1 自动迁移并丢弃 overlay/maximized 临时字段。
 - DSH seam 不足时明确报告兼容错误，禁止回退到覆盖左侧栏的旧 overlay。
+- Bash 等 Tool Details 与生态 provider 共用 registry/controller/chrome；后续侧栏与底栏能力
+  只允许通过 `registerView()` / `registerPlugin()` 扩展，不新增独立 sidebar 或 Pane store。
 
 ## 开发与证据
 
@@ -53,6 +57,6 @@ pnpm --filter @yeisme/dsh-pane-workbench run test
 `temp/integration-test-runs/<run-id>/`。官方 `dsh plugin add` / Web boot / browser
 runner 是可选 host 集成，不作为本包完成门。
 
-排障时先确认 DSH layout 暴露 `shell.workspace.right`、`shell.workspace.bottom` 和
-`ctx.workspaceLayout`，再检查 bundle row 与 client loader。旧 DSH 不会得到 overlay
-降级路径。
+排障时先确认 DSH layout 暴露 `shell.workspace.right`、`shell.workspace.bottom`、
+`ctx.workspaceLayout` 和 `workspace.core-pane.v1`，再检查 bundle row 与 client loader。
+旧 DSH 不会得到 overlay 降级路径，也不会静默恢复双侧栏组合。

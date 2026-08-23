@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
-import { WorkspaceLayoutController } from '@deepseek-ai/dsh-client-ui-layout/src/client/workspace-layout.ts'
+import {
+  WORKSPACE_CORE_PANE_VERSION,
+  WorkspaceLayoutController,
+} from '@deepseek-ai/dsh-client-ui-layout/src/client/workspace-layout.ts'
 
 describe('WorkspaceLayoutController', () => {
   it('attaches one owner, normalizes defaults, updates and disposes symmetrically', () => {
     const controller = new WorkspaceLayoutController()
+    expect(controller.corePaneVersion).toBe(WORKSPACE_CORE_PANE_VERSION)
     const listener = vi.fn()
     controller.subscribe(listener)
     const handle = controller.attach('pane-workbench', { rightVisible: false, bottomVisible: false })
@@ -14,6 +18,7 @@ describe('WorkspaceLayoutController', () => {
       bottomVisible: false,
       rightWidth: 480,
       bottomRatio: 0.34,
+      corePaneHostAttached: false,
     })
     handle.update({ rightVisible: true, activeRegion: 'right' })
     expect(controller.getSnapshot()).toMatchObject({ rightVisible: true, activeRegion: 'right', auxiliaryPriority: 'workspace' })
@@ -40,6 +45,22 @@ describe('WorkspaceLayoutController', () => {
     expect(controller.getSnapshot()).toMatchObject({ auxiliaryPriority: 'workspace', maximizedRegion: 'right' })
     controller.restoreMaximized()
     expect(controller.getSnapshot().maximizedRegion).toBeUndefined()
+  })
+
+  it('routes the closed Core Pane id through the attached host and clears it on dispose', () => {
+    const controller = new WorkspaceLayoutController()
+    const host = { open: vi.fn(), close: vi.fn() }
+    const handle = controller.attach('pane', {}, host)
+    expect(controller.getSnapshot().corePaneHostAttached).toBe(true)
+    expect(controller.openCorePane('dsh.tool-details')).toBe(true)
+    expect(controller.closeCorePane('dsh.tool-details')).toBe(true)
+    expect(host.open).toHaveBeenCalledWith('dsh.tool-details')
+    expect(host.close).toHaveBeenCalledWith('dsh.tool-details')
+
+    handle.dispose()
+    expect(controller.getSnapshot().corePaneHostAttached).toBe(false)
+    expect(controller.openCorePane('dsh.tool-details')).toBe(false)
+    expect(controller.closeCorePane('dsh.tool-details')).toBe(false)
   })
 
   it('ignores stale handle writes after disposal and allows a fresh generation', () => {
