@@ -99,6 +99,11 @@ flowchart LR
 
 ## Open Questions
 
+以下问题均已裁决（2026-08-23 收口，与 tasks 6.1–6.3 对齐）：
+
 - 是否需要在助手消息尾部（`conversation.chat.turnTail`）也显示建议，而不是只在 composer dock？
+  - 裁决：V1 建议入口只落在 composer dock（`conversation.input.dock`）。turnTail 入口依赖上游 `conversation.chat.turnTail` seam 或额外官方 slot，当前均不存在；按 Upstream Seam Channel 规则须经 `upstream-prs/<slug>/` 另立 seam change 后再实现，不做 DOM patch 或死入口。retain-next。
 - 是否引入 host 侧 `ctx.nextStepSuggestions` registry 以支持跨 profile/跨进程贡献？
+  - 裁决：V1 不引入（见上文「不实现 host 侧跨插件 registry/projection（retain-next）」）。deliver-now 范围由 client-local source registry（`src/client/sources.ts`）交付；host 侧贡献待真实跨 profile/跨进程需求出现后另立 change。
 - 单 chip 点击在非空草稿时默认“追加”还是“替换”是否需要用户可配置？
+  - 裁决：需要，已实现。`SuggestionApplyPreference`('append'|'replace') + dock 控制行「替换草稿」切换，偏好经 `SuggestionStorage` 持久化；默认仍为追加。
