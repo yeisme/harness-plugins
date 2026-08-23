@@ -21,7 +21,9 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "build": "tsdown src/index.ts --out-dir lib --format esm --dts --clean"
+    "build": "tsdown src/index.ts --out-dir lib --format esm --dts --clean",
+    "test:slash-conformance": "bun scripts/run-slash-conformance.mjs",
+    "test:slash-browser": "node scripts/run-slash-browser-evidence.mjs"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
