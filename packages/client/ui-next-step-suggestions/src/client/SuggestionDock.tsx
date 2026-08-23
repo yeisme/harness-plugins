@@ -13,13 +13,55 @@ import { useEffect, useMemo, useState } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { NextStepSuggestionV1, PlanOptionsProjectionValue, SuggestionSource } from './types.ts'
 import { planOptionsToSuggestions } from './plan-options-source.ts'
-import { appendPrompt, applySelected, composeParallelPrompt, mergeSuggestions } from './suggestion-composer.ts'
+import {
+  applyPrompt,
+  applySelected,
+  composeParallelPrompt,
+  mergeSuggestions,
+  type SuggestionApplyPreference,
+} from './suggestion-composer.ts'
 import { SuggestionChip } from './SuggestionChip.tsx'
 import { NS } from './locales.ts'
 
 /** Injected face for the dock: a snapshot function of client-local sources. */
 export interface SuggestionDockInjected {
   readonly getSources: () => readonly SuggestionSource[]
+  /** 可注入的偏好存储；缺省安全访问 window.localStorage（不可用则进程内）。 */
+  readonly storage?: SuggestionStorage
+}
+
+/** Minimal persistence seam for the replace/append preference. */
+export type SuggestionStorage = Pick<Storage, 'getItem' | 'setItem'>
+
+/**
+ * 6.3 用户偏好持久化：建议写入草稿时“替换”或“追加”（默认追加）。
+ * 只存枚举值；非法/缺失值回退到默认，绝不把草稿内容写进 storage。
+ */
+const APPLY_PREFERENCE_KEY = 'nextStepSuggestions.applyPreference'
+
+function defaultStorage(): SuggestionStorage | undefined {
+  try {
+    return window.localStorage ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+function readApplyPreference(storage: SuggestionStorage | undefined): SuggestionApplyPreference {
+  try {
+    const stored = storage?.getItem(APPLY_PREFERENCE_KEY)
+    return stored === 'replace' ? 'replace' : 'append'
+  } catch {
+    return 'append'
+  }
+}
+
+function writeApplyPreference(storage: SuggestionStorage | undefined, preference: SuggestionApplyPreference): void {
+  try {
+    storage?.setItem(APPLY_PREFERENCE_KEY, preference)
+  } catch {
+    // Storage 不可用时偏好退化为进程内状态，不影响写入草稿的行为。
+  }
 }
 
 export type SuggestionDockProps =
@@ -28,10 +70,12 @@ export type SuggestionDockProps =
   & PropsLocale<typeof NS>
 
 /** Render the suggestion dock above the composer. */
-export function SuggestionDock({ useProjection, useInput, inputActions, getSources, t }: SuggestionDockProps) {
+export function SuggestionDock({ useProjection, useInput, inputActions, getSources, storage: injectedStorage, t }: SuggestionDockProps) {
+  const storage = injectedStorage ?? defaultStorage()
   const draft = useInput((state) => state.draft)
   const [multiSelect, setMultiSelect] = useState(false)
   const [parallel, setParallel] = useState(false)
+  const [applyPreference, setApplyPreference] = useState<SuggestionApplyPreference>(() => readApplyPreference(storage))
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set())
 
   // plan-options is read by string key because this plugin intentionally does
@@ -75,11 +119,11 @@ export function SuggestionDock({ useProjection, useInput, inputActions, getSourc
       })
       return
     }
-    writeDraft(appendPrompt(draft ?? '', suggestion.prompt))
+    writeDraft(applyPrompt(draft ?? '', suggestion.prompt, applyPreference))
   }
 
   const handleApply = () => {
-    writeDraft(applySelected(draft ?? '', selectedSuggestions))
+    writeDraft(applySelected(draft ?? '', selectedSuggestions, applyPreference))
     setSelectedIds(new Set())
   }
 
@@ -117,6 +161,19 @@ export function SuggestionDock({ useProjection, useInput, inputActions, getSourc
             }}
           />
           {t('suggestions.multiSelect')}
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            aria-label={t('suggestions.replaceMode')}
+            checked={applyPreference === 'replace'}
+            onChange={(event) => {
+              const next: SuggestionApplyPreference = event.currentTarget.checked ? 'replace' : 'append'
+              setApplyPreference(next)
+              writeApplyPreference(storage, next)
+            }}
+          />
+          {t('suggestions.replaceMode')}
         </label>
         {multiSelect && (
           <label>

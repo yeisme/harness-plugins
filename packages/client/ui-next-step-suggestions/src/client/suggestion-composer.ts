@@ -23,17 +23,40 @@ export function appendPrompt(current: string, prompt: string): string {
   return `${current.replace(/\s+$/, '')}\n${trimmedPrompt}`
 }
 
+/** 用户偏好：建议写入草稿时“追加”或“替换”（V1 默认追加）。 */
+export type SuggestionApplyPreference = 'append' | 'replace'
+
+/**
+ * Apply one suggestion prompt to the current draft under a replace/append
+ * preference. `append` keeps the legacy behavior (empty draft is replaced,
+ * non-empty draft gets a new line); `replace` always writes the prompt alone.
+ */
+export function applyPrompt(
+  current: string,
+  prompt: string,
+  preference: SuggestionApplyPreference = 'append',
+): string {
+  if (preference === 'replace') return prompt.trim()
+  return appendPrompt(current, prompt)
+}
+
 /**
  * Apply a list of selected suggestions to the current draft in order.
  *
  * @param current - current composer draft.
  * @param suggestions - selected suggestions in display order.
- * @returns The next draft with every selected prompt appended.
+ * @param preference - replace/append user preference (defaults to append).
+ * @returns The next draft with every selected prompt appended, or the joined
+ * prompts alone when the preference is replace.
  */
 export function applySelected(
   current: string,
   suggestions: readonly NextStepSuggestionV1[],
+  preference: SuggestionApplyPreference = 'append',
 ): string {
+  if (preference === 'replace') {
+    return suggestions.map(suggestion => suggestion.prompt.trim()).join('\n')
+  }
   return suggestions.reduce((draft, suggestion) => appendPrompt(draft, suggestion.prompt), current)
 }
 
