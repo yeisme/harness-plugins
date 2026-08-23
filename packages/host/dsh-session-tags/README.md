@@ -1,13 +1,30 @@
 # @yeisme/dsh-session-tags-host
 
 Harness Plugins 拥有的 Session 标签 sidecar Host。V1 使用公开 `ctx.storageDomain`
-打开 `yeisme.session-tags.v1`，按 Session 生命周期身份保存标签行；不得写入
-会话事件日志、Workspace registry 或浏览器存储。
+打开 `yeisme.session-tags.v1`（sessions 表，SessionId 为 key），按 Session 生命周期
+身份（createdAt + cwd）保存标签行；通过 Typert Remote `sessionTags.list/set`
+暴露只读快照与全量目标值 + `ifVersion` 的 CAS 写入。不得写入
+会话事件日志、Workspace registry 或浏览器存储，不改变会话 recency。
 
-本切片只发布可 typecheck 的包身份、行类型与占位 Host。完整 domain / CAS 与
-Typert `sessionTags` Remote 属于后续任务。运行时依赖已发布的
-`@deepseek-ai/dsh-storage-domain`、`@deepseek-ai/dsh-session-persistence` 与
-`@deepseek-ai/dsh-typert-protocol`（`^0.1.0-rc.6`）。
+## 模块
+
+- `wire`：跨 Host/Client 合同类型（`specVersion: '1.0'`、四个固定失败码）。
+- `tags`：V1 标签模型（NFKC+trim、首现去重、12 tags/64 bytes、控制字符拒绝）。
+- `domain`：storage-domain 声明（zod 行 schema，durable boundary 校验）。
+- `service`：`SessionTagsSidecar`——行级写队列、CAS、stale 行过滤、
+  durability-before-memory（服务不持有行副本）、no-op 不换版本、空 tags 删行。
+- `remote`：`SessionTagsRemoteService`（Typert `@Remote` list/set，namespace
+  `sessionTags`），失败原样返回，绝不自动重试。
+- `plugin`：Cordis 装配（`inject: ['storageDomain','sessionPersistence']`）。
+
+## 失败码
+
+| code | 语义 |
+| --- | --- |
+| `session-not-found` | Session 不存在或已删除；storage 无新增 |
+| `tags-invalid` | 目标集合违反 V1 模型；旧行/版本不动 |
+| `version-conflict` | `ifVersion` 不匹配；返回当前权威行（stale 行视为无行） |
+| `storage-unavailable` | 后端读写失败；内存/耐久态不变 |
 
 ## 开发
 

@@ -1,0 +1,22 @@
+# Yeisme DSH session tags bundle.
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-session-tags
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/dsh-session-tags
+#
+# Session tags sidecar: tags state, sessionTags.list/set Remote, the tag
+# editor overlay and the `yeisme.session-tags` grouping provider. The Client
+# provider is capability-probed — without the upstream `ctx.sessionGroupings`
+# seam (SessionGroupingProviderV1Alpha1) nothing is registered and the native
+# sidebar keeps its built-in workspace/flat grouping.
+#
+# Compatibility anchor: the first DSH release that ships the grouping seam
+# (upstream-prs/session-grouping-provider/; unreleased at 0.1.1-rc.2). DSH
+# releases without the seam are INCOMPATIBLE with the grouping surface: the
+# host sidecar stays loadable, but "By tags" and "Manage tags" do not appear
+# and no sidebar replacement or DOM fallback is used.
+- insert:
+  - id: dsh-session-tags-host
+    name: '@yeisme/dsh-session-tags-host'
+  - id: dsh-session-tags
+    name: '@yeisme/dsh-session-tags'

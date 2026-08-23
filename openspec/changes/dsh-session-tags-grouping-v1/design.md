@@ -166,11 +166,37 @@ Host 在写前检查持久化 Session 和生命周期身份。sidecar 不创建/
 
 | Surface | 分类 | 兼容策略 |
 | --- | --- | --- |
-| DSH public TS API | additive experimental | 新增 `V1Alpha1` export，不改旧 symbol |
-| DSH view persistence | additive | 保留 `workspace`/`flat` 值；未知 provider 回退 `workspace` |
-| Typert Remote | additive v1 | 新 service/method；字段不复用、不重命名 |
-| storageDomain | additive | 新 domain；无迁移、无既有数据写回 |
-| Bundle/profile | additive | 新 package row；移除即回滚 |
+| DSH public TS API | additive experimental | 新增 `V1Alpha1` type-only export，不改旧 symbol；不上 value export |
+| DSH view persistence | additive | 保留 `workspace`/`flat` 值；外部选择值固定 `provider:<id>` 前缀；未知/已卸载 provider 回退 `workspace`（持久化键 `dsh.workspace.view.v5` 不变） |
+| Typert Remote | additive v1 | 新 service/method（`sessionTags.list/set`，`specVersion: '1.0'`）；字段不复用、不重命名 |
+| storageDomain | additive | 新 domain `yeisme.session-tags.v1`（version 1）；无迁移、无既有数据写回 |
+| Bundle/profile | additive | 新 package row（host + bundle 两行）；移除即回滚 |
+
+### Alpha 兼容窗口（一个 RC）
+
+`SessionGroupingProviderV1Alpha1` 及 `ctx.sessionGroupings` 标记 experimental：
+**签名一经发布至少保持到下一个 RC 结束**（例如 0.1.x 系列内 0.1.0 → 0.1.1 两个
+相邻 RC），期间只做 additive 演进（新可选字段、新可选方法），绝不原地改签名、
+重命名或删除。引入 `V1Beta1`/`V1` 后旧 alpha 仍保留一个 RC 窗口供社区迁移，
+删除旧 alpha 必须开独立迁移 OpenSpec。`sessionTags` Remote 的
+`specVersion: '1.0'` 字段即为此窗口的运行时锚点：服务端拒绝不认识的
+specVersion 而不是静默兼容。
+
+### 回滚（rollback）
+
+1. 用户侧回滚：`dsh plugin --profile web remove @yeisme/dsh-session-tags` ——
+   bundle 行移除后 Client provider 消失，DSH 回退内建 `workspace` 分组；
+   `yeisme.session-tags.v1` sidecar 数据原样保留，重装即恢复（卸载不清数据）。
+2. seam 侧回滚：上游不合并该 PR 时，bundle 永远走 capability probe 降级
+   （无“按标签”入口、无死按钮），Host sidecar 独立可加载；不启用任何
+   整侧栏/DOM fallback。
+3. 合同钉住：本仓合同测试 pin 既有 `workspace`/`flat` 行为边界——
+   `packages/client/ui-session-tags/tests/compatibility.spec.ts` pin
+   内建值集合与已发布 `@deepseek-ai/dsh-client-ui-workspace/client` 公开面
+   连续性（apply/inject 原形、无 `sessionGroupings` 导出）；上游 staging
+   (`upstream-prs/session-grouping-provider/`) 的 144 个测试（含既有 126）
+   在干净 checkout 上 pin DSH 侧既有行为不回归。若任何实现需要重命名/删除
+   既有 symbol，停止实现并新增迁移/弃用方案。
 
 ## Open Questions
 

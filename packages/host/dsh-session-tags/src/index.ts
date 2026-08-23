@@ -2,48 +2,107 @@
  * @yeisme/dsh-session-tags-host.
  *
  * Plugin-owned Session tags sidecar. Canonical rows live in the public
- * storage-domain `yeisme.session-tags.v1`. This slice ships package identity,
- * the durable row type, and a versioned placeholder host. Domain table/CAS
- * and Typert Remote arrive in later tasks.
+ * storage-domain `yeisme.session-tags.v1`; the Typert Remote namespace
+ * `sessionTags` exposes `list`/`set` with full-target + `ifVersion` CAS.
+ * The sidecar never touches SessionEvent logs, Workspace state, or
+ * browser storage, and never changes Session recency.
+ *
+ * 入口分层：
+ * - `./wire`    ：跨 Host/Client 的 wire 合同类型（specVersion '1.0'）。
+ * - `./tags`    ：V1 标签模型（NFKC/trim、12×64bytes、控制字符拒绝）。
+ * - `./domain`  ：storage-domain 声明（sessions 表）。
+ * - `./service` ：行级 CAS + 生命周期身份校验的 sidecar 核心。
+ * - `./remote`  ：`sessionTags` Typert Remote 服务面。
+ * - `./plugin`  ：Cordis 插件装配（storageDomain + sessionPersistence）。
  *
  * @module @yeisme/dsh-session-tags-host
  */
 
-/** Public storage-domain name opened via `ctx.storageDomain`. */
-export const SESSION_TAGS_DOMAIN = 'yeisme.session-tags.v1' as const
+import {
+  SESSION_TAGS_CAPABILITY,
+  SESSION_TAGS_DOMAIN,
+  SESSION_TAGS_HOST_VERSION,
+} from './constants.ts'
+import type { SessionTagRowV1, SessionTagSessionIdentityV1 } from './wire.ts'
+import type { SessionTagsSidecar } from './service.ts'
 
-/** Published host package version. */
-export const SESSION_TAGS_HOST_VERSION = '0.1.0-rc.1' as const
+export {
+  SESSION_TAGS_CAPABILITY,
+  SESSION_TAGS_DOMAIN,
+  SESSION_TAGS_HOST_VERSION,
+  SESSION_TAGS_REMOTE_SERVICE_KEY,
+  SESSION_TAGS_SPEC_VERSION,
+} from './constants.ts'
 
-/** Capability id advertised by this host face. */
-export const SESSION_TAGS_CAPABILITY = 'session-tags-host' as const
+export type {
+  SessionTagRowV1,
+  SessionTagSessionIdentityV1,
+  SessionTagsListEntryV1,
+  SessionTagsListOkV1,
+  SessionTagsSetInputV1,
+  SessionTagsSetOkV1,
+  SessionNotFoundFailureV1,
+  StorageUnavailableFailureV1,
+  TagsInvalidFailureV1,
+  VersionConflictFailureV1,
+} from './wire.ts'
+export { SESSION_TAGS_FAILURE_CODES } from './wire.ts'
+export type { SessionTagsFailureCode } from './wire.ts'
+
+export {
+  MAX_TAGS_PER_SESSION,
+  MAX_TAG_BYTES,
+  normalizeTagText,
+  normalizeTags,
+  tagUtf8Bytes,
+  tagsMaterialEqual,
+  validateNormalizedTag,
+} from './tags.ts'
+export type { NormalizeTagsResult, TagInvalidReason } from './tags.ts'
+
+export { sessionTagsDomainSpec, sessionTagRowSchema } from './domain.ts'
+export type { SessionId, SessionTagsDomainSpec } from './domain.ts'
+
+export {
+  createSessionTagsSidecar,
+  SessionTagsSidecar,
+} from './service.ts'
+export type {
+  SessionIdentityPort,
+  SessionTagsFailure,
+  SessionTagsListOk,
+  SessionTagsListResult,
+  SessionTagsSetOk,
+  SessionTagsSidecarDeps,
+  SessionTagsTablePort,
+} from './service.ts'
+
+export {
+  SessionTagsRemoteService,
+  sessionTagsRemoteMarkers,
+} from './remote.ts'
+export type {
+  SessionTagsListWireResult,
+  SessionTagsSetWireResult,
+} from './remote.ts'
+
+export {
+  apply,
+  createPersistenceIdentityPort,
+  createStorageDomainTablePort,
+  inject,
+  mountSessionTags,
+  name,
+} from './plugin.ts'
+export type {
+  MountedSessionTags,
+  SessionPersistenceListFace,
+  SessionTagsDomainHandle,
+} from './plugin.ts'
 
 /**
- * sidecar 行绑定的 Session 生命周期身份。
- * createdAt 使用 ISO 字符串，而不是把持久化 Session header 原样写入：
- * 避免把会话日志字段泄漏进标签 domain，并在 SessionId 被新生命周期复用时
- * 把旧行判为 stale。cwd 仅作可选身份补充，不得当作授权或路径泄漏面。
- */
-export interface SessionTagSessionIdentityV1 {
-  readonly createdAt: string
-  readonly cwd?: string
-}
-
-/**
- * `yeisme.session-tags.v1` sessions 表的一行。
- * SessionId 是存储 key，不重复写入行值；tags 是规范化后的完整目标集合。
- * version 为行级 opaque CAS 令牌，updatedAt 只描述 sidecar，不得回写 Session recency。
- */
-export interface SessionTagRowV1 {
-  readonly session: SessionTagSessionIdentityV1
-  readonly tags: readonly string[]
-  readonly version: string
-  readonly updatedAt: number
-}
-
-/**
- * 后续 3.2 接到公开 `ctx.storageDomain.open(...)` 的构造参数。
- * 3.1 只保存引用，占位 Host 不得打开 domain 或读写记录。
+ * 后续 3.2/3.3 接到公开 `ctx.storageDomain.open(...)` 的构造参数。
+ * 3.1 形状保留：只携带 domain 名，不代表已打开的表句柄。
  */
 export interface SessionTagsStorageDomainSeam {
   readonly domain: typeof SESSION_TAGS_DOMAIN
@@ -58,33 +117,41 @@ export interface SessionTagsPersistenceSeam {
 }
 
 /**
- * Typed seams for later storage-domain / persistence / Typert wiring.
+ * Typed seams for storage-domain / persistence / Typert wiring.
  * Constructor args only — this package does not call live DSH services.
  */
 export interface SessionTagsHostSeamsV1 {
   readonly storageDomain?: SessionTagsStorageDomainSeam
   readonly sessionPersistence?: SessionTagsPersistenceSeam
+  /** 已装配的 sidecar 核心（3.2/3.3 起可注入；缺省时 host face 不产生标签）。 */
+  readonly sidecar?: SessionTagsSidecar
 }
 
 export interface SessionTagsHostV1 {
   readonly version: typeof SESSION_TAGS_HOST_VERSION
   readonly capability: typeof SESSION_TAGS_CAPABILITY
   readonly domain: typeof SESSION_TAGS_DOMAIN
-  /** Returns currently known sidecar rows. The placeholder never invents tags. */
+  /** Returns currently known sidecar rows. An unwired host never invents tags. */
   listRows(): Promise<readonly SessionTagRowV1[]>
 }
 
-/** Wrap optional later-task seams as a versioned `SessionTagsHostV1`. */
+/** Wrap optional seams as a versioned `SessionTagsHostV1`. */
 export function createSessionTagsHost(seams: SessionTagsHostSeamsV1 = {}): SessionTagsHostV1 {
   return {
     version: SESSION_TAGS_HOST_VERSION,
     capability: SESSION_TAGS_CAPABILITY,
     domain: SESSION_TAGS_DOMAIN,
     async listRows() {
-      // 占位实现必须忽略 seam：未接线时不得伪造标签，也不得探测持久化 Session。
-      void seams.storageDomain
-      void seams.sessionPersistence
-      return Object.freeze([])
+      // 未接线（没有 sidecar 核心）时必须保持“零标签、零探测”：
+      // 不得读取 persistence，也不得伪造行。
+      if (seams.sidecar === undefined) {
+        void seams.storageDomain
+        void seams.sessionPersistence
+        return Object.freeze([])
+      }
+      const result = await seams.sidecar.list()
+      if (!result.ok) throw new Error(result.message)
+      return result.entries.map(entry => entry.row)
     },
   }
 }

@@ -1,0 +1,834 @@
+diff --git a/packages/client/ui-workspace/README.md b/packages/client/ui-workspace/README.md
+index 041c886..3c361d4 100644
+--- a/packages/client/ui-workspace/README.md
++++ b/packages/client/ui-workspace/README.md
+@@ -20,6 +20,33 @@ Both target slots are declared by other plugins, so `apply` uses `slots.inject()
+ 
+ The shared sidebar projection hides rows whose durable Session summary has `origin: 'subagent'`; users enter those conversations through the selected parent's subagent header catalog. Each visible ordinary row inherits the blue activity indicator while any descendant reached through uninterrupted subagent-origin lineage is running, and its hover and assistive text report the exact running-descendant count without describing an idle parent as running. Ordinary forks remain visible and terminate this aggregation because lineage alone does not set their origin. Pending user interaction outranks the session's own running state, and either remains the primary row status while descendant activity stays available as a separate hover and assistive status. With neither present, descendant activity outranks the green unviewed-completion reminder; the reminder returns once no descendant is running. The runtime keeps hidden rows available for conversation, title, and addressed transport state.
+ 
++## Session grouping extension seam (experimental, v1alpha1)
++
++Third-party client plugins can contribute their own session grouping to this browser's view menu without replacing the sidebar slot. The seam is intentionally generic — grouping projections, bounded plain-text search terms, and session actions — and carries no domain types (no tags, folders, or favorites).
++
++A provider registers through the `ctx.sessionGroupings` service, which this package provides; registration and disposal belong to the calling plugin's fiber (unload/HMR clears the menu entry, subscription, and actions; duplicate ids fail loud):
++
++```ts
++import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
++import type { SessionGroupingProviderV1Alpha1 } from '@deepseek-ai/dsh-client-ui-workspace/client'
++
++export const inject = ['sessionGroupings'] as const
++
++export function apply(ctx: ClientContext): void {
++  const dispose = ctx.sessionGroupings.register({
++    id: 'org.example.my-grouping',           // unique; `workspace`/`flat`/`provider:` are reserved
++    label: () => 'By my thing',
++    getSnapshot: () => snapshot,             // stable reference until the next notify
++    subscribe: (listener) => subscribe(listener),
++    // optional: row actions appended to every session row menu
++    sessionActions: [{ id: 'org.example.edit', label: 'Edit…', open: (sessionId) => openEditor(sessionId) }],
++  })
++  // dispose() is idempotent and also runs when this plugin unloads.
++}
++```
++
++The provider owns group order, labels, and membership only. The browser keeps everything else: it filters unknown, archived, subagent-origin, and non-current blank sessions; renders native session rows (rename/fork/archive stay); keeps the current-session highlight on every copy of a multi-group session; applies the existing **Manual**/**Last updated** ordering per namespaced `provider:<providerId>:<groupId>` browser-local account (never a Workspace order account, never the Host reorder API); hides Workspace-only group-header actions (new/rename/delete/drag) on external groups; and merges each provider's `searchTermsBySession` into the local search while leaving the Host content-search bound unchanged. The persisted selection key for an external grouping is `provider:<providerId>`, so existing `workspace`/`flat` persisted values load unchanged and an unloaded provider falls back to the workspace view. Plugins must probe the capability first (`typeof ctx.sessionGroupings?.register === 'function'`) and degrade honestly on older hosts — no DOM patching, no sidebar replacement. The public surface is type-only (`SessionGroupingProviderV1Alpha1` and friends exported from `./client`); `fakeSessionGroupingProvider` in the same module doubles as a community sample (see `tests/grouping.client.spec.ts`).
++
+ ## Model Experience
+ 
+ None, as the picker is browser chrome; nothing here reaches a model request.
+diff --git a/packages/client/ui-workspace/src/client/WorkspaceBrowser.tsx b/packages/client/ui-workspace/src/client/WorkspaceBrowser.tsx
+index 9681f67..a20a5a5 100644
+--- a/packages/client/ui-workspace/src/client/WorkspaceBrowser.tsx
++++ b/packages/client/ui-workspace/src/client/WorkspaceBrowser.tsx
+@@ -19,8 +19,10 @@ import type {
+   SessionId, SessionListState, SessionSearchResultItem, WorkspaceId, WorkspaceView,
+ } from '@deepseek-ai/dsh-client-runtime/client'
+ import type { WorkspaceBrowserProps } from './contract/slots.ts'
++import type { SessionGroupingRegistrationV1Alpha1, SessionGroupBy } from './grouping.ts'
++import { externalGroupingKey, providerIdOfGroupBy } from './grouping.ts'
+ import type { SessionNode, SessionOrderBy } from './tree.ts'
+-import { deriveFlat, deriveGroups, deriveSearchResults, UNGROUPED_KEY } from './tree.ts'
++import { deriveExternalGroups, deriveFlat, deriveGroups, deriveSearchResults, mergedSearchTermsBySession, UNGROUPED_KEY } from './tree.ts'
+ import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './rows/Rows.tsx'
+ import { FLAT_SESSION_ORDER_KEY } from './stores.ts'
+ import { WorkspacePickFlow } from './WorkspacePicker.tsx'
+@@ -143,12 +145,19 @@ function nextSessionOrderAccount({
+   return { order, updatedAt, changed: orderChanged || timestampsChanged }
+ }
+ 
+-/** Grouping and ordering menu; own open state so it resets with the wide chrome. */
+-function ViewOptionsMenu({ groupBy, orderBy, onGroupPick, onOrderPick, t }: {
+-  groupBy: 'workspace' | 'flat'
++/**
++ * Grouping and ordering menu; own open state so it resets with the wide
++ * chrome. External v1alpha1 providers append their entries after the two
++ * built-in modes; their menu id is the persisted selection key
++ * (`provider:<id>`), so picking one is a plain `setGroupBy`.
++ */
++function ViewOptionsMenu({ groupBy, orderBy, onGroupPick, onOrderPick, providers, t }: {
++  groupBy: SessionGroupBy
+   orderBy: SessionOrderBy
+-  onGroupPick: (mode: 'workspace' | 'flat') => void
++  onGroupPick: (mode: SessionGroupBy) => void
+   onOrderPick: (mode: SessionOrderBy) => void
++  /** Live external provider registrations (registry order); absent while the seam has no providers. */
++  providers?: readonly SessionGroupingRegistrationV1Alpha1[] | undefined
+   t: WorkspaceBrowserProps['t']
+ }) {
+   const [open, setOpen] = useState(false)
+@@ -160,6 +169,10 @@ function ViewOptionsMenu({ groupBy, orderBy, onGroupPick, onOrderPick, t }: {
+         { type: 'label' as const, id: 'group-by', text: t('groupBy.label') },
+         { id: 'workspace', label: t('groupBy.workspace') },
+         { id: 'flat', label: t('groupBy.flat') },
++        ...(providers ?? []).map(({ provider, label }) => ({
++          id: externalGroupingKey(provider.id),
++          label,
++        })),
+         { type: 'separator' as const, id: 'order-by-separator' },
+         { type: 'label' as const, id: 'order-by', text: t('orderBy.label') },
+         { id: 'manual', label: t('orderBy.manual') },
+@@ -167,7 +180,7 @@ function ViewOptionsMenu({ groupBy, orderBy, onGroupPick, onOrderPick, t }: {
+       ]}
+       selectedIds={[groupBy, orderBy]}
+       onSelect={(id) => {
+-        if (id === 'workspace' || id === 'flat') onGroupPick(id)
++        if (id === 'workspace' || id === 'flat' || id.startsWith('provider:')) onGroupPick(id as SessionGroupBy)
+         else if (id === 'manual' || id === 'updated') onOrderPick(id)
+         setOpen(false)
+       }}
+@@ -665,6 +678,218 @@ function FlatList({
+   )
+ }
+ 
++/**
++ * The external-provider grouped body (v1alpha1 seam): native session rows
++ * under provider-owned group headers. The browser owns visibility filtering
++ * (inside deriveExternalGroups), group expansion, and the manual/updated
++ * order per namespaced group account (`provider:<pid>:<gid>` — never a
++ * Workspace order account, never the Host reorder API). Workspace-only
++ * header actions and workspace-row drag stay off (GroupNode.external).
++ */
++function ExternalTree({
++  useSessions, registration, archivedSessionIds, orderBy,
++  groupExpansion, setGroupExpanded,
++  sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder,
++  onSessionRename, onSessionArchive, open, forkSession, t,
++}: Pick<
++  SessionTreeProps,
++  | 'useSessions'
++  | 'open'
++  | 'forkSession'
++  | 'onSessionRename'
++  | 'onSessionArchive'
++  | 'archivedSessionIds'
++  | 'orderBy'
++  | 'groupExpansion'
++  | 'setGroupExpanded'
++  | 'sessionOrderByAccount'
++  | 'sessionUpdatedAtByAccount'
++  | 'syncSessionOrderAccount'
++  | 'setSessionOrder'
++  | 't'
++> & { readonly registration: SessionGroupingRegistrationV1Alpha1 }) {
++  const list = useSessions(s => s)
++  const current = list.current
++  const [expandedSessionGroups, setExpandedSessionGroups] = useState<string[]>([])
++  const [drag, setDrag] = useState<DragState | null>(null)
++  const sessionDropCommitted = useRef(false)
++  useNativeDragAcceptance(drag !== null)
++  const snapshot = registration.provider.getSnapshot()
++  const expandedGroups = useMemo(
++    () => Object.entries(groupExpansion).filter(([, expanded]) => expanded).map(([key]) => key),
++    [groupExpansion],
++  )
++  const groupKeys = useMemo(() => snapshot.groups.map(group => `provider:${registration.provider.id}:${group.id}`), [snapshot, registration.provider.id])
++  // Per-group order accounts: manual reconciles against the visible members;
++  // updated applies the same one-time promotion policy as workspace groups.
++  const memberIdsByGroup = useMemo(() => {
++    const archived = new Set(archivedSessionIds)
++    const visible = (id: SessionNode['id']): boolean => {
++      const summary = list.byId[id]
++      return summary !== undefined && summary.origin !== 'subagent'
++        && !archived.has(id) && (!summary.blank || id === list.current)
++    }
++    const byGroup = new Map<string, SessionNode['id'][]>()
++    for (const group of snapshot.groups) {
++      const key = `provider:${registration.provider.id}:${group.id}`
++      const seen = new Set<string>()
++      const members: SessionNode['id'][] = []
++      for (const id of group.sessionIds) {
++        if (seen.has(id) || !visible(id)) continue
++        seen.add(id)
++        members.push(id)
++      }
++      byGroup.set(key, members)
++    }
++    return byGroup
++  }, [snapshot, list, archivedSessionIds])
++  const previousOrderBy = useRef(orderBy)
++  useEffect(() => {
++    if (list.phase !== 'ready') return
++    const switchedToUpdated = previousOrderBy.current !== 'updated' && orderBy === 'updated'
++    previousOrderBy.current = orderBy
++    for (const key of groupKeys) {
++      const sessionIds = memberIdsByGroup.get(key)
++      if (sessionIds === undefined) continue
++      const previousOrder = sessionOrderByAccount[key]
++      const previousUpdatedAt = sessionUpdatedAtByAccount[key] ?? {}
++      const next = nextSessionOrderAccount({
++        sessionIds,
++        previousOrder,
++        previousUpdatedAt,
++        list,
++        orderBy,
++        sortByRecency: orderBy === 'updated' && (previousOrder === undefined || switchedToUpdated),
++      })
++      if (next.changed) {
++        syncSessionOrderAccount(key, next.order.map(id => id as string), next.updatedAt)
++      }
++    }
++  }, [list, orderBy, groupKeys, memberIdsByGroup, sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount])
++  const groups = useMemo(
++    () => deriveExternalGroups(list, registration.provider.id, snapshot, archivedSessionIds, {
++      expandedGroups,
++      ordersByGroup: Object.fromEntries(groupKeys.flatMap(key => {
++        const order = sessionOrderByAccount[key]
++        return order === undefined ? [] : [[key, order]]
++      })),
++    }),
++    [list, registration.provider.id, snapshot, archivedSessionIds, expandedGroups, groupKeys, sessionOrderByAccount],
++  )
++  // Provider session actions reach every copy of a multi-group session; each
++  // row receives the canonical SessionId, so `open` addresses the same session.
++  const providerActions = registration.provider.sessionActions === undefined
++    ? undefined
++    : registration.provider.sessionActions.map(action => ({
++      action,
++      label: typeof action.label === 'function' ? action.label() : action.label,
++    }))
++  const commitSessionDrag = (activeDrag: DragState, over: NonNullable<DragState['over']>): void => {
++    if (sessionDropCommitted.current) return
++    sessionDropCommitted.current = true
++    setDrag(null)
++    const group = groups.find(candidate => candidate.key === activeDrag.accountKey)
++    if (group === undefined) return
++    const targetIndex = group.sessions.findIndex(session => session.id === over.id)
++    if (targetIndex === -1) return
++    const anchor = over.half === 'before' ? over.id : group.sessions[targetIndex + 1]?.id
++    if (anchor === activeDrag.sessionId) return
++    const sourceIndex = group.sessions.findIndex(session => session.id === activeDrag.sessionId)
++    const anchorIndex = anchor === undefined
++      ? group.sessions.length
++      : group.sessions.findIndex(session => session.id === anchor)
++    if (sourceIndex !== -1 && (anchorIndex === sourceIndex || anchorIndex === sourceIndex + 1)) return
++    const accountSessionIds = memberIdsByGroup.get(activeDrag.accountKey)
++    if (accountSessionIds === undefined) return
++    const nextOrder = accountSessionIds.filter(id => id !== activeDrag.sessionId)
++    const insertAt = anchor === undefined ? nextOrder.length : nextOrder.indexOf(anchor)
++    nextOrder.splice(insertAt === -1 ? nextOrder.length : insertAt, 0, activeDrag.sessionId)
++    // Manual reorder of an external group writes ONLY the browser-local
++    // namespaced view account — never the Workspace persistence API.
++    setSessionOrder(activeDrag.accountKey, nextOrder.map(id => id as string))
++  }
++  const now = Date.now()
++  return (
++    <div className={clsx(css.treeBody, css.wide)}>
++      <div className={css.list} role="tree" aria-label={t('section.sessions')}>
++        {groups.length === 0 && (
++          <div className={css.empty}>{t('empty.none')}</div>
++        )}
++        {groups.map((group) => (
++          <div key={group.key} className={css.groupSection}>
++            <ProjectRowItem
++              group={group}
++              t={t}
++              onToggle={() => {
++                if (group.expanded) {
++                  setExpandedSessionGroups(keys => keys.filter(key => key !== group.key))
++                }
++                setGroupExpanded(group.key, !group.expanded)
++              }}
++            />
++            {(expandedSessionGroups.includes(group.key)
++              ? group.sessions
++              : group.sessions.slice(0, COLLAPSED_SESSION_LIMIT)
++            ).map((node) => {
++              const sameGroupDrag = drag !== null && drag.accountKey === group.key
++              const dragProps = {
++                start: () => {
++                  sessionDropCommitted.current = false
++                  setDrag({ accountKey: group.key, sessionId: node.id, over: null })
++                },
++                active: sameGroupDrag,
++                marker: sameGroupDrag && drag.over?.id === node.id ? drag.over.half : null,
++                hover: (half: 'before' | 'after') => {
++                  /* v8 ignore next -- narrowing guard: Rows gates hover on `active`, which is false while the drag state is null. */
++                  setDrag(d => (d === null ? d : { ...d, over: { id: node.id, half } }))
++                },
++                drop: (half: 'before' | 'after') => {
++                  /* v8 ignore next -- narrowing guard: Rows gates drop on `active`, which is false while the drag state is null. */
++                  if (drag === null) return
++                  commitSessionDrag(drag, { id: node.id, half })
++                },
++                end: () => {
++                  if (drag?.over !== null && drag?.over !== undefined) commitSessionDrag(drag, drag.over)
++                  else setDrag(null)
++                  sessionDropCommitted.current = false
++                },
++              }
++              return (
++                <SessionNodeItem
++                  key={`${group.key}:${node.id}`}
++                  node={node}
++                  currentId={current}
++                  now={now}
++                  onOpen={open}
++                  onRename={onSessionRename}
++                  onFork={forkSession}
++                  onArchive={onSessionArchive}
++                  providerActions={providerActions}
++                  drag={dragProps}
++                  t={t}
++                />
++              )
++            })}
++            {group.sessions.length > COLLAPSED_SESSION_LIMIT && (
++              <button
++                type="button"
++                className={css.sessionOverflowButton}
++                aria-expanded={expandedSessionGroups.includes(group.key)}
++                onClick={() => { setExpandedSessionGroups(keys => toggled(keys, group.key)) }}
++              >
++                {expandedSessionGroups.includes(group.key)
++                  ? t('sessions.collapse')
++                  : t('sessions.expand', { n: group.sessions.length - COLLAPSED_SESSION_LIMIT })}
++              </button>
++            )}
++          </div>
++        ))}
++      </div>
++      <span className={css.fade} />
++    </div>
++  )
++}
++
+ interface RemoteSearchState {
+   query: string
+   status: 'idle' | 'loading' | 'ready' | 'error'
+@@ -681,6 +906,7 @@ function SearchResults({
+   query,
+   remote,
+   resultLimit,
++  searchTermsBySession,
+   t,
+ }: Pick<SessionTreeProps, 'useSessions' | 'open' | 't'> & {
+   workspaces: readonly WorkspaceView[]
+@@ -688,14 +914,16 @@ function SearchResults({
+   query: string
+   remote: RemoteSearchState
+   resultLimit: number
++  /** Merged external-provider search terms (v1alpha1); merged into the local match set only. */
++  searchTermsBySession?: Readonly<Record<string, readonly string[]>> | undefined
+ }) {
+   const list = useSessions(s => s)
+   const currentRemote = remote.query === query
+     ? remote
+     : { query, status: 'loading' as const, items: [], hasMore: false }
+   const results = useMemo(
+-    () => deriveSearchResults(list, workspaces, query, archivedSessionIds, currentRemote, resultLimit),
+-    [list, workspaces, query, archivedSessionIds, currentRemote, resultLimit],
++    () => deriveSearchResults(list, workspaces, query, archivedSessionIds, currentRemote, resultLimit, searchTermsBySession),
++    [list, workspaces, query, archivedSessionIds, currentRemote, resultLimit, searchTermsBySession],
+   )
+   const pending = currentRemote.status === 'loading'
+   const failed = currentRemote.status === 'error'
+@@ -747,6 +975,7 @@ export function WorkspaceBrowser({
+   useSessions,
+   useWorkspaces,
+   useStore,
++  useSessionGroupings,
+   actions,
+   startSession,
+   open,
+@@ -774,6 +1003,26 @@ export function WorkspaceBrowser({
+   const directoryFlowAvailable = useDirectoryFlow(occupied => occupied)
+   const groupBy = useStore(s => s.groupBy)
+   const orderBy = useStore(s => s.orderBy)
++  // External v1alpha1 providers (hooks compartment, always bound by apply).
++  // Revision moves on registration and on every provider snapshot
++  // notification, so snapshots are read fresh in render; an empty registry
++  // renders exactly the built-in workspace/flat behavior.
++  const groupings = useSessionGroupings(state => state)
++  const externalProviders = groupings?.providers ?? []
++  const externalRegistration = (() => {
++    const providerId = providerIdOfGroupBy(groupBy)
++    if (providerId === undefined) return undefined
++    return externalProviders.find(registration => registration.provider.id === providerId)
++  })()
++  // Unknown or unloaded provider selection falls back to the workspace view:
++  // no blank sidebar, no dead entry (the selection itself stays persisted).
++  const effectiveGroupBy: SessionGroupBy = groupBy === 'workspace' || groupBy === 'flat' || externalRegistration !== undefined
++    ? groupBy
++    : 'workspace'
++  const externalSearchTerms = useMemo(
++    () => mergedSearchTermsBySession(externalProviders.map(registration => registration.provider.getSnapshot())),
++    [externalProviders, groupings?.revision],
++  )
+   const groupExpansion = useStore(s => s.groupExpansion)
+   const sessionOrderByAccount = useStore(s => s.sessionOrderByAccount)
+   const sessionUpdatedAtByAccount = useStore(s => s.sessionUpdatedAtByAccount)
+@@ -783,8 +1032,15 @@ export function WorkspaceBrowser({
+       UNGROUPED_KEY,
+       FLAT_SESSION_ORDER_KEY,
+       ...workspaces.map(workspace => workspace.workspaceId as string),
++      // External group accounts are namespaced per provider group; stale
++      // providers' accounts retire with the same retention sweep.
++      ...externalProviders.flatMap(registration =>
++        registration.provider.getSnapshot().groups.map(
++          group => `provider:${registration.provider.id}:${group.id}`,
++        ),
++      ),
+     ])
+-  }, [actions.retainAccountKeys, workspacePhase, workspaces])
++  }, [actions.retainAccountKeys, workspacePhase, workspaces, externalProviders])
+   // The query outlives the tree and the input (both wide-only) so collapsing
+   // does not silently drop an in-progress filter.
+   const [query, setQuery] = useState('')
+@@ -987,7 +1243,7 @@ export function WorkspaceBrowser({
+       <div className={css.sectionHeader}>
+         {wide && (
+           <span className={clsx(css.sectionLabel, css.wide, searchExpanded && css.sectionLabelHidden)}>
+-            {groupBy === 'flat' ? t('section.sessions') : t('section.workspaces')}
++            {groupBy === 'workspace' ? t('section.workspaces') : t('section.sessions')}
+           </span>
+         )}
+         {wide && (
+@@ -1054,6 +1310,7 @@ export function WorkspaceBrowser({
+               orderBy={orderBy}
+               onGroupPick={(mode) => { actions.setGroupBy(mode) }}
+               onOrderPick={(mode) => { actions.setOrderBy(mode) }}
++              providers={externalProviders}
+               t={t}
+             />
+           )}
+@@ -1126,10 +1383,11 @@ export function WorkspaceBrowser({
+               query={normalizedQuery}
+               remote={remoteSearch}
+               resultLimit={searchResultLimit}
++              searchTermsBySession={externalSearchTerms}
+               t={t}
+             />
+           )
+-          : groupBy === 'flat'
++          : effectiveGroupBy === 'flat'
+             ? (
+               <FlatList
+                 useSessions={useSessions} open={open} forkSession={forkSession}
+@@ -1143,6 +1401,26 @@ export function WorkspaceBrowser({
+                 t={t}
+               />
+             )
++            : externalRegistration !== undefined
++              ? (
++                <ExternalTree
++                  useSessions={useSessions}
++                  registration={externalRegistration}
++                  onSessionRename={onSessionRename}
++                  onSessionArchive={onSessionArchive}
++                  forkSession={forkSession}
++                  groupExpansion={groupExpansion}
++                  setGroupExpanded={actions.setGroupExpanded}
++                  sessionOrderByAccount={sessionOrderByAccount}
++                  sessionUpdatedAtByAccount={sessionUpdatedAtByAccount}
++                  syncSessionOrderAccount={actions.syncSessionOrderAccount}
++                  setSessionOrder={actions.setSessionOrder}
++                  archivedSessionIds={archivedSessionIds}
++                  open={open}
++                  orderBy={orderBy}
++                  t={t}
++                />
++              )
+             : (
+               <SessionTree
+                 useSessions={useSessions}
+diff --git a/packages/client/ui-workspace/src/client/contract/slots.ts b/packages/client/ui-workspace/src/client/contract/slots.ts
+index bdd8505..ba47507 100644
+--- a/packages/client/ui-workspace/src/client/contract/slots.ts
++++ b/packages/client/ui-workspace/src/client/contract/slots.ts
+@@ -91,6 +91,12 @@ export type WorkspaceBrowserInjected = {
+   hooks: DirectoryPickingInjected['hooks'] & {
+     /** Current generation's Host description, bound by the slot renderer. */
+     hostDescription: HostDescriptionSource
++    /**
++     * External session-grouping registry state (experimental v1alpha1 seam).
++     * Always supplied by this package's apply (the registry unloads with it);
++     * an empty registry renders exactly the built-in workspace/flat behavior.
++     */
++    sessionGroupings: HostObservable<import('../grouping.ts').SessionGroupingsStateV1Alpha1>
+   }
+   /**
+    * Start a New Session in a Workspace: reuse-or-create its blank session and
+diff --git a/packages/client/ui-workspace/src/client/index.ts b/packages/client/ui-workspace/src/client/index.ts
+index 93269c2..16a7577 100644
+--- a/packages/client/ui-workspace/src/client/index.ts
++++ b/packages/client/ui-workspace/src/client/index.ts
+@@ -14,6 +14,7 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+ // Type-only: pulls the locale plugin's Context merge (ctx.locale).
+ import type {} from '@deepseek-ai/dsh-client-locale/client'
+ import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from './contract/slots.ts'
++import { SessionGroupings } from './grouping.ts'
+ import { createWorkspaceViewStore } from './stores.ts'
+ import { WorkspaceBrowser } from './WorkspaceBrowser.tsx'
+ import { WorkspacePicker } from './WorkspacePicker.tsx'
+@@ -24,6 +25,14 @@ export type {
+   WorkspaceBrowserInjected, WorkspaceBrowserProps, WorkspacePickerInjected, WorkspacePickerProps,
+ } from './contract/slots.ts'
+ export type { WorkspaceKey } from './locales.ts'
++// Experimental v1alpha1 grouping seam: types only (values stay internal —
++// registration goes through `ctx.sessionGroupings`, never a value export).
++export type {
++  SessionGroupingActionV1Alpha1,
++  SessionGroupingGroupV1Alpha1,
++  SessionGroupingProviderV1Alpha1,
++  SessionGroupingSnapshotV1Alpha1,
++} from './grouping.ts'
+ 
+ declare module '@deepseek-ai/dsh-client-ui-slots' {
+   interface LocaleNamespaceMap {
+@@ -55,6 +64,11 @@ export function apply(ctx: ClientContext): void {
+   const connection = ctx.get('connection') as ConnectionHandle
+   const hostDescription = connection.hostDescription
+   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-workspace: dictionaries')
++  // External grouping registry (v1alpha1): the Service registers itself as
++  // `ctx.sessionGroupings` under this plugin's fiber, so the seam unloads with
++  // the browser plugin and providers registered by other plugins dispose with
++  // THEIR fibers (the Service proxy binds register()'s effect to the caller).
++  const groupings = new SessionGroupings(ctx)
+ 
+   const searchSessions: WorkspaceBrowserInjected['searchSessions'] = async (query, signal) => {
+     const result = await ctx.sessions.search(query, signal)
+@@ -102,7 +116,7 @@ export function apply(ctx: ClientContext): void {
+       await ctx.workspaces.insertSessionBefore(workspaceId, sessionId, beforeSessionId)
+     },
+     createWorkspace: input => ctx.workspaces.create(input),
+-    hooks: { directoryFlow: browserFlowSource, hostDescription },
++    hooks: { directoryFlow: browserFlowSource, hostDescription, sessionGroupings: groupings.observer() },
+   })
+   const pickerInjected = (): WorkspacePickerInjected => ({
+     createWorkspace: input => ctx.workspaces.create(input),
+diff --git a/packages/client/ui-workspace/src/client/rows/Rows.tsx b/packages/client/ui-workspace/src/client/rows/Rows.tsx
+index d2d121f..9133550 100644
+--- a/packages/client/ui-workspace/src/client/rows/Rows.tsx
++++ b/packages/client/ui-workspace/src/client/rows/Rows.tsx
+@@ -14,6 +14,7 @@ import {
+ } from '@deepseek-ai/dsh-client-ui-primitives'
+ import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
+ import { abbreviateHomePath } from '@deepseek-ai/dsh-client-runtime/client'
++import type { SessionGroupingActionV1Alpha1 } from '../grouping.ts'
+ import type { WorkspaceBrowserProps } from '../contract/slots.ts'
+ import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
+ import { relativeTime } from '../tree.ts'
+@@ -112,8 +113,9 @@ function rowHalf(e: { clientY: number; currentTarget: HTMLElement }): 'before' |
+ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home, t }: {
+   group: GroupNode
+   onToggle: () => void
+-  onCreate: () => void
+-  /** Real-Workspace actions; absent for the ungrouped bucket (no menu shown). */
++  /** Start a frontend Session here; absent for external provider groups (v1alpha1). */
++  onCreate?: (() => void) | undefined
++  /** Real-Workspace actions; absent for the ungrouped bucket and external groups (no menu shown). */
+   actions?: { rename: () => void; delete: () => void } | undefined
+   /** Present only for real Workspace rows in the grouped view. */
+   drag?: WorkspaceRowDragProps | undefined
+@@ -123,7 +125,8 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
+ }) {
+   const row = group
+   // The ungrouped bucket has no workspace title: its label is dictionary copy.
+-  const label = row.workspaceId === undefined ? t('group.ungrouped') : row.label
++  // External provider groups carry their own label and no Workspace backing.
++  const label = row.external === true ? row.label : row.workspaceId === undefined ? t('group.ungrouped') : row.label
+   const active = group.expanded && group.containsCurrent
+   const [menuOpen, setMenuOpen] = useState(false)
+   const workspaceMenuItems = [
+@@ -184,14 +187,16 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
+             )}
+           />
+         )}
+-        <button
+-          type="button"
+-          className={css.iconButton}
+-          aria-label={t('actions.newSession.aria', { name: label })}
+-          onClick={(e) => { e.stopPropagation(); onCreate() }}
+-        >
+-          <IconPlusOutline16 />
+-        </button>
++        {onCreate !== undefined && (
++          <button
++            type="button"
++            className={css.iconButton}
++            aria-label={t('actions.newSession.aria', { name: label })}
++            onClick={(e) => { e.stopPropagation(); onCreate() }}
++          >
++            <IconPlusOutline16 />
++          </button>
++        )}
+       </span>
+     </div>
+   )
+@@ -359,7 +364,7 @@ export function SearchResultItem({ result, currentId, onOpen, t }: {
+  * @param props.t - the browser root's locale seat.
+  * @returns the session row.
+  */
+-export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork, onArchive, drag, flat = false, t }: {
++export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork, onArchive, providerActions, drag, flat = false, t }: {
+   node: SessionNode
+   currentId: string | undefined
+   now: number
+@@ -370,6 +375,8 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
+   onFork: (id: SessionNode['id']) => void
+   /** Archive this session (row menu action; commits without a dialog). */
+   onArchive: (id: SessionNode['id']) => void
++  /** External provider session actions (v1alpha1): appended after the native verbs; the provider owns its surface. */
++  providerActions?: readonly { action: SessionGroupingActionV1Alpha1; label: string }[] | undefined
+   /** Present only on draggable rows (workspace-group sessions outside search). */
+   drag?: RowDragProps | undefined
+   /** The row is rendered without a parent Workspace header. */
+@@ -391,6 +398,13 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
+     { id: 'fork', label: t('menu.fork'), icon: <IconBranchOutline16 /> },
+     // 20-native glyph in the menu's 16px icon slot (Menu.module.css .itemIcon).
+     { id: 'archive', label: t('menu.archiveSession'), icon: <IconArchiveOutline20 size={16} /> },
++    // Provider actions use a namespaced id (`provider:<providerId>.<actionId>`)
++    // so a future native verb can never collide with a third-party entry.
++    ...(providerActions ?? []).map(({ action, label }) => ({
++      id: `provider:${action.id}`,
++      label,
++      icon: <IconEditOutline16 />,
++    })),
+   ]
+   // Figma session cell: pad 8, status slot 16, then a 4px title gap.
+   const ownRow = (
+@@ -453,6 +467,12 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
+               if (id === 'rename') onRename(node.id, row.title)
+               if (id === 'fork') onFork(node.id)
+               if (id === 'archive') onArchive(node.id)
++              // Provider entries dispatch `open` with the canonical row id;
++              // DSH never executes the provider's domain mutation.
++              if (id.startsWith('provider:')) {
++                const entry = providerActions?.find(({ action }) => `provider:${action.id}` === id)
++                entry?.action.open(node.id)
++              }
+             }}
+             portal
+             closeOnPointerLeave
+diff --git a/packages/client/ui-workspace/src/client/stores.ts b/packages/client/ui-workspace/src/client/stores.ts
+index f085329..a9210c4 100644
+--- a/packages/client/ui-workspace/src/client/stores.ts
++++ b/packages/client/ui-workspace/src/client/stores.ts
+@@ -10,8 +10,13 @@ import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-run
+ /** Browser-local order account for the hierarchy-free flat Session list. */
+ export const FLAT_SESSION_ORDER_KEY = '__flat_session_order__'
+ 
+-/** Session-list grouping mode: workspace sections or one flat recency list. */
+-export type SessionGroupBy = 'workspace' | 'flat'
++/**
++ * Session-list grouping mode: workspace sections, one flat recency list, or
++ * an external provider selection (`provider:<id>`, additive v1alpha1 seam —
++ * see grouping.ts). Persisted values from older builds (`workspace`/`flat`)
++ * keep loading unchanged.
++ */
++export type SessionGroupBy = import('./grouping.ts').SessionGroupBy
+ /** Session order: user-arranged only, or user-arranged plus activity promotion. */
+ export type SessionOrderBy = 'manual' | 'updated'
+ 
+diff --git a/packages/client/ui-workspace/src/client/tree.ts b/packages/client/ui-workspace/src/client/tree.ts
+index 23649a2..39fa094 100644
+--- a/packages/client/ui-workspace/src/client/tree.ts
++++ b/packages/client/ui-workspace/src/client/tree.ts
+@@ -8,6 +8,7 @@ import {
+   type SessionSearchResultItem, type SessionSummary, type SubagentDescendantSummary,
+   type WorkspaceId, type WorkspaceView,
+ } from '@deepseek-ai/dsh-client-runtime/client'
++import type { SessionGroupingSnapshotV1Alpha1 } from './grouping.ts'
+ 
+ /** Group key for Sessions outside every Workspace. */
+ export const UNGROUPED_KEY = ''
+@@ -37,9 +38,9 @@ export type SessionOrderBy = 'manual' | 'updated'
+ 
+ /** One workspace group section: header row facts + visible top-level session rows. */
+ export interface GroupNode {
+-  /** Group key: the workspace id or {@link UNGROUPED_KEY}. */
++  /** Group key: the workspace id, {@link UNGROUPED_KEY}, or the namespaced `provider:<pid>:<gid>` for external groups. */
+   key: string
+-  /** Backing Workspace id; absent only for the ungrouped bucket. */
++  /** Backing Workspace id; absent for the ungrouped bucket and external groups. */
+   workspaceId: WorkspaceId | undefined
+   cwd: string | undefined
+   /** Workspace creation time (epoch ms); absent only for the ungrouped bucket. */
+@@ -52,6 +53,8 @@ export interface GroupNode {
+   containsCurrent: boolean
+   /** Visible session rows (empty while the group is folded). */
+   sessions: readonly SessionNode[]
++  /** External v1alpha1 provider group: no Workspace backing (header hides workspace-only actions and drag). */
++  external?: boolean
+ }
+ 
+ /** One flat search row combining list metadata with an optional content match. */
+@@ -297,6 +300,103 @@ export function deriveFlat(
+   return rows.map(session => sessionNode(session, descendants))
+ }
+ 
++/**
++ * Derive the external-provider group sections (v1alpha1 seam).
++ *
++ * The provider owns group order, labels, and membership; the browser owns
++ * everything else: unknown, archived, subagent-origin, and non-current blank
++ * sessions are filtered here (same visibility rule as workspace groups), a
++ * session MAY appear in several groups, and duplicate ids inside one group
++ * render once. Group keys are namespaced as `provider:<pid>:<gid>` so
++ * expansion state and manual order accounts never collide with Workspace ids
++ * or the ungrouped bucket; `ordersByGroup` carries the browser-resolved
++ * per-group member order (manual accounts or recency).
++ * @param list - sessions list snapshot (`current` feeds containsCurrent).
++ * @param providerId - provider id for key namespacing.
++ * @param snapshot - provider's stable snapshot.
++ * @param archivedSessionIds - registry-global archive set.
++ * @param view - expansion arrays plus the resolved per-group member order.
++ * @returns external group sections in provider order.
++ */
++export function deriveExternalGroups(
++  list: SessionListState,
++  providerId: string,
++  snapshot: SessionGroupingSnapshotV1Alpha1,
++  archivedSessionIds: readonly SessionId[],
++  view: TreeView & {
++    /** Manual/updated member order per namespaced group key (browser-owned accounts). */
++    ordersByGroup?: Readonly<Record<string, readonly string[]>>
++  },
++): GroupNode[] {
++  const archived = new Set(archivedSessionIds)
++  const expandedGroups = new Set(view.expandedGroups)
++  const descendants = indexSubagentDescendants(list.byId)
++  const groups: GroupNode[] = []
++  for (const group of snapshot.groups) {
++    const key = `provider:${providerId}:${group.id}`
++    // 同组重复 SessionId 只渲染一次；未知/归档/不可见会话被过滤。
++    const seen = new Set<SessionId>()
++    const members: SessionSummary[] = []
++    for (const id of group.sessionIds) {
++      if (seen.has(id)) continue
++      seen.add(id)
++      const summary = list.byId[id]
++      if (summary === undefined || !sessionVisible(summary, list.current, archived)) continue
++      members.push(summary)
++    }
++    const stored = view.ordersByGroup?.[key]
++    if (stored !== undefined) {
++      const byId = new Map(members.map(session => [session.id as string, session]))
++      const ordered: SessionSummary[] = []
++      const included = new Set<string>()
++      for (const id of stored) {
++        const session = byId.get(id)
++        if (session === undefined || included.has(id)) continue
++        ordered.push(session)
++        included.add(id)
++      }
++      for (const session of [...members].sort(byRecency)) {
++        if (!included.has(session.id)) ordered.push(session)
++      }
++      members.length = 0
++      members.push(...ordered)
++    } else {
++      members.sort(byRecency)
++    }
++    const expanded = expandedGroups.has(key)
++    groups.push({
++      key,
++      workspaceId: undefined,
++      cwd: undefined,
++      createdAt: undefined,
++      label: group.label,
++      sessionCount: members.length,
++      expanded,
++      containsCurrent: list.current !== undefined && seen.has(list.current),
++      external: true,
++      sessions: expanded ? members.map(session => sessionNode(session, descendants)) : [],
++    })
++  }
++  return groups
++}
++
++/** Merge every provider's bounded search terms into one lookup (per-session union in provider order). */
++export function mergedSearchTermsBySession(
++  snapshots: readonly SessionGroupingSnapshotV1Alpha1[],
++): Readonly<Record<string, readonly string[]>> | undefined {
++  if (snapshots.length === 0) return undefined
++  const merged: Record<string, readonly string[]> = {}
++  for (const snapshot of snapshots) {
++    const terms = snapshot.searchTermsBySession
++    if (terms === undefined) continue
++    for (const [sessionId, values] of Object.entries(terms)) {
++      const existing = merged[sessionId]
++      merged[sessionId] = existing === undefined ? [...values] : [...new Set([...existing, ...values])]
++    }
++  }
++  return Object.keys(merged).length === 0 ? undefined : merged
++}
++
+ /** Relative-time bucket of a session row's trailing label. */
+ export type RelativeTimeUnit = 'now' | 'minutes' | 'hours' | 'days' | 'months' | 'years'
+ 
+@@ -316,6 +416,9 @@ export interface RelativeTime {
+  * @param archivedSessionIds - registry-global archive set (members never match).
+  * @param content - ranked Host content-search page.
+  * @param limit - protocol-owned maximum merged row count.
++ * @param searchTermsBySession - bounded plain-text terms contributed by
++ * external grouping providers (v1alpha1); merged into the local match set
++ * without touching the Host content-search semantics or bound.
+  * @returns bounded deduplicated flat rows and a refine-query hint bit.
+  */
+ export function deriveSearchResults(
+@@ -325,6 +428,7 @@ export function deriveSearchResults(
+   archivedSessionIds: readonly SessionId[],
+   content: { items: readonly SessionSearchResultItem[]; hasMore: boolean },
+   limit: number,
++  searchTermsBySession?: Readonly<Record<string, readonly string[]>>,
+ ): SearchResultSet {
+   const q = query.trim().toLowerCase()
+   if (q === '') return { items: [], hasMore: false }
+@@ -350,9 +454,11 @@ export function deriveSearchResults(
+     // Blank placeholders never match a query (their canonical title displays
+     // localized, so matching it would tie search to one language).
+     if (summary === undefined || summary.blank || !sessionVisible(summary, list.current, archived)) continue
++    const providerTerms = searchTermsBySession?.[summary.id as string]
+     if (
+       sessionTitle(summary).toLowerCase().includes(q)
+       || labelOf(summary).toLowerCase().includes(q)
++      || providerTerms?.some(term => term.toLowerCase().includes(q)) === true
+     ) {
+       local.push(summary)
+     }
+diff --git a/packages/client/ui-workspace/tests/workspace-browser.client.spec.tsx b/packages/client/ui-workspace/tests/workspace-browser.client.spec.tsx
+index 9b5875d..e2aa132 100644
+--- a/packages/client/ui-workspace/tests/workspace-browser.client.spec.tsx
++++ b/packages/client/ui-workspace/tests/workspace-browser.client.spec.tsx
+@@ -16,6 +16,9 @@ import { zh } from '../src/client/locales.ts'
+ afterEach(cleanup)
+ beforeEach(() => { localStorage.clear(); createWorkspaceViewStore().create().actions.setOrderBy('manual') })
+ 
++/** Stable empty-registry snapshot: uSES loops if getSnapshot mints new objects. */
++const EMPTY_GROUPINGS = Object.freeze({ revision: 0, providers: Object.freeze([]) })
++
+ // The seat's key domain is workspace ∪ common; the stub mirrors the real
+ // lookup chain (namespace, then common vocabulary, then the key).
+ const t: WorkspaceBrowserProps['t'] = makeTranslate(zh, commonZh)
+@@ -80,6 +83,10 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
+     insertSessionBefore: vi.fn(async () => {}),
+     createWorkspace: vi.fn(async () => workspace('created', [])),
+     useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
++    useSessionGroupings: bindSnapshotSelector({
++      getSnapshot: () => EMPTY_GROUPINGS,
++      subscribe: () => () => {},
++    }),
+     useHostDescription: selector => selector(undefined),
+     renderSlot: ((_name: string, owner: { open: boolean }) => (owner.open ? <div data-testid="directory-flow" /> : null)) as never,
+     t,
