@@ -226,10 +226,12 @@ describe('V4 Task 3.4: Bulk Close Operations', () => {
       throw new Error('Not enough views for test')
     }
 
+    // Use allow decision since view4 is dirty from setup
     const result = reducePaneWorkspace(state, {
       type: 'close_views_bulk',
       operation: 'close_others',
       viewId: viewIds[1], // Close others except view2
+      decision: 'allow',
     })
 
     expect(result.accepted).toBe(true)
@@ -257,10 +259,12 @@ describe('V4 Task 3.4: Bulk Close Operations', () => {
       throw new Error('Not enough views for test')
     }
 
+    // Use allow decision since view4 is dirty from setup
     const result = reducePaneWorkspace(state, {
       type: 'close_views_bulk',
       operation: 'close_right',
       viewId: viewIds[1], // Close tabs to the right of view2
+      decision: 'allow',
     })
 
     expect(result.accepted).toBe(true)
@@ -297,10 +301,12 @@ describe('V4 Task 3.4: Bulk Close Operations', () => {
       throw new Error('No views for test')
     }
 
+    // Use allow decision since view4 is dirty from setup
     const result = reducePaneWorkspace(state, {
       type: 'close_views_bulk',
       operation: 'close_group',
       groupId: state.groups['group:right:content']?.id,
+      decision: 'allow',
     })
 
     expect(result.accepted).toBe(true)
