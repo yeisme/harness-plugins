@@ -17,6 +17,9 @@ export type WorkbenchIconName =
   | 'terminal'
   | 'search'
   | 'git'
+  | 'git-branch'
+  | 'folder'
+  | 'window'
   | 'agents'
   | 'font-decrease'
   | 'font-increase'
@@ -38,6 +41,9 @@ const PATHS: Record<WorkbenchIconName, string> = {
   terminal: 'm5 7 5 5-5 5M12 17h7',
   search: 'm20 20-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z',
   git: 'M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5',
+  'git-branch': 'M6 3v12M6 15a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3M6 6a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm12 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
+  folder: 'M4 5h6l2 2h8v12H4z',
+  window: 'M4 5h16v14H4zM4 9h16',
   agents: 'M8 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM4 20a4 4 0 0 1 8 0M12 20a4 4 0 0 1 8 0',
   'font-decrease': 'M5 18h6M8 6v12M14 10h7M14 14h5',
   'font-increase': 'M4 18h8M8 6v12M15 12h6M18 9v6',
