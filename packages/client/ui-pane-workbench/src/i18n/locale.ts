@@ -301,7 +301,7 @@ export function getActiveLocale(): Locale {
  */
 export function setActiveLocale(locale: Locale): void {
   const baseLocale = getLocaleBase(locale) as Locale
-  if (LOCALE_BUNDLES[baseLocale]) {
+  if (LOCALE_BUNDLES[baseLocale] !== undefined) {
     activeLocale = baseLocale
   }
 }
@@ -311,15 +311,15 @@ export function setActiveLocale(locale: Locale): void {
  * Fallback chain: active locale → language base → English → key itself
  */
 export function t(key: string, options?: { count?: number }): string {
-  const bundle = LOCALE_BUNDLES[activeLocale] || EN_BUNDLE
-  const fallbackBundle = LOCALE_BUNDLES[en] || EN_BUNDLE
+  const bundle = LOCALE_BUNDLES[activeLocale] ?? EN_BUNDLE
+  const fallbackBundle = LOCALE_BUNDLES['en'] ?? EN_BUNDLE
 
-  let result = bundle.resources[key] || fallbackBundle.resources[key] || key
+  let result = bundle.resources[key] ?? fallbackBundle.resources[key] ?? key
 
   // Handle simple pluralization (future: proper plural rules per locale)
   if (options?.count !== undefined) {
     const pluralKey = `${key}.${options.count === 1 ? 'one' : 'other'}`
-    result = bundle.resources[pluralKey] || fallbackBundle.resources[pluralKey] || result
+    result = bundle.resources[pluralKey] ?? fallbackBundle.resources[pluralKey] ?? result
   }
 
   return result
