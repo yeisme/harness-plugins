@@ -130,8 +130,10 @@ export function PaneTab(props: PaneTabProps): React.ReactNode {
     }
   }
 
+  // V4 Task 3.5: Detect fine vs coarse pointer for drag threshold
   const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
-    controller.drag.begin(view.id, event.clientX, event.clientY)
+    const pointerType = event.pointerType === 'touch' || event.pointerType === 'pen' ? 'coarse' : 'fine'
+    controller.drag.begin(view.id, event.clientX, event.clientY, pointerType)
   }
 
   const handleClose = (event: MouseEvent<HTMLButtonElement>) => {

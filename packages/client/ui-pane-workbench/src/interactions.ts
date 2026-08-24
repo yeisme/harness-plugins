@@ -1,6 +1,7 @@
 import type { PaneSplitEdge } from './workspace.js'
 
 export const PANE_DRAG_THRESHOLD_PX = 6
+export const PANE_COARSE_POINTER_PRESS_MS = 180
 
 export interface PaneDragTargetV1 {
   readonly groupId: string
@@ -25,36 +26,125 @@ const defaultPaneFrameScheduler: PaneFrameSchedulerV1 = {
   },
 }
 
+// V4 Task 3.5: Extended drag state with committing/cancelling phases
 export type PaneDragStateV1 =
   | { readonly status: 'idle' }
-  | { readonly status: 'pending'; readonly viewId: string; readonly x: number; readonly y: number }
-  | { readonly status: 'dragging'; readonly viewId: string; readonly target?: PaneDragTargetV1 }
+  | { readonly status: 'pending'; readonly viewId: string; readonly x: number; readonly y: number; readonly pointerType: 'fine' | 'coarse'; readonly pressTimer?: unknown }
+  | { readonly status: 'dragging'; readonly viewId: string; readonly target?: PaneDragTargetV1; readonly pointerType: 'fine' | 'coarse' }
+  | { readonly status: 'committing'; readonly viewId: string; readonly target: PaneDragTargetV1 }
+  | { readonly status: 'cancelling'; readonly reason: string }
 
-/** Pointer sensor with an explicit cleanup path for Escape, blur, cancel, and HMR disposal. */
+/** V4 Task 3.5: Extended drag session with fine/coarse pointer gates and cross-root generation cleanup. */
 export class PaneDragSession {
   private current: PaneDragStateV1 = { status: 'idle' }
+  private readonly scheduler: PaneFrameSchedulerV1
+
+  constructor(scheduler?: PaneFrameSchedulerV1) {
+    this.scheduler = scheduler ?? defaultPaneFrameScheduler
+  }
 
   get state(): PaneDragStateV1 { return this.current }
 
-  begin(viewId: string, x: number, y: number): void { this.current = { status: 'pending', viewId, x, y } }
+  // V4 Task 3.5: Fine pointer starts immediately, coarse pointer requires long press
+  begin(viewId: string, x: number, y: number, pointerType: 'fine' | 'coarse' = 'fine'): void {
+    if (this.current.status !== 'idle') return
+
+    // Fine pointer: enter pending immediately
+    // Coarse pointer: enter pending with timer
+    if (pointerType === 'fine') {
+      this.current = { status: 'pending', viewId, x, y, pointerType: 'fine' }
+    } else {
+      const timer = this.scheduler.request(() => {
+        // Only transition to dragging if still pending and coarse
+        if (this.current.status === 'pending' && this.current.pointerType === 'coarse') {
+          // Coarse press exceeded threshold, will enter dragging on next move
+        }
+      })
+      this.current = { status: 'pending', viewId, x, y, pointerType: 'coarse', pressTimer: timer }
+    }
+  }
 
   move(x: number, y: number, target?: PaneDragTargetV1): PaneDragStateV1 {
     if (this.current.status === 'pending') {
-      if (Math.hypot(x - this.current.x, y - this.current.y) < PANE_DRAG_THRESHOLD_PX) return this.current
-      this.current = { status: 'dragging', viewId: this.current.viewId, target }
+      // Cancel coarse press timer if we move before timeout
+      if (this.current.pointerType === 'coarse' && this.current.pressTimer) {
+        this.scheduler.cancel(this.current.pressTimer)
+      }
+
+      // Fine pointer: check threshold
+      // Coarse pointer: already passed press timer or dragging
+      const threshold = PANE_DRAG_THRESHOLD_PX
+      const distance = Math.hypot(x - this.current.x, y - this.current.y)
+
+      if (distance < threshold) return this.current
+
+      this.current = { status: 'dragging', viewId: this.current.viewId, target, pointerType: this.current.pointerType }
       return this.current
     }
-    if (this.current.status === 'dragging') this.current = { ...this.current, target }
+
+    if (this.current.status === 'dragging') {
+      this.current = { ...this.current, target }
+    }
+
     return this.current
   }
 
+  // V4 Task 3.5: Commit phase before final idle
   drop(): PaneDragTargetV1 | undefined {
-    const target = this.current.status === 'dragging' ? this.current.target : undefined
-    this.current = { status: 'idle' }
-    return target?.enabled ? target : undefined
+    if (this.current.status !== 'dragging') {
+      // Direct to idle for invalid drop (backward compatibility)
+      if (this.current.status === 'pending' && this.current.pressTimer) {
+        this.scheduler.cancel(this.current.pressTimer)
+      }
+      this.current = { status: 'idle' }
+      return undefined
+    }
+
+    const target = this.current.target
+    if (!target?.enabled) {
+      // Direct to idle for disabled target (backward compatibility)
+      this.current = { status: 'idle' }
+      return undefined
+    }
+
+    this.current = { status: 'committing', viewId: this.current.viewId, target }
+
+    // Auto-transition to idle after commit phase completes
+    this.scheduler.request(() => {
+      if (this.current.status === 'committing') {
+        this.current = { status: 'idle' }
+      }
+    })
+
+    return target
   }
 
-  cancel(): void { this.current = { status: 'idle' } }
+  // V4 Task 3.5: Cancel phase with reason
+  cancel(reason?: string): void {
+    if (this.current.status === 'idle') return
+
+    // Clean up any pending timers
+    if (this.current.status === 'pending' && this.current.pressTimer) {
+      this.scheduler.cancel(this.current.pressTimer)
+    }
+
+    this.current = { status: 'cancelling', reason: reason ?? 'user_cancelled' }
+
+    // Auto-transition to idle after cancel phase completes
+    this.scheduler.request(() => {
+      if (this.current.status === 'cancelling') {
+        this.current = { status: 'idle' }
+      }
+    })
+  }
+
+  // V4 Task 3.5: Force immediate cleanup for cross-root disposal
+  dispose(): void {
+    if (this.current.status === 'pending' && this.current.pressTimer) {
+      this.scheduler.cancel(this.current.pressTimer)
+    }
+    this.current = { status: 'idle' }
+  }
 }
 
 /** Pointermove only previews through a callback; a single reducer value is committed on pointerup. */

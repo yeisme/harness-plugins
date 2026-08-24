@@ -31,8 +31,9 @@ export class PaneDragCoordinator {
     return () => { this.listeners.delete(listener) }
   }
 
-  begin(viewId: string, x: number, y: number): void {
-    this.session.begin(viewId, x, y)
+  // V4 Task 3.5: Fine/coarse pointer gate, cross-root generation cleanup
+  begin(viewId: string, x: number, y: number, pointerType: 'fine' | 'coarse' = 'fine'): void {
+    this.session.begin(viewId, x, y, pointerType)
     this.publish('')
   }
 
@@ -49,17 +50,23 @@ export class PaneDragCoordinator {
   }
 
   drop(): PaneWorkspaceReducerResultV1 | undefined {
-    const sourceViewId = this.session.state.status === 'dragging' ? this.session.state.viewId : undefined
+    // V4 Task 3.5: Handle committing phase
+    const sourceViewId = this.session.state.status === 'dragging' || this.session.state.status === 'committing'
+      ? this.session.state.viewId
+      : undefined
     const target = this.session.drop()
+
     if (sourceViewId === undefined || target === undefined) {
       this.publish(formatT('drag.cancelled', {}))
       return undefined
     }
+
     const source = this.getWorkspace().views[sourceViewId]
     if (source === undefined) {
       this.publish(formatT('drag.sourceUnavailable', {}))
       return undefined
     }
+
     const intent: PaneWorkspaceIntentV1 = target.edge === 'center'
       ? source.groupId === target.groupId && target.index !== undefined
         ? { type: 'reorder_view', viewId: sourceViewId, targetGroupId: target.groupId, index: target.index }
@@ -72,12 +79,13 @@ export class PaneDragCoordinator {
 
   cancel(message?: string): void {
     if (this.session.state.status === 'idle' && this.snapshot.target === undefined) return
-    this.session.cancel()
+    this.session.cancel(message)
     this.publish(message ?? formatT('drag.cancelled', {}))
   }
 
+  // V4 Task 3.5: Cross-root generation cleanup with proper disposal
   dispose(): void {
-    this.session.cancel()
+    this.session.dispose()
     this.snapshot = IDLE
     this.listeners.clear()
   }
