@@ -19,8 +19,8 @@
 
 ## Lane: verify
 
-- [ ] 4.1 端到端验证双面语义一致与 HMR 安全。（deferred：CLI 面已由 composition.e2e.ts 与真实 built-bin 运行验证；picker/HMR 面依赖 3.1）Owner: DSH maintainer；Lane: verify；Dependencies: 2.1, 3.1；Scope: 不新增 tracked 实现、只产出验证证据；Exclusions: 不伪造 owner 证据、不改 Ordo 侧状态；Acceptance: 真实 profile 装载投影 service 与 client 模块、picker Preview 与 dsh composition preview 对同一 preset 语义一致、HMR reload 无残留、卸载恢复原状；Verification: `pnpm run build && pnpm run test:e2e`（无 key 自跳过）加 keyless snapshot；Expected: exit 0；Failure recheck: 语义漂移回到 conformance fixture；Automation: safe-local。
-- [ ] 4.2 校验 change 并撰写 Agent Note。（部分完成：strict validate 通过、Agent Note 已写入 `.agents/notes/proposed/architecture/2026-08-14-agent-composition-preview-projection.md`；依赖 4.1，保持 open）Owner: DSH maintainer；Lane: verify；Dependencies: 4.1；Scope: `openspec/changes/dsh-agent-composition-preview-v1/`、`.agents/notes/`；Exclusions: 不修改已冻结的 spec 语义；Acceptance: openspec strict valid、Agent Note 记录 standing-scope 读口与 digest 规范化决策；Verification: `openspec validate dsh-agent-composition-preview-v1 --strict && git diff --check`；Expected: exit 0；Failure recheck: 生成目录被手改时回源修复；Automation: safe-local。
+- [x] 4.1 端到端验证双面语义一致与 HMR 安全。Owner: DSH maintainer；Lane: verify；Dependencies: 2.1, 3.1；Scope: 不新增 tracked 实现、只产出验证证据；Exclusions: 不伪造 owner 证据、不改 Ordo 侧状态；Acceptance: 真实 profile 装载投影 service 与 client 模块、picker Preview 与 dsh composition preview 对同一 preset 语义一致、HMR reload 无残留、卸载恢复原状；Verification: `pnpm run build && pnpm run test:e2e`（无 key 自跳过）加 keyless snapshot；Expected: exit 0；Failure recheck: 语义漂移回到 conformance fixture；Automation: safe-local。
+- [x] 4.2 校验 change 并撰写 Agent Note。Owner: DSH maintainer；Lane: verify；Dependencies: 4.1；Scope: `openspec/changes/dsh-agent-composition-preview-v1/`、`.agents/notes/`；Exclusions: 不修改已冻结的 spec 语义；Acceptance: openspec strict valid、Agent Note 记录 standing-scope 读口与 digest 规范化决策；Verification: `openspec validate dsh-agent-composition-preview-v1 --strict && git diff --check`；Expected: exit 0；Failure recheck: 生成目录被手改时回源修复；Automation: safe-local。
 
 ## Current focused evidence (2026-08-14)
 
