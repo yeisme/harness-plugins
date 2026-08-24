@@ -10,7 +10,7 @@
   "exports": {
     ".": {
       "types": "./lib/types/index.d.ts",
-      "default": "./lib/index.js"
+      "default": "./lib/index.mjs"
     },
     "./package.json": "./package.json"
   },
