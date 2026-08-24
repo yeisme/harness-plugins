@@ -14,7 +14,7 @@
 
 ## 3. Tab 系统与拖拽动效
 
-- [ ] 3.1 [Owner: Tab Architecture；Dependencies: 1.3, 2.3] 将现有 group chrome拆为可测试的 `PaneTabStrip`、`PaneTab`、`PaneTabClose`、`PaneTabOverflow`和status presenter，保持单一controller。Acceptance: 无嵌套button，APG roles有效，旧open/close intents不变。Validation: Testing Library role/focus tests。
+- [x] 3.1 [Owner: Tab Architecture；Dependencies: 1.3, 2.3] 将现有 group chrome拆为可测试的 `PaneTabStrip`、`PaneTab`、`PaneTabClose`、`PaneTabOverflow`和status presenter，保持单一controller。Acceptance: 无嵌套button，APG roles有效，旧open/close intents不变。Validation: Testing Library role/focus tests。
 - [ ] 3.2 [Owner: Tab Lifecycle；Dependencies: 3.1] 实现 pinned/normal-preview segments、preview→pinned commit、same-resource dedupe、explicit duplicate和状态presentation。Acceptance: 转换不重建renderer，dirty/attention/offline/orphaned不只靠颜色。Validation: reducer + lifecycle component tests。
 - [ ] 3.3 [Owner: Tab Overflow；Dependencies: 3.1] 实现宽度预算、active/pinned/dirty优先、More Tabs searchable listbox、30+ tabs bounded measurement与focus restore。Acceptance: 50-tab fixture无hidden view activation或无界observer。Validation: component benchmark和390px tests。
 - [ ] 3.4 [Owner: Bulk Close；Dependencies: 3.2] 实现 Close Others/Right/Unpinned/Group完整preflight与原子提交；复杂close policy聚合使用中文注释。Acceptance: 任一deny/unknown不部分关闭。Validation: close matrix tests。
