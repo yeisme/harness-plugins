@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useState, useRef, type CSSProperties } from 'react'
 import {
   IconAgentPresetOutline16, IconRefreshOutline16, IconWarningOutline16, IconCheckOutline16, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -43,20 +43,25 @@ const styles: Record<'layer' | 'panel' | 'header' | 'body' | 'status' | 'detail'
 }
 
 /**
- * 渲染操作描述符的抽屉项。
+ * 渲染操作描述符的抽屉项，包含完整的 a11y 支持。
  */
 function ActionDrawerItem({ action, t }: { action: OrdoAgentOpsActionDescriptor; t: (key: OrdoAgentOpsKey) => string }) {
   const isExpired = Date.parse(action.expiresAt) <= Date.now()
   const actionLabel = ACTION_TYPE_LABELS[action.actionType] ?? 'panel.actionUnknown'
 
   return (
-    <div style={styles.drawerItem} data-ordo-agent-ops-action-item={action.actionType}>
+    <div
+      style={styles.drawerItem}
+      data-ordo-agent-ops-action-item={action.actionType}
+      role="listitem"
+      aria-label={`${t(actionLabel)}: ${action.safeEffect}`}
+    >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
         <strong>{t(actionLabel)}</strong>
         {isExpired && <span style={styles.badge}>({t('panel.actionExpired')})</span>}
       </div>
       <div>{action.safeEffect}</div>
-      <div style={styles.expires}>
+      <div style={styles.expires} aria-live="polite">
         {t('panel.actionTarget')} {action.targetRef} • {t('panel.actionExpires')} {action.expiresAt}
       </div>
     </div>
@@ -70,8 +75,33 @@ function ActionDrawerItem({ action, t }: { action: OrdoAgentOpsActionDescriptor;
 export function OrdoAgentOpsSidebar({ wide, useState: useAgentOpsState, refresh, t }: OrdoAgentOpsSidebarProps) {
   const state = useAgentOpsState(snapshot => snapshot)
   const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { void refresh() }, [refresh])
+
+  // 键盘导航：Escape 关闭面板
+  useEffect(() => {
+    if (!open) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false)
+        triggerRef.current?.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [open])
+
+  // 面板打开时聚焦第一个可交互元素
+  useEffect(() => {
+    if (open && panelRef.current) {
+      const firstFocusable = panelRef.current.querySelector('button') as HTMLButtonElement | null
+      firstFocusable?.focus()
+    }
+  }, [open])
 
   const projectionState = state.snapshot?.state
   const statusLabel = projectionState === undefined
@@ -86,34 +116,45 @@ export function OrdoAgentOpsSidebar({ wide, useState: useAgentOpsState, refresh,
   ) ?? []
   const hasPendingActions = availableActions.length > 0
 
+  // 判断是否可以执行 mutation 操作
+  const canMutate = projectionState === 'ready' && state.snapshot?.freshness === 'fresh'
+
   return (
     <div style={styles.layer} data-ordo-agent-ops-sidebar>
       {open && (
-        <section style={styles.panel} aria-label={t('panel.aria')}>
+        <section
+          ref={panelRef}
+          style={styles.panel}
+          aria-label={t('panel.aria')}
+          role="region"
+          aria-live="polite"
+        >
           <header style={styles.header}>
-            <IconAgentPresetOutline16 size={16} />
+            <IconAgentPresetOutline16 size={16} aria-hidden="true" />
             <span>{t('panel.title')}</span>
           </header>
           <div style={styles.body}>
-            <div style={styles.status} aria-live="polite">
-              <StateDot state={dotState} />
+            <div style={styles.status} aria-live="polite" role="status">
+              <StateDot state={dotState} aria-hidden="true" />
               <span data-ordo-agent-ops-status>{statusLabel}</span>
             </div>
             {state.snapshot?.state === 'needs_contract' && (
-              <div style={styles.detail} data-ordo-agent-ops-needs-contract>
-                <IconWarningOutline16 size={14} />
+              <div style={styles.detail} data-ordo-agent-ops-needs-contract role="alert">
+                <IconWarningOutline16 size={14} aria-hidden="true" />
                 <span>{t('panel.needsContractDetail')}</span>
               </div>
             )}
-            {state.snapshot?.run === undefined && state.phase === 'ready' && <div style={styles.detail}>{t('panel.noRun')}</div>}
+            {state.snapshot?.run === undefined && state.phase === 'ready' && (
+              <div style={styles.detail} role="note">{t('panel.noRun')}</div>
+            )}
             {state.snapshot?.run !== undefined && (
-              <div style={styles.detail}>
+              <div style={styles.detail} role="note">
                 <span>{state.snapshot.run.safeTitle}</span>
                 <span>{`${state.snapshot.run.completedTaskCount}/${state.snapshot.run.taskCount}`}</span>
               </div>
             )}
             {state.snapshot?.capacity !== undefined && (
-              <div style={styles.detail}>
+              <div style={styles.detail} role="note">
                 <span>{t('panel.capacity', {
                   observed: state.snapshot.capacity.observedOrRetained,
                   policy: state.snapshot.capacity.policyCap,
@@ -123,13 +164,22 @@ export function OrdoAgentOpsSidebar({ wide, useState: useAgentOpsState, refresh,
                   : state.snapshot.capacity.reservationState}</span>
               </div>
             )}
-            {state.errorCode !== null && <div style={styles.detail} role="alert">{t('panel.error', { code: state.errorCode })}</div>}
+            {state.errorCode !== null && (
+              <div style={styles.detail} role="alert" aria-live="assertive">
+                {t('panel.error', { code: state.errorCode })}
+              </div>
+            )}
 
             {/* Pending actions drawer */}
             {hasPendingActions && (
-              <div style={styles.drawer} data-ordo-agent-ops-actions-drawer>
+              <div
+                style={styles.drawer}
+                data-ordo-agent-ops-actions-drawer
+                role="list"
+                aria-label={t('panel.actionsTitle')}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
-                  <IconCheckOutline16 size={14} />
+                  <IconCheckOutline16 size={14} aria-hidden="true" />
                   <span>{t('panel.actionsTitle')}</span>
                 </div>
                 {availableActions.map(action => (
@@ -139,18 +189,31 @@ export function OrdoAgentOpsSidebar({ wide, useState: useAgentOpsState, refresh,
                   type="button"
                   style={Object.assign({}, styles.action, { width: '100%', marginTop: 4 })}
                   disabled={state.phase === 'loading'}
+                  aria-label={t('panel.viewAllActions')}
                 >
                   {t('panel.viewAllActions')}
                 </button>
               </div>
             )}
 
-            <div style={styles.actions}>
-              <button type="button" style={styles.action} onClick={() => { void refresh() }} disabled={state.phase === 'loading'}>
-                <IconRefreshOutline16 size={14} />
+            <div style={styles.actions} role="toolbar" aria-label={t('panel.title')}>
+              <button
+                type="button"
+                style={styles.action}
+                onClick={() => { void refresh() }}
+                disabled={state.phase === 'loading'}
+                aria-label={t('panel.refresh')}
+              >
+                <IconRefreshOutline16 size={14} aria-hidden="true" />
                 {t('panel.refresh')}
               </button>
-              <button type="button" style={styles.action} disabled title={t('panel.openStudioUnavailable')}>
+              <button
+                type="button"
+                style={styles.action}
+                disabled
+                title={t('panel.openStudioUnavailable')}
+                aria-label={t('panel.openStudioUnavailable')}
+              >
                 {t('panel.openStudio')}
               </button>
             </div>
@@ -158,15 +221,17 @@ export function OrdoAgentOpsSidebar({ wide, useState: useAgentOpsState, refresh,
         </section>
       )}
       <button
+        ref={triggerRef}
         type="button"
         style={styles.button}
         data-active={open || undefined}
         data-ordo-agent-ops-trigger
         aria-label={t('panel.aria')}
         aria-expanded={open}
+        aria-haspopup="true"
         onClick={() => { setOpen(value => !value) }}
       >
-        <IconAgentPresetOutline16 size={wide ? 16 : 18} />
+        <IconAgentPresetOutline16 size={wide ? 16 : 18} aria-hidden="true" />
         {wide && <span>{t('panel.trigger')}</span>}
         {wide && projectionState === 'needs_contract' && <span style={styles.badge}>needs_contract</span>}
         {wide && hasPendingActions && <span style={styles.badge}>{availableActions.length}</span>}
