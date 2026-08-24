@@ -271,6 +271,9 @@ describe('Tab Lifecycle', () => {
       expect(currentView?.pinned).toBe(true) // dirty tabs auto-pin
       expect(currentView?.preview).toBe(false) // dirty tabs cannot be preview
       expect(currentView?.status).toBeDefined()
+      expect(currentView?.attention).toBe(false)
+      expect(currentView?.offline).toBe(false)
+      expect(currentView?.stale).toBe(false)
     })
   })
 })

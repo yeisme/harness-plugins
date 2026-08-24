@@ -11,6 +11,7 @@ import {
   type PaneRegionId,
   type PaneViewSpecV1,
   type PaneWorkspaceIntentV1,
+  type PaneWorkspaceIntentV1Additive,
   type PaneWorkspaceReducerResultV1,
   type PaneWorkspaceV1,
 } from './workspace.js'
@@ -119,7 +120,7 @@ export class PaneWorkbenchController {
     }
   }
 
-  dispatch(intent: PaneWorkspaceIntentV1): PaneWorkspaceReducerResultV1 {
+  dispatch(intent: PaneWorkspaceIntentV1Additive): PaneWorkspaceReducerResultV1 {
     const result = reducePaneWorkspace(this.state, intent)
     const next = this.options.registry === undefined ? result.state : markOrphanedPaneViews(result.state, this.options.registry)
     this.message = result.effects[0]?.message ?? (result.accepted ? 'Layout updated.' : result.reason ?? 'Layout action was not available.')

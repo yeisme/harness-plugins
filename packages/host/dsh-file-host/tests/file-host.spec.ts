@@ -4,10 +4,14 @@ import {
   createFileHostFromWorkspaces,
   createFileHostFromWorkspaceTree,
   createFileHostPlaceholder,
+  FILE_TREE_PROJECTION_CAPABILITY,
   FILE_WATCH_CAPABILITY,
   isFileHostV1,
   isSafeFileWatchEvent,
+  probeFileTreeProjection,
   probeFileWatch,
+  validateFileTreeBreadcrumb,
+  validateFileTreeNode,
   type FileHostV1,
 } from '../src/index.ts'
 
@@ -121,6 +125,44 @@ describe('@yeisme/dsh-file-host', () => {
     const entries = await host.listEntries()
     expect(entries).toHaveLength(1)
     expect(entries[0]).toMatchObject({ name: 'app.ts', kind: 'text' })
+  })
+
+  it('probes FileTreeProjectionCapabilityV1 independently of watch and rejects absolute paths', () => {
+    expect(probeFileTreeProjection(createFileHostPlaceholder())).toMatchObject({
+      available: false,
+      missingCapability: FILE_TREE_PROJECTION_CAPABILITY,
+    })
+    const host: FileHostV1 = {
+      ...createFileHostPlaceholder(),
+      capabilities: [FILE_TREE_PROJECTION_CAPABILITY],
+      tree: {
+        capability: FILE_TREE_PROJECTION_CAPABILITY,
+        async roots() { return [] },
+        async listChildren() { return [] },
+      },
+    }
+    expect(probeFileTreeProjection(host)).toMatchObject({ available: true, freshness: 'fresh' })
+    expect(validateFileTreeNode({
+      ref: 'node:src',
+      name: 'src',
+      kind: 'directory',
+      version: 'v1',
+      hasChildren: true,
+      capabilities: ['open'],
+      freshness: 'fresh',
+    }).ok).toBe(true)
+    expect(validateFileTreeNode({
+      ref: '/workspace/src',
+      name: 'src',
+      kind: 'directory',
+      version: 'v1',
+      hasChildren: true,
+      capabilities: ['open'],
+      freshness: 'fresh',
+    }).ok).toBe(false)
+    expect(validateFileTreeBreadcrumb([{ ref: 'node:src', name: 'src' }])).toBe(true)
+    expect(validateFileTreeBreadcrumb([{ ref: '/etc/passwd', name: 'passwd' }])).toBe(false)
+    expect(probeFileWatch(host).live).toBe(false)
   })
 
   it('enables live watch only when capability and watch() are both present', () => {

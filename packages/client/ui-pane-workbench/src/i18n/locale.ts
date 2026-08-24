@@ -114,6 +114,10 @@ const EN_BUNDLE: LocaleBundle = {
     'explorer.openFile': 'Open File',
     'explorer.collapseAll': 'Collapse All',
     'explorer.refresh': 'Refresh',
+    'explorer.action.compare': 'Compare',
+    'explorer.action.reload': 'Reload',
+    'explorer.action.save_as': 'Save As',
+    'explorer.action.keep_local': 'Keep Local',
 
     // Source Control
     'git.repository': 'Repository',
@@ -129,7 +133,15 @@ const EN_BUNDLE: LocaleBundle = {
     'git.discard': 'Discard',
     'git.push': 'Push',
     'git.pull': 'Pull',
+    'git.fetch': 'Fetch',
     'git.clean': 'Working tree clean',
+    'git.diff': 'Open Diff',
+    'git.binaryFallback': 'Binary file. Diff is unavailable.',
+    'git.diffUnloaded': 'More hunks are not loaded.',
+    'git.branchCreate': 'Create Branch',
+    'git.worktreeCreate': 'Create Worktree',
+    'git.remoteUnavailable': 'Remote actions are unavailable',
+    'git.aheadBehind': 'Ahead/behind',
 
     // Workspace Designer
     'designer.title': 'Workspace Designer',
@@ -145,6 +157,11 @@ const EN_BUNDLE: LocaleBundle = {
     'designer.validation.errors': 'errors',
     'designer.validation.warnings': 'warnings',
     'designer.validation.applyWarning': 'Apply changes will move {count} views',
+    'designer.palette': 'Provider palette',
+    'designer.canvas': 'Layout canvas',
+    'designer.ratio': 'Split ratio',
+    'designer.rail': 'Rail order',
+    'designer.motion': 'Motion preference',
 
     // Accessibility
     'a11y.region': 'Region',
@@ -269,6 +286,10 @@ const ZH_BUNDLE: LocaleBundle = {
     'explorer.openFile': '打开文件',
     'explorer.collapseAll': '全部折叠',
     'explorer.refresh': '刷新',
+    'explorer.action.compare': '比较',
+    'explorer.action.reload': '重新加载',
+    'explorer.action.save_as': '另存为',
+    'explorer.action.keep_local': '保留本地',
 
     // Source Control
     'git.repository': '仓库',
@@ -284,7 +305,15 @@ const ZH_BUNDLE: LocaleBundle = {
     'git.discard': '丢弃',
     'git.push': '推送',
     'git.pull': '拉取',
+    'git.fetch': '获取',
     'git.clean': '工作区干净',
+    'git.diff': '打开差异',
+    'git.binaryFallback': '二进制文件，无法显示差异。',
+    'git.diffUnloaded': '还有未加载的变更块。',
+    'git.branchCreate': '创建分支',
+    'git.worktreeCreate': '创建工作树',
+    'git.remoteUnavailable': '远程操作不可用',
+    'git.aheadBehind': '超前/落后',
 
     // Workspace Designer
     'designer.title': '工作区设计器',
@@ -300,6 +329,11 @@ const ZH_BUNDLE: LocaleBundle = {
     'designer.validation.errors': '错误',
     'designer.validation.warnings': '警告',
     'designer.validation.applyWarning': '应用更改将移动 {count} 个视图',
+    'designer.palette': '提供程序面板',
+    'designer.canvas': '布局画布',
+    'designer.ratio': '拆分比例',
+    'designer.rail': '活动栏顺序',
+    'designer.motion': '动效偏好',
 
     // Accessibility
     'a11y.region': '区域',

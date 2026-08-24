@@ -1,4 +1,5 @@
 import type { JsonValue, PaneViewDescriptorV1 } from '@yeisme/dsh-pane-protocol'
+import type { PaneWorkspaceDraftIssueV1, PaneWorkspaceDraftV1 } from './workspace-draft.js'
 
 export const PANE_WORKSPACE_SCHEMA = 'pane.workspace.v1alpha1' as const
 
@@ -17,6 +18,9 @@ export const PANE_WORKSPACE_LIMITS = Object.freeze({
   maxRegionRatio: 0.8,
 })
 
+export type PaneViewRuntimeStatus = 'ready' | 'orphaned' | 'conflict' | 'stale'
+export type PaneBulkCloseMode = 'others' | 'right' | 'unpinned' | 'group'
+
 export interface PaneViewSpecV1 {
   readonly kind: string
   readonly resourceKey: string
@@ -33,6 +37,11 @@ export interface PaneViewSpecV1 {
   readonly dirty?: boolean
   readonly duplicate?: boolean
   readonly closePolicy?: PaneViewClosePolicy
+  readonly attention?: boolean
+  readonly offline?: boolean
+  readonly stale?: boolean
+  readonly resourceVersion?: string
+  readonly instanceLabel?: string
   readonly metadata?: Readonly<Record<string, JsonValue>>
 }
 
@@ -51,9 +60,12 @@ export interface PaneViewInstanceV1 {
   readonly dirty: boolean
   readonly duplicate: boolean
   readonly closePolicy: PaneViewClosePolicy
-  readonly status: 'ready' | 'orphaned' | 'conflict' | 'ok'
+  readonly status: PaneViewRuntimeStatus
   readonly attention: boolean
   readonly offline: boolean
+  readonly stale: boolean
+  readonly resourceVersion?: string
+  readonly instanceLabel?: string
   readonly metadata?: Readonly<Record<string, JsonValue>>
 }
 
@@ -101,7 +113,7 @@ export interface PaneWorkspaceV1 extends PaneWorkspaceSnapshotV1 {
 
 export const PANE_WORKSPACE_OPEN_VIEW_INTENT = 'open_view' as const
 export const PANE_WORKSPACE_CLOSE_VIEW_INTENT = 'close_view' as const
-/** Additive Designer batch intent name. The V1 reducer does not apply it yet. */
+/** Additive Designer batch intent. Validation and atomic apply live in workspace-apply. */
 export const PANE_WORKSPACE_DRAFT_INTENT = 'apply_workspace_draft' as const
 
 export type PaneWorkspaceIntentV1 =
@@ -110,7 +122,13 @@ export type PaneWorkspaceIntentV1 =
   | { readonly type: 'pin_view'; readonly viewId: string; readonly pinned?: boolean }
   | { readonly type: 'set_view_dirty'; readonly viewId: string; readonly dirty: boolean }
   | { readonly type: typeof PANE_WORKSPACE_CLOSE_VIEW_INTENT; readonly viewId: string; readonly decision?: 'allow' | 'confirm' | 'deny' }
-  | { readonly type: 'close_views_bulk'; readonly operation: 'close_others' | 'close_right' | 'close_unpinned' | 'close_group'; readonly viewId?: string; readonly groupId?: string; readonly decision?: 'allow' | 'confirm' | 'deny' }
+  | {
+    readonly type: 'bulk_close'
+    readonly groupId: string
+    readonly mode: PaneBulkCloseMode
+    readonly sourceViewId?: string
+    readonly decision?: 'allow' | 'confirm' | 'deny'
+  }
   | { readonly type: 'reorder_view'; readonly viewId: string; readonly targetGroupId: string; readonly index: number }
   | { readonly type: 'move_view'; readonly viewId: string; readonly targetGroupId: string; readonly index?: number }
   | { readonly type: 'split_with_view'; readonly viewId: string; readonly targetGroupId: string; readonly edge: PaneSplitEdge }
@@ -126,9 +144,11 @@ export type PaneWorkspaceIntentV1 =
 
 export type PaneWorkspaceDraftIntentV1 = {
   readonly type: typeof PANE_WORKSPACE_DRAFT_INTENT
+  readonly draft: PaneWorkspaceDraftV1
+  readonly expectedGeneration: number
 }
 
-/** Parallel V4 intent surface. Keep the live reducer on PaneWorkspaceIntentV1. */
+/** Parallel V4 intent surface. Live reducer accepts the additive draft intent. */
 export type PaneWorkspaceIntentV1Additive = PaneWorkspaceIntentV1 | PaneWorkspaceDraftIntentV1
 
 export interface PaneWorkspaceEffectV1 {
@@ -345,7 +365,18 @@ function normalizeSnapshot(input: PaneWorkspaceSnapshotV1): PaneWorkspaceSnapsho
       dirty: Boolean(view.dirty),
       duplicate: Boolean(view.duplicate),
       closePolicy: view.closePolicy ?? 'allow',
-      status: view.status === 'orphaned' ? 'orphaned' : 'ready',
+      status: view.status === 'orphaned'
+        ? 'orphaned'
+        : view.status === 'conflict'
+          ? 'conflict'
+          : view.status === 'stale'
+            ? 'stale'
+            : 'ready',
+      attention: Boolean(view.attention),
+      offline: Boolean(view.offline),
+      stale: Boolean(view.stale) || view.status === 'stale',
+      resourceVersion: typeof view.resourceVersion === 'string' ? view.resourceVersion.slice(0, 80) : undefined,
+      instanceLabel: typeof view.instanceLabel === 'string' ? view.instanceLabel.slice(0, 40) : undefined,
     }
   }
 
@@ -586,7 +617,9 @@ function addViewToGroup(snapshot: MutableSnapshot, view: PaneViewInstanceV1, gro
   const group = snapshot.groups[groupId]
   if (group === undefined) return
   const tabs = [...group.tabs.filter(id => id !== view.id)]
-  const targetIndex = index === undefined ? tabs.length : Math.max(0, Math.min(index, tabs.length))
+  const lastPinned = tabs.reduce((last, id, current) => snapshot.views[id]?.pinned ? current : last, -1)
+  const defaultIndex = view.pinned ? lastPinned + 1 : tabs.length
+  const targetIndex = index === undefined ? defaultIndex : Math.max(0, Math.min(index, tabs.length))
   tabs.splice(targetIndex, 0, view.id)
   snapshot.groups[groupId] = { ...group, tabs, activeTabId: view.id }
   snapshot.views[view.id] = { ...view, groupId, region: group.region }
@@ -625,8 +658,214 @@ function activate(snapshot: MutableSnapshot, viewId: string): boolean {
 
 function findExistingView(state: PaneWorkspaceSnapshotV1, request: PaneViewSpecV1): PaneViewInstanceV1 | undefined {
   return Object.values(state.views).find(view => view.kind === request.kind && (
-    view.resourceKey === request.resourceKey || (request.singleton && view.singleton)
+    (view.resourceKey === request.resourceKey
+      && (request.resourceVersion === undefined || view.resourceVersion === undefined || view.resourceVersion === request.resourceVersion))
+    || (request.singleton && view.singleton)
   ))
+}
+
+export type PaneTabSegmentId = 'pinned' | 'working'
+
+export interface PaneTabSegmentV1 {
+  readonly id: PaneTabSegmentId
+  readonly viewIds: readonly string[]
+}
+
+export interface PaneTabPresentationV1 {
+  readonly viewId: string
+  readonly title: string
+  readonly accessibleName: string
+  readonly icon: 'file' | 'terminal' | 'git-branch' | 'folder' | 'window'
+  readonly preview: boolean
+  readonly pinned: boolean
+  readonly dirty: boolean
+  readonly attention: boolean
+  readonly offline: boolean
+  readonly stale: boolean
+  readonly orphaned: boolean
+  readonly conflict: boolean
+  readonly closePolicy: PaneViewClosePolicy
+  readonly instanceLabel?: string
+  readonly statusTokens: readonly string[]
+}
+
+export function segmentPaneTabs(group: PaneGroupV1, views: Readonly<Record<string, PaneViewInstanceV1>>): readonly PaneTabSegmentV1[] {
+  const pinned: string[] = []
+  const working: string[] = []
+  for (const viewId of group.tabs) {
+    const view = views[viewId]
+    if (view === undefined) continue
+    if (view.pinned) pinned.push(viewId)
+    else working.push(viewId)
+  }
+  return [
+    { id: 'pinned', viewIds: pinned },
+    { id: 'working', viewIds: working },
+  ]
+}
+
+export const PANE_TAB_OVERFLOW_THRESHOLD = 30
+export const PANE_TAB_MIN_WIDTH = 88
+export const PANE_TAB_PREFERRED_WIDTH = 136
+export const PANE_TAB_MAX_WIDTH = 220
+export const PANE_TAB_OVERFLOW_CONTROL_WIDTH = 44
+
+export interface PaneTabOverflowPlanV1 {
+  readonly visibleIds: readonly string[]
+  readonly overflowIds: readonly string[]
+  readonly measuredCount: number
+  readonly observerCount: number
+}
+
+export function planPaneTabOverflow(
+  group: PaneGroupV1,
+  views: Readonly<Record<string, PaneViewInstanceV1>>,
+  availableWidth: number,
+  options: { readonly tabWidth?: number; readonly overflowControlWidth?: number } = {},
+): PaneTabOverflowPlanV1 {
+  const tabWidth = options.tabWidth ?? PANE_TAB_PREFERRED_WIDTH
+  const overflowControlWidth = options.overflowControlWidth ?? PANE_TAB_OVERFLOW_CONTROL_WIDTH
+  const ordered = segmentPaneTabs(group, views).flatMap(segment => segment.viewIds)
+  const activeId = group.activeTabId
+  const priority = (viewId: string): number => {
+    const view = views[viewId]
+    if (view === undefined) return 0
+    if (view.id === activeId) return 400
+    if (view.pinned) return 300
+    if (view.dirty) return 200
+    if (view.attention) return 150
+    return 50
+  }
+  const ranked = [...ordered].sort((left, right) => priority(right) - priority(left) || ordered.indexOf(left) - ordered.indexOf(right))
+  const budget = Math.max(PANE_TAB_MIN_WIDTH, availableWidth)
+  const maxVisible = Math.max(1, Math.floor((budget - overflowControlWidth) / Math.max(PANE_TAB_MIN_WIDTH, tabWidth)))
+  const keep = new Set<string>()
+  for (const viewId of ordered) {
+    const view = views[viewId]
+    if (view === undefined) continue
+    if (view.id === activeId || view.pinned || view.dirty || view.attention) keep.add(viewId)
+  }
+  for (const viewId of ranked) {
+    if (keep.size >= maxVisible) break
+    keep.add(viewId)
+  }
+  const visibleIds = ordered.filter(id => keep.has(id))
+  const overflowIds = ordered.filter(id => !keep.has(id))
+  const measuredCount = Math.min(ordered.length, PANE_TAB_OVERFLOW_THRESHOLD)
+  return {
+    visibleIds,
+    overflowIds,
+    measuredCount,
+    observerCount: overflowIds.length > 0 ? 1 : 0,
+  }
+}
+
+export function filterOverflowTabs(
+  overflowIds: readonly string[],
+  views: Readonly<Record<string, PaneViewInstanceV1>>,
+  query: string,
+): readonly string[] {
+  const needle = query.trim().toLowerCase()
+  if (needle.length === 0) return overflowIds
+  return overflowIds.filter(id => {
+    const view = views[id]
+    if (view === undefined) return false
+    const presentation = presentPaneTab(view)
+    return [view.title, view.kind, view.instanceLabel, ...presentation.statusTokens]
+      .some(token => token !== undefined && token.toLowerCase().includes(needle))
+  })
+}
+
+export function presentPaneTab(view: PaneViewInstanceV1): PaneTabPresentationV1 {
+  const tokens: string[] = []
+  if (view.preview) tokens.push('preview')
+  if (view.pinned) tokens.push('pinned')
+  if (view.dirty) tokens.push('dirty')
+  if (view.attention) tokens.push('attention')
+  if (view.offline) tokens.push('offline')
+  if (view.stale || view.status === 'stale') tokens.push('stale')
+  if (view.status === 'orphaned') tokens.push('orphaned')
+  if (view.status === 'conflict') tokens.push('conflict')
+  if (view.closePolicy !== 'allow') tokens.push(`close:${view.closePolicy}`)
+  const icon = view.kind.startsWith('file.') ? 'file'
+    : view.kind.startsWith('terminal.') ? 'terminal'
+      : view.kind.startsWith('git.') ? 'git-branch'
+        : view.kind.startsWith('explorer.') ? 'folder'
+          : 'window'
+  const accessibleName = [view.title, view.instanceLabel, ...tokens].filter(Boolean).join(', ')
+  return {
+    viewId: view.id,
+    title: view.title,
+    accessibleName,
+    icon,
+    preview: view.preview,
+    pinned: view.pinned,
+    dirty: view.dirty,
+    attention: view.attention,
+    offline: view.offline,
+    stale: view.stale || view.status === 'stale',
+    orphaned: view.status === 'orphaned',
+    conflict: view.status === 'conflict',
+    closePolicy: view.closePolicy,
+    instanceLabel: view.instanceLabel,
+    statusTokens: tokens,
+  }
+}
+
+export interface PaneBulkClosePreflightV1 {
+  readonly mode: PaneBulkCloseMode
+  readonly groupId: string
+  readonly targetIds: readonly string[]
+  readonly accepted: boolean
+  readonly reason?: 'close_denied' | 'confirmation_required' | 'unknown_view' | 'empty'
+  readonly blockerViewId?: string
+}
+
+export function collectBulkCloseTargets(
+  state: PaneWorkspaceSnapshotV1,
+  groupId: string,
+  mode: PaneBulkCloseMode,
+  sourceViewId?: string,
+): readonly string[] {
+  const group = state.groups[groupId]
+  if (group === undefined) return []
+  const sourceIndex = sourceViewId === undefined ? -1 : group.tabs.indexOf(sourceViewId)
+  return group.tabs.filter(viewId => {
+    const view = state.views[viewId]
+    if (view === undefined) return false
+    if (mode === 'group') return true
+    if (mode === 'others') return viewId !== sourceViewId
+    if (mode === 'unpinned') return !view.pinned
+    if (mode === 'right') return sourceIndex >= 0 && group.tabs.indexOf(viewId) > sourceIndex
+    return false
+  })
+}
+
+export function preflightBulkClose(
+  state: PaneWorkspaceSnapshotV1,
+  groupId: string,
+  mode: PaneBulkCloseMode,
+  sourceViewId?: string,
+  decision?: 'allow' | 'confirm' | 'deny',
+): PaneBulkClosePreflightV1 {
+  const targetIds = collectBulkCloseTargets(state, groupId, mode, sourceViewId)
+  if (targetIds.length === 0) return { mode, groupId, targetIds, accepted: false, reason: 'empty' }
+  // 批量关闭必须先聚合全部目标的 deny/unknown，再处理 confirm。任一失败则整批拒绝，避免部分关闭留下残缺 group。
+  for (const viewId of targetIds) {
+    const view = state.views[viewId]
+    if (view === undefined) return { mode, groupId, targetIds, accepted: false, reason: 'unknown_view', blockerViewId: viewId }
+    if (view.closePolicy === 'deny' && decision !== 'allow') {
+      return { mode, groupId, targetIds, accepted: false, reason: 'close_denied', blockerViewId: viewId }
+    }
+  }
+  for (const viewId of targetIds) {
+    const view = state.views[viewId]
+    if (view === undefined) return { mode, groupId, targetIds, accepted: false, reason: 'unknown_view', blockerViewId: viewId }
+    if ((view.dirty || view.closePolicy === 'confirm') && decision !== 'allow') {
+      return { mode, groupId, targetIds, accepted: false, reason: decision === 'deny' ? 'close_denied' : 'confirmation_required', blockerViewId: viewId }
+    }
+  }
+  return { mode, groupId, targetIds, accepted: true }
 }
 
 function chooseOpenGroup(state: PaneWorkspaceSnapshotV1, request: PaneViewSpecV1): PaneGroupV1 | undefined {
@@ -683,7 +922,19 @@ function applyOpenView(state: PaneWorkspaceV1, request: PaneViewSpecV1): PaneWor
   if (existing !== undefined && (request.singleton || !request.duplicate)) {
     const snapshot = cloneSnapshot(state)
     activate(snapshot, existing.id)
-    if (request.pinned || request.dirty) snapshot.views[existing.id] = { ...existing, pinned: true, preview: false, dirty: Boolean(request.dirty) || existing.dirty }
+    if (request.pinned || request.dirty || request.attention !== undefined || request.offline !== undefined || request.stale !== undefined) {
+      snapshot.views[existing.id] = {
+        ...existing,
+        pinned: request.pinned || request.dirty || existing.pinned,
+        preview: (request.pinned || request.dirty) ? false : existing.preview,
+        dirty: Boolean(request.dirty) || existing.dirty,
+        attention: request.attention ?? existing.attention,
+        offline: request.offline ?? existing.offline,
+        stale: request.stale ?? existing.stale,
+        status: request.stale ? 'stale' : existing.status,
+        resourceVersion: request.resourceVersion ?? existing.resourceVersion,
+      }
+    }
     return result(commit(state, snapshot, false), true, 'reused', `${existing.title} is already open.`)
   }
 
@@ -703,6 +954,9 @@ function applyOpenView(state: PaneWorkspaceV1, request: PaneViewSpecV1): PaneWor
   const viewId = request.viewId && safeId(request.viewId) && snapshot.views[request.viewId] === undefined
     ? request.viewId
     : nextId(`view:${request.kind}`, Object.keys(snapshot.views))
+  const duplicateCount = request.duplicate
+    ? Object.values(snapshot.views).filter(candidate => candidate.kind === request.kind && candidate.resourceKey === request.resourceKey).length + 1
+    : 0
   const view: PaneViewInstanceV1 = {
     id: viewId,
     kind: request.kind,
@@ -718,9 +972,12 @@ function applyOpenView(state: PaneWorkspaceV1, request: PaneViewSpecV1): PaneWor
     dirty: Boolean(request.dirty),
     duplicate: Boolean(request.duplicate),
     closePolicy: request.closePolicy ?? 'allow',
-    status: 'ready',
-    attention: false,
-    offline: false,
+    status: request.stale ? 'stale' : 'ready',
+    attention: Boolean(request.attention),
+    offline: Boolean(request.offline),
+    stale: Boolean(request.stale),
+    resourceVersion: request.resourceVersion,
+    instanceLabel: request.instanceLabel ?? (request.duplicate ? `${duplicateCount}` : undefined),
     metadata: request.metadata,
   }
   addViewToGroup(snapshot, view, group.id)
@@ -747,127 +1004,20 @@ function applyCloseView(state: PaneWorkspaceV1, intent: Extract<PaneWorkspaceInt
   return result(next, true, 'closed', `${view.title} closed.`)
 }
 
-/**
- * V4 Task 3.4: Bulk Close
- *
- * Implements bulk close operations with full preflight and atomic submission:
- * - Close Others: Close all tabs in the same group except the reference tab
- * - Close Right: Close all tabs to the right of the reference tab in the same group
- * - Close Unpinned: Close all unpinned tabs in the same group
- * - Close Group: Close all tabs in the specified group
- *
- * 任一deny/unknown不部分关闭. Complex close policy aggregation uses Chinese comments for boundary logic.
- */
-function applyCloseViewsBulk(state: PaneWorkspaceV1, intent: Extract<PaneWorkspaceIntentV1, { type: 'close_views_bulk' }>): PaneWorkspaceReducerResultV1 {
-  const { operation, viewId, groupId, decision } = intent
-
-  // Determine target views based on operation
-  let targetViewIds: string[] = []
-
-  switch (operation) {
-    case 'close_others': {
-      // Close all tabs in the same group except the reference tab
-      if (!viewId) return result(state, false, 'invalid_bulk_close', 'Reference view ID required for close_others operation.')
-      const view = viewFor(state, viewId)
-      if (!view) return result(state, false, 'unknown_view', 'Reference view not found.')
-      const group = state.groups[view.groupId]
-      if (!group) return result(state, false, 'invalid_bulk_close', 'Group not found.')
-      targetViewIds = group.tabs.filter(id => id !== viewId)
-      break
-    }
-
-    case 'close_right': {
-      // Close all tabs to the right of the reference tab in the same group
-      if (!viewId) return result(state, false, 'invalid_bulk_close', 'Reference view ID required for close_right operation.')
-      const view = viewFor(state, viewId)
-      if (!view) return result(state, false, 'unknown_view', 'Reference view not found.')
-      const group = state.groups[view.groupId]
-      if (!group) return result(state, false, 'invalid_bulk_close', 'Group not found.')
-      const viewIndex = group.tabs.indexOf(viewId)
-      if (viewIndex === -1) return result(state, false, 'invalid_bulk_close', 'View not found in group tabs.')
-      targetViewIds = group.tabs.slice(viewIndex + 1)
-      break
-    }
-
-    case 'close_unpinned': {
-      // Close all unpinned tabs in the same group
-      if (!groupId) return result(state, false, 'invalid_bulk_close', 'Group ID required for close_unpinned operation.')
-      const group = state.groups[groupId]
-      if (!group) return result(state, false, 'invalid_bulk_close', 'Group not found.')
-      targetViewIds = group.tabs.filter(id => {
-        const view = state.views[id]
-        return view && !view.pinned
-      })
-      break
-    }
-
-    case 'close_group': {
-      // Close all tabs in the specified group
-      if (!groupId) return result(state, false, 'invalid_bulk_close', 'Group ID required for close_group operation.')
-      const group = state.groups[groupId]
-      if (!group) return result(state, false, 'invalid_bulk_close', 'Group not found.')
-      targetViewIds = [...group.tabs]
-      break
-    }
-
-    default:
-      return result(state, false, 'invalid_bulk_close', 'Unknown bulk close operation.')
+function applyBulkClose(state: PaneWorkspaceV1, intent: Extract<PaneWorkspaceIntentV1, { type: 'bulk_close' }>): PaneWorkspaceReducerResultV1 {
+  const preflight = preflightBulkClose(state, intent.groupId, intent.mode, intent.sourceViewId, intent.decision)
+  if (!preflight.accepted) {
+    const blocker = preflight.blockerViewId === undefined ? undefined : state.views[preflight.blockerViewId]
+    return result(state, false, preflight.reason, blocker === undefined ? 'No tabs can be closed.' : `${blocker.title} blocks bulk close.`)
   }
-
-  if (targetViewIds.length === 0) {
-    return result(state, true, 'no_targets', 'No views to close.')
-  }
-
-  // Pre-flight检查：收集所有需要关闭的view的策略
-  // Preflight check: collect close policies for all target views
-  const closeChecks = targetViewIds.map(viewId => {
-    const view = state.views[viewId]
-    if (!view) return { viewId, canClose: false, reason: 'unknown_view' }
-
-    // Dirty状态需要确认
-    // Dirty state requires confirmation
-    if (view.dirty && decision !== 'allow') {
-      return { viewId, canClose: false, reason: 'dirty', title: view.title }
-    }
-
-    // 检查owner的closePolicy
-    // Check owner's closePolicy
-    if (view.closePolicy === 'deny' && decision !== 'allow') {
-      return { viewId, canClose: false, reason: 'close_denied', title: view.title }
-    }
-
-    return { viewId, canClose: true, title: view.title }
-  })
-
-  // 如果有任何view无法关闭，整批操作拒绝
-  // If any view cannot be closed, reject the entire bulk operation
-  const blockers = closeChecks.filter(check => !check.canClose)
-  if (blockers.length > 0) {
-    const blockerReasons = blockers.map(b => `${b.title}: ${b.reason}`).join('; ')
-    return result(state, false, 'close_denied', `Bulk close blocked: ${blockerReasons}`)
-  }
-
-  // 原子提交：所有检查通过后一次性关闭所有view
-  // Atomic commit: close all views after all checks pass
   const snapshot = cloneSnapshot(state)
-
-  for (const viewId of targetViewIds) {
-    const view = snapshot.views[viewId]
-    if (!view) continue
-
-    const group = snapshot.groups[view.groupId]
-    removeViewFromGroup(snapshot, view.id)
-    delete snapshot.views[view.id]
-
-    // 如果group空了且未锁定，删除group
-    // Remove group if empty and not locked
-    if (group !== undefined && group.tabs.length <= 1 && !group.locked) {
-      removeGroup(snapshot, group.id)
-    }
+  for (const viewId of preflight.targetIds) {
+    removeViewFromGroup(snapshot, viewId)
+    delete snapshot.views[viewId]
   }
-
-  const next = commit(state, snapshot)
-  return result(next, true, 'bulk_closed', `Closed ${targetViewIds.length} view(s).`)
+  const group = snapshot.groups[intent.groupId]
+  if (group !== undefined && group.tabs.length === 0 && !group.locked) removeGroup(snapshot, group.id)
+  return result(commit(state, snapshot), true, 'closed', `${preflight.targetIds.length} tabs closed.`)
 }
 
 function applyMoveView(state: PaneWorkspaceV1, intent: Extract<PaneWorkspaceIntentV1, { type: 'move_view' | 'reorder_view' }>): PaneWorkspaceReducerResultV1 {
@@ -904,11 +1054,78 @@ function applySplitWithView(state: PaneWorkspaceV1, intent: Extract<PaneWorkspac
   return result(commit(state, snapshot), true, 'split', `${view.title} moved into a new pane.`)
 }
 
-export function reducePaneWorkspace(state: PaneWorkspaceV1, intent: PaneWorkspaceIntentV1): PaneWorkspaceReducerResultV1 {
+function draftIssue(code: string, message: string): PaneWorkspaceDraftIssueV1 {
+  return { severity: 'error', code, message }
+}
+
+export interface ApplyWorkspaceDraftValidationV1 {
+  readonly ok: boolean
+  readonly blockers: readonly PaneWorkspaceDraftIssueV1[]
+  readonly warnings: readonly PaneWorkspaceDraftIssueV1[]
+}
+
+/**
+ * 原子 Apply 必须先聚合全部 blocker。generation 漂移、depth/group/size、
+ * capability、core/dirty/deny 任一失败都不得部分改 layout。
+ */
+export function validateApplyWorkspaceDraft(
+  state: PaneWorkspaceV1,
+  intent: PaneWorkspaceDraftIntentV1,
+): ApplyWorkspaceDraftValidationV1 {
+  const blockers: PaneWorkspaceDraftIssueV1[] = []
+  const warnings = [...intent.draft.validation.warnings]
+  if (intent.expectedGeneration !== state.generation || intent.draft.baseGeneration !== state.generation) {
+    blockers.push(draftIssue('generation_drift', 'Draft base generation no longer matches the live workspace.'))
+  }
+  if (!intent.draft.validation.ok) blockers.push(...intent.draft.validation.errors)
+  for (const region of ['right', 'bottom'] as const) {
+    const size = intent.draft.regions[region].size
+    if (size < PANE_WORKSPACE_LIMITS.minRegionRatio || size > PANE_WORKSPACE_LIMITS.maxRegionRatio) {
+      blockers.push(draftIssue('size', `${region} size is outside the allowed ratio.`))
+    }
+  }
+  const liveProtected = Object.values(state.views).filter(view => view.closePolicy === 'deny' || view.dirty)
+  if (liveProtected.length > 0 && intent.draft.providerPlacements.every(placement => placement.kind !== 'keep-in-place')) {
+    const closer = liveProtected[0]
+    if (closer !== undefined && intent.draft.groups[closer.groupId] === undefined) {
+      blockers.push(draftIssue(closer.closePolicy === 'deny' ? 'deny' : 'dirty', `${closer.title} must stay in place.`))
+    }
+  }
+  return { ok: blockers.length === 0, blockers, warnings }
+}
+
+export function applyWorkspaceDraft(
+  state: PaneWorkspaceV1,
+  intent: PaneWorkspaceDraftIntentV1,
+): PaneWorkspaceReducerResultV1 {
+  const report = validateApplyWorkspaceDraft(state, intent)
+  if (!report.ok) {
+    return result(state, false, report.blockers[0]?.code ?? 'apply_blocked', report.blockers[0]?.message ?? 'Workspace draft was not applied.')
+  }
+  const snapshot = cloneSnapshot(state)
+  snapshot.regions.right = { ...snapshot.regions.right, ...intent.draft.regions.right, root: intent.draft.regions.right.root }
+  snapshot.regions.bottom = { ...snapshot.regions.bottom, ...intent.draft.regions.bottom, root: intent.draft.regions.bottom.root }
+  return result(commit(state, snapshot), true, 'applied', 'Workspace draft applied.')
+}
+
+export function createApplyWorkspaceDraftIntent(
+  draft: PaneWorkspaceDraftV1,
+  expectedGeneration: number,
+): PaneWorkspaceDraftIntentV1 {
+  return {
+    type: PANE_WORKSPACE_DRAFT_INTENT,
+    draft,
+    expectedGeneration,
+  }
+}
+
+export function reducePaneWorkspace(state: PaneWorkspaceV1, intent: PaneWorkspaceIntentV1Additive): PaneWorkspaceReducerResultV1 {
   switch (intent.type) {
+    case PANE_WORKSPACE_DRAFT_INTENT:
+      return applyWorkspaceDraft(state, intent)
     case 'open_view': return applyOpenView(state, intent.request)
     case 'close_view': return applyCloseView(state, intent)
-    case 'close_views_bulk': return applyCloseViewsBulk(state, intent)
+    case 'bulk_close': return applyBulkClose(state, intent)
     case 'move_view':
     case 'reorder_view': return applyMoveView(state, intent)
     case 'split_with_view': return applySplitWithView(state, intent)
@@ -921,7 +1138,15 @@ export function reducePaneWorkspace(state: PaneWorkspaceV1, intent: PaneWorkspac
       if (view === undefined) return result(state, false, 'unknown_view')
       const snapshot = cloneSnapshot(state)
       const pinned = intent.pinned ?? !view.pinned
-      snapshot.views[view.id] = { ...view, pinned, preview: pinned ? false : view.preview }
+      const nextView = { ...view, pinned, preview: pinned ? false : view.preview }
+      snapshot.views[view.id] = nextView
+      const group = snapshot.groups[view.groupId]
+      if (group !== undefined) {
+        const tabs = group.tabs.filter(id => id !== view.id)
+        const lastPinned = tabs.reduce((last, id, current) => snapshot.views[id]?.pinned ? current : last, -1)
+        tabs.splice(pinned ? lastPinned + 1 : lastPinned + 1, 0, view.id)
+        snapshot.groups[group.id] = { ...group, tabs }
+      }
       return result(commit(state, snapshot, false), true, pinned ? 'pinned' : 'unpinned')
     }
     case 'set_view_dirty': {

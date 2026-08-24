@@ -9,6 +9,7 @@ import {
   type PointerEvent,
   type ReactNode,
 } from 'react'
+import { intentForDragTarget } from './drag-coordinator.js'
 import { PaneDragSession, PaneResizeSession, type PaneDragTargetV1 } from './interactions.js'
 import { PaneWorkbenchController } from './controller.js'
 import { projectPaneWorkspace, type PaneWorkspaceProjectionV1 } from './projection.js'
@@ -408,8 +409,13 @@ export function PaneWorkbenchChrome({ initialState = createPaneWorkspace(), regi
       event.preventDefault()
       const target = moveTargets[moveMode.targetIndex]
       if (target === undefined) return
-      if (target.edge === 'center') dispatch({ type: 'move_view', viewId: moveMode.viewId, targetGroupId: target.groupId })
-      else dispatch({ type: 'split_with_view', viewId: moveMode.viewId, targetGroupId: target.groupId, edge: target.edge })
+      const source = state.views[moveMode.viewId]
+      if (source === undefined) return
+      dispatch(intentForDragTarget(moveMode.viewId, source.groupId, {
+        groupId: target.groupId,
+        edge: target.edge,
+        enabled: true,
+      }))
       setFocusTabId(moveMode.viewId)
       setMoveMode(undefined)
     }

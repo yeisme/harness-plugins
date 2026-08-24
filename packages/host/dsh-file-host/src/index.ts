@@ -11,6 +11,7 @@
 import type { FileEntryV1 } from '@yeisme/dsh-file-document'
 
 export const FILE_WATCH_CAPABILITY = 'FileWatchCapabilityV1'
+export const FILE_TREE_PROJECTION_CAPABILITY = 'FileTreeProjectionCapabilityV1'
 
 export type FileWatchFreshness = 'unknown' | 'stale' | 'offline' | 'contract_mismatch' | 'fresh'
 export type FileWatchOp = 'created' | 'changed' | 'deleted' | 'renamed'
@@ -49,6 +50,45 @@ export interface FileHostV1 {
   readonly capabilities?: readonly string[]
   /** Optional live watch handle. Absent unless FileWatchCapabilityV1 is present. */
   watch?(parentRef?: string): FileWatchHandle
+  /** Optional owner-issued tree projection. Absent unless FileTreeProjectionCapabilityV1 is present. */
+  tree?: FileTreeProjectionCapabilityV1
+}
+
+export type FileTreeNodeKindV1 = 'file' | 'directory' | 'symlink'
+export type FileTreeFreshnessV1 = FileWatchFreshness
+
+export interface FileTreeBreadcrumbSegmentV1 {
+  readonly ref: string
+  readonly name: string
+}
+
+export interface FileTreeNodeV1 {
+  readonly ref: string
+  readonly parentRef?: string
+  readonly name: string
+  readonly kind: FileTreeNodeKindV1
+  readonly version: string
+  readonly hasChildren: boolean
+  readonly capabilities: readonly string[]
+  readonly gitDecoration?: string
+  readonly symlinkKind?: 'file' | 'directory' | 'unknown'
+  readonly freshness: FileTreeFreshnessV1
+}
+
+export interface FileTreeProjectionCapabilityV1 {
+  readonly capability: typeof FILE_TREE_PROJECTION_CAPABILITY
+  roots(): Promise<readonly FileTreeNodeV1[]>
+  listChildren(ref: string): Promise<readonly FileTreeNodeV1[]>
+  reveal?(ref: string): Promise<readonly FileTreeBreadcrumbSegmentV1[]>
+  search?(query: string): Promise<readonly FileTreeNodeV1[]>
+  subscribe?(listener: (nodes: readonly FileTreeNodeV1[]) => void): () => void
+}
+
+export interface FileTreeProjectionProbe {
+  readonly available: boolean
+  readonly freshness: FileTreeFreshnessV1
+  readonly missingCapability?: string
+  readonly reason: string
 }
 
 export interface FileWatchProbe {
@@ -81,6 +121,85 @@ export function isSafeFileWatchEvent(event: FileWatchEventV1): boolean {
     && event.entryRef.length <= 160
     && event.cursor.length > 0
     && !UNSAFE_WATCH.test(blob)
+}
+
+const UNSAFE_TREE = /(?:^|[:/\\])(?:etc|home|usr|var|tmp)|file:\/\/|authorization|cookie|token/i
+const OPAQUE_REF = /^[A-Za-z0-9._~:-]{1,160}$/
+const SAFE_NAME = /^[^\\/\r\n]{1,200}$/
+
+function looksLikeAbsolutePath(value: string): boolean {
+  return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value) || value.startsWith('\\\\') || value.startsWith('file:')
+}
+
+export function isSafeFileTreeRef(value: string): boolean {
+  return OPAQUE_REF.test(value) && !looksLikeAbsolutePath(value) && !UNSAFE_TREE.test(value)
+}
+
+export function isSafeFileTreeNode(node: FileTreeNodeV1): boolean {
+  if (!isSafeFileTreeRef(node.ref)) return false
+  if (node.parentRef !== undefined && !isSafeFileTreeRef(node.parentRef)) return false
+  if (!SAFE_NAME.test(node.name) || looksLikeAbsolutePath(node.name)) return false
+  if (node.version.length === 0 || node.version.length > 80 || looksLikeAbsolutePath(node.version)) return false
+  const blob = `${node.ref}|${node.parentRef ?? ''}|${node.name}|${node.version}|${node.gitDecoration ?? ''}`
+  return !UNSAFE_TREE.test(blob) && !looksLikeAbsolutePath(blob)
+}
+
+export function validateFileTreeNode(value: unknown): { readonly ok: true; readonly value: FileTreeNodeV1 } | { readonly ok: false; readonly reason: string } {
+  if (typeof value !== 'object' || value === null) return { ok: false, reason: 'node must be an object' }
+  const candidate = value as Partial<FileTreeNodeV1>
+  if (typeof candidate.ref !== 'string' || !isSafeFileTreeRef(candidate.ref)) return { ok: false, reason: 'unsafe ref' }
+  if (candidate.parentRef !== undefined && (typeof candidate.parentRef !== 'string' || !isSafeFileTreeRef(candidate.parentRef))) {
+    return { ok: false, reason: 'unsafe parentRef' }
+  }
+  if (typeof candidate.name !== 'string' || !SAFE_NAME.test(candidate.name) || looksLikeAbsolutePath(candidate.name)) {
+    return { ok: false, reason: 'unsafe name' }
+  }
+  if (candidate.kind !== 'file' && candidate.kind !== 'directory' && candidate.kind !== 'symlink') {
+    return { ok: false, reason: 'invalid kind' }
+  }
+  if (typeof candidate.version !== 'string' || candidate.version.length === 0) return { ok: false, reason: 'missing version' }
+  if (typeof candidate.hasChildren !== 'boolean') return { ok: false, reason: 'hasChildren required' }
+  if (!Array.isArray(candidate.capabilities) || candidate.capabilities.some(item => typeof item !== 'string')) {
+    return { ok: false, reason: 'capabilities invalid' }
+  }
+  const node: FileTreeNodeV1 = {
+    ref: candidate.ref,
+    ...(candidate.parentRef === undefined ? {} : { parentRef: candidate.parentRef }),
+    name: candidate.name,
+    kind: candidate.kind,
+    version: candidate.version,
+    hasChildren: candidate.hasChildren,
+    capabilities: [...candidate.capabilities],
+    ...(typeof candidate.gitDecoration === 'string' ? { gitDecoration: candidate.gitDecoration } : {}),
+    ...(candidate.symlinkKind === 'file' || candidate.symlinkKind === 'directory' || candidate.symlinkKind === 'unknown'
+      ? { symlinkKind: candidate.symlinkKind }
+      : {}),
+    freshness: candidate.freshness === 'fresh' || candidate.freshness === 'stale' || candidate.freshness === 'offline' || candidate.freshness === 'unknown' || candidate.freshness === 'contract_mismatch'
+      ? candidate.freshness
+      : 'unknown',
+  }
+  if (!isSafeFileTreeNode(node)) return { ok: false, reason: 'contract_mismatch' }
+  return { ok: true, value: node }
+}
+
+export function validateFileTreeBreadcrumb(segments: readonly FileTreeBreadcrumbSegmentV1[]): boolean {
+  return segments.every(segment => isSafeFileTreeRef(segment.ref) && SAFE_NAME.test(segment.name) && !looksLikeAbsolutePath(segment.name))
+}
+
+export function probeFileTreeProjection(host: FileHostV1 | undefined): FileTreeProjectionProbe {
+  if (host === undefined) {
+    return { available: false, freshness: 'offline', reason: 'file owner is offline' }
+  }
+  const capabilities = host.capabilities ?? []
+  if (!capabilities.includes(FILE_TREE_PROJECTION_CAPABILITY) || host.tree === undefined) {
+    return {
+      available: false,
+      freshness: 'contract_mismatch',
+      missingCapability: FILE_TREE_PROJECTION_CAPABILITY,
+      reason: `missing ${FILE_TREE_PROJECTION_CAPABILITY}`,
+    }
+  }
+  return { available: true, freshness: 'fresh', reason: 'file tree projection available' }
 }
 
 /** Probe live watch. Missing capability is not live and must not be polled. */

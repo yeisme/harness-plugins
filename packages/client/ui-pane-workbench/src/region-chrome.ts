@@ -13,7 +13,11 @@ import {
 import type { PaneDragTargetV1 } from './interactions.js'
 import { PaneResizeSession } from './interactions.js'
 import type { PaneWorkbenchController } from './controller.js'
-import { isPaneCoreViewId, type PaneCoreViewId } from './core-pane.js'
+import { isPaneCoreViewId, openPaneWorkbenchCoreView, DSH_WORKSPACE_DESIGNER_VIEW_KIND, type PaneCoreViewId } from './core-pane.js'
+import { DSH_EXPLORER_VIEW_KIND, openExplorerNavigator } from './explorer/provider.js'
+import { openSourceControlNavigator } from './git/provider.js'
+import { DSH_SOURCE_CONTROL_VIEW_KIND } from './git/source-control.js'
+import { PaneTabStrip } from './tabs.js'
 import type { PaneViewRegistry } from './view-registry.js'
 import { WorkbenchIcon } from './icon.js'
 import type { WorkbenchIconName } from './icon.js'
@@ -132,11 +136,6 @@ function groupIds(node: PaneSplitNodeV1, output: string[] = []): string[] {
   if (node.type === 'group') output.push(node.groupId)
   else { groupIds(node.first, output); groupIds(node.second, output) }
   return output
-}
-
-function nextTab(group: PaneGroupV1, viewId: string, direction: -1 | 1): string | undefined {
-  const current = group.tabs.indexOf(viewId)
-  return current < 0 || group.tabs.length === 0 ? undefined : group.tabs[(current + direction + group.tabs.length) % group.tabs.length]
 }
 
 function targetGroup(state: PaneWorkspaceV1, view: PaneViewInstanceV1, region: PaneRegionId): PaneGroupV1 | undefined {
@@ -275,16 +274,6 @@ function GroupChrome(props: {
   const registration = active === undefined ? undefined : props.registry.get(active.kind)
   const target = drag.target?.groupId === props.group.id ? drag.target : undefined
   const close = (viewId: string): void => { props.controller.dispatch({ type: 'close_view', viewId }) }
-  const onTabKeyDown = (event: KeyboardEvent<HTMLElement>, view: PaneViewInstanceV1): void => {
-    const next = event.key === 'ArrowRight' ? nextTab(props.group, view.id, 1)
-      : event.key === 'ArrowLeft' ? nextTab(props.group, view.id, -1)
-      : event.key === 'Home' ? props.group.tabs[0]
-      : event.key === 'End' ? props.group.tabs.at(-1)
-      : undefined
-    if (next !== undefined) { event.preventDefault(); props.controller.dispatch({ type: 'activate_view', viewId: next }); document.getElementById(`pane-tab-${next}`)?.focus(); return }
-    if (event.key === 'Delete') { event.preventDefault(); close(view.id); return }
-    if (event.key === 'F10' && event.shiftKey) { event.preventDefault(); setMenuViewId(view.id) }
-  }
   const dropTarget = (event: PointerEvent<HTMLElement>): PaneDragTargetV1 | undefined => {
     const sourceId = drag.drag.status === 'dragging' ? drag.drag.viewId : drag.drag.status === 'pending' ? drag.drag.viewId : undefined
     const source = sourceId === undefined ? undefined : props.state.views[sourceId]
@@ -342,19 +331,13 @@ function GroupChrome(props: {
   },
   target === undefined ? null : createElement('div', { className: 'pwr-drop', role: 'status', 'aria-label': target.enabled ? `${t('drag.splitUpper')} ${target.edge}` : `${formatT('drag.unavailable', {})}: ${target.reason ?? formatT('drag.notAllowed', {})}` }, target.enabled ? `${t('drag.splitUpper')} ${target.edge}` : formatT('drag.unavailable', {})),
   createElement('div', { className: 'pwr-tabs', role: 'tablist', 'aria-label': `${props.group.role} pane tabs` },
-    ...props.group.tabs.map((viewId, tabIndex) => {
-      const view = props.state.views[viewId]
-      if (view === undefined) return null
-      return createElement('button', {
-        key: view.id, id: `pane-tab-${view.id}`, className: 'pwr-tab', role: 'tab', type: 'button',
-        title: view.title, 'aria-selected': props.group.activeTabId === view.id, 'aria-controls': `pane-panel-${view.id}`,
-        tabIndex: props.group.activeTabId === view.id ? 0 : -1, 'data-pane-tab-index': tabIndex,
-        onClick: () => props.controller.dispatch({ type: 'activate_view', viewId: view.id }),
-        onDoubleClick: () => props.controller.dispatch({ type: 'pin_view', viewId: view.id, pinned: true }),
-        onContextMenu: event => { event.preventDefault(); setMenuViewId(view.id) },
-        onKeyDown: event => onTabKeyDown(event, view),
-        onPointerDown: (event: PointerEvent<HTMLButtonElement>) => props.controller.drag.begin(view.id, event.clientX, event.clientY),
-      }, createElement(WorkbenchIcon, { name: iconForView(view), size: 14 }), createElement('span', { className: 'pwr-tab-title' }, `${view.title}${view.dirty ? ' •' : ''}`))
+    createElement(PaneTabStrip, {
+      group: props.group,
+      state: props.state,
+      controller: props.controller,
+      availableWidth: Math.max(136, menuWidth - 132),
+      onContextMenu: viewId => setMenuViewId(viewId),
+      onClose: close,
     }),
     createElement('div', { className: 'pwr-tab-actions', role: 'group', 'aria-label': t('chrome.paneActions') },
       createElement('button', {
@@ -370,13 +353,10 @@ function GroupChrome(props: {
         'aria-label': maximized ? t('chrome.restorePane') : t('chrome.maximizePane'),
         onClick: () => { props.controller.dispatch(maximized ? { type: 'restore_layout' } : { type: 'maximize_group', groupId: props.group.id }) },
       }, createElement(WorkbenchIcon, { name: maximized ? 'restore' : 'maximize' })),
-      active === undefined ? null : createElement('button', {
-        type: 'button', title: formatT('tab.closeWithName', { name: active.title }), 'aria-label': formatT('tab.closeWithName', { name: active.title }),
-        onClick: () => close(active.id),
-      }, createElement(WorkbenchIcon, { name: 'close' })),
     ),
   ),
   menuView === undefined ? null : createElement('div', { className: 'pwr-menu', role: 'menu', 'aria-label': `${menuView.title} actions` },
+    createElement('button', { role: 'menuitem', type: 'button', onClick: () => { openPaneWorkbenchCoreView(props.controller, DSH_WORKSPACE_DESIGNER_VIEW_KIND); setMenuViewId(undefined) } }, t('rail.customize')),
     createElement('button', { role: 'menuitem', type: 'button', onClick: () => { props.controller.dispatch({ type: 'pin_view', viewId: menuView.id }); setMenuViewId(undefined) } }, menuView.pinned ? t('tab.unpin') : t('tab.pin')),
     createElement('button', { role: 'menuitem', type: 'button', onClick: () => { close(menuView.id); setMenuViewId(undefined) } }, formatT('tab.closeWithName', { name: menuView.title })),
     createElement('button', { role: 'menuitem', type: 'button', onClick: () => {
@@ -466,11 +446,25 @@ export function PaneRegionChrome(props: PaneRegionChromeProps): ReactNode {
   createElement('div', { className: 'pwr-status', role: 'status', 'aria-live': 'polite', 'aria-atomic': true }, drag.announcement || props.controller.announcement),
   props.region === 'right' ? createElement('nav', { className: 'pwr-rail', 'aria-label': t('chrome.workspaceActivity') },
     bodyVisible ? null : createElement('button', { type: 'button', title: t('chrome.openView'), 'aria-label': t('chrome.openView'), onClick: () => setPickerOpen(true) }, createElement(WorkbenchIcon, { name: 'add' })),
-    ...openedViews.map(view => createElement('button', {
+    createElement('button', {
+      type: 'button', title: t('rail.explorer'), 'aria-label': t('rail.explorer'),
+      className: openedViews.some(view => view.kind === DSH_EXPLORER_VIEW_KIND && state.groups[view.groupId]?.activeTabId === view.id) ? 'pwr-active' : undefined,
+      onClick: () => openExplorerNavigator(props.controller),
+    }, createElement(WorkbenchIcon, { name: 'folder' })),
+    createElement('button', {
+      type: 'button', title: t('rail.sourceControl'), 'aria-label': t('rail.sourceControl'),
+      className: openedViews.some(view => view.kind === DSH_SOURCE_CONTROL_VIEW_KIND && state.groups[view.groupId]?.activeTabId === view.id) ? 'pwr-active' : undefined,
+      onClick: () => openSourceControlNavigator(props.controller),
+    }, createElement(WorkbenchIcon, { name: 'git' })),
+    ...openedViews.filter(view => view.kind !== DSH_EXPLORER_VIEW_KIND && view.kind !== DSH_SOURCE_CONTROL_VIEW_KIND).map(view => createElement('button', {
       key: view.id, type: 'button', title: view.title, 'aria-label': `Open ${view.title}`,
       className: state.activeGroupId === view.groupId && state.groups[view.groupId]?.activeTabId === view.id ? 'pwr-active' : undefined,
       onClick: () => props.controller.dispatch({ type: 'activate_view', viewId: view.id }),
     }, createElement(WorkbenchIcon, { name: iconForView(view) }))),
+    createElement('button', {
+      type: 'button', title: t('rail.customize'), 'aria-label': t('rail.customize'),
+      onClick: () => openPaneWorkbenchCoreView(props.controller, DSH_WORKSPACE_DESIGNER_VIEW_KIND),
+    }, createElement(WorkbenchIcon, { name: 'workspace' })),
     createElement(FontScaleControls),
   ) : null,
   createElement('div', { className: 'pwr-body', 'data-body-visible': bodyVisible },

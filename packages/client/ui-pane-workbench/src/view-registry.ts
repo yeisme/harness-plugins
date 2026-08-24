@@ -197,7 +197,9 @@ export function parseSafePaneProjection(input: unknown): JsonValue | undefined {
 export function markOrphanedPaneViews(state: PaneWorkspaceV1, registry: Pick<PaneViewRegistry, 'has'>): PaneWorkspaceV1 {
   let changed = false
   const views = Object.fromEntries(Object.entries(state.views).map(([id, view]) => {
-    const status = registry.has(view.kind) ? 'ready' : 'orphaned'
+    const status = registry.has(view.kind)
+      ? (view.status === 'orphaned' ? 'ready' : view.status)
+      : 'orphaned'
     if (status !== view.status) changed = true
     return [id, { ...view, status }]
   })) as PaneWorkspaceV1['views']

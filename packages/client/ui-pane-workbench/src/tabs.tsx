@@ -11,10 +11,19 @@
  * Maintains single controller, no nested buttons, APG roles, and existing intents.
  */
 
-import { createElement, type MouseEvent, type KeyboardEvent, type PointerEvent } from 'react'
+import { createElement, useMemo, useState, type MouseEvent, type KeyboardEvent, type PointerEvent } from 'react'
 import { WorkbenchIcon, type WorkbenchIconName } from './icon.js'
 import { formatT, t } from './i18n/locale.js'
-import type { PaneViewInstanceV1, PaneGroupV1 } from './workspace.js'
+import {
+  filterOverflowTabs,
+  planPaneTabOverflow,
+  presentPaneTab,
+  segmentPaneTabs,
+  type PaneBulkCloseMode,
+  type PaneGroupV1,
+  type PaneViewInstanceV1,
+  type PaneWorkspaceV1,
+} from './workspace.js'
 import type { PaneWorkbenchController } from './controller.js'
 
 // Types for tab components
@@ -30,8 +39,36 @@ export interface PaneTabProps {
 }
 
 export interface TabStatusPresenterProps {
-  view: PaneViewInstanceV1
+  view: Pick<PaneViewInstanceV1, 'dirty' | 'status'> & {
+    readonly attention?: boolean
+    readonly offline?: boolean
+    readonly stale?: boolean
+    readonly preview?: boolean
+    readonly pinned?: boolean
+  }
   isActive: boolean
+}
+
+export interface PaneTabCloseProps {
+  view: Pick<PaneViewInstanceV1, 'id' | 'title'>
+  onClose: (viewId: string) => void
+}
+
+export interface PaneTabOverflowProps {
+  group: PaneGroupV1
+  views: Readonly<Record<string, PaneViewInstanceV1>>
+  overflowIds: readonly string[]
+  controller: PaneWorkbenchController
+  onRestoreFocus?: (viewId: string) => void
+}
+
+export interface PaneTabStripProps {
+  group: PaneGroupV1
+  state: PaneWorkspaceV1
+  controller: PaneWorkbenchController
+  availableWidth: number
+  onContextMenu: (viewId: string) => void
+  onClose?: (viewId: string) => void
 }
 
 export interface PaneTabActionsProps {
@@ -55,36 +92,41 @@ function iconForView(view: PaneViewInstanceV1): WorkbenchIconName {
 // Status indicators for tabs
 export function TabStatusPresenter(props: TabStatusPresenterProps): React.ReactNode {
   const { view, isActive } = props
-  const { dirty, status, attention, offline } = view
-
-  // Priority order for status indicators: conflict > offline > attention > dirty > orphaned
-  let statusClass: string | undefined
-  let ariaLabel: string | undefined
-
-  if (status === 'conflict') {
-    statusClass = 'pwr-status-conflict'
-    ariaLabel = 'Conflict'
-  } else if (offline) {
-    statusClass = 'pwr-status-offline'
-    ariaLabel = 'Offline'
-  } else if (attention) {
-    statusClass = 'pwr-status-attention'
-    ariaLabel = 'Attention'
-  } else if (dirty) {
-    statusClass = 'pwr-status-dirty'
-    ariaLabel = t('tab.dirty')
-  } else if (status === 'orphaned') {
-    statusClass = 'pwr-status-orphaned'
-    ariaLabel = t('tab.orphaned')
-  }
-
-  if (!statusClass) return null
+  const tokens: Array<{ id: string; className: string; label: string }> = []
+  if (view.preview) tokens.push({ id: 'preview', className: 'pwr-status-preview', label: t('tab.preview') })
+  if (view.dirty) tokens.push({ id: 'dirty', className: 'pwr-status-dirty', label: t('tab.dirty') })
+  if (view.status === 'orphaned') tokens.push({ id: 'orphaned', className: 'pwr-status-orphaned', label: t('tab.orphaned') })
+  if (view.status === 'conflict') tokens.push({ id: 'conflict', className: 'pwr-status-conflict', label: t('tab.conflict') })
+  if (view.offline) tokens.push({ id: 'offline', className: 'pwr-status-offline', label: t('tab.offline') })
+  if (view.stale || view.status === 'stale') tokens.push({ id: 'stale', className: 'pwr-status-stale', label: t('state.stale') })
+  if (view.attention) tokens.push({ id: 'attention', className: 'pwr-status-attention', label: t('tab.attention') })
+  if (tokens.length === 0) return null
 
   return createElement('span', {
-    className: `pwr-tab-status ${statusClass} ${isActive ? 'pwr-status-active' : ''}`,
-    'aria-label': ariaLabel,
-    title: ariaLabel,
-  })
+    className: `pwr-tab-status ${tokens.map(token => token.className).join(' ')} ${isActive ? 'pwr-status-active' : ''}`,
+    'aria-hidden': true,
+    'aria-label': tokens.map(token => token.label).join(', '),
+    title: tokens.map(token => token.label).join(', '),
+    'data-pane-status-tokens': tokens.map(token => token.id).join(' '),
+  }, ...tokens.map(token => createElement('span', {
+    key: token.id,
+    className: `${token.className} pwr-status-token`,
+    'data-pane-status': token.id,
+  }, token.label)))
+}
+
+export function PaneTabClose(props: PaneTabCloseProps): React.ReactNode {
+  return createElement('button', {
+    type: 'button',
+    className: 'pwr-tab-close',
+    title: formatT('tab.closeWithName', { name: props.view.title }),
+    'aria-label': formatT('tab.closeWithName', { name: props.view.title }),
+    onClick: (event: MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation()
+      props.onClose(props.view.id)
+    },
+    tabIndex: -1,
+  }, createElement(WorkbenchIcon, { name: 'close', size: 12 }))
 }
 
 // Individual tab component
@@ -130,48 +172,48 @@ export function PaneTab(props: PaneTabProps): React.ReactNode {
     }
   }
 
-  // V4 Task 3.5: Detect fine vs coarse pointer for drag threshold
   const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
-    const pointerType = event.pointerType === 'touch' || event.pointerType === 'pen' ? 'coarse' : 'fine'
-    controller.drag.begin(view.id, event.clientX, event.clientY, pointerType)
+    controller.drag.begin(view.id, event.clientX, event.clientY)
   }
 
-  const handleClose = (event: MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation()
-    if (onClose) {
-      onClose(view.id)
-    } else {
-      controller.dispatch({ type: 'close_view', viewId: view.id })
-    }
-  }
+  const presentation = presentPaneTab({
+    ...view,
+    attention: Boolean(view.attention),
+    offline: Boolean(view.offline),
+    stale: Boolean(view.stale),
+  })
 
-  const closeIcon = createElement(WorkbenchIcon, { name: 'close', size: 12 })
-
-  return createElement('button', {
-    id: `pane-tab-${view.id}`,
-    className: `pwr-tab ${isActive ? 'pwr-tab-active' : ''} ${isPinned ? 'pwr-tab-pinned' : ''}`,
-    role: 'tab',
-    type: 'button',
-    title: view.title,
-    'aria-selected': isActive,
-    'aria-controls': `pane-panel-${view.id}`,
-    'data-pane-tab-index': tabIndex,
-    tabIndex: isActive ? 0 : -1,
-    onClick: handleClick,
-    onDoubleClick: handleDoubleClick,
-    onContextMenu: handleContextMenu,
-    onKeyDown: handleKeyDown,
-    onPointerDown: handlePointerDown,
+  return createElement('div', {
+    className: `pwr-tab-item ${isPinned ? 'pwr-tab-item-pinned' : ''} ${view.preview ? 'pwr-tab-item-preview' : ''}`,
+    'data-pane-tab-segment': isPinned ? 'pinned' : 'working',
+    'data-pane-renderer-id': view.id,
   },
-    createElement(WorkbenchIcon, { name: iconForView(view), size: 14 }),
-    createElement('span', { className: 'pwr-tab-title' }, view.title),
-    createElement(TabStatusPresenter, { view, isActive }),
-    createElement('span', {
-      className: 'pwr-tab-close',
-      role: 'presentation',
-      onClick: handleClose,
-      'aria-hidden': true,
-    }, closeIcon)
+    createElement('button', {
+      id: `pane-tab-${view.id}`,
+      className: `pwr-tab ${isActive ? 'pwr-tab-active' : ''} ${isPinned ? 'pwr-tab-pinned' : ''} ${view.preview ? 'pwr-tab-preview' : ''}`,
+      role: 'tab',
+      type: 'button',
+      title: presentation.accessibleName,
+      'aria-selected': isActive,
+      'aria-controls': `pane-panel-${view.id}`,
+      'aria-description': presentation.statusTokens.join(', ') || undefined,
+      'data-pane-tab-index': tabIndex,
+      tabIndex: isActive ? 0 : -1,
+      onClick: handleClick,
+      onDoubleClick: handleDoubleClick,
+      onContextMenu: handleContextMenu,
+      onKeyDown: handleKeyDown,
+      onPointerDown: handlePointerDown,
+    },
+      createElement(WorkbenchIcon, { name: iconForView(view), size: 14 }),
+      createElement('span', { className: 'pwr-tab-title' }, view.title),
+      view.instanceLabel === undefined ? null : createElement('span', { className: 'pwr-tab-instance' }, view.instanceLabel),
+      createElement(TabStatusPresenter, { view, isActive }),
+    ),
+    createElement(PaneTabClose, { view, onClose: viewId => {
+      if (onClose) onClose(viewId)
+      else controller.dispatch({ type: 'close_view', viewId })
+    } }),
   )
 }
 
@@ -227,100 +269,100 @@ export function PaneTabActions(props: PaneTabActionsProps): React.ReactNode {
   )
 }
 
-/**
- * V4 Task 3.3: Tab Overflow
- *
- * Implements tab overflow handling with:
- * - Width budget and active/pinned/dirty priority
- * - More Tabs searchable listbox
- * - 30+ tabs bounded measurement and focus restore
- */
-
-// Tab overflow menu component
-export interface PaneTabOverflowProps {
-  hiddenTabs: Array<{ view: PaneViewInstanceV1, index: number }>
-  onSelect: (viewId: string) => void
-  onClose?: (viewId: string) => void
-}
-
 export function PaneTabOverflow(props: PaneTabOverflowProps): React.ReactNode {
-  const { hiddenTabs, onSelect, onClose } = props
-
-  if (hiddenTabs.length === 0) return null
-
-  return createElement('div', {
-    className: 'pwr-tab-overflow',
-    role: 'menu',
-    'aria-label': t('tab.moreTabs', { count: hiddenTabs.length }),
-  },
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const matches = useMemo(() => filterOverflowTabs(props.overflowIds, props.views, query), [props.overflowIds, props.views, query])
+  if (props.overflowIds.length === 0) return null
+  return createElement('div', { className: 'pwr-tab-overflow' },
     createElement('button', {
       type: 'button',
-      className: 'pwr-tab-overflow-button',
-      title: formatT('tab.moreTabs', { count: hiddenTabs.length }),
-      'aria-label': formatT('tab.moreTabs', { count: hiddenTabs.length }),
-      'aria-haspopup': 'menu',
-    },
-      createElement(WorkbenchIcon, { name: 'more', size: 14 }),
-      createElement('span', { className: 'pwr-tab-count' }, hiddenTabs.length.toString())
-    ),
-    // Hidden tabs menu would be rendered here on interaction
+      className: 'pwr-tab-overflow-trigger',
+      'aria-haspopup': 'listbox',
+      'aria-expanded': open,
+      onClick: () => setOpen(value => !value),
+    }, t('tab.moreTabs')),
+    open ? createElement('div', { className: 'pwr-tab-overflow-panel', role: 'listbox', 'aria-label': t('tab.moreTabs') },
+      createElement('input', {
+        type: 'search',
+        value: query,
+        'aria-label': t('tab.moreTabs'),
+        onChange: (event: { currentTarget: { value: string } }) => setQuery(event.currentTarget.value),
+      }),
+      ...matches.map(viewId => {
+        const view = props.views[viewId]
+        if (view === undefined) return null
+        const presentation = presentPaneTab(view)
+        return createElement('button', {
+          key: viewId,
+          type: 'button',
+          role: 'option',
+          'aria-selected': false,
+          'data-pane-overflow-id': viewId,
+          onClick: () => {
+            props.controller.dispatch({ type: 'activate_view', viewId })
+            setOpen(false)
+            setQuery('')
+            props.onRestoreFocus?.(viewId)
+            document.getElementById(`pane-tab-${viewId}`)?.focus()
+          },
+        }, `${view.title}${presentation.statusTokens.length === 0 ? '' : ` (${presentation.statusTokens.join(', ')})`}`)
+      }),
+    ) : null,
   )
 }
 
-// Helper to calculate visible tabs based on width budget
-export function calculateVisibleTabs(
-  tabs: string[],
-  views: Record<string, PaneViewInstanceV1>,
-  availableWidth: number,
-  activeViewId: string | undefined,
-  minTabWidth: number = 88,
-  maxTabWidth: number = 220
-): { visible: string[], hidden: string[] } {
-  if (tabs.length === 0) return { visible: [], hidden: [] }
-
-  // Priority: active > pinned > dirty > others
-  const prioritized = [...tabs].sort((a, b) => {
-    const viewA = views[a]
-    const viewB = views[b]
-
-    // Active tab always visible
-    if (activeViewId === a && activeViewId !== b) return -1
-    if (activeViewId !== a && activeViewId === b) return 1
-
-    // Pinned tabs next priority
-    if (viewA.pinned && !viewB.pinned) return -1
-    if (!viewA.pinned && viewB.pinned) return 1
-
-    // Dirty tabs next priority
-    if (viewA.dirty && !viewB.dirty) return -1
-    if (!viewA.dirty && viewB.dirty) return 1
-
-    // Maintain original order for same priority
-    return tabs.indexOf(a) - tabs.indexOf(b)
-  })
-
-  const visible: string[] = []
-  const hidden: string[] = []
-  let usedWidth = 0
-
-  for (const tabId of prioritized) {
-    const view = views[tabId]
-    const tabWidth = Math.min(Math.max(minTabWidth, view.title.length * 8 + 40), maxTabWidth)
-
-    if (usedWidth + tabWidth <= availableWidth || visible.length < 3) {
-      visible.push(tabId)
-      usedWidth += tabWidth
-    } else {
-      hidden.push(tabId)
-    }
-  }
-
-  // Restore original order for visible tabs
-  visible.sort((a, b) => tabs.indexOf(a) - tabs.indexOf(b))
-  hidden.sort((a, b) => tabs.indexOf(a) - tabs.indexOf(b))
-
-  return { visible, hidden }
+export function PaneTabStrip(props: PaneTabStripProps): React.ReactNode {
+  const plan = planPaneTabOverflow(props.group, props.state.views, props.availableWidth)
+  const segments = segmentPaneTabs(props.group, props.state.views)
+  const children = [
+    ...segments.map(segment => {
+      const visible = segment.viewIds.flatMap(viewId => {
+        if (!plan.visibleIds.includes(viewId)) return []
+        const view = props.state.views[viewId]
+        if (view === undefined) return []
+        return [createElement(PaneTab, {
+          key: viewId,
+          view,
+          isActive: props.group.activeTabId === viewId,
+          isPinned: view.pinned,
+          tabIndex: props.group.tabs.indexOf(viewId),
+          group: props.group,
+          controller: props.controller,
+          onContextMenu: props.onContextMenu,
+          onClose: props.onClose,
+        })]
+      })
+      return createElement('div', {
+        key: segment.id,
+        className: `pwr-tab-segment pwr-tab-segment-${segment.id}`,
+        'data-pane-tab-segment': segment.id,
+      }, visible)
+    }),
+    createElement(PaneTabOverflow, {
+      key: 'overflow',
+      group: props.group,
+      views: props.state.views,
+      overflowIds: plan.overflowIds,
+      controller: props.controller,
+      onRestoreFocus: viewId => document.getElementById(`pane-tab-${viewId}`)?.focus(),
+    }),
+  ]
+  return createElement('div', {
+    className: 'pwr-tab-strip',
+    'aria-label': t('a11y.tabList'),
+    'data-pane-tab-measured': plan.measuredCount,
+    'data-pane-tab-observers': plan.observerCount,
+  }, children)
 }
 
-// Export the components for use in region-chrome.ts
+export function dispatchBulkClose(
+  controller: PaneWorkbenchController,
+  groupId: string,
+  mode: PaneBulkCloseMode,
+  sourceViewId?: string,
+): ReturnType<PaneWorkbenchController['dispatch']> {
+  return controller.dispatch({ type: 'bulk_close', groupId, mode, sourceViewId })
+}
+
 export { TabStatusPresenter as PaneTabStatusPresenter }

@@ -9,6 +9,21 @@
  */
 
 export const GIT_TYPED_ACTIONS_CAPABILITY = 'GitTypedActionsCapabilityV1'
+export const GIT_STATUS_PROJECTION_CAPABILITY_V2 = 'GitStatusProjectionCapabilityV2'
+export const GIT_DIFF_WINDOW_CAPABILITY = 'GitDiffWindowCapabilityV1'
+export const GIT_BRANCH_ACTIONS_CAPABILITY = 'GitBranchActionsCapabilityV1'
+export const GIT_REMOTE_ACTIONS_CAPABILITY = 'GitRemoteActionsCapabilityV1'
+export const GIT_WORKTREE_ACTIONS_CAPABILITY_V2 = 'GitWorktreeActionsCapabilityV2'
+
+export const GIT_OPTIONAL_CAPABILITIES_V2 = [
+  GIT_STATUS_PROJECTION_CAPABILITY_V2,
+  GIT_DIFF_WINDOW_CAPABILITY,
+  GIT_BRANCH_ACTIONS_CAPABILITY,
+  GIT_REMOTE_ACTIONS_CAPABILITY,
+  GIT_WORKTREE_ACTIONS_CAPABILITY_V2,
+] as const
+
+export type GitOptionalCapabilityV2 = (typeof GIT_OPTIONAL_CAPABILITIES_V2)[number]
 
 export const GIT_TYPED_ACTIONS = [
   'status',
@@ -45,6 +60,56 @@ export interface GitDiffV1 {
   readonly truncated: boolean
 }
 
+export interface GitStatusProjectionV2 {
+  readonly repositoryRef: string
+  readonly worktreeRef: string
+  readonly branch: string
+  readonly upstream?: string
+  readonly ahead: number
+  readonly behind: number
+  readonly revision: string
+  readonly cursor: string
+  readonly conflictCount: number
+  readonly stagedCount: number
+  readonly unstagedCount: number
+  readonly untrackedCount: number
+}
+
+export interface GitDiffWindowV1 {
+  readonly fileRef: string
+  readonly loaded: number
+  readonly total: number
+  readonly baseRevision: string
+  readonly targetRevision: string
+  readonly nextCursor?: string
+}
+
+export interface GitBranchActionsCapabilityV1 {
+  readonly capability: typeof GIT_BRANCH_ACTIONS_CAPABILITY
+  readonly actions: readonly ('list' | 'create' | 'switch' | 'delete')[]
+}
+
+export interface GitRemoteActionsCapabilityV1 {
+  readonly capability: typeof GIT_REMOTE_ACTIONS_CAPABILITY
+  readonly actions: readonly ('fetch' | 'pull' | 'push')[]
+}
+
+export interface GitWorktreeActionsCapabilityV2 {
+  readonly capability: typeof GIT_WORKTREE_ACTIONS_CAPABILITY_V2
+  readonly actions: readonly ('list' | 'create' | 'remove')[]
+  readonly releasesOrdoLease: false
+}
+
+export interface GitStatusProjectionCapabilityV2 {
+  readonly capability: typeof GIT_STATUS_PROJECTION_CAPABILITY_V2
+  snapshot(): Promise<GitStatusProjectionV2>
+}
+
+export interface GitDiffWindowCapabilityV1 {
+  readonly capability: typeof GIT_DIFF_WINDOW_CAPABILITY
+  window(fileRef: string, cursor?: string): Promise<GitDiffWindowV1>
+}
+
 export interface GitHostV1 {
   readonly version: '0.1.0-rc.1'
   readonly capability: 'git-host'
@@ -55,6 +120,17 @@ export interface GitHostV1 {
   stage?(path: string): Promise<GitActionReceiptV1>
   unstage?(path: string): Promise<GitActionReceiptV1>
   commit?(message: string, idempotencyKey?: string): Promise<GitActionReceiptV1>
+  statusProjection?: GitStatusProjectionCapabilityV2
+  diffWindow?: GitDiffWindowCapabilityV1
+  branchActions?: GitBranchActionsCapabilityV1
+  remoteActions?: GitRemoteActionsCapabilityV1
+  worktreeActions?: GitWorktreeActionsCapabilityV2
+}
+
+export interface GitCapabilityProbeV1 {
+  readonly available: boolean
+  readonly capability: string
+  readonly reason: string
 }
 
 const TYPED = new Set<string>(GIT_TYPED_ACTIONS)
@@ -62,6 +138,29 @@ const GATED = new Set<string>(GIT_GATED_ACTIONS)
 
 export function isGitTypedAction(actionId: string): actionId is GitTypedActionId {
   return TYPED.has(actionId)
+}
+
+const OPAQUE_GIT_REF = /^[A-Za-z0-9._~:-]{1,160}$/
+
+export function isSafeGitOpaqueRef(value: string): boolean {
+  return OPAQUE_GIT_REF.test(value) && !value.startsWith('/') && !value.includes('--') && !value.includes(' ')
+}
+
+export function probeGitOptionalCapability(host: GitHostV1 | undefined, capability: GitOptionalCapabilityV2): GitCapabilityProbeV1 {
+  if (host === undefined) return { available: false, capability, reason: 'git owner is offline' }
+  const advertised = host.capabilities ?? []
+  if (!advertised.includes(capability)) return { available: false, capability, reason: `missing ${capability}` }
+  const present = capability === GIT_STATUS_PROJECTION_CAPABILITY_V2 ? host.statusProjection !== undefined
+    : capability === GIT_DIFF_WINDOW_CAPABILITY ? host.diffWindow !== undefined
+      : capability === GIT_BRANCH_ACTIONS_CAPABILITY ? host.branchActions !== undefined
+        : capability === GIT_REMOTE_ACTIONS_CAPABILITY ? host.remoteActions !== undefined
+          : host.worktreeActions !== undefined
+  if (!present) return { available: false, capability, reason: `missing ${capability} handle` }
+  return { available: true, capability, reason: `${capability} available` }
+}
+
+export function validateGitTypedActionId(actionId: string): boolean {
+  return isGitTypedAction(actionId) && !actionId.includes(' ') && !actionId.includes('--')
 }
 
 export function admitGitAction(host: GitHostV1 | undefined, actionId: string): GitActionAdmission {

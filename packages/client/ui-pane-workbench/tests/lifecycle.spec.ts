@@ -22,6 +22,9 @@ function view(id: string, kind = 'file.editor', retention: PaneViewInstanceV1['r
     duplicate: false,
     closePolicy: 'allow',
     status: 'ready',
+    attention: false,
+    offline: false,
+    stale: false,
   }
 }
 
