@@ -9,8 +9,8 @@
 
 - [x] 2.1 [Owner: `packages/client/ui-pane-workbench`；Dependencies: 1.2] 新增 `paneWorkbench` locale namespace、`zh`/`en` typed keys和fallback formatter，接入 DSH LocaleRuntime；复杂 fallback/热切换逻辑使用中文注释说明边界。Acceptance: locale缺失时English fallback，旧provider继续显示descriptor label。Validation: `pnpm --filter @yeisme/dsh-client-ui-pane-workbench run test`。
 - [x] 2.2 [Owner: View Registry；Dependencies: 2.1] 为 `PaneViewRegistrationV1` 增加 optional local-only i18n block并拒绝remote namespace/key注入。Acceptance: 旧registration/API签名兼容，forbidden fixtures fail closed。Validation: registry contract tests + typecheck。
-- [ ] 2.3 [Owner: Chrome Copy Migration；Dependencies: 2.1] 迁移 Rail、Picker、Tab、group toolbar、menus、error boundary、empty states、drag/resize/close announcements和Core View copy，清除生产硬编码固定文案。Acceptance: source scan仅允许error code/test fixture/owner data。Validation: `rg -n "Open view|Close Tab|Move to|Drop unavailable|Layout updated" packages/client/ui-pane-workbench/src` 人工分类 + tests。
-- [ ] 2.4 [Owner: Locale QA；Dependencies: 2.2, 2.3] 添加 zh/en/pseudo-long/pseudo-RTL component/browser matrix，覆盖动态count、shortcut、risk、Tooltips、ARIA和locale hot switch。Acceptance: 不改layout ids/order/selection，长文案不覆盖controls。Validation: focused browser evidence写入 `temp/integration-test-runs/<run-id>/`。
+- [x] 2.3 [Owner: Chrome Copy Migration；Dependencies: 2.1] 迁移 Rail、Picker、Tab、group toolbar、menus、error boundary、empty states、drag/resize/close announcements和Core View copy，清除生产硬编码固定文案。Acceptance: source scan仅允许error code/test fixture/owner data。Validation: `rg -n "Open view|Close Tab|Move to|Drop unavailable|Layout updated" packages/client/ui-pane-workbench/src` 人工分类 + tests。
+- [x] 2.4 [Owner: Locale QA；Dependencies: 2.2, 2.3] 添加 zh/en/pseudo-long/pseudo-RTL component/browser matrix，覆盖动态count、shortcut、risk、Tooltips、ARIA和locale hot switch。Acceptance: 不改layout ids/order/selection，长文案不覆盖controls。Validation: focused browser evidence写入 `temp/integration-test-runs/<run-id>/`。
 
 ## 3. Tab 系统与拖拽动效
 
