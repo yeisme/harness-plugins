@@ -14,7 +14,8 @@
 import { createElement, type MouseEvent, type KeyboardEvent, type PointerEvent } from 'react'
 import { WorkbenchIcon, type WorkbenchIconName } from './icon.js'
 import { formatT, t } from './i18n/locale.js'
-import type { PaneViewInstanceV1, PaneGroupV1, PaneWorkbenchController } from './types.js'
+import type { PaneViewInstanceV1, PaneGroupV1 } from './workspace.js'
+import type { PaneWorkbenchController } from './controller.js'
 
 // Types for tab components
 export interface PaneTabProps {
