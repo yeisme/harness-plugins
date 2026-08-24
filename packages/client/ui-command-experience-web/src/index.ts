@@ -13,6 +13,8 @@ export type {
   CommandSelectorOptions,
   ConfirmationDialogProps,
   PendingReceiptProps,
+  OwnerPreview,
+  RedactedTelemetry,
 } from './types';
 
 // Components
@@ -39,3 +41,13 @@ export {
   getCommandDisabledReason,
   isCommandUnavailable,
 } from './utils';
+
+// Redaction utilities for telemetry/evidence
+export {
+  generateRedactedDigest,
+  redactCommandState,
+  redactTextContent,
+  validateNoSensitiveInfo,
+  createSafeCommandLog,
+  redactEvidence,
+} from './redaction';

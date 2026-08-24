@@ -130,3 +130,8 @@ export interface PendingReceiptProps {
   /** Dispatch function */
   dispatch: (action: CommandReducerAction) => void;
 }
+
+/**
+ * Re-export redaction telemetry type
+ */
+export type { RedactedTelemetry } from './redaction';
