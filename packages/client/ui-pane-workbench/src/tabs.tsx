@@ -55,12 +55,30 @@ function iconForView(view: PaneViewInstanceV1): WorkbenchIconName {
 // Status indicators for tabs
 export function TabStatusPresenter(props: TabStatusPresenterProps): React.ReactNode {
   const { view, isActive } = props
-  const hasStatus = view.dirty || view.status === 'orphaned'
+  const { dirty, status, attention, offline } = view
 
-  if (!hasStatus) return null
+  // Priority order for status indicators: conflict > offline > attention > dirty > orphaned
+  let statusClass: string | undefined
+  let ariaLabel: string | undefined
 
-  const statusClass = view.dirty ? 'pwr-status-dirty' : 'pwr-status-orphaned'
-  const ariaLabel = view.dirty ? t('tab.dirty') : t('tab.orphaned')
+  if (status === 'conflict') {
+    statusClass = 'pwr-status-conflict'
+    ariaLabel = 'Conflict'
+  } else if (offline) {
+    statusClass = 'pwr-status-offline'
+    ariaLabel = 'Offline'
+  } else if (attention) {
+    statusClass = 'pwr-status-attention'
+    ariaLabel = 'Attention'
+  } else if (dirty) {
+    statusClass = 'pwr-status-dirty'
+    ariaLabel = t('tab.dirty')
+  } else if (status === 'orphaned') {
+    statusClass = 'pwr-status-orphaned'
+    ariaLabel = t('tab.orphaned')
+  }
+
+  if (!statusClass) return null
 
   return createElement('span', {
     className: `pwr-tab-status ${statusClass} ${isActive ? 'pwr-status-active' : ''}`,

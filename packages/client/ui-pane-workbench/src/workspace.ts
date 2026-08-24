@@ -51,7 +51,9 @@ export interface PaneViewInstanceV1 {
   readonly dirty: boolean
   readonly duplicate: boolean
   readonly closePolicy: PaneViewClosePolicy
-  readonly status: 'ready' | 'orphaned'
+  readonly status: 'ready' | 'orphaned' | 'conflict' | 'ok'
+  readonly attention: boolean
+  readonly offline: boolean
   readonly metadata?: Readonly<Record<string, JsonValue>>
 }
 
@@ -716,6 +718,8 @@ function applyOpenView(state: PaneWorkspaceV1, request: PaneViewSpecV1): PaneWor
     duplicate: Boolean(request.duplicate),
     closePolicy: request.closePolicy ?? 'allow',
     status: 'ready',
+    attention: false,
+    offline: false,
     metadata: request.metadata,
   }
   addViewToGroup(snapshot, view, group.id)
