@@ -116,9 +116,6 @@ export function OrdoAgentOpsSidebar({ wide, useState: useAgentOpsState, refresh,
   ) ?? []
   const hasPendingActions = availableActions.length > 0
 
-  // 判断是否可以执行 mutation 操作
-  const canMutate = projectionState === 'ready' && state.snapshot?.freshness === 'fresh'
-
   return (
     <div style={styles.layer} data-ordo-agent-ops-sidebar>
       {open && (
