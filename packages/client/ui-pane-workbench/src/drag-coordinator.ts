@@ -1,5 +1,6 @@
 import { PaneDragSession, type PaneDragStateV1, type PaneDragTargetV1 } from './interactions.js'
 import type { PaneWorkspaceIntentV1, PaneWorkspaceReducerResultV1, PaneWorkspaceV1 } from './workspace.js'
+import { formatT } from './i18n/locale.js'
 
 export interface PaneDragCoordinatorSnapshot {
   readonly drag: PaneDragStateV1
@@ -41,8 +42,8 @@ export class PaneDragCoordinator {
     const announcement = resolvedTarget === undefined
       ? ''
       : resolvedTarget.enabled
-        ? `${resolvedTarget.edge === 'center' ? 'Move to' : 'Split at'} ${resolvedTarget.groupId}; release to apply.`
-        : `Drop unavailable: ${resolvedTarget.reason ?? 'not allowed'}.`
+        ? `${resolvedTarget.edge === 'center' ? formatT('drag.moveTo', {}) : formatT('drag.splitAt', {})} ${resolvedTarget.groupId}; ${formatT('drag.releaseToApply', {})}`
+        : formatT('drag.dropUnavailable', { reason: resolvedTarget.reason ?? formatT('drag.notAllowed', {}) })
     this.publish(announcement)
     return next
   }
@@ -51,12 +52,12 @@ export class PaneDragCoordinator {
     const sourceViewId = this.session.state.status === 'dragging' ? this.session.state.viewId : undefined
     const target = this.session.drop()
     if (sourceViewId === undefined || target === undefined) {
-      this.publish('Drag cancelled.')
+      this.publish(formatT('drag.cancelled', {}))
       return undefined
     }
     const source = this.getWorkspace().views[sourceViewId]
     if (source === undefined) {
-      this.publish('Drag cancelled because the source view is no longer available.')
+      this.publish(formatT('drag.sourceUnavailable', {}))
       return undefined
     }
     const intent: PaneWorkspaceIntentV1 = target.edge === 'center'
@@ -65,14 +66,14 @@ export class PaneDragCoordinator {
         : { type: 'move_view', viewId: sourceViewId, targetGroupId: target.groupId, index: target.index }
       : { type: 'split_with_view', viewId: sourceViewId, targetGroupId: target.groupId, edge: target.edge }
     const result = this.dispatch(intent)
-    this.publish(result.effects[0]?.message ?? (result.accepted ? 'Pane moved.' : `Drop unavailable: ${result.reason ?? 'not allowed'}.`))
+    this.publish(result.effects[0]?.message ?? (result.accepted ? formatT('drag.moved', {}) : formatT('drag.dropUnavailable', { reason: result.reason ?? formatT('drag.notAllowed', {}) })))
     return result
   }
 
-  cancel(message = 'Drag cancelled.'): void {
+  cancel(message?: string): void {
     if (this.session.state.status === 'idle' && this.snapshot.target === undefined) return
     this.session.cancel()
-    this.publish(message)
+    this.publish(message ?? formatT('drag.cancelled', {}))
   }
 
   dispose(): void {

@@ -73,7 +73,8 @@ const EN_BUNDLE: LocaleBundle = {
     'tab.offline': 'Offline',
     'tab.orphaned': 'Unavailable',
     'tab.conflict': 'Conflict',
-    'tab.close': 'Close',
+    'tab.close': 'Close Tab',
+    'tab.closeWithName': 'Close {name}',
     'tab.closeOthers': 'Close Others',
     'tab.closeRight': 'Close to Right',
     'tab.closeUnpinned': 'Close Unpinned',
@@ -153,6 +154,49 @@ const EN_BUNDLE: LocaleBundle = {
     'a11y.activeTab': 'Active tab',
     'a11y.closeTab': 'Close tab',
     'a11y.dragHandle': 'Drag to move',
+
+    // Chrome (新增 v4 2.3)
+    'chrome.showWorkbench': 'Show Pane Workbench',
+    'chrome.hideWorkbench': 'Hide Pane Workbench',
+    'chrome.showRight': 'Show Right',
+    'chrome.hideRight': 'Hide Right',
+    'chrome.showBottom': 'Show Bottom',
+    'chrome.hideBottom': 'Hide Bottom',
+    'chrome.resetLayout': 'Reset Layout',
+    'chrome.openView': 'Open workspace view',
+    'chrome.openViewTitle': 'Open view',
+    'chrome.closeViewSelector': 'Close view selector',
+    'chrome.closeActivePane': 'Close active pane',
+    'chrome.openAView': 'Open a view',
+    'chrome.workspaceActivity': 'Workspace activity',
+
+    // Tab actions (新增 v4 2.3)
+    'tab.moveToRight': 'Move to Right',
+    'tab.moveToBottom': 'Move to Bottom',
+    'tab.moveByKeyboard': 'Move by Keyboard',
+    'tab.moveMode': 'Keyboard move mode',
+    'tab.moveModeHelp': 'Arrow/Home/End choose a target. Enter or Space applies. Escape cancels.',
+    'tab.moveCancelled': 'Keyboard move cancelled.',
+    'tab.splitUpper': 'Split',
+    'tab.splitEdge': 'Split {edge}',
+
+    // Error states (新增 v4 2.3)
+    'error.viewFailed': 'This view failed to render: {title}.',
+    'error.unavailable': '{title} is unavailable because its provider is not enabled.',
+    'error.retry': 'Retry',
+    'error.reloadView': 'Reload View',
+    'error.noViewOpen': 'No view is open in this pane.',
+    'error.layoutUnavailable': 'Layout action was not available.',
+
+    // Drag announcements (新增 v4 2.3)
+    'drag.moveTo': 'Move to',
+    'drag.splitAt': 'Split at',
+    'drag.releaseToApply': 'release to apply.',
+    'drag.cancelled': 'Drag cancelled.',
+    'drag.sourceUnavailable': 'Drag cancelled because the source view is no longer available.',
+    'drag.moved': 'Pane moved.',
+    'drag.dropUnavailable': 'Drop unavailable: {reason}.',
+    'drag.notAllowed': 'not allowed.',
   }
 }
 
@@ -180,7 +224,8 @@ const ZH_BUNDLE: LocaleBundle = {
     'tab.offline': '离线',
     'tab.orphaned': '不可用',
     'tab.conflict': '冲突',
-    'tab.close': '关闭',
+    'tab.close': '关闭标签页',
+    'tab.closeWithName': '关闭 {name}',
     'tab.closeOthers': '关闭其他',
     'tab.closeRight': '关闭右侧',
     'tab.closeUnpinned': '关闭未固定',
@@ -260,6 +305,49 @@ const ZH_BUNDLE: LocaleBundle = {
     'a11y.activeTab': '当前标签页',
     'a11y.closeTab': '关闭标签页',
     'a11y.dragHandle': '拖动以移动',
+
+    // Chrome (新增 v4 2.3)
+    'chrome.showWorkbench': '显示窗格工作台',
+    'chrome.hideWorkbench': '隐藏窗格工作台',
+    'chrome.showRight': '显示右侧',
+    'chrome.hideRight': '隐藏右侧',
+    'chrome.showBottom': '显示底部',
+    'chrome.hideBottom': '隐藏底部',
+    'chrome.resetLayout': '重置布局',
+    'chrome.openView': '打开工作区视图',
+    'chrome.openViewTitle': '打开视图',
+    'chrome.closeViewSelector': '关闭视图选择器',
+    'chrome.closeActivePane': '关闭当前窗格',
+    'chrome.openAView': '打开视图',
+    'chrome.workspaceActivity': '工作区活动',
+
+    // Tab actions (新增 v4 2.3)
+    'tab.moveToRight': '移至右侧',
+    'tab.moveToBottom': '移至底部',
+    'tab.moveByKeyboard': '使用键盘移动',
+    'tab.moveMode': '键盘移动模式',
+    'tab.moveModeHelp': '箭头/Home/End 选择目标。回车或空格应用。ESC 取消。',
+    'tab.moveCancelled': '键盘移动已取消。',
+    'tab.splitUpper': 'Split',
+    'tab.splitEdge': 'Split {edge}',
+
+    // Error states (新增 v4 2.3)
+    'error.viewFailed': '此视图渲染失败：{title}。',
+    'error.unavailable': '{title} 不可用，因为其提供程序未启用。',
+    'error.retry': '重试',
+    'error.reloadView': '重新加载视图',
+    'error.noViewOpen': '此窗格中未打开视图。',
+    'error.layoutUnavailable': '布局操作不可用。',
+
+    // Drag announcements (新增 v4 2.3)
+    'drag.moveTo': '移动到',
+    'drag.splitAt': '拆分于',
+    'drag.releaseToApply': '释放以应用。',
+    'drag.cancelled': '拖拽已取消。',
+    'drag.sourceUnavailable': '拖拽已取消，因为源视图不再可用。',
+    'drag.moved': '窗格已移动。',
+    'drag.dropUnavailable': '不可放置：{reason}。',
+    'drag.notAllowed': '不允许。',
   }
 }
 

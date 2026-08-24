@@ -13,6 +13,7 @@ import { PaneDragSession, PaneResizeSession, type PaneDragTargetV1 } from './int
 import { PaneWorkbenchController } from './controller.js'
 import { projectPaneWorkspace, type PaneWorkspaceProjectionV1 } from './projection.js'
 import { markOrphanedPaneViews, type PaneViewRegistry } from './view-registry.js'
+import { formatT, t } from './i18n/locale.js'
 import {
   createPaneWorkspace,
   reducePaneWorkspace,
@@ -60,10 +61,10 @@ class ViewBoundary extends Component<ViewBoundaryProps, ViewBoundaryState> {
       return createElement('div', { key: this.state.generation, 'data-pane-view-generation': this.state.generation }, this.props.children)
     }
     return createElement('section', { role: 'alert', 'data-pane-view-error': this.props.view.id, 'data-pane-view-generation': this.state.generation },
-      createElement('p', null, `This view failed to render: ${this.props.view.title}.`),
-      createElement('button', { type: 'button', onClick: () => this.setState({ error: undefined }) }, 'Retry'),
-      createElement('button', { type: 'button', onClick: () => this.setState(state => ({ error: undefined, generation: state.generation + 1 })) }, 'Reload View'),
-      createElement('button', { type: 'button', onClick: this.props.onClose }, 'Close Tab'),
+      createElement('p', null, formatT('error.viewFailed', { title: this.props.view.title })),
+      createElement('button', { type: 'button', onClick: () => this.setState({ error: undefined }) }, t('error.retry')),
+      createElement('button', { type: 'button', onClick: () => this.setState(state => ({ error: undefined, generation: state.generation + 1 })) }, t('error.reloadView')),
+      createElement('button', { type: 'button', onClick: this.props.onClose }, t('tab.close')),
     )
   }
 }
@@ -194,22 +195,22 @@ function PaneTabBar(props: {
       }, `${view.title}${view.dirty ? ' •' : ''}${view.pinned ? ' 📌' : ''}`)
     }),
     menuView === undefined ? null : createElement('div', { role: 'menu', 'aria-label': `${menuView.title} actions` },
-      createElement('button', { role: 'menuitem', type: 'button', onClick: () => { props.dispatch({ type: 'pin_view', viewId: menuView.id }); closeMenu() } }, menuView.pinned ? 'Unpin' : 'Pin'),
+      createElement('button', { role: 'menuitem', type: 'button', onClick: () => { props.dispatch({ type: 'pin_view', viewId: menuView.id }); closeMenu() } }, menuView.pinned ? t('tab.unpin') : t('tab.pin')),
       createElement('button', { role: 'menuitem', type: 'button', onClick: () => {
         const index = props.group.tabs.indexOf(menuView.id)
         const focusViewId = index < 0 ? undefined : props.group.tabs[index + 1] ?? props.group.tabs[index - 1]
         props.onCloseView(menuView.id, focusViewId)
         closeMenu()
-      } }, 'Close'),
-      createElement('button', { role: 'menuitem', type: 'button', onClick: () => { props.dispatch({ type: 'move_view', viewId: menuView.id, targetGroupId: 'group:right:content' }); closeMenu() } }, 'Move to Right'),
-      createElement('button', { role: 'menuitem', type: 'button', onClick: () => { props.dispatch({ type: 'move_view', viewId: menuView.id, targetGroupId: 'group:bottom:utility' }); closeMenu() } }, 'Move to Bottom'),
-      createElement('button', { role: 'menuitem', type: 'button', onClick: () => { props.onKeyboardMove(menuView.id); closeMenu() } }, 'Move by Keyboard'),
+      } }, t('tab.close')),
+      createElement('button', { role: 'menuitem', type: 'button', onClick: () => { props.dispatch({ type: 'move_view', viewId: menuView.id, targetGroupId: 'group:right:content' }); closeMenu() } }, t('tab.moveToRight')),
+      createElement('button', { role: 'menuitem', type: 'button', onClick: () => { props.dispatch({ type: 'move_view', viewId: menuView.id, targetGroupId: 'group:bottom:utility' }); closeMenu() } }, t('tab.moveToBottom')),
+      createElement('button', { role: 'menuitem', type: 'button', onClick: () => { props.onKeyboardMove(menuView.id); closeMenu() } }, t('tab.moveByKeyboard')),
       ...(['left', 'right', 'top', 'bottom'] as const).map(edge => createElement('button', {
         key: `split-${edge}`,
         role: 'menuitem',
         type: 'button',
         onClick: () => { props.dispatch({ type: 'split_with_view', viewId: menuView.id, targetGroupId: props.group.id, edge }); closeMenu() },
-      }, `Split ${edge[0]!.toUpperCase()}${edge.slice(1)}`)),
+      }, formatT('tab.splitEdge', { edge: edge[0]!.toUpperCase() + edge.slice(1) }))),
     ),
   )
 }
@@ -229,11 +230,11 @@ function PaneGroupChrome(props: {
   const active = props.group.activeTabId === undefined ? undefined : props.state.views[props.group.activeTabId]
   const registration = active === undefined ? undefined : props.registry.get(active.kind)
   const content = active === undefined
-    ? createElement('p', { 'data-pane-empty': props.group.id }, 'No view is open in this pane.')
+    ? createElement('p', { 'data-pane-empty': props.group.id }, t('error.noViewOpen'))
     : active.status === 'orphaned' || registration === undefined
       ? createElement('section', { role: 'status', 'data-pane-orphaned': active.id },
-        createElement('p', null, `${active.title} is unavailable because its provider is not enabled.`),
-        createElement('button', { type: 'button', onClick: () => props.onCloseView(active.id) }, 'Close Tab'),
+        createElement('p', null, formatT('error.unavailable', { title: active.title })),
+        createElement('button', { type: 'button', onClick: () => props.onCloseView(active.id) }, t('tab.close')),
       )
       : createElement(ViewBoundary, {
         view: active,
@@ -320,7 +321,7 @@ export function PaneWorkbenchChrome({ initialState = createPaneWorkspace(), regi
     const next = markOrphanedPaneViews(reduced.state, registry)
     setState(next)
     onStateChange?.(next)
-    setAnnouncement(reduced.effects[0]?.message ?? (reduced.accepted ? 'Layout updated.' : reduced.reason ?? 'Layout action was not available.'))
+    setAnnouncement(reduced.effects[0]?.message ?? (reduced.accepted ? t('drag.layoutUpdated') : reduced.reason ?? t('error.layoutUnavailable')))
   }
   useEffect(() => registry.subscribe(() => setState(current => markOrphanedPaneViews(current, registry))), [registry])
   const dispatchRef = useRef(dispatch)
@@ -332,7 +333,7 @@ export function PaneWorkbenchChrome({ initialState = createPaneWorkspace(), regi
       if (drag.state.status === 'idle') return
       drag.cancel()
       setDragTarget(undefined)
-      setAnnouncement('Drag cancelled.')
+      setAnnouncement(formatT('drag.cancelled', {}))
     }
     window.addEventListener('blur', cancelDrag)
     return () => window.removeEventListener('blur', cancelDrag)
@@ -369,14 +370,14 @@ export function PaneWorkbenchChrome({ initialState = createPaneWorkspace(), regi
     const view = state.views[viewId]
     if (view === undefined) return
     setMoveMode({ viewId, targetIndex: 0 })
-    setAnnouncement(`Keyboard move mode for ${view.title}. Use Arrow keys to choose a target, Enter to apply, Escape to cancel.`)
+    setAnnouncement(formatT('tab.moveModeHelp', {}))
   }
   const handleMoveModeInput = (event: KeyboardEvent<HTMLElement>): void => {
     if (moveMode === undefined || moveTargets.length === 0) {
       if (event.key === 'Escape') {
         event.preventDefault()
         setMoveMode(undefined)
-        setAnnouncement('Keyboard move cancelled.')
+        setAnnouncement(t('tab.moveCancelled'))
       }
       return
     }
@@ -400,7 +401,7 @@ export function PaneWorkbenchChrome({ initialState = createPaneWorkspace(), regi
     if (event.key === 'Escape') {
       event.preventDefault()
       setMoveMode(undefined)
-      setAnnouncement('Keyboard move cancelled.')
+      setAnnouncement(t('tab.moveCancelled'))
       return
     }
     if (event.key === 'Enter' || event.key === ' ') {
@@ -429,8 +430,8 @@ export function PaneWorkbenchChrome({ initialState = createPaneWorkspace(), regi
     const message = target === undefined
       ? ''
       : target.enabled
-        ? `${target.edge === 'center' ? 'Move to' : 'Split at'} ${target.groupId}; release to apply.`
-        : `Drop unavailable: ${target.reason ?? 'not allowed'}.`
+        ? `${target.edge === 'center' ? formatT('drag.moveTo', {}) : formatT('drag.splitAt', {})} ${target.groupId}; ${formatT('drag.releaseToApply', {})}`
+        : formatT('drag.dropUnavailable', { reason: target.reason ?? formatT('drag.notAllowed', {}) })
     if (message !== lastDragAnnouncement.current) {
       lastDragAnnouncement.current = message
       if (message.length > 0) setAnnouncement(message)
@@ -452,7 +453,7 @@ export function PaneWorkbenchChrome({ initialState = createPaneWorkspace(), regi
         if (controller !== undefined) controller.show()
         else setWorkbenchVisible(true)
       },
-    }, 'Show Pane Workbench'),
+    }, t('chrome.showWorkbench')),
     )
   }
   return createElement('aside', {
@@ -467,7 +468,7 @@ export function PaneWorkbenchChrome({ initialState = createPaneWorkspace(), regi
       event.preventDefault()
       drag.cancel()
       setDragTarget(undefined)
-      setAnnouncement('Drag cancelled.')
+      setAnnouncement(formatT('drag.cancelled', {}))
     },
   },
   createElement('div', { role: 'status', 'aria-live': 'polite', 'aria-atomic': true }, announcement),
@@ -475,10 +476,10 @@ export function PaneWorkbenchChrome({ initialState = createPaneWorkspace(), regi
     createElement('button', { ref: workbenchToggleRef, type: 'button', 'aria-expanded': true, onClick: () => {
       if (controller !== undefined) controller.hide()
       else setWorkbenchVisible(false)
-    } }, 'Hide Pane Workbench'),
-    createElement('button', { type: 'button', onClick: () => dispatch({ type: 'set_region_visibility', region: 'right', visible: !state.regions.right.visible }) }, state.regions.right.visible ? 'Hide Right' : 'Show Right'),
-    createElement('button', { type: 'button', onClick: () => dispatch({ type: 'set_region_visibility', region: 'bottom', visible: !state.regions.bottom.visible }) }, state.regions.bottom.visible ? 'Hide Bottom' : 'Show Bottom'),
-    createElement('button', { type: 'button', onClick: () => dispatch({ type: 'reset_layout' }) }, 'Reset Layout'),
+    } }, t('chrome.hideWorkbench')),
+    createElement('button', { type: 'button', onClick: () => dispatch({ type: 'set_region_visibility', region: 'right', visible: !state.regions.right.visible }) }, state.regions.right.visible ? t('chrome.hideRight') : t('chrome.showRight')),
+    createElement('button', { type: 'button', onClick: () => dispatch({ type: 'set_region_visibility', region: 'bottom', visible: !state.regions.bottom.visible }) }, state.regions.bottom.visible ? t('chrome.hideBottom') : t('chrome.showBottom')),
+    createElement('button', { type: 'button', onClick: () => dispatch({ type: 'reset_layout' }) }, t('chrome.resetLayout')),
   ),
   (['right', 'bottom'] as const).filter(region => projection.regions[region].visible).map(region => createElement('section', {
     key: region,
@@ -504,7 +505,7 @@ export function PaneWorkbenchChrome({ initialState = createPaneWorkspace(), regi
     role: 'dialog',
     tabIndex: 0,
     'aria-modal': true,
-    'aria-label': 'Keyboard move mode',
+    'aria-label': t('tab.moveMode'),
     'data-pane-keyboard-move': moveMode.viewId,
     onKeyDown: handleMoveModeInput,
   },

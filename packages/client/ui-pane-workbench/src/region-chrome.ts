@@ -17,6 +17,7 @@ import { isPaneCoreViewId, type PaneCoreViewId } from './core-pane.js'
 import type { PaneViewRegistry } from './view-registry.js'
 import { WorkbenchIcon } from './icon.js'
 import type { WorkbenchIconName } from './icon.js'
+import { formatT, t } from './i18n/locale.js'
 import {
   applyWorkbenchFontSizeTo,
   getWorkbenchFontSize,
@@ -119,10 +120,10 @@ class ViewBoundary extends Component<ViewBoundaryProps, ViewBoundaryState> {
   render(): ReactNode {
     if (this.state.error === undefined) return createElement('div', { key: this.state.generation, 'data-pane-view-generation': this.state.generation }, this.props.children)
     return createElement('section', { role: 'alert', className: 'pwr-empty' },
-      createElement('p', null, `This view failed to render: ${this.props.view.title}.`),
-      createElement('button', { type: 'button', onClick: () => this.setState({ error: undefined }) }, 'Retry'),
-      createElement('button', { type: 'button', onClick: () => this.setState(state => ({ error: undefined, generation: state.generation + 1 })) }, 'Reload View'),
-      createElement('button', { type: 'button', onClick: this.props.onClose }, 'Close Tab'),
+      createElement('p', null, formatT('error.viewFailed', { title: this.props.view.title })),
+      createElement('button', { type: 'button', onClick: () => this.setState({ error: undefined }) }, t('error.retry')),
+      createElement('button', { type: 'button', onClick: () => this.setState(state => ({ error: undefined, generation: state.generation + 1 })) }, t('error.reloadView')),
+      createElement('button', { type: 'button', onClick: this.props.onClose }, t('tab.close')),
     )
   }
 }
@@ -157,13 +158,13 @@ function Picker(props: { registry: PaneViewRegistry; controller: PaneWorkbenchCo
   const [, setRevision] = useState(0)
   useEffect(() => props.registry.subscribe(() => setRevision(value => value + 1)), [props.registry])
   const registrations = props.registry.snapshot().filter(registration => registration.showInPicker !== false)
-  return createElement('section', { className: 'pwr-picker', role: 'dialog', 'aria-modal': false, 'aria-label': 'Open workspace view' },
+  return createElement('section', { className: 'pwr-picker', role: 'dialog', 'aria-modal': false, 'aria-label': t('chrome.openView') },
     createElement('header', null,
-      createElement('strong', null, 'Open view'),
-      createElement('button', { type: 'button', className: 'pwr-icon', onClick: props.onClose, 'aria-label': 'Close view selector' }, createElement(WorkbenchIcon, { name: 'close' })),
+      createElement('strong', null, t('chrome.openViewTitle')),
+      createElement('button', { type: 'button', className: 'pwr-icon', onClick: props.onClose, 'aria-label': t('chrome.closeViewSelector') }, createElement(WorkbenchIcon, { name: 'close' })),
     ),
     createElement('div', { className: 'pwr-picker-list' },
-      registrations.length === 0 ? createElement('p', { className: 'pwr-empty' }, 'No view providers are enabled.') : null,
+      registrations.length === 0 ? createElement('p', { className: 'pwr-empty' }, t('error.noViewOpen')) : null,
       ...registrations.map(({ descriptor }) => createElement('button', {
         key: descriptor.kind,
         type: 'button',
@@ -317,8 +318,9 @@ function GroupChrome(props: {
     ? null
     : active.status === 'orphaned' || registration === undefined
       ? createElement('section', { className: 'pwr-empty', role: 'status' },
-        createElement('p', null, `${active.title} is unavailable because its provider is not enabled.`),
-        createElement('button', { type: 'button', onClick: () => close(active.id) }, 'Close Tab'))
+        createElement('p', null, formatT('error.unavailable', { title: active.title })),
+        createElement('button', { type: 'button', onClick: () => close(active.id) }, formatT('tab.closeWithName', { name: active.title }))
+      )
       : createElement(ViewBoundary, { view: active, onClose: () => close(active.id) },
         createElement(registration.component as never, {
           view: active,
@@ -338,7 +340,7 @@ function GroupChrome(props: {
     onPointerUp: () => { props.controller.drag.drop() },
     onPointerCancel: () => props.controller.drag.cancel(),
   },
-  target === undefined ? null : createElement('div', { className: 'pwr-drop', role: 'status', 'aria-label': target.enabled ? `Drop ${target.edge}` : `Drop unavailable: ${target.reason ?? 'not allowed'}` }, target.enabled ? `Drop ${target.edge}` : 'Drop unavailable'),
+  target === undefined ? null : createElement('div', { className: 'pwr-drop', role: 'status', 'aria-label': target.enabled ? `${t('drag.splitUpper')} ${target.edge}` : `${formatT('drag.unavailable', {})}: ${target.reason ?? formatT('drag.notAllowed', {})}` }, target.enabled ? `${t('drag.splitUpper')} ${target.edge}` : formatT('drag.unavailable', {})),
   createElement('div', { className: 'pwr-tabs', role: 'tablist', 'aria-label': `${props.group.role} pane tabs` },
     ...props.group.tabs.map((viewId, tabIndex) => {
       const view = props.state.views[viewId]
@@ -356,7 +358,7 @@ function GroupChrome(props: {
     }),
     createElement('div', { className: 'pwr-tab-actions', role: 'group', 'aria-label': 'Pane actions' },
       createElement('button', {
-        type: 'button', title: 'Open view', 'aria-label': 'Open workspace view',
+        type: 'button', title: t('chrome.openView'), 'aria-label': t('chrome.openView'),
         onClick: props.onOpenPicker,
       }, createElement(WorkbenchIcon, { name: 'add' })),
       active === undefined ? null : createElement('button', {
@@ -369,13 +371,13 @@ function GroupChrome(props: {
         onClick: () => { props.controller.dispatch(maximized ? { type: 'restore_layout' } : { type: 'maximize_group', groupId: props.group.id }) },
       }, createElement(WorkbenchIcon, { name: maximized ? 'restore' : 'maximize' })),
       active === undefined ? null : createElement('button', {
-        type: 'button', title: 'Close active pane', 'aria-label': `Close ${active.title}`,
+        type: 'button', title: t('chrome.closeActivePane'), 'aria-label': `${t('chrome.closeActivePane')} ${active.title}`,
         onClick: () => close(active.id),
       }, createElement(WorkbenchIcon, { name: 'close' })),
     ),
   ),
   menuView === undefined ? null : createElement('div', { className: 'pwr-menu', role: 'menu', 'aria-label': `${menuView.title} actions` },
-    createElement('button', { role: 'menuitem', type: 'button', onClick: () => { props.controller.dispatch({ type: 'pin_view', viewId: menuView.id }); setMenuViewId(undefined) } }, menuView.pinned ? 'Unpin' : 'Pin'),
+    createElement('button', { role: 'menuitem', type: 'button', onClick: () => { props.controller.dispatch({ type: 'pin_view', viewId: menuView.id }); setMenuViewId(undefined) } }, menuView.pinned ? t('tab.unpin') : t('tab.pin')),
     createElement('button', { role: 'menuitem', type: 'button', onClick: () => { close(menuView.id); setMenuViewId(undefined) } }, 'Close'),
     createElement('button', { role: 'menuitem', type: 'button', onClick: () => {
       props.controller.dispatch({ type: 'set_region_visibility', region: props.group.region, visible: false })
@@ -462,8 +464,8 @@ export function PaneRegionChrome(props: PaneRegionChromeProps): ReactNode {
   },
   createElement('style', { 'data-pane-workbench-region-styles': true }, REGION_STYLES),
   createElement('div', { className: 'pwr-status', role: 'status', 'aria-live': 'polite', 'aria-atomic': true }, drag.announcement || props.controller.announcement),
-  props.region === 'right' ? createElement('nav', { className: 'pwr-rail', 'aria-label': 'Workspace activity' },
-    bodyVisible ? null : createElement('button', { type: 'button', title: 'Open view', 'aria-label': 'Open workspace view', onClick: () => setPickerOpen(true) }, createElement(WorkbenchIcon, { name: 'add' })),
+  props.region === 'right' ? createElement('nav', { className: 'pwr-rail', 'aria-label': t('chrome.workspaceActivity') },
+    bodyVisible ? null : createElement('button', { type: 'button', title: t('chrome.openView'), 'aria-label': t('chrome.openView'), onClick: () => setPickerOpen(true) }, createElement(WorkbenchIcon, { name: 'add' })),
     ...openedViews.map(view => createElement('button', {
       key: view.id, type: 'button', title: view.title, 'aria-label': `Open ${view.title}`,
       className: state.activeGroupId === view.groupId && state.groups[view.groupId]?.activeTabId === view.id ? 'pwr-active' : undefined,
@@ -476,8 +478,8 @@ export function PaneRegionChrome(props: PaneRegionChromeProps): ReactNode {
       hasViews
         ? createElement(SplitTree, { node: region.root, state, registry: props.registry, controller: props.controller, regionWidth: props.width, regionHeight: props.height, onOpenPicker: () => setPickerOpen(true), renderCoreView: props.renderCoreView })
         : createElement('section', { className: 'pwr-empty' },
-          createElement('p', null, 'No views open in this workspace.'),
-          createElement('button', { type: 'button', onClick: () => setPickerOpen(true) }, 'Open a view'),
+          createElement('p', null, t('state.empty')),
+          createElement('button', { type: 'button', onClick: () => setPickerOpen(true) }, t('chrome.openAView')),
           createElement('button', { type: 'button', onClick: () => props.controller.dispatch({ type: 'set_region_visibility', region: props.region, visible: false }) }, `Hide ${props.region === 'right' ? 'Right' : 'Bottom'} workspace`)),
     ),
   ),
