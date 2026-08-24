@@ -5,7 +5,20 @@
  * with the shared command directory and reducer.
  */
 
-import type { CommandReducerState, ReceiptStatus, CommandReducerAction } from '@yeisme/dsh-client-ui-command-experience-core';
+import type {
+  CommandExperienceEntryV1,
+  CommandReducerAction,
+  CommandReducerState,
+  ReceiptStatus,
+} from '@yeisme/dsh-client-ui-command-experience-core';
+
+export interface SelectorItem {
+  readonly id: string;
+  readonly label: string;
+  readonly description?: string;
+  readonly disabled?: boolean;
+  readonly reason?: string;
+}
 
 /**
  * Command menu component props
@@ -15,10 +28,14 @@ export interface CommandMenuProps {
   state: CommandReducerState;
   /** Dispatch function for reducer actions */
   dispatch: (action: CommandReducerAction) => void;
+  /** Shared command directory consumed by the menu */
+  commands?: readonly CommandExperienceEntryV1[];
   /** Optional configuration overrides */
   options?: CommandMenuOptions;
   /** Optional className for styling */
   className?: string;
+  /** Restore focus to the composer after cancel */
+  onRestoreFocus?: () => void;
 }
 
 /**
@@ -64,13 +81,13 @@ export interface CommandSelectorProps {
   /** Optional configuration */
   options?: CommandSelectorOptions;
   /** Items to display in selector */
-  items?: Array<{
-    id: string;
-    label: string;
-    description?: string;
-  }>;
+  items?: readonly SelectorItem[];
+  /** Bounded window size for long lists */
+  windowSize?: number;
+  /** Catalog revision used to keep the selection anchor */
+  catalogRevision?: number;
   /** Callback when item is selected */
-  onSelect?: (item: { id: string; label: string; description?: string }) => void;
+  onSelect?: (item: SelectorItem) => void;
   /** Callback when selector is closed */
   onClose?: () => void;
   /** Initial value to display */
@@ -99,24 +116,16 @@ export interface ConfirmationDialogProps {
   dispatch: (action: CommandReducerAction) => void;
   /** Optional custom message */
   customMessage?: string;
-  /** Owner preview data */
-  ownerPreview?: OwnerPreview;
-}
-
-/**
- * Owner preview information for dangerous commands
- */
-export interface OwnerPreview {
-  /** Title of the action preview */
-  title: string;
-  /** Detailed description of what will happen */
-  description: string;
-  /** Scope information (files, sessions, etc.) */
-  scope?: string[];
-  /** Whether action is reversible */
-  reversible: boolean;
-  /** Estimated time to complete */
-  estimatedDuration?: string;
+  /** Owner-authored impact preview. Missing preview keeps delete/archive staged. */
+  preview?: {
+    readonly targetRef: string;
+    readonly impactSummary: string;
+    readonly reversible: boolean;
+    readonly owner: 'dsh' | 'host';
+    readonly capability: string;
+  } | null;
+  /** Whether the owner can emit a receipt */
+  receiptCapable?: boolean;
 }
 
 /**
@@ -126,12 +135,7 @@ export interface PendingReceiptProps {
   /** Current command state */
   state: CommandReducerState;
   /** Receipt status */
-  receiptStatus: ReceiptStatus;
+  receiptStatus?: ReceiptStatus | null;
   /** Dispatch function */
   dispatch: (action: CommandReducerAction) => void;
 }
-
-/**
- * Re-export redaction telemetry type
- */
-export type { RedactedTelemetry } from './redaction';

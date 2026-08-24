@@ -124,6 +124,12 @@ describe('directory', () => {
       expect(filtered[0].canonicalName).toBe('delete');
     });
 
+    it('should strip slash prefixes from query', () => {
+      const filtered = filterCommands(mockCommands, { query: '/help' });
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].canonicalName).toBe('help');
+    });
+
     it('should exclude hidden by default', () => {
       const commands = [...mockCommands];
       commands.push({

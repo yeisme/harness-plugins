@@ -151,8 +151,7 @@ export function matchesQuery(
 ): boolean {
   if (!query) return true;
 
-  // Strip leading slash for matching (users type /agent but command is agent)
-  const lowerQuery = query.toLowerCase().replace(/^\//, '');
+  const lowerQuery = query.replace(/^\s*\/+/, '').toLowerCase();
 
   // Check canonical name
   if (command.canonicalName.includes(lowerQuery)) {
@@ -251,7 +250,7 @@ export function findExactMatch(
   commands: readonly CommandExperienceEntryV1[],
   name: string
 ): CommandExperienceEntryV1 | null {
-  const normalizedName = name.toLowerCase().trim();
+  const normalizedName = name.replace(/^\s*\/+/, '').toLowerCase().trim();
 
   for (const command of commands) {
     if (command.canonicalName === normalizedName) {
@@ -274,7 +273,7 @@ export function findUniquePrefixMatch(
   commands: readonly CommandExperienceEntryV1[],
   prefix: string
 ): CommandExperienceEntryV1 | null {
-  const normalizedPrefix = prefix.toLowerCase().trim();
+  const normalizedPrefix = prefix.replace(/^\s*\/+/, '').toLowerCase().trim();
 
   if (!normalizedPrefix) {
     return null;
@@ -299,7 +298,7 @@ export function findPrefixMatches(
   commands: readonly CommandExperienceEntryV1[],
   prefix: string
 ): CommandExperienceEntryV1[] {
-  const normalizedPrefix = prefix.toLowerCase().trim();
+  const normalizedPrefix = prefix.replace(/^\s*\/+/, '').toLowerCase().trim();
 
   if (!normalizedPrefix) {
     return [];

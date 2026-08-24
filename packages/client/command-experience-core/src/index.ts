@@ -45,7 +45,85 @@ export {
   isCommandDestructive,
 } from './directory';
 
+export {
+  type AssistResolution,
+  parseSlashToken,
+  isSlashAssistInput,
+  resolveAssistQuery,
+} from './discovery';
+
+export {
+  type ProjectableItem,
+  type BoundedProjection,
+  type ProjectionOptions,
+  commandStableKey,
+  selectorStableKey,
+  projectBoundedWindow,
+  retainSelectionAnchor,
+} from './projection';
+
+export {
+  type OwnerImpactPreview,
+  type DangerGate,
+  canonicalCommandName,
+  gradeCommandDanger,
+  requiresOwnerPreview,
+  evaluateDangerGate,
+  refusePluginRecursiveDelete,
+} from './danger';
+
+export {
+  TELEMETRY_ALLOWED_FIELDS,
+  type TelemetryAllowedField,
+  type TelemetryRecord,
+  type RedactionResult,
+  redactDigest,
+  redactTelemetry,
+  createUsageRecord,
+  collectForbiddenTelemetryKeys,
+  assertTelemetryAllowlist,
+} from './telemetry';
+
+export {
+  type DescriptorSanitizeInput,
+  type SanitizedDescriptor,
+  stripAnsi,
+  escapeDisplayText,
+  sanitizeCommandDescriptor,
+} from './sanitize';
+
 // Reducer
+export {
+  type ThreadCandidate,
+  type PresetCandidate,
+  type AgentTokenResolution,
+  flattenThreadProjection,
+  selectThreadRef,
+  retainStaleThreadSelection,
+  resolveAgentToken,
+  isBareAgentCommand,
+} from './agent-preset';
+
+export {
+  type SessionCandidate,
+  type SessionCommandId,
+  type SessionCommandIntent,
+  filterSessionProjection,
+  selectSessionRef,
+  planSessionCommand,
+  applySessionReceipt,
+  distinguishNewAndFork,
+} from './session-commands';
+
+export {
+  type OwnerCapabilitySnapshot,
+  type CoverageLedgerRow,
+  buildP0Catalog,
+  inspectCommandsMutateState,
+  sharedActionIdentity,
+  auditCoverageLedger,
+} from './p0-catalog';
+
 export {
   createInitialState,
   generateCorrelationId,

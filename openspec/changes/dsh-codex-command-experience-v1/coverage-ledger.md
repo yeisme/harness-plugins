@@ -67,29 +67,29 @@ This document tracks the coverage status of Codex commands relative to DSH imple
 
 ## P1 Commands (Next Release)
 
-| Command | Coverage | DSH Owner | Current Seam | Advancement Conditions |
-|---------|----------|-----------|--------------|----------------------|
-| `/clear` | staged | dsh | pending | New chat + view clear seam |
-| `/archive` | staged | dsh | pending | Owner preview + receipt seam |
-| `/delete` | staged | dsh | pending | Owner preview + confirmation seam |
-| `/side` | not-applicable | n/a | n/a | Codex ephemeral side-chat |
-| `/btw` | not-applicable | n/a | n/a | Alias to /side |
-| `/usage` | staged | dsh | pending | Usage statistics projection |
-| `/debug-config` | conditional | dsh | pending | Debug mode condition |
-| `/theme` | staged | client | pending | Theme switching |
-| `/statusline` | staged | client | pending | Status line configuration |
-| `/keymap` | staged | client | pending | Keymap customization |
-| `/ps` | staged | dsh | pending | Process status (TUI-specific) |
-| `/stop` | staged | dsh | pending | Stop action |
-| `/raw` | staged | client | pending | Raw mode toggle |
-| `/history` | adapted | dsh | owner action | Adapted to /resume for sessions |
-| `/doctor` | staged | dsh | pending | Diagnostic mode |
-| `/settings` | staged | client | pending | Settings UI |
-| `/tools` | staged | dsh | pending | Tool management |
-| `/context` | staged | dsh | pending | Context management |
-| `/jobs` | not-applicable | n/a | n/a | Codex job system |
-| `/search` | staged | dsh | pending | Search in conversations |
-| `/export` | staged | dsh | pending | Export functionality |
+| Command | Coverage | DSH Owner | Current Seam | Advancement Conditions | Verify |
+|---------|----------|-----------|--------------|----------------------|--------|
+| `/clear` | staged | dsh | pending | New chat + view clear seam | `auditCoverageLedger` + owner action fixture |
+| `/archive` | staged | dsh | owner preview/receipt | Danger gate keeps staged without preview | `evaluateDangerGate` / `prepareDestructiveSubmit` |
+| `/delete` | staged | dsh | owner preview/receipt | Danger gate keeps staged without preview | `evaluateDangerGate` / `prepareDestructiveSubmit` |
+| `/side` | not-applicable | n/a | n/a | Codex ephemeral side-chat | ledger audit |
+| `/btw` | not-applicable | n/a | n/a | Alias to /side | ledger audit |
+| `/usage` | staged | dsh | pending | Usage statistics projection | ledger audit |
+| `/debug-config` | conditional | dsh | pending | Debug mode condition | ledger audit |
+| `/theme` | staged | client | pending | Theme switching | ledger audit |
+| `/statusline` | staged | client | pending | Status line configuration | ledger audit |
+| `/keymap` | staged | client | pending | Keymap customization | ledger audit |
+| `/ps` | staged | dsh | pending | Process status (TUI-specific) | ledger audit |
+| `/stop` | staged | dsh | pending | Stop action | ledger audit |
+| `/raw` | staged | client | pending | Raw mode toggle | ledger audit |
+| `/history` | adapted | dsh | owner action | Adapted to /resume for sessions | `planSessionCommand('resume')` |
+| `/doctor` | staged | dsh | pending | Diagnostic mode | ledger audit |
+| `/settings` | staged | client | pending | Settings UI | ledger audit |
+| `/tools` | staged | dsh | pending | Tool management | ledger audit |
+| `/context` | staged | dsh | pending | Context management | ledger audit |
+| `/jobs` | not-applicable | n/a | n/a | Codex job system | ledger audit |
+| `/search` | staged | dsh | pending | Search in conversations | ledger audit |
+| `/export` | staged | dsh | pending | Export functionality | ledger audit |
 
 ## P2 Commands (Platform-Specific)
 

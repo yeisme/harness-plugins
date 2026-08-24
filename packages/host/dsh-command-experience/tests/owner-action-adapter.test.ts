@@ -10,6 +10,7 @@ import {
   createForkChatRequest,
   createRenameRequest,
   createCompactRequest,
+  createApplyPresetRequest,
   createDeleteRequest,
   isValidReceipt,
   areReceiptsEquivalent,
@@ -58,6 +59,13 @@ describe('owner-action-adapter', () => {
       expect(request.action.targetRef).toBeNull();
       expect(request.action.danger).toBe('safe');
       expect(request.correlationId).toBe(correlationId);
+    });
+
+    it('should create apply-preset request on a separate action from open-thread', () => {
+      const request = createApplyPresetRequest('preset:review', correlationId);
+      expect(request.action.type).toBe('apply-preset');
+      expect(request.action.targetRef).toBe('preset:review');
+      expect(request.action.type).not.toBe('open-thread');
     });
 
     it('should create rename request', () => {

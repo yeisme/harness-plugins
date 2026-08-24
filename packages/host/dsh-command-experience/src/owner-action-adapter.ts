@@ -8,11 +8,13 @@
 import type {
   ThreadRef,
   SessionRef,
+  PresetRef,
   ThreadProjection,
   SessionProjection,
   OwnerActionRequest,
   OwnerActionReceipt,
   OwnerActionDescriptor,
+  OwnerImpactPreview,
 } from './types';
 
 /**
@@ -50,6 +52,12 @@ export interface OwnerActionAdapter {
    * Check if a specific action capability is available
    */
   hasCapability(action: OwnerActionDescriptor['type']): boolean;
+
+  /**
+   * Fetch owner-authored impact preview. Missing preview keeps
+   * archive/delete staged. The plugin must not invent descendants.
+   */
+  getActionPreview?(action: OwnerActionDescriptor): Promise<OwnerImpactPreview | null>;
 }
 
 /**
@@ -144,6 +152,21 @@ export function createRenameRequest(
 /**
  * Create compact context action request
  */
+export function createApplyPresetRequest(
+  presetRef: PresetRef,
+  correlationId: string,
+): OwnerActionRequest {
+  return {
+    action: {
+      type: 'apply-preset',
+      targetRef: presetRef,
+      parameters: {},
+      danger: 'safe',
+    },
+    correlationId,
+  }
+}
+
 export function createCompactRequest(
   correlationId: string
 ): OwnerActionRequest {
@@ -159,11 +182,33 @@ export function createCompactRequest(
 }
 
 /**
- * Create delete session action request
+ * Create archive session action request. Preview is required before submit.
+ */
+export function createArchiveRequest(
+  sessionRef: SessionRef,
+  correlationId: string,
+  preview: OwnerImpactPreview | null = null,
+): OwnerActionRequest {
+  return {
+    action: {
+      type: 'archive-session',
+      targetRef: sessionRef,
+      parameters: {},
+      danger: 'confirm',
+      preview,
+    },
+    correlationId,
+  };
+}
+
+/**
+ * Create delete session action request. Preview is required before submit.
+ * The plugin must not attach descendant lists or filesystem paths.
  */
 export function createDeleteRequest(
   sessionRef: SessionRef,
-  correlationId: string
+  correlationId: string,
+  preview: OwnerImpactPreview | null = null,
 ): OwnerActionRequest {
   return {
     action: {
@@ -171,8 +216,69 @@ export function createDeleteRequest(
       targetRef: sessionRef,
       parameters: {},
       danger: 'destructive',
+      preview,
     },
     correlationId,
+  };
+}
+
+export interface DestructiveSubmitDecision {
+  readonly allowed: boolean;
+  readonly staged: boolean;
+  readonly reason: string | null;
+  readonly request: OwnerActionRequest | null;
+}
+
+/**
+ * Stage archive/delete unless the owner preview and receipt path exist.
+ * Rejects recursive/descendant payloads so the plugin cannot delete trees.
+ */
+export function prepareDestructiveSubmit(input: {
+  readonly command: 'archive' | 'delete';
+  readonly sessionRef: SessionRef;
+  readonly correlationId: string;
+  readonly preview: OwnerImpactPreview | null;
+  readonly receiptCapable: boolean;
+  readonly descendants?: readonly unknown[];
+  readonly paths?: readonly string[];
+  readonly recursive?: boolean;
+}): DestructiveSubmitDecision {
+  if (input.recursive === true || (input.descendants?.length ?? 0) > 0 || (input.paths?.length ?? 0) > 0) {
+    return {
+      allowed: false,
+      staged: true,
+      reason: 'Plugin must not recursively delete',
+      request: null,
+    };
+  }
+
+  if (!input.receiptCapable) {
+    return {
+      allowed: false,
+      staged: true,
+      reason: `/${input.command} stays staged until owner receipt is available`,
+      request: null,
+    };
+  }
+
+  if (input.preview === null || input.preview.targetRef !== input.sessionRef) {
+    return {
+      allowed: false,
+      staged: true,
+      reason: `/${input.command} stays staged until owner preview is available`,
+      request: null,
+    };
+  }
+
+  const request = input.command === 'archive'
+    ? createArchiveRequest(input.sessionRef, input.correlationId, input.preview)
+    : createDeleteRequest(input.sessionRef, input.correlationId, input.preview);
+
+  return {
+    allowed: true,
+    staged: false,
+    reason: null,
+    request,
   };
 }
 
@@ -216,6 +322,7 @@ export function createMockAdapter(
     threads?: ThreadProjection[];
     sessions?: SessionProjection[];
     capabilities?: Set<OwnerActionDescriptor['type']>;
+    previews?: Map<string, OwnerImpactPreview>;
   } = {}
 ): OwnerActionAdapter {
   const {
@@ -229,6 +336,7 @@ export function createMockAdapter(
       'rename-session',
       'compact-context',
     ]),
+    previews = new Map<string, OwnerImpactPreview>(),
   } = options;
 
   const receiptHandlers = new Set<(receipt: OwnerActionReceipt) => void>();
@@ -268,6 +376,13 @@ export function createMockAdapter(
 
     hasCapability(action) {
       return capabilities.has(action);
+    },
+
+    async getActionPreview(action) {
+      if (action.targetRef === null) {
+        return null;
+      }
+      return previews.get(`${action.type}:${action.targetRef}`) ?? null;
     },
   };
 }

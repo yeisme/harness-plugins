@@ -73,9 +73,26 @@ export interface SessionProjection {
 /**
  * Owner action descriptor
  */
+export interface OwnerImpactPreview {
+  /** Opaque target supplied by the owner */
+  targetRef: ThreadRef | SessionRef;
+
+  /** Owner-authored impact summary */
+  impactSummary: string;
+
+  /** Whether the owner says the action is reversible */
+  reversible: boolean;
+
+  /** Preview capability id */
+  capability: string;
+
+  /** Owner-declared descendant count. Plugin must not compute this. */
+  descendantCount?: number;
+}
+
 export interface OwnerActionDescriptor {
   /** Action type */
-  type: 'open-thread' | 'open-session' | 'new-chat' | 'fork-chat' | 'rename-session' | 'compact-context' | 'delete-session' | 'archive-session';
+  type: 'open-thread' | 'open-session' | 'new-chat' | 'fork-chat' | 'rename-session' | 'compact-context' | 'delete-session' | 'archive-session' | 'apply-preset' | 'set-model' | 'set-reasoning' | 'set-permissions';
 
   /** Opaque reference for the action target */
   targetRef: ThreadRef | SessionRef | null;
@@ -85,6 +102,9 @@ export interface OwnerActionDescriptor {
 
   /** Expected danger level */
   danger: 'safe' | 'confirm' | 'destructive';
+
+  /** Owner preview required for confirm/destructive actions */
+  preview?: OwnerImpactPreview | null;
 }
 
 /**

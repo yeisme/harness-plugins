@@ -1,191 +1,185 @@
 /**
  * Command Experience Web Components
  *
- * React components for command menu, selectors, and dialogs.
+ * Consume the shared directory + reducer. No DOM patching.
  */
 
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import type { CommandExperienceEntryV1 } from '@yeisme/dsh-client-ui-command-experience-core';
+import {
+  commandStableKey,
+  evaluateDangerGate,
+  generateCorrelationId,
+  groupByCategory,
+  isCommandExecutable,
+  projectBoundedWindow,
+  retainSelectionAnchor,
+  resolveAssistQuery,
+  selectorStableKey,
+} from '@yeisme/dsh-client-ui-command-experience-core';
 import type {
   CommandMenuProps,
   CommandSelectorProps,
   ConfirmationDialogProps,
   PendingReceiptProps,
+  SelectorItem,
 } from './types';
-import type { CommandExperienceEntryV1 } from '@yeisme/dsh-client-ui-command-experience-core';
 import { useCommandNavigation } from './hooks';
-import { getCommandAccessibilityLabel, getCommandDisabledReason } from './utils';
-
-const isCommandExecutable = (cmd: CommandExperienceEntryV1) => {
-  return cmd.availability.state === 'available' || cmd.availability.state === 'hidden';
-};
+import { getCommandAccessibilityLabel, getCommandDisabledReason, sanitizeCommandDescription } from './utils';
 
 export const CommandMenu: React.FC<CommandMenuProps> = ({
   state,
   dispatch,
+  commands = [],
   options = {},
   className = '',
+  onRestoreFocus,
 }) => {
-  const {
-    showCategories = true,
-    showDisabledCommands = false,
-    maxCommandsWithoutVirtualization = 100,
-  } = options;
-  const inputRef = React.useRef<HTMLInputElement>(null);
-  const commands: CommandExperienceEntryV1[] = state.selectedCommand ? [state.selectedCommand] : [];
-  const draft = state.draft || '';
-
-  // Stable key generation for virtualization
-  const getCommandKey = useCallback((cmd: CommandExperienceEntryV1) => {
-    return `cmd-${cmd.canonicalName}-${cmd.owner}-${cmd.coverage}`;
-  }, []);
-
-  const { navigateUp, navigateDown, resetSelection, navigateToCommand } = useCommandNavigation(
-    commands.filter((cmd) => showDisabledCommands || isCommandExecutable(cmd)),
-    state.selectedCommand,
-    getCommandKey
+  const { showCategories = true, showDisabledCommands = true } = options;
+  const inputRef = useRef<HTMLInputElement>(null);
+  const composerRestoreRef = useRef<HTMLButtonElement>(null);
+  const query = state.draft || state.query || '';
+  const resolution = useMemo(() => resolveAssistQuery(commands, query || '/'), [commands, query]);
+  const visibleCommands = useMemo(
+    () => resolution.candidates.filter((command) => showDisabledCommands || isCommandExecutable(command)),
+    [resolution.candidates, showDisabledCommands],
   );
 
-  const executeCommand = useCallback(() => {
-    dispatch({
-      type: 'DISPATCH',
-      correlationId: Date.now().toString(),
-    });
+  const { selectedCommand, navigateUp, navigateDown, resetSelection, navigateToCommand } =
+    useCommandNavigation(visibleCommands, state.selectedCommand ?? resolution.selected);
+
+  const categories = useMemo(() => groupByCategory(visibleCommands), [visibleCommands]);
+
+  const executeSelected = useCallback((command: CommandExperienceEntryV1 | null) => {
+    if (command === null || !isCommandExecutable(command)) {
+      return;
+    }
+    dispatch({ type: 'SELECT_COMMAND', command });
+    if (command.input.selectorKey) {
+      dispatch({ type: 'OPEN_SELECTOR' });
+      return;
+    }
+    if (command.danger !== 'safe') {
+      dispatch({ type: 'REQUEST_CONFIRMATION' });
+      return;
+    }
+    dispatch({ type: 'DISPATCH', correlationId: generateCorrelationId() });
   }, [dispatch]);
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Handle Ctrl/Meta+Enter for execution first (highest priority)
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        executeCommand();
+    if (resolution.selected && state.state === 'assist') {
+      dispatch({ type: 'SELECT_COMMAND', command: resolution.selected });
+      navigateToCommand(resolution.selected);
+    }
+  }, [resolution.selected, state.state, dispatch, navigateToCommand]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (state.state === 'idle' && !query.startsWith('/')) {
         return;
       }
-
-      // Handle Escape for cancellation
-      if (e.key === 'Escape') {
-        e.preventDefault();
+      if (event.key === 'ArrowDown' || (event.ctrlKey && event.key === 'n')) {
+        event.preventDefault();
+        navigateDown();
+      } else if (event.key === 'ArrowUp' || (event.ctrlKey && event.key === 'p')) {
+        event.preventDefault();
+        navigateUp();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
         dispatch({ type: 'CANCEL' });
         resetSelection();
-        // Focus restoration happens in reducer
-        return;
-      }
-
-      // Handle navigation
-      if (e.key === 'ArrowDown' || (e.ctrlKey && e.key === 'n')) {
-        e.preventDefault();
-        navigateDown();
-      } else if (e.key === 'ArrowUp' || (e.ctrlKey && e.key === 'p')) {
-        e.preventDefault();
-        navigateUp();
+        onRestoreFocus?.();
+        composerRestoreRef.current?.focus();
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        executeSelected(selectedCommand ?? resolution.selected ?? state.selectedCommand);
       }
     };
 
-    if (state.state !== 'idle') {
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-    }
-    return undefined;
-  }, [state.state, navigateUp, navigateDown, dispatch, resetSelection, executeCommand]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    state.state,
+    state.selectedCommand,
+    query,
+    navigateUp,
+    navigateDown,
+    dispatch,
+    resetSelection,
+    executeSelected,
+    selectedCommand,
+    resolution.selected,
+    onRestoreFocus,
+  ]);
 
-  const categories = React.useMemo(() => {
-    const grouped = new Map<string, CommandExperienceEntryV1[]>();
-    for (const command of commands) {
-      if (!showDisabledCommands && !isCommandExecutable(command)) continue;
-      const category = command.category || 'other';
-      if (!grouped.has(category)) {
-        grouped.set(category, []);
-      }
-      grouped.get(category)!.push(command);
-    }
-    return grouped;
-  }, [commands, showDisabledCommands]);
-
-  const selectCommand = useCallback((command: CommandExperienceEntryV1) => {
-    navigateToCommand(command);
-    dispatch({
-      type: 'SELECT_COMMAND',
-      command,
-    });
-  }, [dispatch, navigateToCommand]);
-
-  // Focus restoration when menu closes
   useEffect(() => {
-    if (state.state === 'idle' && draft.startsWith('/')) {
+    if (state.state === 'idle' && state.draft.startsWith('/')) {
       inputRef.current?.focus();
     }
-  }, [state.state, draft]);
+  }, [state.state, state.draft]);
 
-  if (state.state === 'idle' && !draft.startsWith('/')) {
+  if (state.state === 'idle' && !state.draft.startsWith('/') && !query.startsWith('/')) {
     return null;
   }
 
-  // Bounded projection for large command lists
-  const shouldUseVirtualization = commands.length > maxCommandsWithoutVirtualization;
-
-  // Create bounded projection (show first 50 + last 10 for very large lists)
-  const createBoundedProjection = useCallback((allCategories: Map<string, CommandExperienceEntryV1[]>) => {
-    if (!shouldUseVirtualization) {
-      return Array.from(allCategories.entries());
-    }
-
-    const boundedCategories = new Map<string, CommandExperienceEntryV1[]>();
-    let totalShown = 0;
-    const maxVisible = 60; // First 50 + last 10
-
-    for (const [category, cmds] of allCategories.entries()) {
-      if (totalShown >= maxVisible) break;
-
-      const remaining = maxVisible - totalShown;
-      const boundedCmds = cmds.slice(0, remaining);
-      boundedCategories.set(category, boundedCmds);
-      totalShown += boundedCmds.length;
-    }
-
-    return Array.from(boundedCategories.entries());
-  }, [shouldUseVirtualization]);
-
-  const visibleCategories = createBoundedProjection(categories);
+  const activeCommand = selectedCommand ?? resolution.selected ?? state.selectedCommand;
+  const activeDescendant = activeCommand ? commandStableKey(activeCommand.canonicalName) : undefined;
 
   return (
     <div className={`command-menu ${className}`} role="dialog" aria-label="Command Menu" aria-modal="true">
+      <button
+        ref={composerRestoreRef}
+        type="button"
+        className="command-menu-focus-restore"
+        aria-label="Restore composer focus"
+        tabIndex={-1}
+      />
       <input
+        ref={inputRef}
         type="text"
-        value={draft}
-        onChange={(e) => dispatch({
-          type: 'UPDATE_QUERY',
-          query: e.target.value,
-        })}
+        value={query}
+        onChange={(event) => {
+          const next = event.target.value;
+          if (state.state === 'idle') {
+            dispatch({ type: 'START_ASSIST', query: next, draft: next });
+          } else {
+            dispatch({ type: 'UPDATE_QUERY', query: next });
+          }
+        }}
         placeholder="Type a command or search..."
         className="command-menu-input"
         aria-label="Command input"
         aria-autocomplete="list"
         aria-controls="command-list"
+        aria-activedescendant={activeDescendant}
         autoFocus
       />
 
       <ul id="command-list" role="listbox" className="command-list" aria-label="Available commands">
-        {visibleCategories.map(([category, cmds]) => (
+        {Array.from(categories.entries()).map(([category, cmds]) => (
           <React.Fragment key={category}>
             {showCategories && (
               <li role="presentation" className="command-category">{category}</li>
             )}
             {cmds.map((command) => {
-              const isSelected = state.selectedCommand?.canonicalName === command.canonicalName;
+              const isSelected = activeCommand?.canonicalName === command.canonicalName;
               const disabledReason = getCommandDisabledReason(command);
+              const executable = isCommandExecutable(command);
 
               return (
                 <li
-                  key={getCommandKey(command)}
+                  key={commandStableKey(command.canonicalName)}
+                  id={commandStableKey(command.canonicalName)}
                   role="option"
                   aria-selected={isSelected}
-                  aria-disabled={!isCommandExecutable(command)}
+                  aria-disabled={!executable}
                   className={`command-item ${isSelected ? 'selected' : ''} ${disabledReason ? 'disabled' : ''}`}
-                  onClick={() => isCommandExecutable(command) && executeCommand()}
-                  onMouseEnter={() => selectCommand(command)}
+                  onClick={() => executable && executeSelected(command)}
+                  onMouseEnter={() => navigateToCommand(command)}
                   aria-label={getCommandAccessibilityLabel(command)}
                 >
-                  <span className="command-canonical">{command.canonicalName}</span>
-                  <span className="command-description">{command.description}</span>
+                  <span className="command-canonical">/{command.canonicalName}</span>
+                  <span className="command-description">{sanitizeCommandDescription(command.description)}</span>
                   {disabledReason && (
                     <span className="command-disabled-reason" aria-label={`Disabled: ${disabledReason}`}>
                       {disabledReason}
@@ -197,89 +191,131 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
           </React.Fragment>
         ))}
       </ul>
-      {shouldUseVirtualization && (
-        <div className="command-menu-footer" role="status" aria-live="polite">
-          Showing {visibleCategories.reduce((sum, [, cmds]) => sum + cmds.length, 0)} of {commands.length} commands
-        </div>
-      )}
     </div>
   );
 };
 
 export const CommandSelector: React.FC<CommandSelectorProps> = ({
+  state,
+  dispatch,
   selectorType,
   options = {},
   items = [],
+  windowSize,
+  catalogRevision,
   onSelect,
   onClose,
   initialValue,
 }) => {
-  const { placeholder = 'Select...' } = options;
-  const [isOpen, setIsOpen] = React.useState(false);
+  const { placeholder = 'Select...', maxItems } = options;
+  const [isOpen, setIsOpen] = React.useState(state?.state === 'selector');
   const [query, setQuery] = React.useState('');
-  const [selectedIndex, setSelectedIndex] = React.useState(-1);
-  const listRef = React.useRef<HTMLUListElement>(null);
-  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const [selectedKey, setSelectedKey] = React.useState<string | null>(
+    state?.selectedRef ? selectorStableKey(selectorType, state.selectedRef) : initialValue ? selectorStableKey(selectorType, initialValue.id) : null,
+  );
+  const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
-  const filteredItems = React.useMemo(() => {
-    if (!query) return items;
+  useEffect(() => {
+    if (state?.state === 'selector') {
+      setIsOpen(true);
+    }
+  }, [state?.state]);
+
+  const filteredItems = useMemo(() => {
+    if (!query) return [...items];
     const lowerQuery = query.toLowerCase();
-    return items.filter(item =>
+    return items.filter((item) =>
       item.label.toLowerCase().includes(lowerQuery) ||
-      item.description?.toLowerCase().includes(lowerQuery)
+      item.description?.toLowerCase().includes(lowerQuery),
     );
   }, [items, query]);
 
-  const handleSelect = useCallback((item: typeof items[number]) => {
+  const keyedItems = useMemo(
+    () => filteredItems.map((item) => ({ ...item, key: selectorStableKey(selectorType, item.id) })),
+    [filteredItems, selectorType],
+  );
+
+  const retained = useMemo(
+    () => retainSelectionAnchor(selectedKey, keyedItems.map((item) => item.key)),
+    [selectedKey, keyedItems, catalogRevision],
+  );
+
+  const projection = useMemo(
+    () => projectBoundedWindow(keyedItems, {
+      windowSize: windowSize ?? maxItems ?? 40,
+      selectedKey: retained.key,
+    }),
+    [keyedItems, retained.key, windowSize, maxItems],
+  );
+
+  useEffect(() => {
+    if (retained.key !== selectedKey) {
+      setSelectedKey(retained.key);
+    }
+  }, [retained.key, selectedKey]);
+
+  const handleSelect = useCallback((item: SelectorItem) => {
+    if (item.disabled) {
+      return;
+    }
+    setSelectedKey(selectorStableKey(selectorType, item.id));
+    dispatch?.({ type: 'SET_SELECTED_REF', ref: item.id });
     onSelect?.(item);
     setIsOpen(false);
     setQuery('');
-    setSelectedIndex(-1);
     triggerRef.current?.focus();
-  }, [onSelect]);
+  }, [dispatch, onSelect, selectorType]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        setSelectedIndex(prev =>
-          prev < filteredItems.length - 1 ? prev + 1 : prev
-        );
+  const handleClose = useCallback(() => {
+    setIsOpen(false);
+    dispatch?.({ type: 'CANCEL' });
+    onClose?.();
+    triggerRef.current?.focus();
+  }, [dispatch, onClose]);
+
+  const selectedIndex = projection.selectedIndex >= 0
+    ? projection.items.findIndex((item) => item.key === projection.selectedKey)
+    : -1;
+
+  const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
+    switch (event.key) {
+      case 'ArrowDown': {
+        event.preventDefault();
+        const next = keyedItems[Math.min((selectedIndex < 0 ? -1 : keyedItems.findIndex((item) => item.key === selectedKey)) + 1, keyedItems.length - 1)];
+        if (next) setSelectedKey(next.key);
         break;
-      case 'ArrowUp':
-        e.preventDefault();
-        setSelectedIndex(prev => (prev > 0 ? prev - 1 : -1));
+      }
+      case 'ArrowUp': {
+        event.preventDefault();
+        const current = keyedItems.findIndex((item) => item.key === selectedKey);
+        const prev = keyedItems[Math.max(current - 1, 0)];
+        if (prev) setSelectedKey(prev.key);
         break;
-      case 'Enter':
-        e.preventDefault();
-        if (selectedIndex >= 0 && filteredItems[selectedIndex]) {
-          handleSelect(filteredItems[selectedIndex]);
-        }
+      }
+      case 'Enter': {
+        event.preventDefault();
+        const current = keyedItems.find((item) => item.key === selectedKey) ?? projection.items[0];
+        if (current) handleSelect(current);
         break;
+      }
       case 'Escape':
-        e.preventDefault();
-        setIsOpen(false);
-        onClose?.();
-        triggerRef.current?.focus();
+        event.preventDefault();
+        handleClose();
         break;
-      case 'Tab':
-        if (isOpen) {
-          e.preventDefault();
-        }
+      default:
         break;
     }
-  }, [filteredItems, selectedIndex, handleSelect, isOpen, onClose]);
+  }, [handleClose, handleSelect, keyedItems, projection.items, selectedIndex, selectedKey]);
 
-  const activeDescendant = selectedIndex >= 0 && filteredItems[selectedIndex]
-    ? filteredItems[selectedIndex].id
-    : undefined;
+  const activeDescendant = projection.selectedKey ?? undefined;
 
   return (
     <div className={`command-selector command-selector--${selectorType}`}>
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => setIsOpen(true)}
         className="command-selector-trigger"
         aria-haspopup="listbox"
         aria-expanded={isOpen}
@@ -296,11 +332,11 @@ export const CommandSelector: React.FC<CommandSelectorProps> = ({
           aria-label={`Select ${selectorType}`}
         >
           <input
+            ref={inputRef}
             type="text"
             value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setSelectedIndex(-1);
+            onChange={(event) => {
+              setQuery(event.target.value);
             }}
             onKeyDown={handleKeyDown}
             placeholder={`Search ${selectorType}s...`}
@@ -310,26 +346,26 @@ export const CommandSelector: React.FC<CommandSelectorProps> = ({
             autoFocus
           />
           <ul
-            ref={listRef}
             id={`${selectorType}-list`}
             role="listbox"
             className="command-selector-list"
             aria-label={`${selectorType} options`}
           >
-            {filteredItems.length === 0 ? (
+            {projection.items.length === 0 ? (
               <li role="option" className="command-selector-no-results">
                 No {selectorType}s found
               </li>
             ) : (
-              filteredItems.map((item, index) => (
+              projection.items.map((item) => (
                 <li
-                  key={item.id}
-                  id={item.id}
+                  key={item.key}
+                  id={item.key}
                   role="option"
-                  aria-selected={selectedIndex === index}
-                  className={`command-selector-item ${selectedIndex === index ? 'selected' : ''}`}
+                  aria-selected={item.key === projection.selectedKey}
+                  aria-disabled={item.disabled === true}
+                  className={`command-selector-item ${item.key === projection.selectedKey ? 'selected' : ''}`}
                   onClick={() => handleSelect(item)}
-                  onMouseEnter={() => setSelectedIndex(index)}
+                  onMouseEnter={() => setSelectedKey(item.key)}
                 >
                   <span className="command-selector-item-label">{item.label}</span>
                   {item.description && (
@@ -351,120 +387,69 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   state,
   dispatch,
   customMessage,
-  ownerPreview,
+  preview = null,
+  receiptCapable = true,
 }) => {
   const command = state.selectedCommand;
   const dangerLevel = command?.danger || 'safe';
-  const confirmButtonRef = React.useRef<HTMLButtonElement>(null);
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const gate = command
+    ? evaluateDangerGate({ command, preview, receiptCapable })
+    : { allowed: false, staged: true, reason: 'No command selected', grade: 'safe' as const };
 
   const handleConfirm = useCallback(() => {
-    // Check if owner preview is required for dangerous commands
-    if (dangerLevel === 'destructive' && !ownerPreview) {
-      // Do not allow destructive actions without owner preview
-      // Just return without dispatching - the command stays in confirmation state
+    if (!gate.allowed) {
       return;
     }
     dispatch({ type: 'CONFIRM' });
-  }, [dispatch, dangerLevel, ownerPreview]);
+  }, [dispatch, gate.allowed]);
 
   const handleCancel = useCallback(() => {
     dispatch({ type: 'CANCEL' });
   }, [dispatch]);
 
-  // Focus trap and restoration
-  React.useEffect(() => {
+  useEffect(() => {
     if (command && dangerLevel !== 'safe') {
-      // Focus confirm button by default
       confirmButtonRef.current?.focus();
-
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          e.preventDefault();
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
           handleCancel();
-        } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-          e.preventDefault();
+        } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && gate.allowed) {
+          event.preventDefault();
           handleConfirm();
         }
       };
-
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
     }
     return undefined;
-  }, [command, dangerLevel, handleConfirm, handleCancel]);
+  }, [command, dangerLevel, handleConfirm, handleCancel, gate.allowed]);
 
   if (!command || dangerLevel === 'safe') {
     return null;
   }
 
-  // Check if destructive action lacks required owner preview
-  const missingPreview = dangerLevel === 'destructive' && !ownerPreview;
-  const isDisabled = missingPreview;
-
-  const dangerColors = {
-    confirm: 'border-yellow-500',
-    destructive: 'border-red-500',
-    safe: 'border-gray-500',
-  };
-
-  const dangerIcons = {
-    confirm: '⚠️',
-    destructive: '🔴',
-    safe: '',
-  };
-
   return (
     <div
       role="dialog"
-      className={`confirmation-dialog ${dangerColors[dangerLevel]} ${isDisabled ? 'confirmation-dialog--disabled' : ''}`}
+      className={`confirmation-dialog confirmation-dialog--${dangerLevel}`}
       aria-modal="true"
       aria-labelledby="confirmation-title"
       aria-describedby="confirmation-description"
     >
       <h2 id="confirmation-title" className="confirmation-title">
-        {dangerIcons[dangerLevel]} Confirm {dangerLevel} action
+        Confirm {dangerLevel} action
       </h2>
-
-      {missingPreview && (
-        <div className="confirmation-warning" role="alert" aria-live="assertive">
-          ⚠️ This destructive action requires owner preview to proceed safely.
-          The command has been staged and disabled until preview information is available.
-        </div>
-      )}
-
       <p id="confirmation-description" className="confirmation-message">
         {customMessage || `Are you sure you want to execute "${command.canonicalName}"?`}
       </p>
-
-      {ownerPreview && (
-        <div className="confirmation-preview" role="region" aria-label="Owner preview">
-          <h3 className="confirmation-preview-title">{ownerPreview.title}</h3>
-          <p className="confirmation-preview-description">{ownerPreview.description}</p>
-
-          {ownerPreview.scope && ownerPreview.scope.length > 0 && (
-            <div className="confirmation-preview-scope">
-              <strong>Scope:</strong>
-              <ul className="confirmation-preview-scope-list">
-                {ownerPreview.scope.map((item, index) => (
-                  <li key={index}>{item}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <div className="confirmation-preview-meta">
-            <span className={`confirmation-preview-reversible ${ownerPreview.reversible ? 'reversible' : 'irreversible'}`}>
-              {ownerPreview.reversible ? '✓ Reversible' : '⚠️ Irreversible'}
-            </span>
-            {ownerPreview.estimatedDuration && (
-              <span className="confirmation-preview-duration">
-                Est. time: {ownerPreview.estimatedDuration}
-              </span>
-            )}
-          </div>
-        </div>
+      {preview && (
+        <p className="confirmation-preview">{preview.impactSummary}</p>
       )}
-
+      {!gate.allowed && gate.reason && (
+        <p role="status" className="confirmation-blocked">{gate.reason}</p>
+      )}
       <div className="confirmation-actions" role="group" aria-label="Confirmation actions">
         <button
           onClick={handleCancel}
@@ -476,11 +461,11 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
         <button
           ref={confirmButtonRef}
           onClick={handleConfirm}
-          disabled={isDisabled}
-          className={`confirmation-btn confirmation-btn--confirm ${isDisabled ? 'confirmation-btn--disabled' : ''}`}
-          aria-label={`Confirm ${dangerLevel} action${isDisabled ? ' (disabled - requires owner preview)' : ''}`}
+          className="confirmation-btn confirmation-btn--confirm"
+          aria-label={`Confirm ${dangerLevel} action`}
+          disabled={!gate.allowed}
         >
-          {isDisabled ? 'Disabled (No Preview)' : `Confirm (Ctrl+Enter)`}
+          Confirm (Ctrl+Enter)
         </button>
       </div>
     </div>
@@ -493,19 +478,18 @@ export const PendingReceipt: React.FC<PendingReceiptProps> = ({
   dispatch,
 }) => {
   const command = state.selectedCommand;
-  const timeoutRef = React.useRef<NodeJS.Timeout>();
+  const status = receiptStatus ?? state.receipt.status;
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const handleDismiss = useCallback(() => {
     dispatch({ type: 'RESET' });
   }, [dispatch]);
 
-  // Auto-dismiss after 5 seconds for successful receipts
-  React.useEffect(() => {
-    if (receiptStatus === 'success') {
+  useEffect(() => {
+    if (status === 'success') {
       timeoutRef.current = setTimeout(() => {
         handleDismiss();
       }, 5000);
-
       return () => {
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current);
@@ -513,42 +497,33 @@ export const PendingReceipt: React.FC<PendingReceiptProps> = ({
       };
     }
     return undefined;
-  }, [receiptStatus, handleDismiss]);
+  }, [status, handleDismiss]);
 
-  // Keyboard shortcut to dismiss
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' || (e.key === 'd' && (e.ctrlKey || e.metaKey))) {
-        e.preventDefault();
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' || (event.key === 'd' && (event.ctrlKey || event.metaKey))) {
+        event.preventDefault();
         handleDismiss();
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleDismiss]);
 
-  const getStatusMessage = () => {
-    switch (receiptStatus) {
-      case 'success':
-        return { text: 'Completed', aria: 'Command completed successfully' };
-      case 'rejected':
-        return { text: 'Cancelled', aria: 'Command was cancelled' };
-      case 'failed':
-        return { text: 'Failed', aria: 'Command execution failed' };
-      case 'stale':
-        return { text: 'Stale', aria: 'Command expired or was superseded' };
-      default:
-        return { text: 'Unknown', aria: 'Unknown status' };
-    }
-  };
-
-  const statusInfo = getStatusMessage();
+  const statusInfo = status === 'success'
+    ? { text: 'Completed', aria: 'Command completed successfully' }
+    : status === 'rejected'
+      ? { text: 'Cancelled', aria: 'Command was cancelled' }
+      : status === 'failed'
+        ? { text: 'Failed', aria: 'Command execution failed' }
+        : status === 'stale'
+          ? { text: 'Stale', aria: 'Command expired or was superseded' }
+          : { text: 'Pending', aria: 'Command is pending' };
 
   return (
     <div
       role="status"
-      className={`pending-receipt pending-receipt--${receiptStatus}`}
+      className={`pending-receipt pending-receipt--${status ?? 'pending'}`}
       aria-live="polite"
       aria-atomic="true"
       aria-label={statusInfo.aria}
@@ -561,6 +536,9 @@ export const PendingReceipt: React.FC<PendingReceiptProps> = ({
       <span className="receipt-status" aria-label={`Status: ${statusInfo.text}`}>
         {statusInfo.text}
       </span>
+      {state.correlationId && (
+        <span className="receipt-correlation">{state.correlationId}</span>
+      )}
       <button
         onClick={handleDismiss}
         className="receipt-dismiss"

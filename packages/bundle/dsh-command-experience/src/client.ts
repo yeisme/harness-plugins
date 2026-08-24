@@ -8,10 +8,9 @@
 // Re-export core types and utilities for Web/TUI adapters
 export * from '@yeisme/dsh-client-ui-command-experience-core';
 
-// Placeholder for Web adapter implementation
-// Will be implemented in tasks 4.x (Web) and 5.x (TUI)
-export const commandExperienceWebAdapter = null;
-
+// Web adapter lives in @yeisme/dsh-client-ui-command-experience-web.
+// TUI adapter is a later wave (5.x).
+export const commandExperienceWebAdapter = 'web-adapter-external';
 export const commandExperienceTuiAdapter = null;
 
 // Module loader registration

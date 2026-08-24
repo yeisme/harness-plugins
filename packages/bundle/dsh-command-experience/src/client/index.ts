@@ -7,7 +7,7 @@
 
 // Inline core exports to satisfy bundle contract
 // Full web adapter implementation will be added in tasks 4.x
-export const commandExperienceWebAdapter = null;
+export const commandExperienceWebAdapter = 'web-adapter-external';
 
 // Placeholder for core exports - these will be properly implemented
 // when the full web adapter is developed

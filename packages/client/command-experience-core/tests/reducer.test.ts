@@ -123,6 +123,17 @@ describe('reducer', () => {
     });
   });
 
+  describe('OPEN_SELECTOR', () => {
+    it('should open selector for a selected command', () => {
+      let state = createInitialState();
+      state = commandReducer(state, actions.selectCommand(mockSelectorCommand));
+
+      const nextState = commandReducer(state, actions.openSelector());
+
+      expect(nextState.state).toBe('selector');
+    });
+  });
+
   describe('REQUEST_CONFIRMATION', () => {
     it('should request confirmation for selected command', () => {
       let state = createInitialState();

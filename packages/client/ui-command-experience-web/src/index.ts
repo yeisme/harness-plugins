@@ -13,8 +13,7 @@ export type {
   CommandSelectorOptions,
   ConfirmationDialogProps,
   PendingReceiptProps,
-  OwnerPreview,
-  RedactedTelemetry,
+  SelectorItem,
 } from './types';
 
 // Components
@@ -40,14 +39,17 @@ export {
   getCommandCategoryLabel,
   getCommandDisabledReason,
   isCommandUnavailable,
+  sanitizeCommandDescription,
 } from './utils';
 
-// Redaction utilities for telemetry/evidence
 export {
-  generateRedactedDigest,
-  redactCommandState,
-  redactTextContent,
-  validateNoSensitiveInfo,
-  createSafeCommandLog,
-  redactEvidence,
-} from './redaction';
+  applyCommandExperienceClient,
+  createCommandMenuContribution,
+  createLocalCommandMenuHost,
+  createMenuController,
+  inspectCommandMenuHost,
+  probeCommandExperienceCapabilities,
+  registerCommandMenuContribution,
+} from './client';
+
+export { createOwnerActionTransport } from './transport';

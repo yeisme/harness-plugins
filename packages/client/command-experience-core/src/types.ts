@@ -188,6 +188,7 @@ export type CommandReducerAction =
   | { type: 'SELECT_COMMAND'; command: CommandExperienceEntryV1 }
   | { type: 'SET_ARGUMENTS'; args: Record<string, unknown> }
   | { type: 'SET_SELECTED_REF'; ref: string | null }
+  | { type: 'OPEN_SELECTOR' }
   | { type: 'REQUEST_CONFIRMATION' }
   | { type: 'CONFIRM' }
   | { type: 'CANCEL' }

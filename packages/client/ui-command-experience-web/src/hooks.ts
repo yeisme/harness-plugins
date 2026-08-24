@@ -1,35 +1,40 @@
 /**
  * Command Experience Web Hooks
  *
- * React hooks for command directory integration and state management.
+ * React hooks that consume the shared directory and reducer.
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useCallback, useMemo, useReducer, useState } from 'react';
 import type {
   CommandExperienceEntryV1,
-  CommandReducerState,
-  CommandReducerAction,
   CommandFilterOptions,
+  CommandReducerAction,
+  CommandReducerState,
 } from '@yeisme/dsh-client-ui-command-experience-core';
 import {
-  createInitialState,
   commandReducer,
+  createInitialState,
   filterCommands,
   findExactMatch,
-  findUniquePrefixMatch,
   findPrefixMatches,
+  findUniquePrefixMatch,
+  generateCorrelationId,
+  isCommandExecutable,
+  resolveAssistQuery,
 } from '@yeisme/dsh-client-ui-command-experience-core';
 
-/**
- * Hook for accessing command directory
- * Provides filtered and sorted commands without RPC calls.
- */
 export function useCommandDirectory(
-  commands: CommandExperienceEntryV1[],
-  options?: CommandFilterOptions
+  commands: readonly CommandExperienceEntryV1[],
+  options?: CommandFilterOptions,
 ) {
   const filteredCommands = useMemo(() => {
-    return filterCommands(commands, options);
+    if (options?.query === undefined) {
+      return filterCommands(commands, options);
+    }
+    return filterCommands(commands, {
+      ...options,
+      query: options.query.replace(/^\s*\/+/, ''),
+    });
   }, [commands, options]);
 
   const commandsByCategory = useMemo(() => {
@@ -45,16 +50,20 @@ export function useCommandDirectory(
   }, [filteredCommands]);
 
   const findCommand = useCallback((query: string) => {
-    return findExactMatch(filteredCommands, query);
+    return findExactMatch(filteredCommands, query.replace(/^\//, ''));
   }, [filteredCommands]);
 
   const findUniqueCommand = useCallback((prefix: string) => {
-    return findUniquePrefixMatch(filteredCommands, prefix);
+    return findUniquePrefixMatch(filteredCommands, prefix.replace(/^\//, ''));
   }, [filteredCommands]);
 
   const findMatchingCommands = useCallback((prefix: string) => {
-    return findPrefixMatches(filteredCommands, prefix);
+    return findPrefixMatches(filteredCommands, prefix.replace(/^\//, ''));
   }, [filteredCommands]);
+
+  const resolve = useCallback((input: string) => {
+    return resolveAssistQuery(commands, input);
+  }, [commands]);
 
   return {
     commands: filteredCommands,
@@ -62,93 +71,69 @@ export function useCommandDirectory(
     findCommand,
     findUniqueCommand,
     findMatchingCommands,
+    resolve,
     totalCommands: commands.length,
     filteredCount: filteredCommands.length,
   };
 }
 
-/**
- * Hook for command state management with reducer
- */
 export function useCommandState(
-  _initialState?: Partial<CommandReducerState>
+  _initialState?: Partial<CommandReducerState>,
 ) {
-  const [state, dispatch] = useState<CommandReducerState>(() =>
-    createInitialState()
-  );
-
-  const dispatchWithCorrelation = useCallback(
-    (action: CommandReducerAction) => {
-      dispatch(commandReducer(state, action));
-    },
-    [state]
-  );
+  const [state, dispatch] = useReducer(commandReducer, undefined, createInitialState);
 
   return {
     state,
-    dispatch: dispatchWithCorrelation,
+    dispatch,
   };
 }
 
-/**
- * Hook for keyboard navigation within command menu
- */
 export function useCommandNavigation(
-  commands: CommandExperienceEntryV1[],
+  commands: readonly CommandExperienceEntryV1[],
   selectedCommand: CommandExperienceEntryV1 | null,
-  getCommandKey?: (cmd: CommandExperienceEntryV1) => string
 ) {
-  const [selectedIndex, setSelectedIndex] = useState<number>(-1);
-  const [selectedCommandKey, setSelectedCommandKey] = useState<string | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number>(() => {
+    if (selectedCommand === null) return -1;
+    return commands.findIndex((cmd) => cmd.canonicalName === selectedCommand.canonicalName);
+  });
 
   const navigateToIndex = useCallback((index: number) => {
     if (index >= -1 && index < commands.length) {
       setSelectedIndex(index);
-      // Update stable key when navigating by index
-      if (index >= 0 && getCommandKey) {
-        setSelectedCommandKey(getCommandKey(commands[index]));
-      } else if (index === -1) {
-        setSelectedCommandKey(null);
-      }
     }
-  }, [commands, getCommandKey]);
+  }, [commands.length]);
 
   const navigateUp = useCallback(() => {
-    navigateToIndex(selectedIndex - 1);
-  }, [selectedIndex, navigateToIndex]);
+    setSelectedIndex((current) => {
+      const next = current <= 0 ? -1 : current - 1;
+      return next;
+    });
+  }, []);
 
   const navigateDown = useCallback(() => {
-    navigateToIndex(selectedIndex + 1);
-  }, [selectedIndex, navigateToIndex]);
+    setSelectedIndex((current) => {
+      if (commands.length === 0) return -1;
+      const start = current < 0 ? -1 : current;
+      return Math.min(start + 1, commands.length - 1);
+    });
+  }, [commands.length]);
 
   const navigateToCommand = useCallback((command: CommandExperienceEntryV1) => {
-    const index = commands.findIndex(cmd => cmd.canonicalName === command.canonicalName);
+    const index = commands.findIndex((cmd) => cmd.canonicalName === command.canonicalName);
     if (index !== -1) {
       setSelectedIndex(index);
-      if (getCommandKey) {
-        setSelectedCommandKey(getCommandKey(command));
-      }
     }
-  }, [commands, selectedCommand, getCommandKey]);
-
-  // Restore selection from stable key when commands change (e.g., after capability refresh)
-  useEffect(() => {
-    if (selectedCommandKey && getCommandKey) {
-      const restoredIndex = commands.findIndex(cmd => getCommandKey(cmd) === selectedCommandKey);
-      if (restoredIndex !== -1 && restoredIndex !== selectedIndex) {
-        setSelectedIndex(restoredIndex);
-      }
-    }
-  }, [commands, selectedCommandKey, selectedIndex, getCommandKey]);
+  }, [commands]);
 
   const resetSelection = useCallback(() => {
     setSelectedIndex(-1);
-    setSelectedCommandKey(null);
   }, []);
 
+  const resolvedIndex = selectedIndex >= commands.length ? -1 : selectedIndex;
+
   return {
-    selectedIndex,
-    selectedCommand: selectedIndex >= 0 ? commands[selectedIndex] : null,
+    selectedIndex: resolvedIndex,
+    selectedCommand: resolvedIndex >= 0 ? commands[resolvedIndex] ?? null : null,
     navigateUp,
     navigateDown,
     navigateToIndex,
@@ -157,20 +142,29 @@ export function useCommandNavigation(
   };
 }
 
-/**
- * Hook for command execution with state updates
- */
 export function useCommandExecutor(
-  dispatch: (action: CommandReducerAction) => void
+  dispatch: (action: CommandReducerAction) => void,
 ) {
   const executeCommand = useCallback(
-    (_command: CommandExperienceEntryV1, _args?: Record<string, unknown>) => {
+    (command: CommandExperienceEntryV1, _args?: Record<string, unknown>) => {
+      if (!isCommandExecutable(command)) {
+        return;
+      }
+      dispatch({ type: 'SELECT_COMMAND', command });
+      if (command.input.selectorKey) {
+        dispatch({ type: 'OPEN_SELECTOR' });
+        return;
+      }
+      if (command.danger !== 'safe') {
+        dispatch({ type: 'REQUEST_CONFIRMATION' });
+        return;
+      }
       dispatch({
         type: 'DISPATCH',
-        correlationId: Date.now().toString(),
+        correlationId: generateCorrelationId(),
       });
     },
-    [dispatch]
+    [dispatch],
   );
 
   const cancelCommand = useCallback(() => {
@@ -184,7 +178,7 @@ export function useCommandExecutor(
         command,
       });
     },
-    [dispatch]
+    [dispatch],
   );
 
   const updateDraft = useCallback(
@@ -194,7 +188,7 @@ export function useCommandExecutor(
         query,
       });
     },
-    [dispatch]
+    [dispatch],
   );
 
   return {
@@ -205,12 +199,8 @@ export function useCommandExecutor(
   };
 }
 
-/**
- * Hook for command selector state management
- * Handles session/thread/workspace/argument selection
- */
 export function useCommandSelector(
-  selectorType: 'session' | 'thread' | 'workspace' | 'argument'
+  selectorType: 'session' | 'thread' | 'workspace' | 'argument',
 ) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
@@ -222,13 +212,11 @@ export function useCommandSelector(
     setQuery('');
   }, []);
 
-  const selectItem = useCallback(
-    (itemId: string) => {
-      setSelectedItem(itemId);
-      close();
-    },
-    [close]
-  );
+  const selectItem = useCallback((itemId: string) => {
+    setSelectedItem(itemId);
+    setIsOpen(false);
+    setQuery('');
+  }, []);
 
   const updateQuery = useCallback((newQuery: string) => {
     setQuery(newQuery);

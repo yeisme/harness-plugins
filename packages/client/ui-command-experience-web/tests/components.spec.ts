@@ -1,150 +1,118 @@
 /**
- * Tests for Command Experience Web Components
+ * Tests for shipped Web command-experience components.
  *
- * Verifies selector, confirmation, and pending receipt components with MSW fixtures
- * and keyboard accessibility.
+ * Drive CommandMenu / CommandSelector / ConfirmationDialog / PendingReceipt
+ * through the shared reducer. MSW fixtures stand in for owner actions.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import * as React from 'react';
+import {
+  commandReducer,
+  createInitialState,
+  generateCorrelationId,
+  type CommandReducerAction,
+  type CommandReducerState,
+} from '@yeisme/dsh-client-ui-command-experience-core';
 import { CommandMenu, CommandSelector, ConfirmationDialog, PendingReceipt } from '../src/components';
-import { MOCK_SESSIONS, MOCK_THREADS } from './fixtures';
-import type { CommandReducerState } from '@yeisme/dsh-client-ui-command-experience-core';
-import type { OwnerPreview } from '../src/types';
+import { createOwnerActionTransport } from '../src/transport';
+import {
+  MALICIOUS_PLUGIN_DESCRIPTOR,
+  MOCK_SESSIONS,
+  MOCK_THREADS,
+  WEB_COMMAND_CATALOG,
+  ownerActionHandlers,
+} from './fixtures';
+import { sanitizeCommandDescriptor } from '@yeisme/dsh-client-ui-command-experience-core';
 
-// Setup MSW server with test fixtures
-const server = setupServer(
-  http.post('https://api.deepseek.com/v1/commands/execute', async ({ request }) => {
-    const body = await request.json() as { command: string };
+const server = setupServer(...ownerActionHandlers);
 
-    if (body.command === 'delete') {
-      return HttpResponse.json({
-        status: 'pending',
-        correlationId: 'test-corr-1',
-        preview: {
-          title: 'Confirm delete',
-          description: 'This action cannot be undone',
-          danger: 'destructive',
-        },
-      });
-    }
+function createStore(initial: CommandReducerState = createInitialState()) {
+  let state = initial;
+  const listeners = new Set<() => void>();
+  const dispatch = (action: CommandReducerAction) => {
+    state = commandReducer(state, action);
+    for (const listener of listeners) listener();
+  };
+  return {
+    getState: () => state,
+    dispatch,
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
 
-    return HttpResponse.json({
-      status: 'success',
-      correlationId: 'test-corr-2',
-      receipt: {
-        id: 'receipt-1',
-        status: 'completed',
-      },
-    });
-  }),
-
-  http.post('https://api.deepseek.com/v1/commands/cancel', () => {
-    return HttpResponse.json({
-      status: 'rejected',
-      correlationId: 'test-corr-3',
-      receipt: {
-        id: 'receipt-2',
-        status: 'cancelled',
-      },
-    });
-  }),
-
-  http.get('https://api.deepseek.com/v1/sessions', () => {
-    return HttpResponse.json({ sessions: MOCK_SESSIONS });
-  }),
-
-  http.get('https://api.deepseek.com/v1/threads', () => {
-    return HttpResponse.json({ threads: MOCK_THREADS });
-  })
-);
+function Harness({
+  store,
+  children,
+}: {
+  store: ReturnType<typeof createStore>;
+  children: (state: CommandReducerState, dispatch: (action: CommandReducerAction) => void) => React.ReactNode;
+}) {
+  const [, setTick] = React.useState(0);
+  React.useEffect(() => store.subscribe(() => setTick((value) => value + 1)), [store]);
+  return React.createElement(React.Fragment, null, children(store.getState(), store.dispatch));
+}
 
 describe('CommandMenu Component', () => {
-  beforeEach(() => {
-    server.listen();
-  });
-
-  afterEach(() => {
-    server.resetHandlers();
-    server.close();
-  });
-
-  const mockState: CommandReducerState = {
-    state: 'assist',
-    query: '/agent',
-    draft: '/agent',
-    selectedCommand: {
-      canonicalName: 'agent',
-      aliases: [],
-      description: 'Switch agent or thread',
-      category: 'session',
-      input: {},
-      surfaces: ['web', 'tui'],
-      actionKind: 'owner-action',
-      owner: 'dsh',
-      danger: 'safe',
-      availability: { state: 'available' },
-      coverage: 'equivalent',
-    },
-    correlationId: null,
-    receiptStatus: null,
-  };
-
-  const mockDispatch = vi.fn();
-
-  it('should render command menu with input', () => {
-    render(React.createElement(CommandMenu, { state: mockState, dispatch: mockDispatch }));
-
-    const input = screen.getByRole('textbox', { name: /command input/i });
-    expect(input).toBeInTheDocument();
-    expect(input).toHaveValue('/agent');
-  });
-
-  it('should handle escape key to cancel', async () => {
+  it('opens / and shows categories plus disabled reasons from the shared directory', async () => {
     const user = userEvent.setup();
-    render(React.createElement(CommandMenu, { state: mockState, dispatch: mockDispatch }));
+    const store = createStore();
+    store.dispatch({ type: 'START_ASSIST', query: '/', draft: '/' });
 
-    const input = screen.getByRole('textbox', { name: /command input/i });
-    await user.click(input);
+    render(React.createElement(Harness, {
+      store,
+      children: (state, dispatch) => React.createElement(CommandMenu, {
+        state,
+        dispatch,
+        commands: WEB_COMMAND_CATALOG,
+      }),
+    }));
+
+    expect(screen.getByRole('textbox', { name: /command input/i })).toHaveValue('/');
+    expect(screen.getByText('discovery')).toBeInTheDocument();
+    expect(screen.getByText('session')).toBeInTheDocument();
+    expect(screen.getByText('System status projection not available')).toBeInTheDocument();
 
     await user.keyboard('{Escape}');
-    expect(mockDispatch).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'CANCEL',
-    }));
+    expect(store.getState().state).toBe('idle');
+    expect(store.getState().draft).toBe('/');
   });
 
-  it('should handle Ctrl+Enter to execute', async () => {
+  it('selects an exact command and unique safe prefix without RPC', async () => {
     const user = userEvent.setup();
-    render(React.createElement(CommandMenu, { state: mockState, dispatch: mockDispatch }));
+    const store = createStore();
+    store.dispatch({ type: 'START_ASSIST', query: '/', draft: '/' });
+
+    render(React.createElement(Harness, {
+      store,
+      children: (state, dispatch) => React.createElement(CommandMenu, {
+        state,
+        dispatch,
+        commands: WEB_COMMAND_CATALOG,
+      }),
+    }));
 
     const input = screen.getByRole('textbox', { name: /command input/i });
-    await user.click(input);
+    await user.clear(input);
+    await user.type(input, '/resume');
+    expect(store.getState().selectedCommand?.canonicalName).toBe('resume');
 
-    // Clear any previous calls
-    mockDispatch.mockClear();
-
-    // Directly trigger the keyboard event
-    const enterEvent = new KeyboardEvent('keydown', {
-      key: 'Enter',
-      ctrlKey: true,
-      bubbles: true,
-      cancelable: true,
-    });
-    window.dispatchEvent(enterEvent);
-
-    expect(mockDispatch).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'DISPATCH',
-    }));
+    store.dispatch({ type: 'START_ASSIST', query: '/', draft: '/' });
+    await user.clear(input);
+    await user.type(input, '/hel');
+    expect(store.getState().selectedCommand?.canonicalName).toBe('help');
   });
 });
 
-describe('CommandSelector Component', () => {
+describe('CommandSelector keyboard flow', () => {
   beforeEach(() => {
-    server.listen();
+    server.listen({ onUnhandledRequest: 'error' });
   });
 
   afterEach(() => {
@@ -152,428 +120,213 @@ describe('CommandSelector Component', () => {
     server.close();
   });
 
-  const mockItems = [
-    { id: 'sess-1', label: 'Project Planning', description: 'Started 1 hour ago' },
-    { id: 'sess-2', label: 'Code Review', description: 'Started 2 hours ago' },
-    { id: 'sess-3', label: 'Bug Investigation', description: 'Started 1 day ago' },
-  ];
-
-  it('should render closed selector', () => {
-    render(React.createElement(CommandSelector, { selectorType: 'session', items: mockItems }));
-
-    const trigger = screen.getByRole('button');
-    expect(trigger).toBeInTheDocument();
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
-  });
-
-  it('should open selector on trigger click', async () => {
+  it('completes session selection with keyboard and accessible descendant', async () => {
     const user = userEvent.setup();
-    render(React.createElement(CommandSelector, { selectorType: 'session', items: mockItems }));
+    const store = createStore();
+    const resume = WEB_COMMAND_CATALOG.find((command) => command.canonicalName === 'resume')!;
+    store.dispatch({ type: 'SELECT_COMMAND', command: resume });
+    store.dispatch({ type: 'OPEN_SELECTOR' });
 
-    const trigger = screen.getByRole('button');
-    await user.click(trigger);
+    const transport = createOwnerActionTransport();
+    const sessions = await transport.listSessions();
+    const items = sessions.map((session) => ({
+      id: session.id,
+      label: session.title,
+      description: 'saved session',
+    }));
 
-    expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByPlaceholderText(/search sessions/i)).toBeInTheDocument();
-  });
-
-  it('should filter items based on query', async () => {
-    const user = userEvent.setup();
-    render(React.createElement(CommandSelector, { selectorType: 'session', items: mockItems }));
-
-    const trigger = screen.getByRole('button');
-    await user.click(trigger);
-
-    const searchInput = screen.getByPlaceholderText(/search sessions/i);
-    await user.type(searchInput, 'Project');
-
-    await waitFor(() => {
-      expect(screen.getByText('Project Planning')).toBeInTheDocument();
-      expect(screen.queryByText('Code Review')).not.toBeInTheDocument();
-    });
-  });
-
-  it('should handle keyboard navigation', async () => {
-    const user = userEvent.setup();
-    render(React.createElement(CommandSelector, { selectorType: 'session', items: mockItems }));
-
-    const trigger = screen.getByRole('button');
-    await user.click(trigger);
-
-    const searchInput = screen.getByPlaceholderText(/search sessions/i);
-    await user.click(searchInput);
-
-    // Navigate down
-    await user.keyboard('{ArrowDown}');
-    const listbox = screen.getByRole('listbox');
-    const firstOption = within(listbox).getAllByRole('option')[0];
-    expect(firstOption).toHaveAttribute('aria-selected', 'true');
-
-    // Navigate up
-    await user.keyboard('{ArrowUp}');
-    expect(firstOption).not.toHaveAttribute('aria-selected', 'true');
-  });
-
-  it('should handle keyboard selection with Enter', async () => {
-    const user = userEvent.setup();
     const onSelect = vi.fn();
     render(React.createElement(CommandSelector, {
+      state: store.getState(),
+      dispatch: store.dispatch,
       selectorType: 'session',
-      items: mockItems,
-      onSelect: onSelect
+      items,
+      onSelect,
     }));
 
     const trigger = screen.getByRole('button');
     await user.click(trigger);
-
     const searchInput = screen.getByPlaceholderText(/search sessions/i);
     await user.click(searchInput);
-
     await user.keyboard('{ArrowDown}');
+    expect(searchInput).toHaveAttribute('aria-activedescendant', `session:${MOCK_SESSIONS[0].id}`);
     await user.keyboard('{Enter}');
 
     await waitFor(() => {
-      expect(onSelect).toHaveBeenCalledWith(mockItems[0]);
+      expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: MOCK_SESSIONS[0].id }));
     });
+    expect(store.getState().selectedRef).toBe(MOCK_SESSIONS[0].id);
   });
 
-  it('should update active descendant for accessibility', async () => {
+  it('cancels the selector, keeps the draft, and restores focus', async () => {
     const user = userEvent.setup();
-    render(React.createElement(CommandSelector, { selectorType: 'session', items: mockItems }));
+    const store = createStore();
+    store.dispatch({ type: 'START_ASSIST', query: '/resume', draft: '/resume draft' });
+    const resume = WEB_COMMAND_CATALOG.find((command) => command.canonicalName === 'resume')!;
+    store.dispatch({ type: 'SELECT_COMMAND', command: resume });
+    store.dispatch({ type: 'OPEN_SELECTOR' });
 
-    const trigger = screen.getByRole('button');
-    await user.click(trigger);
+    render(React.createElement(Harness, {
+      store,
+      children: (state, dispatch) => React.createElement(CommandSelector, {
+        state,
+        dispatch,
+        selectorType: 'session',
+        items: MOCK_SESSIONS.map((session) => ({ id: session.id, label: session.title })),
+      }),
+    }));
 
+    await user.click(screen.getByRole('button'));
     const searchInput = screen.getByPlaceholderText(/search sessions/i);
     await user.click(searchInput);
-    await user.keyboard('{ArrowDown}');
-
-    await waitFor(() => {
-      expect(searchInput).toHaveAttribute('aria-activedescendant', mockItems[0].id);
-    });
-  });
-});
-
-describe('ConfirmationDialog Component', () => {
-  const mockState: CommandReducerState = {
-    state: 'confirmation',
-    query: '/delete',
-    draft: '/delete',
-    selectedCommand: {
-      canonicalName: 'delete',
-      aliases: [],
-      description: 'Delete current session',
-      category: 'session',
-      input: {},
-      surfaces: ['web', 'tui'],
-      actionKind: 'owner-action',
-      owner: 'dsh',
-      danger: 'destructive' as const,
-      availability: { state: 'available' },
-      coverage: 'equivalent',
-    },
-    correlationId: 'test-corr-1',
-    receiptStatus: null,
-  };
-
-  const mockDispatch = vi.fn();
-  const mockOwnerPreview: OwnerPreview = {
-    title: 'Delete Session',
-    description: 'This will permanently delete the current session.',
-    reversible: false,
-  };
-
-  it('should not render for safe commands', () => {
-    const safeState: CommandReducerState = {
-      ...mockState,
-      selectedCommand: {
-        ...mockState.selectedCommand!,
-        danger: 'safe' as const,
-      },
-    };
-
-    render(React.createElement(ConfirmationDialog, { state: safeState, dispatch: mockDispatch }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  });
-
-  it('should render destructive confirmation dialog', () => {
-    render(React.createElement(ConfirmationDialog, {
-      state: mockState,
-      dispatch: mockDispatch,
-      ownerPreview: mockOwnerPreview
-    }));
-
-    const dialog = screen.getByRole('dialog');
-    expect(dialog).toBeInTheDocument();
-    expect(screen.getByText(/confirm destructive action/i)).toBeInTheDocument();
-    expect(dialog).toHaveAttribute('aria-labelledby', 'confirmation-title');
-  });
-
-  it('should confirm action', async () => {
-    const user = userEvent.setup();
-    render(React.createElement(ConfirmationDialog, {
-      state: mockState,
-      dispatch: mockDispatch,
-      ownerPreview: mockOwnerPreview
-    }));
-
-    const confirmButton = screen.getByRole('button', { name: /confirm.*action/i });
-    await user.click(confirmButton);
-
-    expect(mockDispatch).toHaveBeenCalledWith({ type: 'CONFIRM' });
-  });
-
-  it('should handle keyboard shortcuts', async () => {
-    const user = userEvent.setup();
-    render(React.createElement(ConfirmationDialog, {
-      state: mockState,
-      dispatch: mockDispatch,
-      ownerPreview: mockOwnerPreview
-    }));
-
-    // Wait for dialog to render and attach event listeners
-    await waitFor(() => {
-      expect(screen.getByRole('dialog')).toBeInTheDocument();
-    });
-
-    // Test Ctrl+Enter to confirm
-    await user.keyboard('{Control}{Enter}');
-    expect(mockDispatch).toHaveBeenCalledWith({ type: 'CONFIRM' });
-
-    mockDispatch.mockClear();
-
-    // Test Escape to cancel
     await user.keyboard('{Escape}');
-    expect(mockDispatch).toHaveBeenCalledWith({ type: 'CANCEL' });
+
+    expect(store.getState().state).toBe('idle');
+    expect(store.getState().draft).toBe('/resume draft');
+    expect(screen.getByRole('button')).toHaveFocus();
   });
 
-  it('should show owner preview when provided', () => {
-    const ownerPreview = {
-      title: 'Delete Session',
-      description: 'This will permanently delete the current session and all its data.',
-      scope: ['Session: project-planning', 'Messages: 150', 'Files: 3'],
-      reversible: false,
-      estimatedDuration: '2 seconds',
-    };
+  it('loads thread options from the owner-action fixture without changing draft on failed receipt', async () => {
+    const transport = createOwnerActionTransport();
+    const threads = await transport.listThreads();
+    expect(threads.map((thread) => thread.id)).toEqual(MOCK_THREADS.map((thread) => thread.id));
 
-    render(React.createElement(ConfirmationDialog, {
-      state: mockState,
-      dispatch: mockDispatch,
-      ownerPreview
-    }));
+    const store = createStore();
+    store.dispatch({ type: 'START_ASSIST', query: '/agent', draft: '/agent leftover' });
+    const agent = WEB_COMMAND_CATALOG.find((command) => command.canonicalName === 'agent')!;
+    store.dispatch({ type: 'SELECT_COMMAND', command: agent });
+    const correlationId = generateCorrelationId();
+    store.dispatch({ type: 'DISPATCH', correlationId });
+    store.dispatch({ type: 'RECEIPT', status: 'failed', correlationId, message: 'owner rejected' });
 
-    expect(screen.getByText('Delete Session')).toBeInTheDocument();
-    expect(screen.getByText(/permanently delete/)).toBeInTheDocument();
-    expect(screen.getByText('Session: project-planning')).toBeInTheDocument();
-    expect(screen.getByText('Messages: 150')).toBeInTheDocument();
-    expect(screen.getByText('⚠️ Irreversible')).toBeInTheDocument();
-    expect(screen.getByText('Est. time: 2 seconds')).toBeInTheDocument();
-  });
-
-  it('should disable destructive actions without owner preview', () => {
-    render(React.createElement(ConfirmationDialog, {
-      state: mockState,
-      dispatch: mockDispatch,
-    }));
-
-    expect(screen.getByText(/requires owner preview/)).toBeInTheDocument();
-    const confirmButton = screen.getByRole('button', { name: /confirm.*action/i });
-    expect(confirmButton).toBeDisabled();
-    expect(confirmButton).toHaveTextContent('Disabled (No Preview)');
-  });
-
-  it('should enable destructive actions with owner preview', async () => {
-    render(React.createElement(ConfirmationDialog, {
-      state: mockState,
-      dispatch: mockDispatch,
-      ownerPreview: mockOwnerPreview
-    }));
-
-    const confirmButton = screen.getByRole('button', { name: /confirm.*action/i });
-    expect(confirmButton).not.toBeDisabled();
-    expect(confirmButton).toHaveTextContent('Confirm (Ctrl+Enter)');
+    expect(store.getState().draft).toBe('/agent leftover');
+    expect(store.getState().receipt.status).toBe('failed');
   });
 });
 
-describe('Large List Performance', () => {
-  const generateMockCommands = (count: number): CommandExperienceEntryV1[] => {
-    return Array.from({ length: count }, (_, i) => ({
-      canonicalName: `/command${i}`,
-      aliases: [],
-      description: `Test command ${i}`,
-      category: 'test',
-      input: {},
-      surfaces: ['web', 'tui'] as const,
-      actionKind: 'owner-action' as const,
-      owner: 'dsh' as const,
-      danger: 'safe' as const,
+describe('ConfirmationDialog and PendingReceipt', () => {
+  it('blocks /delete without owner preview', () => {
+    const store = createStore();
+    const del = {
+      ...WEB_COMMAND_CATALOG.find((command) => command.canonicalName === 'delete')!,
       availability: { state: 'available' as const },
-      coverage: 'equivalent' as const,
-    }));
-  };
-
-  it('should use bounded projection for large lists (> 100 commands)', () => {
-    const largeCommandList = generateMockCommands(150);
-    const mockState: CommandReducerState = {
-      state: 'assist',
-      query: '/command',
-      draft: '/command',
-      selectedCommand: largeCommandList[0],
-      correlationId: null,
-      receiptStatus: null,
     };
+    store.dispatch({ type: 'SELECT_COMMAND', command: del });
+    store.dispatch({ type: 'REQUEST_CONFIRMATION' });
 
-    render(React.createElement(CommandMenu, {
-      state: mockState,
-      dispatch: vi.fn(),
-      options: { maxCommandsWithoutVirtualization: 1 } // Set low to trigger virtualization
+    render(React.createElement(ConfirmationDialog, {
+      state: store.getState(),
+      dispatch: store.dispatch,
+      preview: null,
+      receiptCapable: true,
     }));
 
-    // For now, test that the component can handle large lists without crashing
-    // The actual bounded projection indicator will be added in future iteration
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByRole('textbox')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(/preview/i);
+    expect(screen.getByRole('button', { name: /confirm destructive action/i })).toBeDisabled();
   });
 
-  it('should provide stable keys for commands during capability refresh', () => {
-    const commands = generateMockCommands(10);
-    const { rerender } = render(React.createElement(CommandMenu, {
-      state: {
-        state: 'assist',
-        query: '/command',
-        draft: '/command',
-        selectedCommand: commands[5],
-        correlationId: null,
-        receiptStatus: null,
-      },
-      dispatch: vi.fn(),
-    }));
-
-    // Get the initial selected command element
-    const initialSelected = screen.getByRole('option', { selected: true });
-    expect(initialSelected).toHaveTextContent(commands[5].canonicalName);
-
-    // Simulate capability refresh by changing the selected command
-    const refreshedCommands = [...commands].reverse();
-    rerender(React.createElement(CommandMenu, {
-      state: {
-        state: 'assist',
-        query: '/command',
-        draft: '/command',
-        selectedCommand: refreshedCommands[4], // Same command, different position
-        correlationId: null,
-        receiptStatus: null,
-      },
-      dispatch: vi.fn(),
-    }));
-
-    // Selection should be maintained
-    const afterRefreshSelected = screen.getByRole('option', { selected: true });
-    expect(afterRefreshSelected).toHaveTextContent(refreshedCommands[4].canonicalName);
-  });
-
-  it('should handle large command lists without performance issues', () => {
-    const largeCommandList = generateMockCommands(200);
-    const startTime = performance.now();
-
-    const mockState: CommandReducerState = {
-      state: 'assist',
-      query: '/',
-      draft: '/',
-      selectedCommand: largeCommandList[0],
-      correlationId: null,
-      receiptStatus: null,
+  it('confirms when owner preview and receipt exist, then shows pending status text', async () => {
+    const user = userEvent.setup();
+    const store = createStore();
+    const del = {
+      ...WEB_COMMAND_CATALOG.find((command) => command.canonicalName === 'delete')!,
+      availability: { state: 'available' as const },
     };
+    store.dispatch({ type: 'SELECT_COMMAND', command: del });
+    store.dispatch({ type: 'REQUEST_CONFIRMATION' });
 
-    render(React.createElement(CommandMenu, {
-      state: mockState,
-      dispatch: vi.fn(),
+    render(React.createElement(Harness, {
+      store,
+      children: (state, dispatch) => {
+        if (state.state === 'confirmation') {
+          return React.createElement(ConfirmationDialog, {
+            state,
+            dispatch,
+            preview: {
+              targetRef: 'session:opaque-1',
+              impactSummary: 'Permanently delete one session',
+              reversible: false,
+              owner: 'dsh',
+              capability: 'session.delete.preview',
+            },
+            receiptCapable: true,
+          });
+        }
+        if (state.state === 'dispatching' || state.state === 'receipt') {
+          return React.createElement(PendingReceipt, {
+            state,
+            receiptStatus: state.receipt.status ?? undefined,
+            dispatch,
+          });
+        }
+        return null;
+      },
     }));
 
-    const endTime = performance.now();
-    const renderTime = endTime - startTime;
-
-    // Should render in reasonable time (< 100ms for this test)
-    expect(renderTime).toBeLessThan(100);
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /confirm destructive action/i }));
+    expect(store.getState().state).toBe('dispatching');
+    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
   });
 });
 
-describe('PendingReceipt Component', () => {
-  const mockState: CommandReducerState = {
-    state: 'receipt',
-    query: '/agent',
-    draft: '/agent',
-    selectedCommand: {
-      canonicalName: 'agent',
-      aliases: [],
-      description: 'Switch agent',
-      category: 'session',
-      input: {},
-      surfaces: ['web', 'tui'],
-      actionKind: 'owner-action',
-      owner: 'dsh',
-      danger: 'safe',
-      availability: { state: 'available' },
-      coverage: 'equivalent',
-    },
-    correlationId: 'test-corr-2',
-    receiptStatus: 'success',
-  };
-
-  const mockDispatch = vi.fn();
-
-  it('should render success receipt', () => {
-    render(React.createElement(PendingReceipt, {
-      state: mockState,
-      receiptStatus: 'success',
-      dispatch: mockDispatch
-    }));
-
-    const status = screen.getByRole('status');
-    expect(status).toBeInTheDocument();
-    expect(status).toHaveAttribute('aria-live', 'polite');
-    expect(screen.getByText('agent')).toBeInTheDocument();
-    expect(screen.getByText('Completed')).toBeInTheDocument();
-  });
-
-  it('should render failed receipt', () => {
-    render(React.createElement(PendingReceipt, {
-      state: mockState,
-      receiptStatus: 'failed',
-      dispatch: mockDispatch
-    }));
-
-    expect(screen.getByText('Failed')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveAttribute('aria-label', 'Command execution failed');
-  });
-
-  it('should dismiss on button click', async () => {
+describe('long-list projection', () => {
+  it('keeps the selected session key after a capability refresh', async () => {
     const user = userEvent.setup();
-    render(React.createElement(PendingReceipt, {
-      state: mockState,
-      receiptStatus: 'success',
-      dispatch: mockDispatch
+    const first = Array.from({ length: 80 }, (_, index) => ({
+      id: `sess-${index}`,
+      label: `Session ${index}`,
+    }));
+    const selectedId = 'sess-41';
+
+    const view = render(React.createElement(CommandSelector, {
+      selectorType: 'session',
+      items: first,
+      windowSize: 20,
+      catalogRevision: 1,
+      initialValue: { id: selectedId, label: 'Session 41' },
     }));
 
-    const dismissButton = screen.getByRole('button', { name: /dismiss notification/i });
-    await user.click(dismissButton);
+    await user.click(screen.getByRole('button'));
+    expect(screen.getByRole('option', { name: /Session 41/ })).toBeInTheDocument();
 
-    expect(mockDispatch).toHaveBeenCalledWith({ type: 'RESET' });
+    const refreshed = [
+      { id: 'sess-0', label: 'Session 0' },
+      { id: 'sess-41', label: 'Session 41' },
+      ...Array.from({ length: 78 }, (_, index) => ({
+        id: `sess-new-${index}`,
+        label: `New ${index}`,
+      })),
+    ];
+
+    view.rerender(React.createElement(CommandSelector, {
+      selectorType: 'session',
+      items: refreshed,
+      windowSize: 20,
+      catalogRevision: 2,
+      initialValue: { id: selectedId, label: 'Session 41' },
+    }));
+
+    const selected = screen.getByRole('option', { name: /Session 41/ });
+    expect(selected).toHaveAttribute('aria-selected', 'true');
+    expect(selected.id).toBe('session:sess-41');
+    expect(screen.queryByRole('option', { name: /Session 42/ })).not.toBeInTheDocument();
   });
+});
 
-  it('should auto-dismiss after 5 seconds for success', () => {
-    vi.useFakeTimers();
-    render(React.createElement(PendingReceipt, {
-      state: mockState,
-      receiptStatus: 'success',
-      dispatch: mockDispatch
-    }));
-
-    // Fast-forward 5 seconds
-    vi.advanceTimersByTime(5000);
-
-    expect(mockDispatch).toHaveBeenCalledWith({ type: 'RESET' });
-    vi.restoreAllMocks();
+describe('malicious descriptor fixture', () => {
+  it('sanitizes plugin description/icon/category and rejects execution injection', () => {
+    const sanitized = sanitizeCommandDescriptor(MALICIOUS_PLUGIN_DESCRIPTOR);
+    expect(sanitized.trustedForExecution).toBe(false);
+    expect(sanitized.icon).toBeNull();
+    expect(sanitized.description).not.toMatch(/\u001b/);
+    expect(sanitized.description).not.toContain('<script');
+    expect(sanitized.rejected).toEqual(expect.arrayContaining([
+      'ansi',
+      'html',
+      'remote-code',
+      'dynamic-import',
+      'global-shortcut',
+      'untrusted-execute',
+    ]));
   });
 });

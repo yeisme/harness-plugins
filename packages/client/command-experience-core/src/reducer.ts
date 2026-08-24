@@ -60,8 +60,11 @@ export function commandReducer(
     case 'UPDATE_QUERY':
       return {
         ...state,
+        state: state.state === 'selected' ? 'assist' : state.state,
         query: action.query,
-        // If we have a selected command but query changed significantly, deselect
+        draft: state.state === 'assist' || state.state === 'idle' || state.state === 'selected'
+          ? action.query
+          : state.draft,
         selectedCommand: state.state === 'assist' || state.state === 'selected'
           ? null
           : state.selectedCommand,
@@ -90,6 +93,19 @@ export function commandReducer(
       return {
         ...state,
         selectedRef: action.ref,
+        error: null,
+      };
+
+    case 'OPEN_SELECTOR':
+      if (!state.selectedCommand) {
+        return {
+          ...state,
+          error: 'Cannot open selector without selected command',
+        };
+      }
+      return {
+        ...state,
+        state: 'selector',
         error: null,
       };
 
@@ -300,6 +316,10 @@ export const actions = {
   setSelectedRef: (ref: string | null): CommandReducerAction => ({
     type: 'SET_SELECTED_REF',
     ref,
+  }),
+
+  openSelector: (): CommandReducerAction => ({
+    type: 'OPEN_SELECTOR',
   }),
 
   requestConfirmation: (): CommandReducerAction => ({
