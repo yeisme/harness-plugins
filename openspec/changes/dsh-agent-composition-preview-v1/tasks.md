@@ -14,8 +14,8 @@
 
 ## Lane: client-ui
 
-- [ ] 3.1 实现 picker 只读 Preview 面板。（deferred：client 切片未排期；非 owner-gated，见下方 evidence 注记）Owner: DSH client implementer；Lane: client-ui；Dependencies: 1.1；Scope: `packages/client/ui-agent-preset/`；Exclusions: 不启动 agent 与 session 与 turn、不修改 preset 或组合文件或默认选择、不本地计算 maturity；Acceptance: AgentPresetRow 与 AgentPresetSeat 增加 Preview 动作、展示 tools 与 prompt sections（id 无正文）与 permissions 与三层 health 与 drift 与 capability_digest 前 12 位、maturity 槽位仅渲染 Ordo 注入值、每次打开重新取投影；Verification: `pnpm run typecheck && pnpm run test -- packages/client/ui-agent-preset`；Expected: 既有 section 与 seat 测试继续绿加新面板测试绿；Failure recheck: 若需读私有 React store 则改走 host client bridge；Automation: safe-local。
-- [ ] 3.2 记录 ToolView 展示契约。（deferred：依赖 3.1）Owner: DSH client implementer；Lane: client-ui；Dependencies: 3.1；Scope: `packages/client/ui-agent-preset/README.md`；Exclusions: 本切片不实现模型可见 agent_preview 工具、不新增 session event；Acceptance: 展示契约文档说明若后续实现模型工具则必须满足 model-visible 与 logged 对等并走 tool.call.toolview；Verification: `pnpm run test`；Expected: 无回归且无模型可见面变化；Failure recheck: 模型可见面变化必须有对应 session event；Automation: safe-local。
+- [x] 3.1 实现 picker 只读 Preview 面板。Owner: DSH client implementer；Lane: client-ui；Dependencies: 1.1；Scope: `packages/client/ui-agent-preset/`；Exclusions: 不启动 agent 与 session 与 turn、不修改 preset 或组合文件或默认选择、不本地计算 maturity；Acceptance: AgentPresetRow 与 AgentPresetSeat 增加 Preview 动作、展示 tools 与 prompt sections（id 无正文）与 permissions 与三层 health 与 drift 与 capability_digest 前 12 位、maturity 槽位仅渲染 Ordo 注入值、每次打开重新取投影；Verification: `pnpm run typecheck && pnpm run test -- packages/client/ui-agent-preset`；Expected: 既有 section 与 seat 测试继续绿加新面板测试绿；Failure recheck: 若需读私有 React store 则改走 host client bridge；Automation: safe-local。
+- [x] 3.2 记录 ToolView 展示契约。Owner: DSH client implementer；Lane: client-ui；Dependencies: 3.1；Scope: `packages/client/ui-agent-preset/README.md`、`TOOLVIEW_CONTRACT.md`；Exclusions: 本切片不实现模型可见 agent_preview 工具、不新增 session event；Acceptance: 展示契约文档说明若后续实现模型工具则必须满足 model-visible 与 logged 对等并走 tool.call.toolview；Verification: `pnpm run test`；Expected: 无回归且无模型可见面变化；Failure recheck: 模型可见面变化必须有对应 session event；Automation: safe-local。
 
 ## Lane: verify
 
