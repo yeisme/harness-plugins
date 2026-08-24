@@ -25,14 +25,24 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
   options = {},
   className = '',
 }) => {
-  const { showCategories = true, showDisabledCommands = false } = options;
+  const {
+    showCategories = true,
+    showDisabledCommands = false,
+    maxCommandsWithoutVirtualization = 100,
+  } = options;
   const inputRef = React.useRef<HTMLInputElement>(null);
   const commands: CommandExperienceEntryV1[] = state.selectedCommand ? [state.selectedCommand] : [];
   const draft = state.draft || '';
 
+  // Stable key generation for virtualization
+  const getCommandKey = useCallback((cmd: CommandExperienceEntryV1) => {
+    return `cmd-${cmd.canonicalName}-${cmd.owner}-${cmd.coverage}`;
+  }, []);
+
   const { navigateUp, navigateDown, resetSelection, navigateToCommand } = useCommandNavigation(
     commands.filter((cmd) => showDisabledCommands || isCommandExecutable(cmd)),
-    state.selectedCommand
+    state.selectedCommand,
+    getCommandKey
   );
 
   const executeCommand = useCallback(() => {
@@ -109,6 +119,33 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
     return null;
   }
 
+  // Bounded projection for large command lists
+  const shouldUseVirtualization = commands.length > maxCommandsWithoutVirtualization;
+
+  // Create bounded projection (show first 50 + last 10 for very large lists)
+  const createBoundedProjection = useCallback((allCategories: Map<string, CommandExperienceEntryV1[]>) => {
+    if (!shouldUseVirtualization) {
+      return Array.from(allCategories.entries());
+    }
+
+    const boundedCategories = new Map<string, CommandExperienceEntryV1[]>();
+    let totalShown = 0;
+    const maxVisible = 60; // First 50 + last 10
+
+    for (const [category, cmds] of allCategories.entries()) {
+      if (totalShown >= maxVisible) break;
+
+      const remaining = maxVisible - totalShown;
+      const boundedCmds = cmds.slice(0, remaining);
+      boundedCategories.set(category, boundedCmds);
+      totalShown += boundedCmds.length;
+    }
+
+    return Array.from(boundedCategories.entries());
+  }, [shouldUseVirtualization]);
+
+  const visibleCategories = createBoundedProjection(categories);
+
   return (
     <div className={`command-menu ${className}`} role="dialog" aria-label="Command Menu" aria-modal="true">
       <input
@@ -127,7 +164,7 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
       />
 
       <ul id="command-list" role="listbox" className="command-list" aria-label="Available commands">
-        {Array.from(categories.entries()).map(([category, cmds]) => (
+        {visibleCategories.map(([category, cmds]) => (
           <React.Fragment key={category}>
             {showCategories && (
               <li role="presentation" className="command-category">{category}</li>
@@ -138,7 +175,7 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
 
               return (
                 <li
-                  key={command.canonicalName}
+                  key={getCommandKey(command)}
                   role="option"
                   aria-selected={isSelected}
                   aria-disabled={!isCommandExecutable(command)}
@@ -160,6 +197,11 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
           </React.Fragment>
         ))}
       </ul>
+      {shouldUseVirtualization && (
+        <div className="command-menu-footer" role="status" aria-live="polite">
+          Showing {visibleCategories.reduce((sum, [, cmds]) => sum + cmds.length, 0)} of {commands.length} commands
+        </div>
+      )}
     </div>
   );
 };

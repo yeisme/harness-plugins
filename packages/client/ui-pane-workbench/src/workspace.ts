@@ -110,6 +110,7 @@ export type PaneWorkspaceIntentV1 =
   | { readonly type: 'pin_view'; readonly viewId: string; readonly pinned?: boolean }
   | { readonly type: 'set_view_dirty'; readonly viewId: string; readonly dirty: boolean }
   | { readonly type: typeof PANE_WORKSPACE_CLOSE_VIEW_INTENT; readonly viewId: string; readonly decision?: 'allow' | 'confirm' | 'deny' }
+  | { readonly type: 'close_views_bulk'; readonly operation: 'close_others' | 'close_right' | 'close_unpinned' | 'close_group'; readonly viewId?: string; readonly groupId?: string; readonly decision?: 'allow' | 'confirm' | 'deny' }
   | { readonly type: 'reorder_view'; readonly viewId: string; readonly targetGroupId: string; readonly index: number }
   | { readonly type: 'move_view'; readonly viewId: string; readonly targetGroupId: string; readonly index?: number }
   | { readonly type: 'split_with_view'; readonly viewId: string; readonly targetGroupId: string; readonly edge: PaneSplitEdge }
@@ -746,6 +747,129 @@ function applyCloseView(state: PaneWorkspaceV1, intent: Extract<PaneWorkspaceInt
   return result(next, true, 'closed', `${view.title} closed.`)
 }
 
+/**
+ * V4 Task 3.4: Bulk Close
+ *
+ * Implements bulk close operations with full preflight and atomic submission:
+ * - Close Others: Close all tabs in the same group except the reference tab
+ * - Close Right: Close all tabs to the right of the reference tab in the same group
+ * - Close Unpinned: Close all unpinned tabs in the same group
+ * - Close Group: Close all tabs in the specified group
+ *
+ * 任一deny/unknown不部分关闭. Complex close policy aggregation uses Chinese comments for boundary logic.
+ */
+function applyCloseViewsBulk(state: PaneWorkspaceV1, intent: Extract<PaneWorkspaceIntentV1, { type: 'close_views_bulk' }>): PaneWorkspaceReducerResultV1 {
+  const { operation, viewId, groupId, decision } = intent
+
+  // Determine target views based on operation
+  let targetViewIds: string[] = []
+
+  switch (operation) {
+    case 'close_others': {
+      // Close all tabs in the same group except the reference tab
+      if (!viewId) return result(state, false, 'invalid_bulk_close', 'Reference view ID required for close_others operation.')
+      const view = viewFor(state, viewId)
+      if (!view) return result(state, false, 'unknown_view', 'Reference view not found.')
+      const group = state.groups[view.groupId]
+      if (!group) return result(state, false, 'invalid_bulk_close', 'Group not found.')
+      targetViewIds = group.tabs.filter(id => id !== viewId)
+      break
+    }
+
+    case 'close_right': {
+      // Close all tabs to the right of the reference tab in the same group
+      if (!viewId) return result(state, false, 'invalid_bulk_close', 'Reference view ID required for close_right operation.')
+      const view = viewFor(state, viewId)
+      if (!view) return result(state, false, 'unknown_view', 'Reference view not found.')
+      const group = state.groups[view.groupId]
+      if (!group) return result(state, false, 'invalid_bulk_close', 'Group not found.')
+      const viewIndex = group.tabs.indexOf(viewId)
+      if (viewIndex === -1) return result(state, false, 'invalid_bulk_close', 'View not found in group tabs.')
+      targetViewIds = group.tabs.slice(viewIndex + 1)
+      break
+    }
+
+    case 'close_unpinned': {
+      // Close all unpinned tabs in the same group
+      if (!groupId) return result(state, false, 'invalid_bulk_close', 'Group ID required for close_unpinned operation.')
+      const group = state.groups[groupId]
+      if (!group) return result(state, false, 'invalid_bulk_close', 'Group not found.')
+      targetViewIds = group.tabs.filter(id => {
+        const view = state.views[id]
+        return view && !view.pinned
+      })
+      break
+    }
+
+    case 'close_group': {
+      // Close all tabs in the specified group
+      if (!groupId) return result(state, false, 'invalid_bulk_close', 'Group ID required for close_group operation.')
+      const group = state.groups[groupId]
+      if (!group) return result(state, false, 'invalid_bulk_close', 'Group not found.')
+      targetViewIds = [...group.tabs]
+      break
+    }
+
+    default:
+      return result(state, false, 'invalid_bulk_close', 'Unknown bulk close operation.')
+  }
+
+  if (targetViewIds.length === 0) {
+    return result(state, true, 'no_targets', 'No views to close.')
+  }
+
+  // Pre-flight检查：收集所有需要关闭的view的策略
+  // Preflight check: collect close policies for all target views
+  const closeChecks = targetViewIds.map(viewId => {
+    const view = state.views[viewId]
+    if (!view) return { viewId, canClose: false, reason: 'unknown_view' }
+
+    // Dirty状态需要确认
+    // Dirty state requires confirmation
+    if (view.dirty && decision !== 'allow') {
+      return { viewId, canClose: false, reason: 'dirty', title: view.title }
+    }
+
+    // 检查owner的closePolicy
+    // Check owner's closePolicy
+    if (view.closePolicy === 'deny' && decision !== 'allow') {
+      return { viewId, canClose: false, reason: 'close_denied', title: view.title }
+    }
+
+    return { viewId, canClose: true, title: view.title }
+  })
+
+  // 如果有任何view无法关闭，整批操作拒绝
+  // If any view cannot be closed, reject the entire bulk operation
+  const blockers = closeChecks.filter(check => !check.canClose)
+  if (blockers.length > 0) {
+    const blockerReasons = blockers.map(b => `${b.title}: ${b.reason}`).join('; ')
+    return result(state, false, 'close_denied', `Bulk close blocked: ${blockerReasons}`)
+  }
+
+  // 原子提交：所有检查通过后一次性关闭所有view
+  // Atomic commit: close all views after all checks pass
+  const snapshot = cloneSnapshot(state)
+
+  for (const viewId of targetViewIds) {
+    const view = snapshot.views[viewId]
+    if (!view) continue
+
+    const group = snapshot.groups[view.groupId]
+    removeViewFromGroup(snapshot, view.id)
+    delete snapshot.views[view.id]
+
+    // 如果group空了且未锁定，删除group
+    // Remove group if empty and not locked
+    if (group !== undefined && group.tabs.length <= 1 && !group.locked) {
+      removeGroup(snapshot, group.id)
+    }
+  }
+
+  const next = commit(state, snapshot)
+  return result(next, true, 'bulk_closed', `Closed ${targetViewIds.length} view(s).`)
+}
+
 function applyMoveView(state: PaneWorkspaceV1, intent: Extract<PaneWorkspaceIntentV1, { type: 'move_view' | 'reorder_view' }>): PaneWorkspaceReducerResultV1 {
   const view = viewFor(state, intent.viewId)
   const target = groupFor(state, intent.targetGroupId)
@@ -784,6 +908,7 @@ export function reducePaneWorkspace(state: PaneWorkspaceV1, intent: PaneWorkspac
   switch (intent.type) {
     case 'open_view': return applyOpenView(state, intent.request)
     case 'close_view': return applyCloseView(state, intent)
+    case 'close_views_bulk': return applyCloseViewsBulk(state, intent)
     case 'move_view':
     case 'reorder_view': return applyMoveView(state, intent)
     case 'split_with_view': return applySplitWithView(state, intent)

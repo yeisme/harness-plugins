@@ -4,7 +4,7 @@
  * React hooks for command directory integration and state management.
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import type {
   CommandExperienceEntryV1,
   CommandReducerState,
@@ -95,15 +95,23 @@ export function useCommandState(
  */
 export function useCommandNavigation(
   commands: CommandExperienceEntryV1[],
-  selectedCommand: CommandExperienceEntryV1 | null
+  selectedCommand: CommandExperienceEntryV1 | null,
+  getCommandKey?: (cmd: CommandExperienceEntryV1) => string
 ) {
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
+  const [selectedCommandKey, setSelectedCommandKey] = useState<string | null>(null);
 
   const navigateToIndex = useCallback((index: number) => {
     if (index >= -1 && index < commands.length) {
       setSelectedIndex(index);
+      // Update stable key when navigating by index
+      if (index >= 0 && getCommandKey) {
+        setSelectedCommandKey(getCommandKey(commands[index]));
+      } else if (index === -1) {
+        setSelectedCommandKey(null);
+      }
     }
-  }, [commands.length]);
+  }, [commands, getCommandKey]);
 
   const navigateUp = useCallback(() => {
     navigateToIndex(selectedIndex - 1);
@@ -117,11 +125,25 @@ export function useCommandNavigation(
     const index = commands.findIndex(cmd => cmd.canonicalName === command.canonicalName);
     if (index !== -1) {
       setSelectedIndex(index);
+      if (getCommandKey) {
+        setSelectedCommandKey(getCommandKey(command));
+      }
     }
-  }, [commands, selectedCommand]);
+  }, [commands, selectedCommand, getCommandKey]);
+
+  // Restore selection from stable key when commands change (e.g., after capability refresh)
+  useEffect(() => {
+    if (selectedCommandKey && getCommandKey) {
+      const restoredIndex = commands.findIndex(cmd => getCommandKey(cmd) === selectedCommandKey);
+      if (restoredIndex !== -1 && restoredIndex !== selectedIndex) {
+        setSelectedIndex(restoredIndex);
+      }
+    }
+  }, [commands, selectedCommandKey, selectedIndex, getCommandKey]);
 
   const resetSelection = useCallback(() => {
     setSelectedIndex(-1);
+    setSelectedCommandKey(null);
   }, []);
 
   return {
