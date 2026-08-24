@@ -151,7 +151,8 @@ export function matchesQuery(
 ): boolean {
   if (!query) return true;
 
-  const lowerQuery = query.toLowerCase();
+  // Strip leading slash for matching (users type /agent but command is agent)
+  const lowerQuery = query.toLowerCase().replace(/^\//, '');
 
   // Check canonical name
   if (command.canonicalName.includes(lowerQuery)) {

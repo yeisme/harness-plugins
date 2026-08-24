@@ -198,7 +198,6 @@ export function useCommandSelector(
   const close = useCallback(() => {
     setIsOpen(false);
     setQuery('');
-    setSelectedItem(null);
   }, []);
 
   const selectItem = useCallback(

@@ -110,7 +110,7 @@ describe('useCommandState', () => {
   it('should create initial state', () => {
     const { result } = renderHook(() => useCommandState());
 
-    expect(result.current.state.phase).toBe('idle');
+    expect(result.current.state.state).toBe('idle');
     expect(result.current.state.draft).toBe('');
   });
 

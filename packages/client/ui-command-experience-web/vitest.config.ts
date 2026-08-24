@@ -4,8 +4,8 @@
  * Configures Testing Library with jsdom environment for React component testing.
  */
 
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
-import path from 'path';
 
 export default defineConfig({
   test: {
@@ -15,8 +15,11 @@ export default defineConfig({
     include: ['./tests/**/*.spec.ts'],
   },
   resolve: {
-    alias: {
-      '@yeisme/dsh-client-ui-command-experience-core': path.resolve(__dirname, '../../command-experience-core/src/index.ts'),
-    },
+    alias: [
+      {
+        find: /^@yeisme\/dsh-client-ui-command-experience-core$/u,
+        replacement: fileURLToPath(new URL('./node_modules/@yeisme/dsh-client-ui-command-experience-core/lib/index.js', import.meta.url))
+      },
+    ],
   },
 });
