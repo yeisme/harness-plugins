@@ -10,9 +10,19 @@ The exported `DesktopWorkbenchOverlay` is retained for one RC as a deprecated
 story component only.
 
 This bundle requires Pane Workbench V2 and a DSH layout exposing
-`shell.workspace.right`, `shell.workspace.bottom`, and `ctx.workspaceLayout`.
+`shell.workspace.right`, `shell.workspace.bottom`, and `ctx.workspaceLayout`
+(peer range: `@deepseek-ai/dsh-client-ui-layout >=0.1.1-rc.3 <0.2.0`).
 Older DSH builds fail with an explicit compatibility error rather than falling
-back to an overlay that covers the sidebar.
+back to an overlay that covers the sidebar. No released DSH ships the core-pane
+seam yet (latest is 0.1.1-rc.2; the seam lives in
+`upstream-prs/pane-workspace-layout/` awaiting upstream merge), so on release
+channel DSH both `@yeisme/dsh-pane-workbench` and this bundle refuse to load by
+design. Until a seam release lands, remove both rows:
+
+```bash
+dsh plugin --profile web remove @yeisme/dsh-pane-workbench
+dsh plugin --profile web remove @yeisme/dsh-desktop-workbench
+```
 
 The client discovers optional owner services through `dsh.fileHost`,
 `dsh.mediaHost`, and the interactive `dsh.terminalHost` V2 capability. File

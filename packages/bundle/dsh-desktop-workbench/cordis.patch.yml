@@ -10,6 +10,13 @@
 # bootstraps the Pane shell in-process. Do not insert a second
 # pane-workbench loader id here — that duplicates a separately installed
 # @yeisme/dsh-pane-workbench row and fails boot.
+#
+# Compatibility anchor: the first DSH release shipping the core-pane seam
+# (workspace.core-pane.v1 + shell.workspace.right/bottom + ctx.workspaceLayout;
+# upstream-prs/pane-workspace-layout/, unreleased at 0.1.1-rc.2). DSH builds
+# without the seam are INCOMPATIBLE: the peer range pins >=0.1.1-rc.3 and both
+# this row and @yeisme/dsh-pane-workbench fail loud at boot by design — no
+# legacy Details or overlay fallback is ever used.
 - insert:
     - id: dsh-desktop-workbench
       name: '@yeisme/dsh-desktop-workbench'
