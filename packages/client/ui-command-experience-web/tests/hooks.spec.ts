@@ -4,7 +4,7 @@
  * Verifies directory access, state management, navigation, and execution.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import {
   useCommandDirectory,

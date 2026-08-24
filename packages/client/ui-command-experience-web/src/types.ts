@@ -56,13 +56,25 @@ export interface CommandKeyboardShortcuts {
  */
 export interface CommandSelectorProps {
   /** Current command state */
-  state: CommandReducerState;
+  state?: CommandReducerState;
   /** Dispatch function */
-  dispatch: (action: CommandReducerAction) => void;
+  dispatch?: (action: CommandReducerAction) => void;
   /** Selector type (session/thread/workspace/etc.) */
   selectorType: 'session' | 'thread' | 'workspace' | 'argument';
   /** Optional configuration */
   options?: CommandSelectorOptions;
+  /** Items to display in selector */
+  items?: Array<{
+    id: string;
+    label: string;
+    description?: string;
+  }>;
+  /** Callback when item is selected */
+  onSelect?: (item: { id: string; label: string; description?: string }) => void;
+  /** Callback when selector is closed */
+  onClose?: () => void;
+  /** Initial value to display */
+  initialValue?: { id: string; label: string };
 }
 
 /**

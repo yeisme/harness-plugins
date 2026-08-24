@@ -26,13 +26,21 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
   className = '',
 }) => {
   const { showCategories = true, showDisabledCommands = false } = options;
+  const inputRef = React.useRef<HTMLInputElement>(null);
   const commands: CommandExperienceEntryV1[] = state.selectedCommand ? [state.selectedCommand] : [];
   const draft = state.draft || '';
 
-  const { navigateUp, navigateDown, resetSelection } = useCommandNavigation(
+  const { navigateUp, navigateDown, resetSelection, navigateToCommand } = useCommandNavigation(
     commands.filter((cmd) => showDisabledCommands || isCommandExecutable(cmd)),
     state.selectedCommand
   );
+
+  const executeCommand = useCallback(() => {
+    dispatch({
+      type: 'DISPATCH',
+      correlationId: Date.now().toString(),
+    });
+  }, [dispatch]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -46,6 +54,10 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
         e.preventDefault();
         dispatch({ type: 'CANCEL' });
         resetSelection();
+        // Focus restoration happens in reducer
+      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        executeCommand();
       }
     };
 
@@ -54,7 +66,7 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
       return () => window.removeEventListener('keydown', handleKeyDown);
     }
     return undefined;
-  }, [state.state, navigateUp, navigateDown, dispatch, resetSelection]);
+  }, [state.state, navigateUp, navigateDown, dispatch, resetSelection, executeCommand]);
 
   const categories = React.useMemo(() => {
     const grouped = new Map<string, CommandExperienceEntryV1[]>();
@@ -70,18 +82,19 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
   }, [commands, showDisabledCommands]);
 
   const selectCommand = useCallback((command: CommandExperienceEntryV1) => {
+    navigateToCommand(command);
     dispatch({
       type: 'SELECT_COMMAND',
       command,
     });
-  }, [dispatch]);
+  }, [dispatch, navigateToCommand]);
 
-  const executeCommand = useCallback(() => {
-    dispatch({
-      type: 'DISPATCH',
-      correlationId: Date.now().toString(),
-    });
-  }, [dispatch]);
+  // Focus restoration when menu closes
+  useEffect(() => {
+    if (state.state === 'idle' && draft.startsWith('/')) {
+      inputRef.current?.focus();
+    }
+  }, [state.state, draft]);
 
   if (state.state === 'idle' && !draft.startsWith('/')) {
     return null;
@@ -145,35 +158,137 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
 export const CommandSelector: React.FC<CommandSelectorProps> = ({
   selectorType,
   options = {},
+  items = [],
+  onSelect,
+  onClose,
+  initialValue,
 }) => {
   const { placeholder = 'Select...' } = options;
   const [isOpen, setIsOpen] = React.useState(false);
   const [query, setQuery] = React.useState('');
+  const [selectedIndex, setSelectedIndex] = React.useState(-1);
+  const listRef = React.useRef<HTMLUListElement>(null);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+
+  const filteredItems = React.useMemo(() => {
+    if (!query) return items;
+    const lowerQuery = query.toLowerCase();
+    return items.filter(item =>
+      item.label.toLowerCase().includes(lowerQuery) ||
+      item.description?.toLowerCase().includes(lowerQuery)
+    );
+  }, [items, query]);
+
+  const handleSelect = useCallback((item: typeof items[number]) => {
+    onSelect?.(item);
+    setIsOpen(false);
+    setQuery('');
+    setSelectedIndex(-1);
+    triggerRef.current?.focus();
+  }, [onSelect]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedIndex(prev =>
+          prev < filteredItems.length - 1 ? prev + 1 : prev
+        );
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedIndex(prev => (prev > 0 ? prev - 1 : -1));
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (selectedIndex >= 0 && filteredItems[selectedIndex]) {
+          handleSelect(filteredItems[selectedIndex]);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        setIsOpen(false);
+        onClose?.();
+        triggerRef.current?.focus();
+        break;
+      case 'Tab':
+        if (isOpen) {
+          e.preventDefault();
+        }
+        break;
+    }
+  }, [filteredItems, selectedIndex, handleSelect, isOpen, onClose]);
+
+  const activeDescendant = selectedIndex >= 0 && filteredItems[selectedIndex]
+    ? filteredItems[selectedIndex].id
+    : undefined;
 
   return (
     <div className={`command-selector command-selector--${selectorType}`}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="command-selector-trigger"
         aria-haspopup="listbox"
         aria-expanded={isOpen}
+        aria-controls={`${selectorType}-list`}
       >
-        {placeholder}
+        {initialValue?.label || placeholder}
       </button>
 
       {isOpen && (
-        <div role="dialog" className="command-selector-dropdown" aria-modal="true">
+        <div
+          role="dialog"
+          className="command-selector-dropdown"
+          aria-modal="true"
+          aria-label={`Select ${selectorType}`}
+        >
           <input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setSelectedIndex(-1);
+            }}
+            onKeyDown={handleKeyDown}
             placeholder={`Search ${selectorType}s...`}
             aria-label={`Search ${selectorType}s`}
+            aria-controls={`${selectorType}-list`}
+            aria-activedescendant={activeDescendant}
             autoFocus
           />
-          <ul role="listbox" className="command-selector-list">
-            {/* Items rendered based on selectorType */}
+          <ul
+            ref={listRef}
+            id={`${selectorType}-list`}
+            role="listbox"
+            className="command-selector-list"
+            aria-label={`${selectorType} options`}
+          >
+            {filteredItems.length === 0 ? (
+              <li role="option" className="command-selector-no-results">
+                No {selectorType}s found
+              </li>
+            ) : (
+              filteredItems.map((item, index) => (
+                <li
+                  key={item.id}
+                  id={item.id}
+                  role="option"
+                  aria-selected={selectedIndex === index}
+                  className={`command-selector-item ${selectedIndex === index ? 'selected' : ''}`}
+                  onClick={() => handleSelect(item)}
+                  onMouseEnter={() => setSelectedIndex(index)}
+                >
+                  <span className="command-selector-item-label">{item.label}</span>
+                  {item.description && (
+                    <span className="command-selector-item-description">
+                      {item.description}
+                    </span>
+                  )}
+                </li>
+              ))
+            )}
           </ul>
         </div>
       )}
@@ -188,6 +303,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
 }) => {
   const command = state.selectedCommand;
   const dangerLevel = command?.danger || 'safe';
+  const confirmButtonRef = React.useRef<HTMLButtonElement>(null);
 
   const handleConfirm = useCallback(() => {
     dispatch({ type: 'CONFIRM' });
@@ -197,24 +313,67 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
     dispatch({ type: 'CANCEL' });
   }, [dispatch]);
 
+  // Focus trap and restoration
+  React.useEffect(() => {
+    if (command && dangerLevel !== 'safe') {
+      // Focus confirm button by default
+      confirmButtonRef.current?.focus();
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          handleCancel();
+        } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          handleConfirm();
+        }
+      };
+
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+    return undefined;
+  }, [command, dangerLevel, handleConfirm, handleCancel]);
+
   if (!command || dangerLevel === 'safe') {
     return null;
   }
 
+  const dangerColors = {
+    confirm: 'border-yellow-500',
+    destructive: 'border-red-500',
+    safe: 'border-gray-500',
+  };
+
   return (
-    <div role="dialog" className="confirmation-dialog" aria-modal="true" aria-labelledby="confirmation-title">
+    <div
+      role="dialog"
+      className={`confirmation-dialog ${dangerColors[dangerLevel]}`}
+      aria-modal="true"
+      aria-labelledby="confirmation-title"
+      aria-describedby="confirmation-description"
+    >
       <h2 id="confirmation-title" className="confirmation-title">
         Confirm {dangerLevel} action
       </h2>
-      <p className="confirmation-message">
+      <p id="confirmation-description" className="confirmation-message">
         {customMessage || `Are you sure you want to execute "${command.canonicalName}"?`}
       </p>
-      <div className="confirmation-actions">
-        <button onClick={handleCancel} className="confirmation-btn confirmation-btn--cancel" autoFocus>
-          Cancel
+      <div className="confirmation-actions" role="group" aria-label="Confirmation actions">
+        <button
+          onClick={handleCancel}
+          className="confirmation-btn confirmation-btn--cancel"
+          aria-label="Cancel this action"
+        >
+          Cancel (Esc)
         </button>
-        <button onClick={handleConfirm} className="confirmation-btn confirmation-btn--confirm">
-          Confirm
+        <button
+          ref={confirmButtonRef}
+          onClick={handleConfirm}
+          className="confirmation-btn confirmation-btn--confirm"
+          aria-label={`Confirm ${dangerLevel} action`}
+        >
+          Confirm (Ctrl+Enter)
         </button>
       </div>
     </div>
@@ -227,30 +386,79 @@ export const PendingReceipt: React.FC<PendingReceiptProps> = ({
   dispatch,
 }) => {
   const command = state.selectedCommand;
+  const timeoutRef = React.useRef<NodeJS.Timeout>();
 
   const handleDismiss = useCallback(() => {
     dispatch({ type: 'RESET' });
   }, [dispatch]);
+
+  // Auto-dismiss after 5 seconds for successful receipts
+  React.useEffect(() => {
+    if (receiptStatus === 'success') {
+      timeoutRef.current = setTimeout(() => {
+        handleDismiss();
+      }, 5000);
+
+      return () => {
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+        }
+      };
+    }
+    return undefined;
+  }, [receiptStatus, handleDismiss]);
+
+  // Keyboard shortcut to dismiss
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || (e.key === 'd' && (e.ctrlKey || e.metaKey))) {
+        e.preventDefault();
+        handleDismiss();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleDismiss]);
+
+  const getStatusMessage = () => {
+    switch (receiptStatus) {
+      case 'success':
+        return { text: 'Completed', aria: 'Command completed successfully' };
+      case 'rejected':
+        return { text: 'Cancelled', aria: 'Command was cancelled' };
+      case 'failed':
+        return { text: 'Failed', aria: 'Command execution failed' };
+      case 'stale':
+        return { text: 'Stale', aria: 'Command expired or was superseded' };
+      default:
+        return { text: 'Unknown', aria: 'Unknown status' };
+    }
+  };
+
+  const statusInfo = getStatusMessage();
 
   return (
     <div
       role="status"
       className={`pending-receipt pending-receipt--${receiptStatus}`}
       aria-live="polite"
+      aria-atomic="true"
+      aria-label={statusInfo.aria}
     >
       {command && (
-        <span className="receipt-command">{command.canonicalName}</span>
+        <span className="receipt-command" aria-label={`Command: ${command.canonicalName}`}>
+          {command.canonicalName}
+        </span>
       )}
-      <span className="receipt-status">
-        {receiptStatus === 'success' && 'Completed'}
-        {receiptStatus === 'rejected' && 'Cancelled'}
-        {receiptStatus === 'failed' && 'Failed'}
-        {receiptStatus === 'stale' && 'Stale'}
+      <span className="receipt-status" aria-label={`Status: ${statusInfo.text}`}>
+        {statusInfo.text}
       </span>
       <button
         onClick={handleDismiss}
         className="receipt-dismiss"
-        aria-label="Dismiss notification"
+        aria-label="Dismiss notification (Ctrl+D)"
+        title="Dismiss (Ctrl+D)"
       >
         ×
       </button>
