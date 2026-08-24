@@ -99,6 +99,24 @@ export interface ConfirmationDialogProps {
   dispatch: (action: CommandReducerAction) => void;
   /** Optional custom message */
   customMessage?: string;
+  /** Owner preview data */
+  ownerPreview?: OwnerPreview;
+}
+
+/**
+ * Owner preview information for dangerous commands
+ */
+export interface OwnerPreview {
+  /** Title of the action preview */
+  title: string;
+  /** Detailed description of what will happen */
+  description: string;
+  /** Scope information (files, sessions, etc.) */
+  scope?: string[];
+  /** Whether action is reversible */
+  reversible: boolean;
+  /** Estimated time to complete */
+  estimatedDuration?: string;
 }
 
 /**

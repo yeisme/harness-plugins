@@ -351,14 +351,21 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   state,
   dispatch,
   customMessage,
+  ownerPreview,
 }) => {
   const command = state.selectedCommand;
   const dangerLevel = command?.danger || 'safe';
   const confirmButtonRef = React.useRef<HTMLButtonElement>(null);
 
   const handleConfirm = useCallback(() => {
+    // Check if owner preview is required for dangerous commands
+    if (dangerLevel === 'destructive' && !ownerPreview) {
+      // Do not allow destructive actions without owner preview
+      // Just return without dispatching - the command stays in confirmation state
+      return;
+    }
     dispatch({ type: 'CONFIRM' });
-  }, [dispatch]);
+  }, [dispatch, dangerLevel, ownerPreview]);
 
   const handleCancel = useCallback(() => {
     dispatch({ type: 'CANCEL' });
@@ -390,26 +397,74 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
     return null;
   }
 
+  // Check if destructive action lacks required owner preview
+  const missingPreview = dangerLevel === 'destructive' && !ownerPreview;
+  const isDisabled = missingPreview;
+
   const dangerColors = {
     confirm: 'border-yellow-500',
     destructive: 'border-red-500',
     safe: 'border-gray-500',
   };
 
+  const dangerIcons = {
+    confirm: '⚠️',
+    destructive: '🔴',
+    safe: '',
+  };
+
   return (
     <div
       role="dialog"
-      className={`confirmation-dialog ${dangerColors[dangerLevel]}`}
+      className={`confirmation-dialog ${dangerColors[dangerLevel]} ${isDisabled ? 'confirmation-dialog--disabled' : ''}`}
       aria-modal="true"
       aria-labelledby="confirmation-title"
       aria-describedby="confirmation-description"
     >
       <h2 id="confirmation-title" className="confirmation-title">
-        Confirm {dangerLevel} action
+        {dangerIcons[dangerLevel]} Confirm {dangerLevel} action
       </h2>
+
+      {missingPreview && (
+        <div className="confirmation-warning" role="alert" aria-live="assertive">
+          ⚠️ This destructive action requires owner preview to proceed safely.
+          The command has been staged and disabled until preview information is available.
+        </div>
+      )}
+
       <p id="confirmation-description" className="confirmation-message">
         {customMessage || `Are you sure you want to execute "${command.canonicalName}"?`}
       </p>
+
+      {ownerPreview && (
+        <div className="confirmation-preview" role="region" aria-label="Owner preview">
+          <h3 className="confirmation-preview-title">{ownerPreview.title}</h3>
+          <p className="confirmation-preview-description">{ownerPreview.description}</p>
+
+          {ownerPreview.scope && ownerPreview.scope.length > 0 && (
+            <div className="confirmation-preview-scope">
+              <strong>Scope:</strong>
+              <ul className="confirmation-preview-scope-list">
+                {ownerPreview.scope.map((item, index) => (
+                  <li key={index}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="confirmation-preview-meta">
+            <span className={`confirmation-preview-reversible ${ownerPreview.reversible ? 'reversible' : 'irreversible'}`}>
+              {ownerPreview.reversible ? '✓ Reversible' : '⚠️ Irreversible'}
+            </span>
+            {ownerPreview.estimatedDuration && (
+              <span className="confirmation-preview-duration">
+                Est. time: {ownerPreview.estimatedDuration}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="confirmation-actions" role="group" aria-label="Confirmation actions">
         <button
           onClick={handleCancel}
@@ -421,10 +476,11 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
         <button
           ref={confirmButtonRef}
           onClick={handleConfirm}
-          className="confirmation-btn confirmation-btn--confirm"
-          aria-label={`Confirm ${dangerLevel} action`}
+          disabled={isDisabled}
+          className={`confirmation-btn confirmation-btn--confirm ${isDisabled ? 'confirmation-btn--disabled' : ''}`}
+          aria-label={`Confirm ${dangerLevel} action${isDisabled ? ' (disabled - requires owner preview)' : ''}`}
         >
-          Confirm (Ctrl+Enter)
+          {isDisabled ? 'Disabled (No Preview)' : `Confirm (Ctrl+Enter)`}
         </button>
       </div>
     </div>

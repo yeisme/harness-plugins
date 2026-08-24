@@ -14,6 +14,7 @@ import * as React from 'react';
 import { CommandMenu, CommandSelector, ConfirmationDialog, PendingReceipt } from '../src/components';
 import { MOCK_SESSIONS, MOCK_THREADS } from './fixtures';
 import type { CommandReducerState } from '@yeisme/dsh-client-ui-command-experience-core';
+import type { OwnerPreview } from '../src/types';
 
 // Setup MSW server with test fixtures
 const server = setupServer(
@@ -276,6 +277,11 @@ describe('ConfirmationDialog Component', () => {
   };
 
   const mockDispatch = vi.fn();
+  const mockOwnerPreview: OwnerPreview = {
+    title: 'Delete Session',
+    description: 'This will permanently delete the current session.',
+    reversible: false,
+  };
 
   it('should not render for safe commands', () => {
     const safeState: CommandReducerState = {
@@ -291,7 +297,11 @@ describe('ConfirmationDialog Component', () => {
   });
 
   it('should render destructive confirmation dialog', () => {
-    render(React.createElement(ConfirmationDialog, { state: mockState, dispatch: mockDispatch }));
+    render(React.createElement(ConfirmationDialog, {
+      state: mockState,
+      dispatch: mockDispatch,
+      ownerPreview: mockOwnerPreview
+    }));
 
     const dialog = screen.getByRole('dialog');
     expect(dialog).toBeInTheDocument();
@@ -301,7 +311,11 @@ describe('ConfirmationDialog Component', () => {
 
   it('should confirm action', async () => {
     const user = userEvent.setup();
-    render(React.createElement(ConfirmationDialog, { state: mockState, dispatch: mockDispatch }));
+    render(React.createElement(ConfirmationDialog, {
+      state: mockState,
+      dispatch: mockDispatch,
+      ownerPreview: mockOwnerPreview
+    }));
 
     const confirmButton = screen.getByRole('button', { name: /confirm.*action/i });
     await user.click(confirmButton);
@@ -311,7 +325,11 @@ describe('ConfirmationDialog Component', () => {
 
   it('should handle keyboard shortcuts', async () => {
     const user = userEvent.setup();
-    render(React.createElement(ConfirmationDialog, { state: mockState, dispatch: mockDispatch }));
+    render(React.createElement(ConfirmationDialog, {
+      state: mockState,
+      dispatch: mockDispatch,
+      ownerPreview: mockOwnerPreview
+    }));
 
     // Wait for dialog to render and attach event listeners
     await waitFor(() => {
@@ -327,6 +345,53 @@ describe('ConfirmationDialog Component', () => {
     // Test Escape to cancel
     await user.keyboard('{Escape}');
     expect(mockDispatch).toHaveBeenCalledWith({ type: 'CANCEL' });
+  });
+
+  it('should show owner preview when provided', () => {
+    const ownerPreview = {
+      title: 'Delete Session',
+      description: 'This will permanently delete the current session and all its data.',
+      scope: ['Session: project-planning', 'Messages: 150', 'Files: 3'],
+      reversible: false,
+      estimatedDuration: '2 seconds',
+    };
+
+    render(React.createElement(ConfirmationDialog, {
+      state: mockState,
+      dispatch: mockDispatch,
+      ownerPreview
+    }));
+
+    expect(screen.getByText('Delete Session')).toBeInTheDocument();
+    expect(screen.getByText(/permanently delete/)).toBeInTheDocument();
+    expect(screen.getByText('Session: project-planning')).toBeInTheDocument();
+    expect(screen.getByText('Messages: 150')).toBeInTheDocument();
+    expect(screen.getByText('⚠️ Irreversible')).toBeInTheDocument();
+    expect(screen.getByText('Est. time: 2 seconds')).toBeInTheDocument();
+  });
+
+  it('should disable destructive actions without owner preview', () => {
+    render(React.createElement(ConfirmationDialog, {
+      state: mockState,
+      dispatch: mockDispatch,
+    }));
+
+    expect(screen.getByText(/requires owner preview/)).toBeInTheDocument();
+    const confirmButton = screen.getByRole('button', { name: /confirm.*action/i });
+    expect(confirmButton).toBeDisabled();
+    expect(confirmButton).toHaveTextContent('Disabled (No Preview)');
+  });
+
+  it('should enable destructive actions with owner preview', async () => {
+    render(React.createElement(ConfirmationDialog, {
+      state: mockState,
+      dispatch: mockDispatch,
+      ownerPreview: mockOwnerPreview
+    }));
+
+    const confirmButton = screen.getByRole('button', { name: /confirm.*action/i });
+    expect(confirmButton).not.toBeDisabled();
+    expect(confirmButton).toHaveTextContent('Confirm (Ctrl+Enter)');
   });
 });
 
