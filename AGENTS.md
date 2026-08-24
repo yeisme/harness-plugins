@@ -18,6 +18,10 @@ Ordo 是 run/task/session/lease/approval/verification/evidence/closeout 的唯�
 - packages/client/*：Client 插件 —— dsh.client bundle、受审查 slot、可访问 UI。
 - packages/preset/*：组合/预设投影与只读摘要。
 - packages/bundle/*：可安装的 dsh --profile patch 层（声明 dsh.bundle.patch）。通常只引用本仓库插件行；自包含的轻量安装器/预设数据（如 `anchored-standard`）可作为例外放在 bundle 内。
+- packages/sdk/*：插件 SDK —— 类型定义、schema 校验、验证 helpers。不拥有 DSH/domain state，面向第三方插件作者提供稳定 API。
+- packages/tool/*：一致性工具 —— 声明验证、安全审计、集成测试运行器。只读 inspect 被测包，不修改 source。
+- packages/catalog/*：插件目录 —— 静态 catalog 入口、构建/查询工具。不建网络服务或遥测。
+- packages/example/*：示例插件 —— 参考实现、演示用法。不接管 core state。
 - Host 边界只向浏览器传 safe projection：opaque ref、有界摘要、版本、freshness、evidence ref、server-authored action；不传 cookie/token/raw URL/文件路径/任意 fetch。
 
 ## Prohibited Actions
