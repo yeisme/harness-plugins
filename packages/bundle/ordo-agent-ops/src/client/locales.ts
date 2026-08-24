@@ -22,6 +22,15 @@ export const zh = {
   'panel.noRun': '当前没有安全 run 摘要',
   'panel.capacity': '容量：{observed}/{policy}',
   'panel.capacityUnreserved': '尚无持久 reservation',
+  'panel.actionsTitle': '待处理动作',
+  'panel.viewAllActions': '查看全部动作',
+  'panel.actionReconcile': '协调',
+  'panel.actionApprove': '批准',
+  'panel.actionLaunch': '启动',
+  'panel.actionUnknown': '未知动作',
+  'panel.actionExpired': '已过期',
+  'panel.actionTarget': '目标',
+  'panel.actionExpires': '过期时间',
 } satisfies Record<string, string>
 
 export type OrdoAgentOpsKey = keyof typeof zh
@@ -52,4 +61,13 @@ export const en = {
   'panel.noRun': 'No safe run summary is available',
   'panel.capacity': 'Capacity: {observed}/{policy}',
   'panel.capacityUnreserved': 'No durable reservation',
+  'panel.actionsTitle': 'Pending actions',
+  'panel.viewAllActions': 'View all actions',
+  'panel.actionReconcile': 'Reconcile',
+  'panel.actionApprove': 'Approve',
+  'panel.actionLaunch': 'Launch',
+  'panel.actionUnknown': 'Unknown action',
+  'panel.actionExpired': 'expired',
+  'panel.actionTarget': 'Target',
+  'panel.actionExpires': 'expires',
 } satisfies Record<OrdoAgentOpsKey, string>

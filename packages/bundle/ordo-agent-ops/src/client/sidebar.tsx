@@ -1,11 +1,11 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import {
-  IconAgentPresetOutline16, IconRefreshOutline16, IconWarningOutline16, StateDot,
+  IconAgentPresetOutline16, IconRefreshOutline16, IconWarningOutline16, IconCheckOutline16, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime, InjectFace } from '@deepseek-ai/dsh-client-ui-slots'
 import type { OrdoAgentOpsKey } from './locales.ts'
 import type { OrdoAgentOpsPanelFace } from './slots.ts'
-import type { OrdoAgentOpsSnapshot } from './contracts.ts'
+import type { OrdoAgentOpsSnapshot, OrdoAgentOpsActionDescriptor } from './contracts.ts'
 
 /** sidebar footer action 拼合后的完整 props。 */
 export type OrdoAgentOpsSidebarProps =
@@ -20,7 +20,13 @@ const STATE_LABELS: Record<OrdoAgentOpsSnapshot['state'], OrdoAgentOpsKey> = {
   contract_mismatch: 'panel.contractMismatch',
 }
 
-const styles: Record<'layer' | 'panel' | 'header' | 'body' | 'status' | 'detail' | 'actions' | 'button' | 'action' | 'badge', CSSProperties> = {
+const ACTION_TYPE_LABELS: Record<string, OrdoAgentOpsKey> = {
+  'ordo.reconcile.request': 'panel.actionReconcile',
+  'ordo.agent.approve': 'panel.actionApprove',
+  'ordo.agent.launch': 'panel.actionLaunch',
+}
+
+const styles: Record<'layer' | 'panel' | 'header' | 'body' | 'status' | 'detail' | 'actions' | 'button' | 'action' | 'badge' | 'drawer' | 'drawerItem' | 'expires', CSSProperties> = {
   layer: { position: 'relative', display: 'grid', gap: 6, width: '100%', padding: 4 },
   panel: { display: 'grid', gap: 8, padding: 10, borderRadius: 8, border: '1px solid var(--dsh-color-border, #3d4550)', background: 'var(--dsh-color-layer, #18202b)' },
   header: { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 },
@@ -31,6 +37,30 @@ const styles: Record<'layer' | 'panel' | 'header' | 'body' | 'status' | 'detail'
   button: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', minHeight: 32 },
   action: { display: 'inline-flex', alignItems: 'center', gap: 4, minHeight: 28 },
   badge: { fontSize: 10, opacity: 0.72 },
+  drawer: { display: 'grid', gap: 4, padding: 8, borderRadius: 6, background: 'var(--dsh-color-layer-secondary, #1a2530)' },
+  drawerItem: { display: 'grid', gap: 2, fontSize: 11 },
+  expires: { fontSize: 10, opacity: 0.8, fontStyle: 'italic' },
+}
+
+/**
+ * 渲染操作描述符的抽屉项。
+ */
+function ActionDrawerItem({ action, t }: { action: OrdoAgentOpsActionDescriptor; t: (key: OrdoAgentOpsKey) => string }) {
+  const isExpired = Date.parse(action.expiresAt) <= Date.now()
+  const actionLabel = ACTION_TYPE_LABELS[action.actionType] ?? 'panel.actionUnknown'
+
+  return (
+    <div style={styles.drawerItem} data-ordo-agent-ops-action-item={action.actionType}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+        <strong>{t(actionLabel)}</strong>
+        {isExpired && <span style={styles.badge}>({t('panel.actionExpired')})</span>}
+      </div>
+      <div>{action.safeEffect}</div>
+      <div style={styles.expires}>
+        {t('panel.actionTarget')} {action.targetRef} • {t('panel.actionExpires')} {action.expiresAt}
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -50,6 +80,11 @@ export function OrdoAgentOpsSidebar({ wide, useState: useAgentOpsState, refresh,
   const dotState = projectionState === 'ready'
     ? 'ongoing'
     : projectionState === 'permission_denied' || state.phase === 'error' ? 'error' : 'warning'
+
+  const availableActions = state.snapshot?.actions?.filter(
+    action => Date.parse(action.expiresAt) > Date.now()
+  ) ?? []
+  const hasPendingActions = availableActions.length > 0
 
   return (
     <div style={styles.layer} data-ordo-agent-ops-sidebar>
@@ -89,6 +124,27 @@ export function OrdoAgentOpsSidebar({ wide, useState: useAgentOpsState, refresh,
               </div>
             )}
             {state.errorCode !== null && <div style={styles.detail} role="alert">{t('panel.error', { code: state.errorCode })}</div>}
+
+            {/* Pending actions drawer */}
+            {hasPendingActions && (
+              <div style={styles.drawer} data-ordo-agent-ops-actions-drawer>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
+                  <IconCheckOutline16 size={14} />
+                  <span>{t('panel.actionsTitle')}</span>
+                </div>
+                {availableActions.map(action => (
+                  <ActionDrawerItem key={action.decisionRef} action={action} t={t} />
+                ))}
+                <button
+                  type="button"
+                  style={Object.assign({}, styles.action, { width: '100%', marginTop: 4 })}
+                  disabled={state.phase === 'loading'}
+                >
+                  {t('panel.viewAllActions')}
+                </button>
+              </div>
+            )}
+
             <div style={styles.actions}>
               <button type="button" style={styles.action} onClick={() => { void refresh() }} disabled={state.phase === 'loading'}>
                 <IconRefreshOutline16 size={14} />
@@ -113,6 +169,7 @@ export function OrdoAgentOpsSidebar({ wide, useState: useAgentOpsState, refresh,
         <IconAgentPresetOutline16 size={wide ? 16 : 18} />
         {wide && <span>{t('panel.trigger')}</span>}
         {wide && projectionState === 'needs_contract' && <span style={styles.badge}>needs_contract</span>}
+        {wide && hasPendingActions && <span style={styles.badge}>{availableActions.length}</span>}
       </button>
     </div>
   )
