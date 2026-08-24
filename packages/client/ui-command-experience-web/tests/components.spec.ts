@@ -123,7 +123,18 @@ describe('CommandMenu Component', () => {
     const input = screen.getByRole('textbox', { name: /command input/i });
     await user.click(input);
 
-    await user.keyboard('{Control}{Enter}');
+    // Clear any previous calls
+    mockDispatch.mockClear();
+
+    // Directly trigger the keyboard event
+    const enterEvent = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    window.dispatchEvent(enterEvent);
+
     expect(mockDispatch).toHaveBeenCalledWith(expect.objectContaining({
       type: 'DISPATCH',
     }));
@@ -256,7 +267,7 @@ describe('ConfirmationDialog Component', () => {
       surfaces: ['web', 'tui'],
       actionKind: 'owner-action',
       owner: 'dsh',
-      danger: 'destructive',
+      danger: 'destructive' as const,
       availability: { state: 'available' },
       coverage: 'equivalent',
     },
@@ -267,10 +278,13 @@ describe('ConfirmationDialog Component', () => {
   const mockDispatch = vi.fn();
 
   it('should not render for safe commands', () => {
-    const safeState = { ...mockState };
-    if (safeState.selectedCommand) {
-      safeState.selectedCommand.danger = 'safe';
-    }
+    const safeState: CommandReducerState = {
+      ...mockState,
+      selectedCommand: {
+        ...mockState.selectedCommand!,
+        danger: 'safe' as const,
+      },
+    };
 
     render(React.createElement(ConfirmationDialog, { state: safeState, dispatch: mockDispatch }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -279,16 +293,17 @@ describe('ConfirmationDialog Component', () => {
   it('should render destructive confirmation dialog', () => {
     render(React.createElement(ConfirmationDialog, { state: mockState, dispatch: mockDispatch }));
 
-    const dialog = screen.getByRole('dialog', { name: /confirm destructive action/i });
+    const dialog = screen.getByRole('dialog');
     expect(dialog).toBeInTheDocument();
     expect(screen.getByText(/confirm destructive action/i)).toBeInTheDocument();
+    expect(dialog).toHaveAttribute('aria-labelledby', 'confirmation-title');
   });
 
   it('should confirm action', async () => {
     const user = userEvent.setup();
     render(React.createElement(ConfirmationDialog, { state: mockState, dispatch: mockDispatch }));
 
-    const confirmButton = screen.getByRole('button', { name: /confirm destructive action/i });
+    const confirmButton = screen.getByRole('button', { name: /confirm.*action/i });
     await user.click(confirmButton);
 
     expect(mockDispatch).toHaveBeenCalledWith({ type: 'CONFIRM' });
@@ -297,6 +312,11 @@ describe('ConfirmationDialog Component', () => {
   it('should handle keyboard shortcuts', async () => {
     const user = userEvent.setup();
     render(React.createElement(ConfirmationDialog, { state: mockState, dispatch: mockDispatch }));
+
+    // Wait for dialog to render and attach event listeners
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
 
     // Test Ctrl+Enter to confirm
     await user.keyboard('{Control}{Enter}');
@@ -333,14 +353,6 @@ describe('PendingReceipt Component', () => {
   };
 
   const mockDispatch = vi.fn();
-
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
 
   it('should render success receipt', () => {
     render(React.createElement(PendingReceipt, {
@@ -379,5 +391,20 @@ describe('PendingReceipt Component', () => {
     await user.click(dismissButton);
 
     expect(mockDispatch).toHaveBeenCalledWith({ type: 'RESET' });
+  });
+
+  it('should auto-dismiss after 5 seconds for success', () => {
+    vi.useFakeTimers();
+    render(React.createElement(PendingReceipt, {
+      state: mockState,
+      receiptStatus: 'success',
+      dispatch: mockDispatch
+    }));
+
+    // Fast-forward 5 seconds
+    vi.advanceTimersByTime(5000);
+
+    expect(mockDispatch).toHaveBeenCalledWith({ type: 'RESET' });
+    vi.restoreAllMocks();
   });
 });

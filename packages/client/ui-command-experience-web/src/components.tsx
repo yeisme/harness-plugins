@@ -44,20 +44,29 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Handle Ctrl/Meta+Enter for execution first (highest priority)
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        executeCommand();
+        return;
+      }
+
+      // Handle Escape for cancellation
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        dispatch({ type: 'CANCEL' });
+        resetSelection();
+        // Focus restoration happens in reducer
+        return;
+      }
+
+      // Handle navigation
       if (e.key === 'ArrowDown' || (e.ctrlKey && e.key === 'n')) {
         e.preventDefault();
         navigateDown();
       } else if (e.key === 'ArrowUp' || (e.ctrlKey && e.key === 'p')) {
         e.preventDefault();
         navigateUp();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        dispatch({ type: 'CANCEL' });
-        resetSelection();
-        // Focus restoration happens in reducer
-      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        executeCommand();
       }
     };
 
