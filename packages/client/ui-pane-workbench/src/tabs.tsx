@@ -44,7 +44,7 @@ export interface PaneTabActionsProps {
 }
 
 // Helper to get icon for view
-function iconForView(view: PaneViewInstanceV1): string {
+function iconForView(view: PaneViewInstanceV1): WorkbenchIconName {
   if (view.kind.startsWith('file.')) return 'file'
   if (view.kind.startsWith('terminal.')) return 'terminal'
   if (view.kind.startsWith('git.')) return 'git-branch'
@@ -55,20 +55,12 @@ function iconForView(view: PaneViewInstanceV1): string {
 // Status indicators for tabs
 export function TabStatusPresenter(props: TabStatusPresenterProps): React.ReactNode {
   const { view, isActive } = props
-  const hasStatus = view.dirty || view.attention || view.offline ||
-                   view.status === 'orphaned' || view.status === 'conflict'
+  const hasStatus = view.dirty || view.status === 'orphaned'
 
   if (!hasStatus) return null
 
-  const statusClass = view.dirty ? 'pwr-status-dirty' :
-                     view.status === 'orphaned' ? 'pwr-status-orphaned' :
-                     view.status === 'conflict' ? 'pwr-status-conflict' :
-                     view.offline ? 'pwr-status-offline' : 'pwr-status-attention'
-
-  const ariaLabel = view.dirty ? t('tab.dirty') :
-                   view.status === 'orphaned' ? t('tab.orphaned') :
-                   view.status === 'conflict' ? t('tab.conflict') :
-                   view.offline ? t('tab.offline') : t('tab.attention')
+  const statusClass = view.dirty ? 'pwr-status-dirty' : 'pwr-status-orphaned'
+  const ariaLabel = view.dirty ? t('tab.dirty') : t('tab.orphaned')
 
   return createElement('span', {
     className: `pwr-tab-status ${statusClass} ${isActive ? 'pwr-status-active' : ''}`,
@@ -248,7 +240,7 @@ export function PaneTabOverflow(props: PaneTabOverflowProps): React.ReactNode {
       'aria-label': formatT('tab.moreTabs', { count: hiddenTabs.length }),
       'aria-haspopup': 'menu',
     },
-      createElement(WorkbenchIcon, { name: 'more-horizontal', size: 14 }),
+      createElement(WorkbenchIcon, { name: 'more', size: 14 }),
       createElement('span', { className: 'pwr-tab-count' }, hiddenTabs.length.toString())
     ),
     // Hidden tabs menu would be rendered here on interaction
@@ -260,6 +252,7 @@ export function calculateVisibleTabs(
   tabs: string[],
   views: Record<string, PaneViewInstanceV1>,
   availableWidth: number,
+  activeViewId: string | undefined,
   minTabWidth: number = 88,
   maxTabWidth: number = 220
 ): { visible: string[], hidden: string[] } {
@@ -271,8 +264,8 @@ export function calculateVisibleTabs(
     const viewB = views[b]
 
     // Active tab always visible
-    if (viewA.active && !viewB.active) return -1
-    if (!viewA.active && viewB.active) return 1
+    if (activeViewId === a && activeViewId !== b) return -1
+    if (activeViewId !== a && activeViewId === b) return 1
 
     // Pinned tabs next priority
     if (viewA.pinned && !viewB.pinned) return -1
@@ -311,4 +304,3 @@ export function calculateVisibleTabs(
 
 // Export the components for use in region-chrome.ts
 export { TabStatusPresenter as PaneTabStatusPresenter }
-export type { PaneTabProps, TabStatusPresenterProps, PaneTabActionsProps, PaneTabOverflowProps }
