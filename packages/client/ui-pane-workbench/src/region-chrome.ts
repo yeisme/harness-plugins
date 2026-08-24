@@ -356,38 +356,38 @@ function GroupChrome(props: {
         onPointerDown: (event: PointerEvent<HTMLButtonElement>) => props.controller.drag.begin(view.id, event.clientX, event.clientY),
       }, createElement(WorkbenchIcon, { name: iconForView(view), size: 14 }), createElement('span', { className: 'pwr-tab-title' }, `${view.title}${view.dirty ? ' •' : ''}`))
     }),
-    createElement('div', { className: 'pwr-tab-actions', role: 'group', 'aria-label': 'Pane actions' },
+    createElement('div', { className: 'pwr-tab-actions', role: 'group', 'aria-label': t('chrome.paneActions') },
       createElement('button', {
         type: 'button', title: t('chrome.openView'), 'aria-label': t('chrome.openView'),
         onClick: props.onOpenPicker,
       }, createElement(WorkbenchIcon, { name: 'add' })),
       active === undefined ? null : createElement('button', {
-        type: 'button', title: 'More pane actions', 'aria-label': `More actions for ${active.title}`,
+        type: 'button', title: formatT('chrome.moreActions', { name: active.title }), 'aria-label': formatT('chrome.moreActions', { name: active.title }),
         onClick: () => setMenuViewId(active.id),
       }, createElement(WorkbenchIcon, { name: 'more' })),
       active === undefined ? null : createElement('button', {
-        type: 'button', title: maximized ? 'Restore pane' : 'Maximize pane',
-        'aria-label': maximized ? 'Restore pane' : 'Maximize pane',
+        type: 'button', title: maximized ? t('chrome.restorePane') : t('chrome.maximizePane'),
+        'aria-label': maximized ? t('chrome.restorePane') : t('chrome.maximizePane'),
         onClick: () => { props.controller.dispatch(maximized ? { type: 'restore_layout' } : { type: 'maximize_group', groupId: props.group.id }) },
       }, createElement(WorkbenchIcon, { name: maximized ? 'restore' : 'maximize' })),
       active === undefined ? null : createElement('button', {
-        type: 'button', title: t('chrome.closeActivePane'), 'aria-label': `${t('chrome.closeActivePane')} ${active.title}`,
+        type: 'button', title: formatT('tab.closeWithName', { name: active.title }), 'aria-label': formatT('tab.closeWithName', { name: active.title }),
         onClick: () => close(active.id),
       }, createElement(WorkbenchIcon, { name: 'close' })),
     ),
   ),
   menuView === undefined ? null : createElement('div', { className: 'pwr-menu', role: 'menu', 'aria-label': `${menuView.title} actions` },
     createElement('button', { role: 'menuitem', type: 'button', onClick: () => { props.controller.dispatch({ type: 'pin_view', viewId: menuView.id }); setMenuViewId(undefined) } }, menuView.pinned ? t('tab.unpin') : t('tab.pin')),
-    createElement('button', { role: 'menuitem', type: 'button', onClick: () => { close(menuView.id); setMenuViewId(undefined) } }, 'Close'),
+    createElement('button', { role: 'menuitem', type: 'button', onClick: () => { close(menuView.id); setMenuViewId(undefined) } }, formatT('tab.closeWithName', { name: menuView.title })),
     createElement('button', { role: 'menuitem', type: 'button', onClick: () => {
       props.controller.dispatch({ type: 'set_region_visibility', region: props.group.region, visible: false })
       setMenuViewId(undefined)
-    } }, `Hide ${props.group.region === 'right' ? 'Right' : 'Bottom'} workspace`),
+    } }, props.group.region === 'right' ? t('chrome.hideRight') : t('chrome.hideBottom')),
     ...(['right', 'bottom'] as const).map(region => createElement('button', { key: `move-${region}`, role: 'menuitem', type: 'button', onClick: () => {
       const group = targetGroup(props.state, menuView, region)
       if (group !== undefined) props.controller.dispatch({ type: 'move_view', viewId: menuView.id, targetGroupId: group.id })
       setMenuViewId(undefined)
-    } }, `Move to ${region === 'right' ? 'Right' : 'Bottom'}`)),
+    } }, region === 'right' ? t('tab.moveToRight') : t('tab.moveToBottom'))),
     ...(['left', 'right', 'top', 'bottom'] as const).map((edge) => {
       const enabled = splitFits(edge, menuWidth, menuHeight)
       return createElement('button', {
@@ -402,7 +402,7 @@ function GroupChrome(props: {
           props.controller.dispatch({ type: 'split_with_view', viewId: menuView.id, targetGroupId: props.group.id, edge })
           setMenuViewId(undefined)
         },
-      }, `Split ${edge}`)
+      }, formatT('tab.splitEdge', { edge }))
     }),
   ),
   active === undefined ? null : createElement('div', { id: `pane-panel-${active.id}`, className: 'pwr-panel', role: 'tabpanel', 'aria-labelledby': `pane-tab-${active.id}` }, content),
