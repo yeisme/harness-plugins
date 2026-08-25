@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/proposed/architecture/2026-08-17-long-term-history-global-search-architecture.md
+2026-08-17-long-term-history-global-search-architecture.md: 5b6d255eeba31d46a3445bc0f302d6d04ff0e3bb
+2026-08-17-long-term-history-global-search-architecture.zh.md: d8e3ed63d9aad88a88f43d5e6f8662aa16c95556
