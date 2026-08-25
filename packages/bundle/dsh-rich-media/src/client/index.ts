@@ -8,9 +8,8 @@
  * @module @yeisme/dsh-rich-media/client
  */
 
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { MediaNodeView, mediaNodeDefinition } from './media-node.tsx'
+export { apply } from './apply.ts'
 
 export { RichMediaCard } from './media-card.tsx'
 export type { MediaSubtitleTrack, RichMediaCardLabels, RichMediaCardProps } from './media-card.tsx'
@@ -38,18 +37,3 @@ export type { MediaHostV1, MediaRefV1 } from '../host/types.ts'
 
 export const name = 'dsh-rich-media'
 export const inject = ['conversationEvents'] as const
-
-function installMediaNode(ctx: ClientContext): void {
-  ctx.conversationEvents.register(mediaNodeDefinition)
-  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
-    name: 'conversation.chat.node',
-    key: 'media-ref',
-    locale: 'conversation',
-  }, MediaNodeView))
-}
-
-/** Mount the client face and return an exact disposer. */
-export async function apply(ctx: ClientContext): Promise<() => void> {
-  installMediaNode(ctx)
-  return () => {}
-}

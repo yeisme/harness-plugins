@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   parsePreviewResource,
+  previewCacheKey,
   previewResourceKey,
   FORBIDDEN_RESOURCE_KEYS,
 } from '../src/client/preview/types.ts'
@@ -41,6 +42,10 @@ describe('parsePreviewResource', () => {
 
   it('key helper matches parsed key', () => {
     expect(previewResourceKey({ owner: 'dsh', ref: 'img-1', version: 'v1' })).toBe('dsh:img-1')
+  })
+
+  it('cache key includes owner, ref, version, and rendition', () => {
+    expect(previewCacheKey({ owner: 'dsh', ref: 'img-1', version: 'v3' }, 'thumbnail')).toBe('dsh:img-1:v3:thumbnail')
   })
 })
 

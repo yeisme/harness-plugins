@@ -211,6 +211,11 @@ export interface MediaPlaybackRendererLabels {
   frameForward?: string
   hlsUnavailable?: string
   unsafe?: string
+  chapters?: string
+  captions?: string
+  speed?: string
+  trackStatus?: string
+  fit?: string
 }
 
 const DEFAULT_PLAYBACK_LABELS: Required<MediaPlaybackRendererLabels> = {
@@ -218,6 +223,79 @@ const DEFAULT_PLAYBACK_LABELS: Required<MediaPlaybackRendererLabels> = {
   frameForward: 'Step forward',
   hlsUnavailable: 'This stream needs an HLS enhancer that is not installed.',
   unsafe: 'This media source or track is not allowed.',
+  chapters: 'Chapters',
+  captions: 'Captions',
+  speed: 'Speed',
+  trackStatus: 'Track status',
+  fit: 'Fit',
+}
+
+export type MediaPlaybackFitMode = 'contain' | 'cover'
+
+export interface MediaTextTrackV1 {
+  readonly src?: string
+  readonly kind?: string
+  readonly label?: string
+  readonly srclang?: string
+}
+
+export function selectSafeTextTracks(tracks: readonly MediaTextTrackV1[] = []): readonly Required<Pick<MediaTextTrackV1, 'src' | 'kind'>>[] {
+  const allowed = new Set(['captions', 'subtitles', 'descriptions'])
+  const selected: Array<Required<Pick<MediaTextTrackV1, 'src' | 'kind'>> & { label?: string; srclang?: string }> = []
+  for (const track of tracks) {
+    if (track.src === undefined || track.kind === undefined) continue
+    if (!allowed.has(track.kind)) continue
+    if (rejectUnsafePlayback(track.src, [track]) !== undefined) continue
+    selected.push({
+      src: track.src,
+      kind: track.kind,
+      ...(track.label === undefined ? {} : { label: track.label }),
+      ...(track.srclang === undefined ? {} : { srclang: track.srclang }),
+    })
+  }
+  return selected
+}
+
+export function playbackRateOptions(): readonly number[] {
+  return [0.75, 1, 1.25, 1.5]
+}
+
+export interface MediaChapterCueV1 {
+  readonly id?: string
+  readonly label?: string
+  readonly startMs?: number
+  readonly kind?: string
+  readonly src?: string
+}
+
+export interface MediaChapterV1 {
+  readonly id: string
+  readonly label: string
+  readonly startMs: number
+}
+
+const CHAPTER_LABEL = /^[\p{L}\p{N} .,_:'-]{1,80}$/u
+
+/**
+ * Owner-authored chapter cues only. Unsafe src/kind and unlabeled times
+ * stay out of the navigator. This is not a WaveSurfer or VTT parser.
+ */
+export function selectSafeChapters(cues: readonly MediaChapterCueV1[] = []): readonly MediaChapterV1[] {
+  const chapters: MediaChapterV1[] = []
+  for (const [index, cue] of cues.entries()) {
+    if (cue.kind !== undefined && cue.kind !== 'chapters') continue
+    if (cue.src !== undefined && rejectUnsafePlayback(cue.src, [cue]) !== undefined) continue
+    if (typeof cue.startMs !== 'number' || !Number.isFinite(cue.startMs) || cue.startMs < 0) continue
+    const label = cue.label?.trim() ?? ''
+    if (!CHAPTER_LABEL.test(label)) continue
+    const id = cue.id !== undefined && /^[A-Za-z0-9._:-]{1,64}$/.test(cue.id) ? cue.id : `chapter-${index + 1}`
+    chapters.push({ id, label, startMs: Math.round(cue.startMs) })
+  }
+  return chapters.sort((left, right) => left.startMs - right.startMs)
+}
+
+export function seekChapterCurrentTime(startMs: number): number {
+  return Math.max(0, startMs) / 1000
 }
 
 /**
@@ -227,13 +305,14 @@ const DEFAULT_PLAYBACK_LABELS: Required<MediaPlaybackRendererLabels> = {
  * Fullscreen API.
  */
 export function MediaPlaybackRenderer({
-  media, url, labels, loadHls, tracks = [],
+  media, url, labels, loadHls, tracks = [], chapters = [],
 }: {
   media: MediaRefV1
   url: string | undefined
   labels?: MediaPlaybackRendererLabels | undefined
   loadHls?: LazyEnhancerLoader<unknown> | undefined
   tracks?: readonly { src?: string; kind?: string }[] | undefined
+  chapters?: readonly MediaChapterCueV1[] | undefined
 }) {
   const text = { ...DEFAULT_PLAYBACK_LABELS, ...labels }
   const unsafe = rejectUnsafePlayback(url, tracks)
@@ -244,10 +323,17 @@ export function MediaPlaybackRenderer({
   if (mode === 'unavailable') {
     return <p role="alert">{text.hlsUnavailable}</p>
   }
+  const safeChapters = selectSafeChapters(chapters)
+  const captionTracks = selectSafeTextTracks(tracks)
+  const rates = playbackRateOptions()
   return (
-    <div data-dsh-media-playback data-mode={mode} style={{ display: 'grid', gap: 4 }}>
+    <div data-dsh-media-playback data-mode={mode} data-fit="contain" style={{ display: 'grid', gap: 4 }}>
       {media.kind === 'video' ? (
-        <video src={url} controls preload="metadata" aria-label={media.title} data-frame-step="1/30" />
+        <video src={url} controls preload="metadata" aria-label={media.title} data-frame-step="1/30" data-object-fit="contain">
+          {captionTracks.map(track => (
+            <track key={`${track.kind}:${track.src}`} kind={track.kind} src={track.src} />
+          ))}
+        </video>
       ) : (
         <audio src={url} controls preload="metadata" aria-label={media.title} />
       )}
@@ -256,6 +342,32 @@ export function MediaPlaybackRenderer({
           <button type="button" aria-label={text.frameBack}>&#8722;1f</button>
           <button type="button" aria-label={text.frameForward}>+1f</button>
         </div>
+      )}
+      <label>
+        {text.speed}
+        <select aria-label={text.speed} defaultValue="1" data-dsh-media-speed>
+          {rates.map(rate => (
+            <option key={rate} value={String(rate)}>{`${rate}x`}</option>
+          ))}
+        </select>
+      </label>
+      <p data-dsh-media-track-status role="status">{`${text.trackStatus}: ${captionTracks.length} captions`}</p>
+      {safeChapters.length > 0 && (
+        <nav aria-label={text.chapters} data-dsh-media-chapters>
+          <ol>
+            {safeChapters.map(chapter => (
+              <li key={chapter.id}>
+                <button
+                  type="button"
+                  data-chapter-id={chapter.id}
+                  data-chapter-start={String(seekChapterCurrentTime(chapter.startMs))}
+                >
+                  {chapter.label}
+                </button>
+              </li>
+            ))}
+          </ol>
+        </nav>
       )}
     </div>
   )

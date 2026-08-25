@@ -5,6 +5,7 @@
   "main": "lib/index.js",
   "scripts": {
     "test": "pnpm run build && pnpm run smoke:bundle",
+    "test:declaration": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsc -p tsconfig.json && tsdown",
     "bundle": "tsdown",

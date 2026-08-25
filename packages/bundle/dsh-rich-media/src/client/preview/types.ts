@@ -53,25 +53,122 @@ export interface PreviewResourceV1 {
   capabilities: readonly string[]
 }
 
+/** Owner-authorized rendition kinds. Unknown kinds fail closed. */
+export const PREVIEW_RENDITIONS = [
+  'original', 'thumbnail', 'text', 'page', 'table', 'waveform', 'captions', 'converted',
+] as const
+export type PreviewRenditionKind = (typeof PREVIEW_RENDITIONS)[number]
+
+/** Visible preview lifecycle. Async abort is internal and must not flash error. */
+export const PREVIEW_VISIBLE_STATES = [
+  'resolving', 'loading', 'ready', 'partial', 'stale', 'unsupported', 'error', 'offline',
+] as const
+export type PreviewVisibleState = (typeof PREVIEW_VISIBLE_STATES)[number]
+
+export const PREVIEW_INTENT_KINDS = ['open', 'attach', 'compare', 'download', 'open-external'] as const
+export type PreviewIntentKind = (typeof PREVIEW_INTENT_KINDS)[number]
+
+export const PREVIEW_RELEASE_REASONS = ['switch', 'close', 'evict', 'unload', 'abort', 'fence', 'replace'] as const
+export type PreviewReleaseReason = (typeof PREVIEW_RELEASE_REASONS)[number]
+
+export interface PreviewTextWindowRequestV1 {
+  offset: number
+  length: number
+}
+
+export interface PreviewTextWindowV1 {
+  text: string
+  offset: number
+  loaded: number
+  total?: number
+  truncated: boolean
+}
+
+export interface PreviewTablePageRequestV1 {
+  page: number
+  pageSize: number
+}
+
+export interface PreviewTablePageV1 {
+  rows: readonly (readonly string[])[]
+  page: number
+  pageSize: number
+  loaded: number
+  total?: number
+  truncated: boolean
+}
+
+export interface PreviewByteRangeRequestV1 {
+  offset: number
+  length: number
+}
+
+/** Playback kind only. The URL/stream stays on the live handle. */
+export interface PreviewPlaybackSourceV1 {
+  kind: 'url' | 'object-url' | 'stream' | 'mediasource'
+  expiresAt: string
+}
+
+/** Persistable/visible facts. Never carries URL, object URL, stream, or worker. */
+export interface PreviewAccessSnapshotV1 {
+  owner: string
+  ref: string
+  version: string
+  rendition: PreviewRenditionKind
+  expiresAt: string
+  released: boolean
+  capabilities: readonly string[]
+}
+
 /** Short-lived byte access granted by the owner host for one resource. */
 export interface PreviewAccessHandleV1 {
-  /** Owner-authorized short-lived URL. Never constructed by the browser. */
-  url: string
+  /**
+   * Owner-authorized short-lived URL when the owner granted one.
+   * Non-enumerable on shipped handles; never copy into Pane state or persistence.
+   */
+  readonly url?: string
   /** ISO timestamp after which the handle must be re-resolved. */
-  expiresAt: string
+  readonly expiresAt: string
   /** Releases the handle; idempotent. */
-  release(): void
+  release(reason?: PreviewReleaseReason | string): void | Promise<void>
+  abort?(reason?: string): void
+  getSnapshot(): PreviewAccessSnapshotV1
+  subscribe(listener: () => void): () => void
+  readTextWindow?(request: PreviewTextWindowRequestV1, signal?: AbortSignal): Promise<PreviewTextWindowV1>
+  readTablePage?(request: PreviewTablePageRequestV1, signal?: AbortSignal): Promise<PreviewTablePageV1>
+  readByteRange?(request: PreviewByteRangeRequestV1, signal?: AbortSignal): Promise<Uint8Array>
+  resolvePlaybackSource?(signal?: AbortSignal): Promise<PreviewPlaybackSourceV1>
+}
+
+export interface PreviewRenditionRequestV1 {
+  resource: PreviewResourceV1
+  rendition?: PreviewRenditionKind | undefined
+  signal?: AbortSignal | undefined
+}
+
+/** Official DSH inspect/rendition remains disabled until task 7.2. */
+export interface OfficialDshPreviewSeamProbeV1 {
+  readonly officialInspectEnabled: false
+  readonly officialOpenRenditionEnabled: false
+  readonly officialReadWindowEnabled: false
+  readonly officialReadRangeEnabled: false
+  readonly officialVersionSubscribeEnabled: false
+  readonly officialReleaseEnabled: false
+  readonly reason: 'seam-unpublished' | 'capability-missing'
 }
 
 /** Owner-side access resolver. Deny-by-default: undefined means no preview. */
 export interface ResourcePreviewHostV1 {
   readonly previewHostVersion: '0.1.0-rc.1'
-  resolveAccess(resource: PreviewResourceV1): Promise<PreviewAccessHandleV1 | undefined>
+  resolveAccess(resource: PreviewResourceV1, signal?: AbortSignal): Promise<PreviewAccessHandleV1 | undefined>
+  inspect?(ref: PreviewResourceRefV1, signal?: AbortSignal): Promise<PreviewResourceV1>
+  openRendition?(request: PreviewRenditionRequestV1, signal?: AbortSignal): Promise<PreviewAccessHandleV1 | undefined>
+  subscribeVersion?(ref: PreviewResourceRefV1, listener: (version: string) => void): () => void
 }
 
 /** Typed cross-module intent emitted by preview surfaces. */
 export interface PreviewIntentV1 {
-  kind: 'open' | 'compare' | 'download' | 'attach'
+  kind: PreviewIntentKind
   resourceKeys: readonly string[]
 }
 
@@ -165,4 +262,9 @@ export function parsePreviewResource(input: unknown): ParseResult<PreviewResourc
 /** Stable resource key from a ref. */
 export function previewResourceKey(ref: PreviewResourceRefV1): string {
   return `${ref.owner}:${ref.ref}`
+}
+
+/** Cache key isolates owner/ref/version/rendition. */
+export function previewCacheKey(ref: PreviewResourceRefV1, rendition: PreviewRenditionKind = 'original'): string {
+  return `${ref.owner}:${ref.ref}:${ref.version}:${rendition}`
 }

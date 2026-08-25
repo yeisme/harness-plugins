@@ -84,4 +84,34 @@ export class PreviewRendererRegistry {
 
   has(id: string): boolean { return this.descriptors.has(id) }
   size(): number { return this.descriptors.size }
+
+  /**
+   * Load the resolved renderer. A failed lazy import may fall back only to the
+   * next compatible descriptor; it never MIME-probes by execution.
+   */
+  async loadBest(input: PreviewResolveInput): Promise<PreviewRendererDescriptorV1 | undefined> {
+    const failed = new Set<string>()
+    while (true) {
+      const next = this.resolveExcluding(input, failed)
+      if (next === undefined) return undefined
+      try {
+        await next.load()
+        return next
+      } catch {
+        failed.add(next.id)
+      }
+    }
+  }
+
+  private resolveExcluding(input: PreviewResolveInput, failed: ReadonlySet<string>): PreviewRendererDescriptorV1 | undefined {
+    if (input.preference !== undefined && !failed.has(input.preference)) {
+      const preferred = this.resolve(input)
+      if (preferred !== undefined && preferred.id === input.preference) return preferred
+    }
+    const remaining = new PreviewRendererRegistry()
+    for (const descriptor of this.descriptors.values()) {
+      if (!failed.has(descriptor.id)) remaining.register(descriptor)
+    }
+    return remaining.resolve({ ...input, preference: undefined })
+  }
 }

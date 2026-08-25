@@ -9,6 +9,9 @@ import {
   playbackMode,
   pixelsOf,
   rejectUnsafePlayback,
+  seekChapterCurrentTime,
+  selectSafeChapters,
+  selectSafeTextTracks,
 } from '../src/client/media-renderers.tsx'
 import type { MediaRefV1 } from '../src/host/types.ts'
 
@@ -83,5 +86,54 @@ describe('MediaPlaybackRenderer', () => {
     const html = renderToStaticMarkup(<MediaPlaybackRenderer media={media} url="javascript:alert(1)" />)
     expect(html).toContain('data-dsh-media-unsafe="unsafe source"')
     expect(html).not.toContain('<video')
+  })
+  it('navigates only owner-authored safe chapters and ignores unlabeled or unsafe cues', () => {
+    const cues = [
+      { id: 'open', label: 'Opening', startMs: 1_500, kind: 'chapters' },
+      { label: 'Second', startMs: 8_000 },
+      { label: '<script>', startMs: 2_000 },
+      { label: 'Bad source', startMs: 3_000, src: 'file:///etc/passwd', kind: 'chapters' },
+      { label: 'No time' },
+    ]
+    expect(selectSafeChapters(cues)).toEqual([
+      { id: 'open', label: 'Opening', startMs: 1_500 },
+      { id: 'chapter-2', label: 'Second', startMs: 8_000 },
+    ])
+    expect(seekChapterCurrentTime(1_500)).toBe(1.5)
+    const media: MediaRefV1 = { owner: 'dsh', kind: 'video', ref: 'v1', version: '1', mediaType: 'video/mp4', title: 'Clip', capabilities: ['play'] }
+    const html = renderToStaticMarkup(<MediaPlaybackRenderer media={media} url="https://cdn.example/safe.mp4" chapters={cues} />)
+    expect(html).toContain('data-dsh-media-chapters')
+    expect(html).toContain('data-chapter-id="open"')
+    expect(html).toContain('data-chapter-start="1.5"')
+    expect(html).toContain('Opening')
+    expect(html).toContain('Second')
+    expect(html).not.toContain('<script>')
+    expect(html).not.toContain('Bad source')
+  })
+  it('exposes captions, speed, track status, and contain fit without autoplay or fullscreen', () => {
+    const tracks = [
+      { src: 'https://cdn.example/en.vtt', kind: 'captions', label: 'English' },
+      { src: 'file:///etc/passwd', kind: 'captions' },
+    ]
+    expect(selectSafeTextTracks(tracks)).toEqual([
+      { src: 'https://cdn.example/en.vtt', kind: 'captions', label: 'English' },
+    ])
+    const media: MediaRefV1 = { owner: 'dsh', kind: 'video', ref: 'v1', version: '1', mediaType: 'video/mp4', title: 'Clip', capabilities: ['play'] }
+    const html = renderToStaticMarkup(<MediaPlaybackRenderer
+      media={media}
+      url="https://cdn.example/safe.mp4"
+      tracks={selectSafeTextTracks(tracks)}
+    />)
+    expect(html).toContain('kind="captions"')
+    expect(html).toContain('https://cdn.example/en.vtt')
+    expect(html).not.toContain('file:///etc/passwd')
+    expect(html).toContain('data-dsh-media-speed')
+    expect(html).toContain('1.25x')
+    expect(html).toContain('data-dsh-media-track-status')
+    expect(html).toContain('1 captions')
+    expect(html).toContain('data-fit="contain"')
+    expect(html).not.toContain('autoplay')
+    expect(html).not.toContain('requestFullscreen')
+    expect(html).not.toContain('picture-in-picture')
   })
 })
