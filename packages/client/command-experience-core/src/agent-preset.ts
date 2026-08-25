@@ -90,13 +90,15 @@ export function resolveAgentToken(
     preset.ref.toLowerCase() === needle || preset.name.toLowerCase() === needle,
   )
 
-  if (threadHits.length === 1 && presetHits.length === 0) {
-    return { kind: 'thread', threadRef: threadHits[0].ref }
+  const threadHit = threadHits[0]
+  const presetHit = presetHits[0]
+  if (threadHits.length === 1 && presetHits.length === 0 && threadHit !== undefined) {
+    return { kind: 'thread', threadRef: threadHit.ref }
   }
-  if (presetHits.length === 1 && threadHits.length === 0) {
+  if (presetHits.length === 1 && threadHits.length === 0 && presetHit !== undefined) {
     return {
       kind: 'legacy-preset',
-      presetRef: presetHits[0].ref,
+      presetRef: presetHit.ref,
       replacement: '/preset',
     }
   }

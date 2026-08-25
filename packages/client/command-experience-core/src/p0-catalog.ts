@@ -73,8 +73,8 @@ export function buildP0Catalog(capabilities: OwnerCapabilitySnapshot = { availab
       description: seed.description,
       category: seed.category,
       input: {
-        hint: seed.hint,
-        selectorKey: seed.selectorKey,
+        ...(seed.hint === undefined ? {} : { hint: seed.hint }),
+        ...(seed.selectorKey === undefined ? {} : { selectorKey: seed.selectorKey }),
       },
       surfaces: ['web', 'tui'],
       actionKind: seed.actionKind,
