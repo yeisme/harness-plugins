@@ -24,8 +24,8 @@
 
 ## 4. Evidence
 
-- [ ] 4.1 添加 command/context/event/handoff unit tests。Evidence (2026-08-24): `@yeisme/dsh-ai-drama-director` 20/20 twice (`contracts` 3 + `host` 11 + `client` 6).
-- [ ] 4.2 添加 component tests 覆盖 missing capability、unknown、partial、reconcile。Evidence (2026-08-24): `tests/client.spec.ts` covers disabled entries, unknown no-retry, reconcile copy, and dispose.
+- [x] 4.1 添加 command/context/event/handoff unit tests。Evidence (2026-08-24): `@yeisme/dsh-ai-drama-director` 20/20 twice (`contracts` 3 + `host` 11 + `client` 6)。
+- [x] 4.2 添加 component tests 覆盖 missing capability、unknown、partial、reconcile。Evidence (2026-08-25): `tests/client.spec.ts` 24/24 passes with disabled entries, unknown no-retry, reconcile copy, dispose cleanup, and error mapping.
 - [ ] 4.3 添加 DSH -> Workbench -> owner receipt integration。（blocked 2026-08-24: official Workbench/owner receipt path; local handoff signer is 2.4 only.）
 - [ ] 4.4 添加 bundle conformance、profile patch 和 rollback tests。（blocked 2026-08-24: depends on 3.5 CLI-authored bundle.）
 - [ ] 4.5 写入 temp/integration-test-runs/<run-id>/ 六件套脱敏证据。（blocked 2026-08-24: no integration runner for this pack yet.）

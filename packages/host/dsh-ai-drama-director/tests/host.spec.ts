@@ -223,4 +223,78 @@ describe('Workbench handoff signer/validator', () => {
       reasonCategory: 'https://secret.example/token',
     })).toBeUndefined()
   })
+
+  describe('DSH -> Workbench handoff integration', () => {
+    it('creates and validates local handoff without external Workbench', () => {
+      const handoff = createWorkbenchHandoff({
+        contextRef: 'ctx:drama-1',
+        targetSurface: 'workbench.review',
+        presentationIntent: 'open_review',
+        nonce: 'nonce-local-1',
+        expiresAt: Date.now() + 300_000, // 5 minutes
+        artifactRef: 'art:scene-42',
+      })
+
+      expect(handoff).toBeDefined()
+      expect(handoff?.handoff).toMatchObject({
+        contextRef: 'ctx:drama-1',
+        targetSurface: 'workbench.review',
+        presentationIntent: 'open_review',
+      })
+      expect(handoff?.handoff.artifactRef).toBe('art:scene-42')
+    })
+
+    it('validates handoff integrity and rejects tampered payloads', () => {
+      const valid = createWorkbenchHandoff({
+        contextRef: 'ctx:review-1',
+        targetSurface: 'workbench.review',
+        presentationIntent: 'open_review',
+        nonce: 'nonce-integrity-1',
+        expiresAt: Date.now() + 300_000,
+      })
+
+      expect(valid).toBeDefined()
+      expect(verifyWorkbenchHandoff(valid!, Date.now())).toEqual({ ok: true })
+
+      // Tamper with digest
+      const tampered = { handoff: valid!.handoff, digest: 'tampered-digest' }
+      expect(verifyWorkbenchHandoff(tampered, Date.now()).ok).toBe(false)
+    })
+
+    it('rejects expired handoffs without retry', () => {
+      const expired = createWorkbenchHandoff({
+        contextRef: 'ctx:expired-1',
+        targetSurface: 'workbench.review',
+        presentationIntent: 'open_review',
+        nonce: 'nonce-expired-1',
+        expiresAt: Date.now() - 1000, // expired 1 second ago
+      })
+
+      expect(expired).toBeDefined()
+      expect(verifyWorkbenchHandoff(expired!, Date.now()).ok).toBe(false)
+    })
+
+    it('supports multiple handoff intents with different surface targets', () => {
+      const intents = [
+        'open_show',
+        'open_episode',
+        'open_review',
+        'open_artifact',
+        'open_evidence',
+      ] as const
+
+      for (const intent of intents) {
+        const handoff = createWorkbenchHandoff({
+          contextRef: 'ctx:intent-test',
+          targetSurface: 'workbench.review',
+          presentationIntent: intent,
+          nonce: `nonce-${intent}`,
+          expiresAt: Date.now() + 300_000,
+        })
+
+        expect(handoff).toBeDefined()
+        expect(handoff?.handoff.presentationIntent).toBe(intent)
+      }
+    })
+  })
 })
