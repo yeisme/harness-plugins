@@ -35,7 +35,7 @@ export interface DramaClientRegistrationV1 {
   readonly commandGroup: typeof DRAMA_COMMAND_GROUP
   readonly commands: readonly DramaCommandEntryV1[]
   readonly panes: readonly DramaPaneViewV1[]
-  readonly preset: DramaPresetV1
+  readonly preset: DramaPresetV1 | undefined
   readonly disposed: boolean
 }
 
@@ -123,7 +123,7 @@ export class DramaClientRegistry {
       commandGroup: DRAMA_COMMAND_GROUP,
       commands: [],
       panes: [],
-      preset: createDirectorPreset(),
+      preset: undefined,
       disposed: true,
     }
   }

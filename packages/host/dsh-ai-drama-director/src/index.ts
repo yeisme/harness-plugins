@@ -75,7 +75,7 @@ export type {
   DramaKeyEventV1,
 } from './interaction.js'
 
-export { dramaHelpCopy, mapDramaCommandError, selectedDramaCommand } from './help.js'
+export { dramaHelpCopy, mapDramaCommandError, selectedDramaCommand, canRetryDramaResult } from './help.js'
 export type { DramaHelpCopyV1, DramaErrorCopyV1 } from './help.js'
 
 export {

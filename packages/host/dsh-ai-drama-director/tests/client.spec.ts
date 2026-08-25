@@ -39,7 +39,7 @@ describe('Director command group and panes', () => {
       kind: 'unknown',
       reason: 'owner settlement is unknown; do not retry with a new idempotency key',
       retried: false,
-    }).next).toContain('Do not retry')
+    }).message).toContain('Do not retry')
   })
 
   it('registers Context/Review/Run first and opens Story/Visual/Audio as secondary', () => {
@@ -107,7 +107,7 @@ describe('missing capability, unknown, partial, and reconcile', () => {
       contextRevision: 'rev-3',
     })
     expect(missing.kind).toBe('needs_contract')
-    expect(mapDramaCommandError(missing).title).toBe('Needs contract')
+    expect(mapDramaCommandError(missing).title).toBe('Contract Required')
 
     const unknown = await handleDramaCommand({
       schema: 'drama.command-request.v1',
@@ -148,6 +148,6 @@ describe('missing capability, unknown, partial, and reconcile', () => {
       dispatch: async () => 'reconcile_required',
     })
     expect(reconcile.kind).toBe('reconcile_required')
-    expect(mapDramaCommandError(reconcile).next).toContain('Resync')
+    expect(mapDramaCommandError(reconcile).message).toContain('refresh')
   })
 })

@@ -12,9 +12,10 @@ export interface DramaHelpCopyV1 {
 }
 
 export interface DramaErrorCopyV1 {
+  readonly kind: 'success' | 'error' | 'warning' | 'disabled'
   readonly title: string
-  readonly reason: string
-  readonly next: string
+  readonly message: string
+  readonly retryable: boolean
 }
 
 export function dramaHelpCopy(): DramaHelpCopyV1 {
@@ -35,37 +36,46 @@ export function dramaHelpCopy(): DramaHelpCopyV1 {
 export function mapDramaCommandError(result: DramaCommandResultV1): DramaErrorCopyV1 {
   if (result.kind === 'unknown') {
     return {
-      title: 'Settlement unknown',
-      reason: result.reason,
-      next: 'Do not retry with a new idempotency key. Reconcile the owner first.',
+      kind: 'error',
+      title: 'Command Unknown',
+      message: 'The command could not be completed. Do not retry automatically.',
+      retryable: false,
     }
   }
   if (result.kind === 'reconcile_required') {
     return {
-      title: 'Reconcile required',
-      reason: result.reason,
-      next: 'Resync the current context snapshot, then request a fresh preview.',
+      kind: 'warning',
+      title: 'Context Updated',
+      message: 'Context has been updated. Please refresh and try again.',
+      retryable: true,
     }
   }
   if (result.kind === 'needs_contract') {
     return {
-      title: 'Needs contract',
-      reason: result.reason,
-      next: 'Keep the command disabled until the drama owner projection is mounted.',
+      kind: 'disabled',
+      title: 'Contract Required',
+      message: 'Server descriptor is missing or contract not available.',
+      retryable: false,
     }
   }
-  if (result.kind === 'disabled') {
+  if (result.kind === 'opened' || result.kind === 'submitted' || result.kind === 'proposal_created') {
     return {
-      title: 'Command disabled',
-      reason: result.reason,
-      next: 'Use /drama help or wait for capability.',
+      kind: 'success',
+      title: 'Command Successful',
+      message: result.reason,
+      retryable: false,
     }
   }
   return {
-    title: 'Command result',
-    reason: result.reason,
-    next: 'Continue from the current context.',
+    kind: 'error',
+    title: 'Command Result',
+    message: result.reason,
+    retryable: false,
   }
+}
+
+export function canRetryDramaResult(result: DramaCommandResultV1): boolean {
+  return result.kind === 'reconcile_required'
 }
 
 export function selectedDramaCommand(
