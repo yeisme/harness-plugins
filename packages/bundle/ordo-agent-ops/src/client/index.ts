@@ -15,6 +15,14 @@ export { OrdoAgentOpsCursor } from './cursor.ts'
 export { OrdoAgentOpsSidebar } from './sidebar.tsx'
 export { OrdoAgentOpsToolView } from './toolview.tsx'
 export { en, NS, zh } from './locales.ts'
+export {
+  createOrdoPopupItems,
+  createOrdoPopupState,
+  openOrdoPopup,
+  applyOrdoPopupKey,
+  selectOrdoPopupItem,
+  canSubmitOrdoPopupMutation,
+} from './popup.ts'
 export type { OrdoAgentOpsSidebarProps } from './sidebar.tsx'
 export type { OrdoAgentOpsToolViewProps } from './toolview.tsx'
 export type { OrdoAgentOpsReadPhase, OrdoAgentOpsViewState } from './controller.ts'
@@ -22,6 +30,7 @@ export type { OrdoAgentOpsCursorDecision } from './cursor.ts'
 export type { OrdoAgentOpsPanelFace } from './slots.ts'
 export type { OrdoAgentOpsKey } from './locales.ts'
 export type { OrdoAgentOpsSnapshot } from './contracts.ts'
+export type { OrdoPopupCommandId, OrdoPopupItemV1, OrdoPopupStateV1, OrdoPopupKeyEventV1 } from './popup.ts'
 
 /** browser entry 与其 root 贡献都需要的公开 DSH services。 */
 export const inject = ['slots', 'remote', 'remote.ordoAgentOps', 'locale']

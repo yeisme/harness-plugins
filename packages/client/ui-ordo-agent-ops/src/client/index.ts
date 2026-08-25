@@ -7,6 +7,14 @@ export {
   applyLegacyClient as apply,
   inject,
 } from '@yeisme/dsh-ordo-agent-ops/client-runtime'
+export {
+  createOrdoPopupItems,
+  createOrdoPopupState,
+  openOrdoPopup,
+  applyOrdoPopupKey,
+  selectOrdoPopupItem,
+  canSubmitOrdoPopupMutation,
+} from '@yeisme/dsh-ordo-agent-ops/src/client/popup.ts'
 export type {
   OrdoAgentOpsKey,
   OrdoAgentOpsPanelFace,
@@ -15,3 +23,9 @@ export type {
   OrdoAgentOpsViewState,
   OrdoAgentOpsReadPhase,
 } from '@yeisme/dsh-ordo-agent-ops/client-runtime'
+export type {
+  OrdoPopupCommandId,
+  OrdoPopupItemV1,
+  OrdoPopupStateV1,
+  OrdoPopupKeyEventV1,
+} from '@yeisme/dsh-ordo-agent-ops/src/client/popup.ts'
