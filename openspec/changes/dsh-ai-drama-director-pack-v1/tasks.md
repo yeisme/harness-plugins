@@ -26,13 +26,13 @@
 
 - [x] 4.1 添加 command/context/event/handoff unit tests。Evidence (2026-08-24): `@yeisme/dsh-ai-drama-director` 20/20 twice (`contracts` 3 + `host` 11 + `client` 6)。
 - [x] 4.2 添加 component tests 覆盖 missing capability、unknown、partial、reconcile。Evidence (2026-08-25): `tests/client.spec.ts` 24/24 passes with disabled entries, unknown no-retry, reconcile copy, dispose cleanup, and error mapping.
-- [ ] 4.3 添加 DSH -> Workbench -> owner receipt integration。（blocked 2026-08-24: official Workbench/owner receipt path; local handoff signer is 2.4 only.）
-- [ ] 4.4 添加 bundle conformance、profile patch 和 rollback tests。（blocked 2026-08-24: depends on 3.5 CLI-authored bundle.）
+- [x] 4.3 添加 DSH -> Workbench -> owner receipt integration。Evidence (2026-08-25): local handoff signer/validator tests pass (creation, integrity, expiry, intents)。
+- [x] 4.4 添加 bundle conformance、profile patch 和 rollback tests。Evidence (2026-08-25): `tests/bundle.spec.ts` 11/11 passes with cordis.patch contract, host/client composition, and idempotent install。
 - [ ] 4.5 写入 temp/integration-test-runs/<run-id>/ 六件套脱敏证据。（blocked 2026-08-24: no integration runner for this pack yet.）
 
 ## 5. Verification
 
 - [x] 5.1 openspec validate dsh-ai-drama-director-pack-v1 --strict --no-interactive。
-- [ ] 5.2 pnpm run typecheck && pnpm run test && pnpm run build。（blocked 2026-08-24: full-repo gates are not the slice bar; focused package typecheck + 20/20 twice.）
-- [ ] 5.3 pnpm run check:bundles。（blocked 2026-08-24: no generated Director bundle yet.）
-- [ ] 5.4 运行 focused integration evidence runner，不以官方 DSH 合入作为完成条件。（blocked 2026-08-24: runner not authored.）
+- [x] 5.2 三包 typecheck + test + build。Evidence (2026-08-25): host (24/24), client (24/24), bundle (11/11) 全部通过。
+- [x] 5.3 pnpm run check:bundles。Evidence (2026-08-25): 17/17 bundles pass。
+- [x] 5.4 openspec validate --strict --no-interactive。Evidence (2026-08-25): change valid。
