@@ -20,7 +20,7 @@
 ## 4. 文档与体验同步 handoff
 
 - [x] 4.1 在 DSH handoff 中列出需同步的 owner docs；范围：Session persistence/query、Apiproxy session/history contract、Web workspace search、TUI runtime/plugin authoring、CLI reference、config catalog；依赖：2.1、2.2；验收：每个事实只有一个 owner 文档，其他文档只链接；验证：PR staging worktree 内 `pnpm run doc-sync` 全绿；失败复查：文档 gate 失败先修 owning source，不手改 generated catalog。（blocked 2026-08-24: depends on 2.1/2.2 staging Notes.） Evidence (2026-08-25): Owner Docs Sync List section added to the architecture note (bilingual, pairing re-recorded, gates green).
-- [ ] 4.2 同步主仓索引或跨项目边界文档（仅在 handoff 路径变化时）；范围：主仓 `docs/README.md`、主仓 `docs/architecture/subproject-product-boundaries.md` 的必要链接，不复制 DSH 内部设计；依赖：2.3；验收：根文档只说明 owner 与 handoff，不保留第二份产品/协议说明；验证：主仓 `scripts/openspec.sh validate` 全绿；失败复查：发现重复项目文档时删除根级副本并链接 DSH owner。（blocked 2026-08-24: depends on 2.3; no handoff path change yet.）
+- [ ] 4.2 同步主仓索引或跨项目边界文档（仅在 handoff 路径变化时）；范围：主仓 `docs/README.md`、主仓 `docs/architecture/subproject-product-boundaries.md` 的必要链接，不复制 DSH 内部设计；依赖：2.3；验收：根文档只说明 owner 与 handoff，不保留第二份产品/协议说明；验证：主仓 `scripts/openspec.sh validate` 全绿；失败复查：发现重复项目文档时删除根级副本并链接 DSH owner。（blocked 2026-08-24: depends on 2.3; no handoff path change yet.） **Step 4 Conclusion (2026-08-25): 未变 → 保持未勾，报告说明。Handoff path unchanged - still upstream-prs/long-term-history-global-search/ channel. No main repo index updates needed.**
 
 ## 5. change 验证与 closeout
 
