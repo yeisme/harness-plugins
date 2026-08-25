@@ -38,6 +38,21 @@ pnpm --filter @yeisme/dsh-client-ui-pane-workbench run test:integration
 ## 导航与交互
 
 - 轨道只显示已经打开的上下文视图；`+` 打开区域内 popover view provider 选择器，不生成固定七模块栏，也不会覆盖 DSH 左侧会话栏。
+
+## V4 交互与回滚
+
+- Tab：双击固定；预览 Tab 同资源去重；More Tabs 可搜索；Close Others/Right/Unpinned/Group 任一 deny 则零部分关闭。
+- 拖拽：idle/pending/dragging/committing/cancelling；pointermove 不提交 reducer；reduced-motion 即时提交。键盘 Arrow/Home/End/Enter/Escape 复用同一 drop target。
+- Explorer / Source Control：opaque file/Git refs；Git offline 不阻塞树；timeout 不自动 retry。
+- Designer：`dsh.workspace-designer` 单例；Apply 走 `apply_workspace_draft`；无官方 Settings/Page 时 Core View 是唯一入口。
+- 安装 / 回滚：
+
+```bash
+dsh plugin --profile web add @yeisme/dsh-client-ui-pane-workbench
+dsh plugin --profile web remove @yeisme/dsh-client-ui-pane-workbench
+```
+
+Locale 缺失时 English fallback。CLI 错误与日志保持 English。
 - Tab 旁提供语义图标、更多操作、最大化/恢复和关闭按钮；更多菜单支持固定、跨区域移动和边缘拆分。
 - Tab 支持 Arrow/Home/End 导航、Delete 关闭、Shift+F10 菜单、键盘跨区移动和 split。
 - Pointer drag 可同组排序、跨 group/region 移动或从边缘拆分；无效 drop、Escape、blur、

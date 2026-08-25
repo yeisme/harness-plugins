@@ -8,6 +8,18 @@
  * @module @yeisme/dsh-git-host
  */
 export const GIT_TYPED_ACTIONS_CAPABILITY = 'GitTypedActionsCapabilityV1';
+export const GIT_STATUS_PROJECTION_CAPABILITY_V2 = 'GitStatusProjectionCapabilityV2';
+export const GIT_DIFF_WINDOW_CAPABILITY = 'GitDiffWindowCapabilityV1';
+export const GIT_BRANCH_ACTIONS_CAPABILITY = 'GitBranchActionsCapabilityV1';
+export const GIT_REMOTE_ACTIONS_CAPABILITY = 'GitRemoteActionsCapabilityV1';
+export const GIT_WORKTREE_ACTIONS_CAPABILITY_V2 = 'GitWorktreeActionsCapabilityV2';
+export const GIT_OPTIONAL_CAPABILITIES_V2 = [
+    GIT_STATUS_PROJECTION_CAPABILITY_V2,
+    GIT_DIFF_WINDOW_CAPABILITY,
+    GIT_BRANCH_ACTIONS_CAPABILITY,
+    GIT_REMOTE_ACTIONS_CAPABILITY,
+    GIT_WORKTREE_ACTIONS_CAPABILITY_V2,
+];
 export const GIT_TYPED_ACTIONS = [
     'status',
     'diff',
@@ -22,6 +34,28 @@ const TYPED = new Set(GIT_TYPED_ACTIONS);
 const GATED = new Set(GIT_GATED_ACTIONS);
 export function isGitTypedAction(actionId) {
     return TYPED.has(actionId);
+}
+const OPAQUE_GIT_REF = /^[A-Za-z0-9._~:-]{1,160}$/;
+export function isSafeGitOpaqueRef(value) {
+    return OPAQUE_GIT_REF.test(value) && !value.startsWith('/') && !value.includes('--') && !value.includes(' ');
+}
+export function probeGitOptionalCapability(host, capability) {
+    if (host === undefined)
+        return { available: false, capability, reason: 'git owner is offline' };
+    const advertised = host.capabilities ?? [];
+    if (!advertised.includes(capability))
+        return { available: false, capability, reason: `missing ${capability}` };
+    const present = capability === GIT_STATUS_PROJECTION_CAPABILITY_V2 ? host.statusProjection !== undefined
+        : capability === GIT_DIFF_WINDOW_CAPABILITY ? host.diffWindow !== undefined
+            : capability === GIT_BRANCH_ACTIONS_CAPABILITY ? host.branchActions !== undefined
+                : capability === GIT_REMOTE_ACTIONS_CAPABILITY ? host.remoteActions !== undefined
+                    : host.worktreeActions !== undefined;
+    if (!present)
+        return { available: false, capability, reason: `missing ${capability} handle` };
+    return { available: true, capability, reason: `${capability} available` };
+}
+export function validateGitTypedActionId(actionId) {
+    return isGitTypedAction(actionId) && !actionId.includes(' ') && !actionId.includes('--');
 }
 export function admitGitAction(host, actionId) {
     if (host === undefined) {

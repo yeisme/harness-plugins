@@ -142,7 +142,7 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
             row.error === undefined ? null : createElement('button', {
               type: 'button',
               className: 'pwr-explorer-retry',
-              onClick: event => {
+              onClick: (event: { stopPropagation(): void }) => {
                 event.stopPropagation()
                 emit(reduceExplorerTree(props.state, { type: 'retry', ref: row.ref }))
               },

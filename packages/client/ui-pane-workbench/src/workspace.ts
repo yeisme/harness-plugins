@@ -1094,6 +1094,23 @@ export function validateApplyWorkspaceDraft(
   return { ok: blockers.length === 0, blockers, warnings }
 }
 
+function isKeepInPlaceProtectedView(view: PaneViewInstanceV1): boolean {
+  if (view.dirty || view.closePolicy === 'deny') return true
+  const lifecycle = view.metadata?.lifecycle ?? view.metadata?.status
+  return lifecycle === 'running' || lifecycle === 'approval_required'
+}
+
+function draftRootKeepsProtectedViews(
+  live: PaneWorkspaceV1,
+  region: PaneRegionId,
+  nextRoot: PaneSplitNodeV1,
+): boolean {
+  const retained = new Set(groupIdsInTree(nextRoot))
+  return Object.values(live.views).every(view => (
+    view.region !== region || !isKeepInPlaceProtectedView(view) || retained.has(view.groupId)
+  ))
+}
+
 export function applyWorkspaceDraft(
   state: PaneWorkspaceV1,
   intent: PaneWorkspaceDraftIntentV1,
@@ -1103,8 +1120,14 @@ export function applyWorkspaceDraft(
     return result(state, false, report.blockers[0]?.code ?? 'apply_blocked', report.blockers[0]?.message ?? 'Workspace draft was not applied.')
   }
   const snapshot = cloneSnapshot(state)
-  snapshot.regions.right = { ...snapshot.regions.right, ...intent.draft.regions.right, root: intent.draft.regions.right.root }
-  snapshot.regions.bottom = { ...snapshot.regions.bottom, ...intent.draft.regions.bottom, root: intent.draft.regions.bottom.root }
+  const keepInPlace = intent.draft.providerPlacements.some(placement => placement.kind === 'keep-in-place')
+  for (const region of ['right', 'bottom'] as const) {
+    const draftRegion = intent.draft.regions[region]
+    const nextRoot = keepInPlace && !draftRootKeepsProtectedViews(state, region, draftRegion.root)
+      ? snapshot.regions[region].root
+      : draftRegion.root
+    snapshot.regions[region] = { ...snapshot.regions[region], ...draftRegion, root: nextRoot }
+  }
   return result(commit(state, snapshot), true, 'applied', 'Workspace draft applied.')
 }
 

@@ -82,7 +82,7 @@ export function GitChangesList(props: {
   readonly actions?: SourceControlActionsV1
 }): ReactNode {
   const windowed = windowVirtualRows(props.files, props.scrollTop ?? 0, props.viewportHeight ?? 420, GIT_CHANGES_ROW_HEIGHT)
-  const onRowKey = (event: KeyboardEvent<HTMLDivElement>, file: GitChangedFileV1): void => {
+  const onRowKey = (event: KeyboardEvent<HTMLElement>, file: GitChangedFileV1): void => {
     if (event.key === 'Enter') props.actions?.onOpenDiff?.(file)
     if (event.key === ' ') { event.preventDefault(); props.actions?.onOpenFile?.(file) }
     if (event.key === 'F10' && event.shiftKey) { event.preventDefault(); props.actions?.onOpenDiff?.(file) }
@@ -104,13 +104,13 @@ export function GitChangesList(props: {
           className: 'pwr-git-row',
           style: { height: GIT_CHANGES_ROW_HEIGHT, minHeight: GIT_CHANGES_ROW_HEIGHT, display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' },
           onClick: () => props.actions?.onOpenDiff?.(file),
-          onKeyDown: event => onRowKey(event, file),
+          onKeyDown: (event: KeyboardEvent<HTMLElement>) => onRowKey(event, file),
         },
           createElement('span', { className: 'pwr-git-status', 'data-status-token': gitChangeStatusToken(file.status) }, gitChangeStatusToken(file.status)),
           createElement('span', { className: 'pwr-git-name' }, file.name),
-          createElement('button', { type: 'button', onClick: event => { event.stopPropagation(); props.actions?.onOpenDiff?.(file) } }, t('git.diff')),
-          createElement('button', { type: 'button', onClick: event => { event.stopPropagation(); props.actions?.onOpenFile?.(file) } }, t('explorer.openFile')),
-          props.mutationDisabled === true ? null : createElement('button', { type: 'button', onClick: event => { event.stopPropagation(); props.actions?.onStage?.(file) } }, t('git.stage')),
+          createElement('button', { type: 'button', onClick: (event: KeyboardEvent<HTMLElement> | { stopPropagation(): void }) => { event.stopPropagation(); props.actions?.onOpenDiff?.(file) } }, t('git.diff')),
+          createElement('button', { type: 'button', onClick: (event: { stopPropagation(): void }) => { event.stopPropagation(); props.actions?.onOpenFile?.(file) } }, t('explorer.openFile')),
+          props.mutationDisabled === true ? null : createElement('button', { type: 'button', onClick: (event: { stopPropagation(): void }) => { event.stopPropagation(); props.actions?.onStage?.(file) } }, t('git.stage')),
         )),
       ),
     ),
@@ -140,7 +140,7 @@ export function SourceControlShell(props: SourceControlShellProps): ReactNode {
         createElement('select', {
           'aria-label': t('git.repository'),
           value: props.shell.worktreeRef ?? '',
-          onChange: event => {
+          onChange: (event: { currentTarget: { value: string } }) => {
             const option = (props.repositories ?? []).find(item => item.worktreeRef === event.currentTarget.value)
             if (option !== undefined) props.actions?.onSelectRepository?.(option)
           },
@@ -150,7 +150,7 @@ export function SourceControlShell(props: SourceControlShellProps): ReactNode {
     ),
     createElement('form', {
       className: 'pwr-git-composer',
-      onSubmit: event => {
+      onSubmit: (event: { preventDefault(): void }) => {
         event.preventDefault()
         if (props.mutationDisabled === true) return
         props.actions?.onCommit?.(props.shell.commitMessage)

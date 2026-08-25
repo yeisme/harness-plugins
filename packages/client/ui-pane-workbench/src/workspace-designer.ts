@@ -1,5 +1,15 @@
 import type { PaneRegionId, PaneWorkspaceV1 } from './workspace.js'
 import {
+  inspectWorkspaceApplyUx,
+  restoreWorkspaceFromRollback,
+  saveWorkspaceDraftWithUx,
+  submitWorkspaceApply,
+  type WorkspaceApplyReceiptV1,
+  type WorkspaceApplyRollbackEntryV1,
+  type WorkspaceApplyUxOptionsV1,
+  type WorkspaceApplyUxV1,
+} from './workspace-apply-ux.js'
+import {
   createPaneWorkspaceDraft,
   serializePaneWorkspaceDraft,
   type PaneWorkspaceDraftScopeV1,
@@ -25,6 +35,8 @@ export interface DesignerSessionV1 {
   readonly future: readonly PaneWorkspaceDraftV1[]
   readonly selectedPlacement?: number
   readonly dirty: boolean
+  readonly lastReceipt?: WorkspaceApplyReceiptV1
+  readonly rollback?: WorkspaceApplyRollbackEntryV1
 }
 
 export function createDesignerSession(workspace: PaneWorkspaceV1): DesignerSessionV1 {
@@ -38,10 +50,10 @@ export function createDesignerSession(workspace: PaneWorkspaceV1): DesignerSessi
 
 function push(session: DesignerSessionV1, draft: PaneWorkspaceDraftV1): DesignerSessionV1 {
   return {
+    ...session,
     draft: serializePaneWorkspaceDraft(draft),
     past: [session.draft, ...session.past].slice(0, DESIGNER_HISTORY_LIMIT),
     future: [],
-    selectedPlacement: session.selectedPlacement,
     dirty: true,
   }
 }
@@ -88,10 +100,10 @@ export function undoDesigner(session: DesignerSessionV1): DesignerSessionV1 {
   const previous = session.past[0]
   if (previous === undefined) return session
   return {
+    ...session,
     draft: previous,
     past: session.past.slice(1),
     future: [session.draft, ...session.future].slice(0, DESIGNER_HISTORY_LIMIT),
-    selectedPlacement: session.selectedPlacement,
     dirty: session.past.length > 1,
   }
 }
@@ -100,10 +112,10 @@ export function redoDesigner(session: DesignerSessionV1): DesignerSessionV1 {
   const next = session.future[0]
   if (next === undefined) return session
   return {
+    ...session,
     draft: next,
     past: [session.draft, ...session.past].slice(0, DESIGNER_HISTORY_LIMIT),
     future: session.future.slice(1),
-    selectedPlacement: session.selectedPlacement,
     dirty: true,
   }
 }
@@ -114,6 +126,7 @@ export function discardDesigner(workspace: PaneWorkspaceV1): DesignerSessionV1 {
 
 export function rebaseDesigner(workspace: PaneWorkspaceV1, session: DesignerSessionV1): DesignerSessionV1 {
   return {
+    ...session,
     draft: createPaneWorkspaceDraft(workspace, {
       scope: session.draft.scope,
       providerPlacements: session.draft.providerPlacements,
@@ -123,11 +136,59 @@ export function rebaseDesigner(workspace: PaneWorkspaceV1, session: DesignerSess
     }),
     past: [],
     future: [],
-    selectedPlacement: session.selectedPlacement,
     dirty: true,
   }
 }
 
 export function focusDesignerIssue(session: DesignerSessionV1, index: number): DesignerSessionV1 {
   return { ...session, selectedPlacement: index }
+}
+
+export function inspectDesignerApplyUx(
+  workspace: PaneWorkspaceV1,
+  session: DesignerSessionV1,
+  options: WorkspaceApplyUxOptionsV1 = {},
+): WorkspaceApplyUxV1 {
+  return inspectWorkspaceApplyUx(workspace, session.draft, options, {
+    lastReceipt: session.lastReceipt,
+    rollback: session.rollback,
+  })
+}
+
+export function applyDesignerWorkspace(
+  workspace: PaneWorkspaceV1,
+  session: DesignerSessionV1,
+  options: WorkspaceApplyUxOptionsV1 = {},
+): { readonly workspace: PaneWorkspaceV1; readonly session: DesignerSessionV1 } {
+  const submitted = submitWorkspaceApply(workspace, session.draft, options)
+  return {
+    workspace: submitted.workspace,
+    session: {
+      ...session,
+      lastReceipt: submitted.receipt,
+      rollback: submitted.rollback,
+      dirty: submitted.receipt.status === 'accepted' ? false : session.dirty,
+    },
+  }
+}
+
+export async function saveDesignerWorkspace(
+  session: DesignerSessionV1,
+  options: WorkspaceApplyUxOptionsV1 = {},
+): Promise<DesignerSessionV1> {
+  const receipt = await saveWorkspaceDraftWithUx(session.draft, options)
+  return { ...session, lastReceipt: receipt }
+}
+
+export function rollbackDesignerWorkspace(
+  session: DesignerSessionV1,
+): { readonly workspace?: PaneWorkspaceV1; readonly session: DesignerSessionV1 } {
+  if (session.rollback === undefined) return { session }
+  return {
+    workspace: restoreWorkspaceFromRollback(session.rollback),
+    session: {
+      ...session,
+      lastReceipt: { action: 'apply', status: 'accepted', reason: 'rolled_back' },
+    },
+  }
 }

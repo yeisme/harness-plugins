@@ -7,7 +7,7 @@ import {
   isSafeGitOpaqueRef,
   probeGitOptionalCapability,
   type GitHostV1,
-} from './index.ts'
+} from './index.js'
 
 export const GIT_MUTATION_KINDS = ['stage', 'unstage', 'discard', 'commit'] as const
 export type GitMutationKindV1 = (typeof GIT_MUTATION_KINDS)[number]
