@@ -3,6 +3,7 @@ packages:
 
 allowBuilds:
   esbuild: true
+  msw: false
 
 # A standalone plugin repo consumes the published DeepSeek Harness surface,
 # never its vendored source. Keep peerDependencies of @deepseek-ai/dsh-* at
@@ -78,4 +79,3 @@ minimumReleaseAgeExclude:
   - '@oh-my-pi/pi-utils@17.3.5'
   - '@deepseek-ai/dsh-client-ui-layout@0.1.0-rc.8'
   - '@deepseek-ai/dsh-client-ui-theme@0.1.0-rc.8'
-
