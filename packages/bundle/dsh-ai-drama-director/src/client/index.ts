@@ -7,4 +7,5 @@
  * @module @yeisme/dsh-ai-drama-director/client
  */
 
+// @ts-ignore - client bundle is built separately with ModuleLoader
 export { apply, inject, name } from '@yeisme/dsh-client-ui-ai-drama-director/client'
