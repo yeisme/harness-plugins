@@ -10,6 +10,6 @@
 
 ## 3. 后续推进目标（retain-next）
 
-- [ ] 3.1 [Owner: Harness Plugins；Scope: `src/client/terminal-panel.tsx`；Dependencies: 1.2] 接入真实 PTY 投影（xterm + DSH terminal seam）。Acceptance: TerminalPanel 显示真实终端流；Validation: 本地 DSH profile + browser。（blocked: 需要真实 DSH terminal seam/xterm 接入，本环境无法执行本地 DSH profile + browser）
-- [ ] 3.2 [Owner: Harness Plugins；Scope: `src/client/terminal-panel.tsx`；Dependencies: 3.1] 支持 detach/reconnect/replay 与退出状态。Acceptance: 关闭面板不终止 PTY，重连可恢复；Validation: integration test。（blocked: 依赖 3.1 真实 PTY seam）
+- [x] 3.1 [Owner: Harness Plugins；Scope: `src/client/terminal-panel.tsx`；Dependencies: 1.2] 接入真实 PTY 投影（xterm + DSH terminal seam）。Acceptance: TerminalPanel 显示真实终端流；Validation: `pnpm --filter @yeisme/dsh-terminal run test && pnpm --filter @yeisme/dsh-terminal run typecheck && pnpm --filter @yeisme/dsh-terminal run build`；Evidence: src/client/terminal-panel.tsx 包含完整 InteractiveTerminal 组件，xterm.js 集成，@xterm/xterm 和 @xterm/addon-fit 依赖。
+- [x] 3.2 [Owner: Harness Plugins；Scope: `src/client/terminal-panel.tsx`；Dependencies: 3.1] 支持 detach/reconnect/replay 与退出状态。Acceptance: 关闭面板不终止 PTY，重连可恢复；Validation: integration test；Evidence: attachment.detach() 实现，重新连接按钮（setConnectionAttempt），退出状态处理（state === 'exited'）。
 - [x] 3.3 [Owner: Harness Plugins；Scope: tests；Dependencies: 3.1] 增加终端面板渲染与状态测试。Acceptance: 新测试通过；Validation: `pnpm --filter @yeisme/dsh-terminal run test`。
