@@ -113,7 +113,7 @@ export class PreviewRenditionCache {
 }
 
 /** Persistence projection: identity only, never content or access sources. */
-export function previewCachePersistenceProjection(cache: PreviewRenditionCache): readonly string[] {
+export function previewCachePersistenceProjection(_cache: PreviewRenditionCache): readonly string[] {
   return []
 }
 

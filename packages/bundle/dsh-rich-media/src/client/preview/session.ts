@@ -96,7 +96,10 @@ export class PreviewSessionController {
 
   async compare(resource: PreviewResourceV1, options: PreviewOpenOptions = {}): Promise<PreviewVisibleRecord> {
     const previous = this.record.version
-    return this.activate(resource, options, { replace: false, compareVersion: previous })
+    return this.activate(resource, options, {
+      replace: false,
+      ...(previous === undefined ? {} : { compareVersion: previous }),
+    })
   }
 
   markStale(version?: string): PreviewVisibleRecord {
