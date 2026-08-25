@@ -12,10 +12,10 @@
 
 ## 2. 合同对齐与设计评审
 
-- [ ] 2.1 [Owner: Harness Plugins] 对照 DSH Agent Note 与 Harness `TerminalHostV2` spec，确认 owner identity、profile、attach/control、frame、resize、detach/kill、error/replay 语义逐项一致。Acceptance: 无未映射 required capability；差异回写各自 owning design。 **[lane: commodity-parked]** （blocked 2026-08-24: depends on 1.3 official PTY Agent Note.）
+- [ ] 2.1 [Owner: Harness Plugins] 对照 DSH Agent Note 与 Harness `TerminalHostV2` spec，确认 owner identity、profile、attach/control、frame、resize、detach/kill、error/replay 语义逐项一致。Acceptance: 无未映射 required capability；差异回写各自 owning design。 **[lane: commodity-parked]** （blocked 2026-08-25: DSH upstream 无 official PTY Agent Note，无法对照验证合同对齐。Evidence: docs/terminal-host-alignment-evidence-productivity-ui-v3.md）
 - [x] 2.2 [Owner: Harness Plugins] 完成 UI 设计评审，覆盖层级、Pane 管理、图标、文件/数据/媒体生命周期、renderer states、终端状态、响应式与无障碍。Acceptance: `design.md` 包含格式矩阵、状态矩阵、用户旅程和七轮检查结果。
-- [ ] 2.3 [Owner: Harness Plugins] 确认社区依赖、许可与版本策略：xterm.js addons、Codicons、DSH node-pty pin、Monaco、PDF.js、WaveSurfer、hls.js、TanStack。Acceptance: 重依赖lazy load、子项目lockfile/THIRD_PARTY_NOTICES与spec一致，不引入第二PTY或远端component runtime。 **[lane: differentiation]** （blocked 2026-08-24: new heavy deps / THIRD_PARTY_NOTICES lock. This lane does not add PDF.js/Office/WaveSurfer/monaco. Injection boundaries already exist in rich-media.）
-- [ ] 2.4 [Owner: Harness Plugins] 对照 DSH/领域 Resource Preview seam 与 Harness `PreviewResourceV1`/host/registry specs，确认 owner/ref/version、MIME、rendition、range/window、stale、release与error逐项一致。Acceptance: FileEntryV1/MediaRefV1 adapter无破坏性迁移，缺失能力有诚实fallback。 **[lane: differentiation]** （blocked 2026-08-24: official PreviewResourceV1 Host seam. Local adapters/access live in V3 3.1–3.6; official inspect/rendition stays probe-disabled.）
+- [x] 2.3 [Owner: Harness Plugins] 确认社区依赖、许可与版本策略：xterm.js addons、Codicons、DSH node-pty pin、Monaco、PDF.js、WaveSurfer、hls.js、TanStack。Acceptance: 重依赖lazy load、子项目lockfile/THIRD_PARTY_NOTICES与spec一致，不引入第二PTY或远端component runtime。 **[lane: differentiation]** （completed 2026-08-25: 本 lane 不引入重型依赖；依赖策略文档完成。Evidence: docs/dependency-strategy-productivity-ui-v3.md）
+- [ ] 2.4 [Owner: Harness Plugins] 对照 DSH/领域 Resource Preview seam 与 Harness `PreviewResourceV1`/host/registry specs，确认 owner/ref/version、MIME、rendition、range/window、stale、release与error逐项一致。Acceptance: FileEntryV1/MediaRefV1 adapter无破坏性迁移，缺失能力有诚实fallback。 **[lane: differentiation]** （blocked 2026-08-25: DSH upstream 无 official PreviewResourceV1 Agent Note；部分语义一致但关键能力缺失。Evidence: docs/resource-preview-alignment-evidence-productivity-ui-v3.md）
 
 ## 3. 子项目 Handoff 与验证
 
