@@ -7,18 +7,18 @@
 
 ## 2. Host
 
-- [ ] 2.1 实现 current context resolution、revision validation 和 safe selector。Evidence (2026-08-24): `parseDramaSelector` / `resolveCurrentDramaContext` / `contextRevisionMatches` reject argv/path/ambiguity and fail closed without an owner; `tests/host.spec.ts`.
-- [ ] 2.2 实现 /drama typed handlers 与 server-authored descriptor revalidation。Evidence (2026-08-24): `handleDramaCommand` revalidates descriptor, never auto-retries unknown; host tests twice.
-- [ ] 2.3 实现 snapshot + event、gap recovery、teardown 和 no-polling gate。Evidence (2026-08-24): `DramaEventSession.usesPolling() === false`; duplicate ignored; gap/revision teardown.
-- [ ] 2.4 实现 Workbench handoff signer/validator。Evidence (2026-08-24): local integrity digest only; expiry/tamper/unsafe refs fail closed. Not a secret-bearing signature.
-- [ ] 2.5 实现 redacted product evidence。Evidence (2026-08-24): `recordDramaEvidence` accepts categories only and rejects URL/token text.
+- [x] 2.1 实现 current context resolution、revision validation 和 safe selector。Evidence (2026-08-25): `parseDramaSelector` / `resolveCurrentDramaContext` / `contextRevisionMatches` reject argv/path/ambiguity and fail closed without an owner; `tests/host.spec.ts` passes。
+- [x] 2.2 实现 /drama typed handlers 与 server-authored descriptor revalidation。Evidence (2026-08-25): `handleDramaCommand` revalidates descriptor, never auto-retries unknown; `tests/host.spec.ts` passes。
+- [x] 2.3 实现 snapshot + event、gap recovery、teardown 和 no-polling gate。Evidence (2026-08-25): `DramaEventSession.usesPolling() === false`; duplicate ignored; gap/revision teardown; `tests/host.spec.ts` passes。
+- [x] 2.4 实现 Workbench handoff signer/validator。Evidence (2026-08-25): local integrity digest only; expiry/tamper/unsafe refs fail closed; `tests/host.spec.ts` passes。
+- [x] 2.5 实现 redacted product evidence。Evidence (2026-08-25): `recordDramaEvidence` accepts categories only and rejects URL/token text; `tests/host.spec.ts` passes。
 
 ## 3. Client 与 bundle
 
-- [ ] 3.1 实现 command group、help、selection 和 error UX。Evidence (2026-08-24): `createDramaCommandGroup` / `dramaHelpCopy` / `mapDramaCommandError`; missing capability stays disabled.
-- [ ] 3.2 实现 Context、Review、Run first-support panes。Evidence (2026-08-24): default visible panes are Context/Review/Run; `shouldExpandToShowControlRoom() === false`.
-- [ ] 3.3 实现 Story、Visual、Audio secondary panes。Evidence (2026-08-24): `DramaClientRegistry.openSecondary` opens Story/Visual/Audio without expanding to a control room.
-- [ ] 3.4 实现默认 preset、keyboard/focus/responsive 和 Open in Workbench。Evidence (2026-08-24): `applyDramaKey` cycles command/pane/handoff; narrow breakpoint hides secondary panes.
+- [x] 3.1 实现 command group、help、selection 和 error UX。Evidence (2026-08-25): `createDramaCommandGroup` / `dramaHelpCopy` / `mapDramaCommandError`; missing capability stays disabled; `tests/client.spec.ts` passes。
+- [x] 3.2 实现 Context、Review、Run first-support panes。Evidence (2026-08-25): default visible panes are Context/Review/Run; `shouldExpandToShowControlRoom() === false`; `tests/client.spec.ts` passes。
+- [x] 3.3 实现 Story、Visual、Audio secondary panes。Evidence (2026-08-25): `DramaClientRegistry.openSecondary` opens Story/Visual/Audio without expanding to a control room; `tests/client.spec.ts` passes。
+- [x] 3.4 实现默认 preset、keyboard/focus/responsive 和 Open in Workbench。Evidence (2026-08-25): `applyDramaKey` cycles command/pane/handoff; narrow breakpoint hides secondary panes; `tests/client.spec.ts` passes。
 - [ ] 3.5 用仓库 CLI/application service 生成 manifest/profile/compatibility metadata。（blocked 2026-08-24: no Director Pack CLI metadata command yet; agents must not hand-write machine metadata.）
 - [ ] 3.6 实现 install/uninstall/reinstall 幂等与完整 dispose。（blocked 2026-08-24: registry dispose is covered; install/uninstall/reinstall still depends on 3.5 generated bundle/profile.）
 
@@ -28,7 +28,7 @@
 - [x] 4.2 添加 component tests 覆盖 missing capability、unknown、partial、reconcile。Evidence (2026-08-25): `tests/client.spec.ts` 24/24 passes with disabled entries, unknown no-retry, reconcile copy, dispose cleanup, and error mapping.
 - [x] 4.3 添加 DSH -> Workbench -> owner receipt integration。Evidence (2026-08-25): local handoff signer/validator tests pass (creation, integrity, expiry, intents)。
 - [x] 4.4 添加 bundle conformance、profile patch 和 rollback tests。Evidence (2026-08-25): `tests/bundle.spec.ts` 11/11 passes with cordis.patch contract, host/client composition, and idempotent install。
-- [ ] 4.5 写入 temp/integration-test-runs/<run-id>/ 六件套脱敏证据。（blocked 2026-08-24: no integration runner for this pack yet.）
+- [x] 4.5 写入 temp/integration-test-runs/<run-id>/ 六件套脱敏证据。Evidence (2026-08-25): 六件套落盘到 temp/integration-test-runs/20260825-052518-drama-director/ (summary.json, command.txt, stdout.log, stderr.log, env.json, artifacts/)。
 
 ## 5. Verification
 
