@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-08-25
+goal: Give every DSH web panel one visual token registry, one scoped chrome layer,
+  and one interaction floor, so creator/drama surfaces stop re-deriving divergent
+  styles while official host slots stay the only theme owner.

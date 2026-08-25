@@ -1,10 +1,10 @@
 /** Domain Pane views. Status is never color-only; mutations stay owner-gated. */
 
 import { createElement, useSyncExternalStore, type ReactNode } from 'react'
+import { buildPanelStyles, statusTone } from '@yeisme/dsh-client-ui-visual-kit'
 import { DOMAIN_BADGES, SUBAGENT_BADGE, type DomainOwner } from './owners.js'
 import { admitDomainAction, admitOrdoClientAction } from './actions.js'
 import type { DomainItemV1, DomainSnapshotV1 } from './snapshot.js'
-import { ordoSubagentDeepLink } from './ordo.js'
 
 export interface DomainPaneViewProps {
   readonly snapshot: DomainSnapshotV1
@@ -17,6 +17,9 @@ export interface DomainPaneViewProps {
 const VISIBLE_WINDOW = 80
 const VISIBLE_TIMELINE = 5
 
+/** 统一面板样式：token fallback 单点声明，规则限定在 [data-pane-domain]。 */
+const domainPaneStyles = buildPanelStyles({ scope: 'pane-domain' })
+
 function actionDisabled(snapshot: DomainSnapshotV1, actionId: string): { disabled: boolean; reason: string } {
   const admission = snapshot.owner === 'ordo' ? admitOrdoClientAction(snapshot, actionId) : admitDomainAction(snapshot, actionId)
   if (admission.kind === 'allowed') return { disabled: false, reason: '' }
@@ -28,45 +31,61 @@ export function DomainPaneView({ snapshot, onAction, onDeepLink }: DomainPaneVie
   const visible = snapshot.items.slice(0, VISIBLE_WINDOW)
   const truncated = snapshot.items.length > visible.length
   const timeline = snapshot.timeline?.slice(-VISIBLE_TIMELINE) ?? []
+  const tone = statusTone(snapshot.status)
   return createElement('section', {
     'data-pane-domain': snapshot.owner,
     'data-status': snapshot.status,
     'data-freshness': snapshot.freshness,
     'data-badge': DOMAIN_BADGES[snapshot.owner],
   },
-    createElement('header', { 'data-owner-badge': true }, DOMAIN_BADGES[snapshot.owner]),
-    snapshot.owner === 'ordo' ? createElement('p', { 'data-subagent-boundary': true }, `Not ${SUBAGENT_BADGE}`) : null,
+    createElement('style', null, domainPaneStyles),
+    createElement('header', { className: 'vk-header' },
+      createElement('strong', { className: 'vk-heading', 'data-owner-badge': true }, DOMAIN_BADGES[snapshot.owner]),
+      createElement('p', { className: 'vk-sub', role: 'status' },
+        createElement('i', { className: 'vk-dot', 'data-tone': tone, 'aria-hidden': true }),
+        `${snapshot.status} · ${snapshot.freshness}`),
+    ),
+    snapshot.owner === 'ordo' ? createElement('p', { className: 'vk-alert', 'data-tone': 'info', 'data-subagent-boundary': true }, `Not ${SUBAGENT_BADGE}`) : null,
     snapshot.owner === 'eikona' && snapshot.modelRef !== undefined
-      ? createElement('p', { 'data-model-ref': true }, snapshot.modelRef)
+      ? createElement('p', { className: 'vk-muted', 'data-model-ref': true }, snapshot.modelRef)
       : null,
-    createElement('p', { role: 'status' }, snapshot.status),
     snapshot.reconcileReason === undefined ? null
-      : createElement('p', { 'data-reconcile-reason': true }, snapshot.reconcileReason),
+      : createElement('p', { className: 'vk-alert', 'data-reconcile-reason': true }, snapshot.reconcileReason),
     visible.length === 0
-      ? createElement('p', null, 'No owner projection.')
-      : createElement('ul', { 'data-virtualized': truncated || undefined, 'aria-rowcount': snapshot.items.length },
+      ? createElement('div', { className: 'vk-empty' },
+        createElement('p', null, 'No owner projection.'),
+        createElement('small', null, 'Owner source 未挂载或暂无投影；通道恢复时自动权威重读，无需手动重试。'))
+      : createElement('ul', { className: 'vk-section', 'data-virtualized': truncated || undefined, 'aria-rowcount': snapshot.items.length },
         visible.map(item => createElement('li', {
           key: item.ref,
+          className: 'vk-row',
           'data-item-ref': item.ref,
           'data-item-kind': item.kind,
           'data-item-status': item.status,
           'data-partial': item.partial || undefined,
         },
-          `${item.title}${item.partial === true ? ' · partial' : ''}`,
-          item.link === undefined ? null : createElement('button', {
+          createElement('span', { className: 'vk-badge' }, item.kind),
+          createElement('span', null,
+            createElement('strong', null, item.title),
+            item.partial === true ? createElement('small', null, ' · partial') : null,
+            item.summary === undefined ? null : createElement('small', null, item.summary)),
+          item.link === undefined ? createElement('span', null) : createElement('button', {
             type: 'button',
+            className: 'vk-btn',
             'aria-label': `open ${item.link.kind} ${item.link.ref}`,
             'data-deep-link': item.link.kind,
             onClick: () => { onDeepLink?.(item) },
           }, 'Open session')))),
+    truncated ? createElement('p', { className: 'vk-muted' }, `${visible.length} of ${snapshot.items.length} rows rendered`) : null,
     timeline.length === 0 ? null
-      : createElement('ul', { 'data-live-timeline': true, 'aria-label': 'Owner live events' },
-        timeline.map((entry, index) => createElement('li', { key: `${index}:${entry.summary.slice(0, 48)}` }, entry.summary))),
-    createElement('div', { role: 'group', 'aria-label': 'Owner actions' }, snapshot.allowedActions.map(action => {
+      : createElement('ul', { className: 'vk-section', 'data-live-timeline': true, 'aria-label': 'Owner live events' },
+        timeline.map((entry, index) => createElement('li', { key: `${index}:${entry.summary.slice(0, 48)}`, className: 'vk-muted' }, entry.summary))),
+    createElement('div', { className: 'vk-toolbar', role: 'group', 'aria-label': 'Owner actions' }, snapshot.allowedActions.map(action => {
       const gate = actionDisabled(snapshot, action.id)
       return createElement('button', {
         key: action.id,
         type: 'button',
+        className: 'vk-btn',
         disabled: gate.disabled,
         'aria-label': action.id,
         title: gate.reason || undefined,

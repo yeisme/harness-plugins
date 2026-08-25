@@ -37,6 +37,7 @@
     "build": "tsdown src/index.ts src/client.ts --out-dir lib --format esm --dts --clean"
   },
   "dependencies": {
+    "@yeisme/dsh-client-ui-visual-kit": "workspace:^",
     "@yeisme/dsh-pane-protocol": "workspace:^"
   },
   "peerDependencies": {

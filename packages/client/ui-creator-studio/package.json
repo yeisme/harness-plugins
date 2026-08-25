@@ -39,6 +39,7 @@
   },
   "dependencies": {
     "@yeisme/dsh-client-ui-pane-workbench": "workspace:^",
+    "@yeisme/dsh-client-ui-visual-kit": "workspace:^",
     "@yeisme/dsh-creator-studio-host": "workspace:^",
     "@yeisme/dsh-pane-protocol": "workspace:^",
     "@yeisme/dsh-rich-media": "workspace:*"

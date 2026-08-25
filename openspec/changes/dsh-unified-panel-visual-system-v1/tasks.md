@@ -1,0 +1,23 @@
+## 1. 审计与设计冻结
+
+- [x] 1.1 [Owner: Harness Plugins] 完成面板样式/交互差异审计并固化为证据文档。范围：`packages/client/*` 的 token fallback 分歧、同义词双词汇、状态色/圆角/控件高度/交互底线差异，含 file:line。依赖：无。验收：`docs/design/dsh-unified-panel-visual-system.md` 的现状表覆盖全部含样式面板并给出 file:line。验证：文档表格逐行可对照源码。失败复查：发现遗漏面板时补审计再冻结。 Evidence (2026-08-25): `docs/design/dsh-unified-panel-visual-system.md` §1 现状表（bg-elevated 单文件 4 值、label-primary 3 值、双词汇、domain panes 零样式等，均带 file:line）。
+- [x] 1.2 [Owner: Harness Plugins] 冻结 canonical token registry 与状态 tone 词表。范围：`--dsw-alias-*` canonical 名+唯一 fallback、同义词映射、status/freshness→tone 词表、尺寸/圆角/字体刻度。依赖：1.1。验收：registry 中每个 token 只有一个 fallback；官方 host 变量优先语义写明。验证：`pnpm --filter @yeisme/dsh-client-ui-visual-kit run test`。失败复查：与官方 host 实际变量冲突时回到设计修订，不双轨。 Evidence (2026-08-25): `packages/client/ui-visual-kit/src/tokens.ts`（PANEL_TOKENS/TOKEN_SYNONYMS/PANEL_SCALE）+ `src/status.ts`（statusTone 词表），决策依据见 design 文档 §2；kit 单测 13/13 绿（两次）。
+
+## 2. 基础包 `@yeisme/dsh-client-ui-visual-kit`
+
+- [x] 2.1 [Owner: `packages/client/ui-visual-kit`] 实现包骨架与 token registry：canonical fallback、同义词映射、`statusTone()`、刻度常量；零运行时依赖。依赖：1.2。验收：导出面最小且带类型；单测覆盖 token 唯一性、同义词等价、词表外 neutral 兜底。验证：`pnpm --filter @yeisme/dsh-client-ui-visual-kit run test && pnpm --filter @yeisme/dsh-client-ui-visual-kit run typecheck`。失败复查：导出泄漏 DOM/网络能力时收回到纯常量。 Evidence (2026-08-25): 包无 dependencies/peerDependencies；`tokens.test.ts`/`status.test.ts` 13 用例两次绿；typecheck/build 绿。
+- [x] 2.2 [Owner: `packages/client/ui-visual-kit`] 实现 `buildPanelStyles({ scope, accent?, extra? })`：根节点单点 token fallback 声明、base/chrome/state 三层规则、focus-visible、reduced-motion、390px 无横向溢出；全部规则限定 scope。依赖：2.1。验收：单测断言 scope 隔离、token 单点声明、幂等注入、动画降级；无跨 scope 选择器。验证：同 2.1。失败复查：出现未 scope 规则即视为缺陷，不靠调用方补救。 Evidence (2026-08-25): `src/panel-styles.ts` + `panel-styles.test.ts`（scope 隔离、token 单点、幂等、reduced-motion/coarse 44px）两次绿；keyframes 以 scope 命名避免跨面板冲突。
+- [x] 2.3 [Owner: `packages/client/ui-visual-kit`] 编写包 README：采纳指南、迁移步骤、与官方主题的关系、非目标。依赖：2.2。验收：README 覆盖同义词迁移与 `extra` 扩展约定。验证：`pnpm run doc-sync` 不报缺失。 Evidence (2026-08-25): `packages/client/ui-visual-kit/README.md` 含采纳五步、同义词表、状态语义、交互底线、非目标。
+
+## 3. 采纳切片（按用户价值排序）
+
+- [x] 3.1 [Owner: `packages/client/ui-pane-domain`] domain panes 接入 visual kit：注入 `buildPanelStyles({ scope: 'pane-domain' })`，结构化 header/status/items/actions/timeline，状态用 `statusTone()` 且非仅颜色，empty/disabled/focus 底线补齐。依赖：2.2。验收：六个 owner pane（eikona/scaena/sonora/auctra/pinax/anatomia/ordo）渲染同一 chrome；既有投影/合同不变。验证：`pnpm --filter @yeisme/dsh-client-ui-pane-domain run test`（含新增样式断言）。 Evidence (2026-08-25): `src/view.ts` 注入 kit 样式并保留全部既有 data-*/role/文本合同；新增 `tests/visual-adoption.spec.ts`（样式串逐字节等于 kit 输出、tone 非仅颜色、empty 解释、disabled 原因、item 属性保持）；109/109 两次绿，typecheck/build 绿。空态不设手动重试（`reread()` 合同限定 open/transport 恢复），见 design §2.4。
+- [x] 3.2 [Owner: `packages/client/ui-creator-studio`] creator-studio 样式串迁移到 kit：token 归一、状态色走 `statusTone()`、自有规则经 `extra` 保留。依赖：2.2。验收：视觉不回退（既有 views 测试全绿+新增样式断言），fallback 分歧清零。验证：`pnpm --filter @yeisme/dsh-client-ui-creator-studio run test`。 Evidence (2026-08-25): `src/styles.ts` 重写为 `buildPanelStyles({scope:'creator-studio',accentFallback:'#9bcbff',extra})`；cs-* 规则全部加 `[data-creator-studio]` scope、只消费 `--vk-*`、状态色改 tone 变量；新增 `tests/styles.spec.ts`（token 单点、无同义词、状态 hex 仅根块一次、scope 全覆盖）；11/11 两次绿，typecheck/build 绿，views.spec 渲染断言不回退。
+- [ ] 3.3 [Owner: 后续切片] pane-workbench chrome fallback 归一（region-chrome/explorer/git）。依赖：2.2。验收：单文件多 fallback 清零，既有 chrome 测试全绿。验证：`pnpm --filter @yeisme/dsh-client-ui-pane-workbench run test`。
+- [ ] 3.4 [Owner: 后续切片] session-tags / cookie-manager / next-step-suggestions / conversation-rewrite / agent-preset 接入 kit。依赖：2.2。验收：各包测试全绿+样式断言。验证：逐包 `pnpm --filter <pkg> run test`。
+- [ ] 3.5 [Owner: 后续切片] desktop-workbench 与 pane-subagent 同义词迁移（`label-*`/`state-*`→canonical）。依赖：2.2。验收：迁移后视觉等价（同义词映射测试）。验证：`pnpm --filter @yeisme/dsh-client-ui-desktop-workbench run test && pnpm --filter @yeisme/dsh-client-ui-pane-subagent run test`。
+
+## 4. 验证与文档
+
+- [x] 4.1 [Owner: Harness Plugins] 全量门：`pnpm install && pnpm run typecheck && pnpm run test && pnpm run build && pnpm run check:bundles`；focused vitest 跑两次并记录。依赖：3.1、3.2。验收：全绿；失败保留输出并分类。验证：CI 同命令。 Evidence (2026-08-25): typecheck exit 0（-r build+tsc）；`pnpm run test` 49 个包套件全绿 0 失败；`pnpm run build` exit 0；`check:bundles` 17/17 PASS；focused：kit 13/13、pane-domain 109/109、creator-studio 11/11，各两次。
+- [x] 4.2 [Owner: Harness Plugins] `openspec validate dsh-unified-panel-visual-system-v1 --strict --no-interactive` 通过；docs 与 README 同步；不宣称官方 host/`dsh web` 验证。依赖：4.1。验收：validate exit 0；文档只声明本仓库验证。验证：命令回显。 Evidence (2026-08-25): strict validate 回显 valid；`docs/design/dsh-unified-panel-visual-system.md` + kit README + change README 就位，全部只声明本仓库验证。
