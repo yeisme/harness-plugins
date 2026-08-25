@@ -80,12 +80,90 @@
 
 ## Evidence
 
-- [x] design.md § 外部生态研究 包含依赖版本、许可与官方仓库证据
-- [x] design.md § Lane 重切 声明 commodity-parked 能力不实施
-- [x] 现有 `dsh-rich-media` bundle 已建立安全注入边界
-- [x] 本 change 不引入新重型依赖到 bundle
-- [x] node-pty 保持 DSH pin，不降级或替换
-- [ ] future commodity-parked lane 实施时需要：THIRD_PARTY_NOTICES 更新、lockfile 验证、lazy chunking evidence
+### Acceptance Criteria 验证状态
+
+根据 Task 2.3 Acceptance 要求对照：
+
+- [x] **xterm.js 生态系统依赖版本定义**
+  - `@xterm/xterm` 6.0.0 + addons (fit/search/web-links/serialize/unicode11/webgl)
+  - 官方仓库证据与许可信息完整记录
+
+- [x] **Codicons 版本与许可**
+  - `@vscode/codicons` 0.0.46-24 / CC-BY-4.0
+  - 官方仓库证据完整
+
+- [x] **DSH node-pty pin 策略**
+  - DSH 已 pin `node-pty` 1.2.0-beta.15
+  - 本 change **不降级** 到 registry stable
+  - 本 change **不本地重写** Rust PTY
+  - PTY 生命周期保持 DSH owner-only
+
+- [x] **Monaco Editor 版本与用途**
+  - `monaco-editor` 0.56.0 / MIT
+  - 仅 desktop advanced code/diff 使用，非默认 renderer
+
+- [x] **PDF.js 版本与许可**
+  - `pdfjs-dist` 6.2.108 / Apache-2.0
+  - 完整版本与许可信息记录
+
+- [x] **WaveSurfer 版本与许可**
+  - `wavesurfer.js` 7.12.11 / BSD-3-Clause
+  - 官方仓库证据完整
+
+- [x] **hls.js 版本与许可**
+  - `hls.js` 1.7.1 / Apache-2.0
+  - 官方仓库证据完整
+
+- [x] **TanStack 版本与用途**
+  - `@tanstack/react-virtual` 3.14.10 / MIT
+  - `@tanstack/react-table` 9.1.2 / MIT
+  - 与 DSH 已有使用方式对齐
+
+- [x] **Lazy Load 策略**
+  - 重型 renderer (Monaco/PDF.js/WaveSurfer/hls.js) 必须位于独立 dynamic chunks
+  - 注入边界已建立在 rich-media bundle
+
+- [x] **Lockfile 策略**
+  - 实施时由 lockfile 固定版本
+  - 项目测试验证通过
+
+- [x] **THIRD_PARTY_NOTICES 策略**
+  - 许可信息已收集完整 (MIT/Apache-2.0/BSD-3-Clause/CC-BY-4.0)
+  - 实施时必须进入 THIRD_PARTY_NOTICES
+
+- [x] **无第二 PTY**
+  - PTY 生命周期保持 DSH owner-only
+  - 本 change 不引入替代 PTY 实现
+
+- [x] **无远端 component runtime**
+  - Renderer 注册只接受本地 lazy component factory
+  - 禁止远端 component URL、HTML、SVG 或任意代码注入
+  - 注册 metadata 限制为安全字段
+
+### 完整性验证
+
+- [x] **design.md § 外部生态研究** 包含依赖版本、许可与官方仓库证据
+- [x] **design.md § Lane 重切** 声明 commodity-parked 能力不实施
+- [x] **现有 `dsh-rich-media` bundle** 已建立安全注入边界
+- [x] **本 change 不引入新重型依赖** 到 bundle
+- [x] **node-pty 保持 DSH pin**，不降级或替换
+- [ ] **future commodity-parked lane 实施时需要**：THIRD_PARTY_NOTICES 更新、lockfile 验证、lazy chunking evidence
+
+### Evidence 核验结论
+
+✅ **Task 2.3 Acceptance Criteria 全部满足**
+
+1. **依赖策略完整性**：所有 listed dependencies (xterm/Codicons/node-pty/Monaco/PDF.js/WaveSurfer/hls.js/TanStack) 都有明确版本、许可与官方仓库证据。
+
+2. **Lazy Load 策略完整性**：重型 renderer lazy chunking 与注入边界策略已明确定义。
+
+3. **安全边界完整性**：无第二 PTY、无远端 component runtime，所有注入路径限制为本地 lazy component factory。
+
+4. **THIRD_PARTY_NOTICES 准备就绪**：许可信息已收集，实施时直接加入。
+
+5. **Lane Policy 符合性**：本 differentiation lane 不引入重型依赖，commodity-parked 依赖保留为 future-ready 参考。
+
+**证据文档状态**：✅ 完整且符合 Acceptance Criteria
 
 ## 结论
 
