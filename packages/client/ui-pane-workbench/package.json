@@ -39,6 +39,7 @@
     "test:integration": "node scripts/run-integration-tests.mjs"
   },
   "dependencies": {
+    "@yeisme/dsh-client-ui-visual-kit": "workspace:^",
     "@yeisme/dsh-pane-protocol": "workspace:^"
   },
   "peerDependencies": {

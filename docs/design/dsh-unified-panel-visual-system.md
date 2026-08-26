@@ -89,7 +89,7 @@ domain pane 空态不提供手动重试按钮：`DomainOwnerSourceBridge.reread(
 
 1. `ui-pane-domain`（六个创作工具 pane，零样式 → 统一 chrome）✅ 3.1
 2. `ui-creator-studio`（token 归一 + 状态色入 tone + 规则 scope 化）✅ 3.2
-3. `ui-pane-workbench` chrome fallback 归一（region-chrome/explorer/git）
+3. `ui-pane-workbench` chrome fallback 归一（region-chrome/explorer/git）✅ 3.3（2026-08-26：34 处 fallback 并入 `.pwr-root` 单点声明）
 4. `ui-session-tags`/`ui-session-cookie-manager`/`ui-next-step-suggestions`/`ui-conversation-rewrite`/`ui-agent-preset`
 5. `ui-desktop-workbench`/`ui-pane-subagent` 同义词迁移
 
