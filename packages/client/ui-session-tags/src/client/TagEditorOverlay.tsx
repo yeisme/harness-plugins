@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { sessionTagsOverlayStyles } from './styles.ts'
 
 export interface TagEditorOverlayLabels {
   readonly title: string
@@ -82,6 +83,7 @@ export function TagEditorOverlay(props: TagEditorOverlayProps): JSX.Element | nu
   return (
     <div
       className="session-tags-overlay-backdrop"
+      data-session-tags="editor"
       role="dialog"
       aria-modal="true"
       aria-labelledby="session-tags-editor-title"
@@ -92,6 +94,7 @@ export function TagEditorOverlay(props: TagEditorOverlayProps): JSX.Element | nu
         }
       }}
     >
+      <style>{sessionTagsOverlayStyles}</style>
       <section className="session-tags-editor">
         <h2 id="session-tags-editor-title">{labels.title}</h2>
 

@@ -38,7 +38,9 @@ describe('source independence', () => {
       peerDependencies?: Record<string, string>
       dependencies?: Record<string, string>
     }
-    expect(Object.keys(manifest.dependencies ?? {})).toEqual([])
+    // visual kit 是本仓自有的样式常量包（零运行时依赖），3.4 采纳为显式放行项；
+    // DSH 私有源码依赖仍然禁止。
+    expect(Object.keys(manifest.dependencies ?? {})).toEqual(['@yeisme/dsh-client-ui-visual-kit'])
     for (const name of Object.keys(manifest.peerDependencies ?? {})) {
       expect(name === '@deepseek-ai/cordis'
         || name === '@deepseek-ai/dsh-client-runtime'

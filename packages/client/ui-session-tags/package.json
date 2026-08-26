@@ -59,5 +59,8 @@
       ],
       "platform": "web"
     }
+  },
+  "dependencies": {
+    "@yeisme/dsh-client-ui-visual-kit": "workspace:^"
   }
 }

@@ -39,5 +39,8 @@
       "default": "./lib/index.js"
     },
     "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@yeisme/dsh-client-ui-visual-kit": "workspace:^"
   }
 }

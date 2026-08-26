@@ -309,9 +309,9 @@ describe('profile CRUD wiring and failure surfaces', () => {
     expect(html).toContain(`aria-label="Add profile"`)
     expect(html).toContain('aria-label="Site"')
     expect(html).toContain('aria-label="Display name"')
-    expect(html).toContain('<button type="submit">Add profile</button>')
-    expect(html).toContain('<button type="button">Delete</button>')
-    expect(html).toContain('<button type="button">Rename</button>')
+    expect(html).toContain('<button type="submit" class="cm-btn">Add profile</button>')
+    expect(html).toContain('<button type="button" class="cm-btn">Delete</button>')
+    expect(html).toContain('<button type="button" class="cm-btn">Rename</button>')
   })
 
   it('maps store failures onto fixed panel error text without echoing foreign messages', () => {
