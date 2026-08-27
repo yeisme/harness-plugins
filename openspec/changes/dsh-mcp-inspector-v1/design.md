@@ -10,7 +10,7 @@
 - `runningCalls`（`RunningToolCall { name, time }`）——进行中的调用。
 - `mcp__<server>__<tool>` 命名解析：server 名允许 `[A-Za-z0-9_-]`（含下划线），
   超长/非法名由 mcp-client 追加 12 位 hash；取 `mcp__` 后到下一个 `__` 为 server；
-  解析不出唯一 server 的条目丢弃（不猜，与 dsh-console `splitMcpTool` 同规则）。
+  解析不出唯一 server 的条目丢弃（不猜）。
 
 派生为纯函数 `deriveMcpActivity(nodes, runningCalls) -> McpServerActivity[]`（结构化
 输入类型，不依赖 React/框架，单测覆盖）；组件只做渲染。

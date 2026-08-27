@@ -4,7 +4,7 @@
 
 - [x] 1.1 纯派生函数 `deriveMcpActivity`：mcp__ 分组（含下划线 server 名）、错误/运行中/耗时、排序稳定。
   - **Owner/Scope**：`packages/client/ui-mcp-inspector/src/client/activity.ts` + `tests/activity.test.ts`。
-  - **Acceptance**：分组规则与 dsh-console `splitMcpTool` 一致；解析不出唯一 server 的条目丢弃；同输入输出确定。
+  - **Acceptance**：按 `mcp__<server>__` 分组；解析不出唯一 server 的条目丢弃；同输入输出确定。
   - **Validation**：`pnpm --filter @yeisme/dsh-client-ui-mcp-inspector test`。
 - [x] 1.2 conversation.view tab 注册 + 视图组件 + locale（zh/en）+ 空态与 L2 降级横幅。
   - **Owner/Scope**：`src/client/index.ts`、`src/client/McpInspectorView.tsx`、`src/client/locales.ts`。

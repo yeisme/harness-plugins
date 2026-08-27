@@ -2,8 +2,8 @@
  * MCP 调用活动派生（纯函数，无框架依赖）。
  *
  * 输入是 ConversationSnapshot 的结构化子集：已落地的 tool-result 节点与
- * 运行中的 tool call。`mcp__<server>__<tool>` 分组规则与 dsh-console 的
- * `splitMcpTool` 一致：server 名可含下划线；解析不出唯一 server 的条目丢弃。
+ * 运行中的 tool call。`mcp__<server>__<tool>` 分组：server 名可含下划线；
+ * 解析不出唯一 server 的条目丢弃。
  *
  * @module @yeisme/dsh-client-ui-mcp-inspector/client
  */
