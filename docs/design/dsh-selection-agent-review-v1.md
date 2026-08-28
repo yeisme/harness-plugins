@@ -35,6 +35,33 @@
 - `packages/bundle/dsh-selection-annotation` — 单行 profile patch 的
   ModuleLoader 单文件 bundle，真实产物冒烟。
 
+## 能力账本（冻结）
+
+| 能力 | 状态 | 交付 |
+|---|---|---|
+| 文本选中后询问 Agent | required | V1 ✅ |
+| Markdown 渲染内容选区映射回源码 | required | V1 ✅（宿主提示就绪时精确映射，缺失诚实降级为 unmapped DomRegion） |
+| 文件源码选区评论 | required | V1 ✅ |
+| 选区人工编辑 | required | V1 ✅（编辑意图经 Composer/宿主桥接） |
+| Agent 局部修改并展示 diff | required | V1 ✅（hunk 级 safeSummary + 查看局部 diff 动作） |
+| 多位置逐项批准、拒绝、要求重做 | required | V1 ✅ |
+| 可见页面和完整页面截图批注 | required | V1 ✅（合同+画布；真实捕获待 Web adapter seam） |
+| 截图多点、多区域联合提交 | required | V1 ✅ |
+| 迷你版 Agent 输入框 | required | V1 ✅（seam + overlay） |
+| 系统窗口、完整桌面截图 | V2 | 独立 Desktop owner；Web probe 永远 unavailable |
+| 评论跨会话恢复 | committed | V2 独立 OpenSpec；V1 不部分实现、不移除扩展点 |
+| 多人实时协作评论 | exploratory | 后续，不承诺时间表 |
+| 无审批自动修改 | rejected | 永久拒绝 |
+
+## 宿主桥接
+
+bundle 不拥有会话/文件/截图状态，宿主经两个 CustomEvent 接入：
+
+- `dsh-selection-annotation:submit` — `{ intent, text, anchor, approvalPolicy:
+  'preview-first' }`：发送/评论本地保存/展开到完整输入框时触发。
+- `dsh-selection-annotation:add-to-batch` — `{ anchor }`：更多菜单"加入批
+  注组"，与截图标记联合提交。
+
 ## 关键不变量
 
 1. 锚点是唯一 join 键；五类锚点共用 artifact/version/digest/freshness。

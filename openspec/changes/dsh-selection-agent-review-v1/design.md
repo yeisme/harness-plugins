@@ -34,6 +34,43 @@
 - 不把 Conversation Composer 的实现复制进本仓；只用 seam 消费。
 - 不建文件 store、不绕过 File Host `writeText` 版本围栏、不解析任意 patch 字符串。
 
+## Capability Ledger（冻结）
+
+| 能力 | 状态 | 交付 |
+|---|---|---|
+| 文本选中后询问 Agent | required | V1 ✅ |
+| Markdown 渲染内容选区映射回源码 | required | V1 ✅（宿主提示就绪时精确映射，缺失诚实降级） |
+| 文件源码选区评论 | required | V1 ✅ |
+| 选区人工编辑 | required | V1 ✅（编辑意图经 Composer/宿主桥接） |
+| Agent 局部修改并展示 diff | required | V1 ✅（hunk 级 safeSummary + 查看局部 diff 动作；渲染由宿主桥接） |
+| 多位置逐项批准、拒绝、要求重做 | required | V1 ✅ |
+| 可见页面和完整页面截图批注 | required | V1 ✅（合同+画布；真实捕获待 Web adapter seam） |
+| 截图多点、多区域联合提交 | required | V1 ✅ |
+| 迷你版 Agent 输入框 | required | V1 ✅（seam + overlay） |
+| 系统窗口、完整桌面截图 | V2 | 保留独立 Desktop owner；Web probe 永远 unavailable |
+| 评论跨会话恢复 | committed | V2，需独立 OpenSpec；V1 不部分实现、不移除扩展点 |
+| 多人实时协作评论 | exploratory | 后续，不承诺时间表 |
+| 无审批自动修改 | rejected | 永久拒绝 |
+
+## 总体流程
+
+```mermaid
+flowchart LR
+    A[文本选区或截图标记] --> B[迷你 Agent Composer]
+    B --> C{意图}
+    C -->|评论| D[创建评论线程<br/>默认不调模型]
+    C -->|询问| E[Agent 流式回答]
+    C -->|修改 preview-first| F[生成多位置 Proposal]
+    F --> G[逐位置审批<br/>批准/拒绝/要求重做/暂不处理]
+    G --> H{版本围栏与依赖闭包校验}
+    H -->|通过| I[Owner 只应用已批准 hunks]
+    H -->|依赖不完整| J[阻断并列出依赖]
+    H -->|版本漂移| K[reconcile_required<br/>禁止静默覆盖]
+    I --> L[owner receipt 与审计证据]
+    J --> L
+    K --> L
+```
+
 ## Decisions
 
 ### 1. 锚点是唯一 join 键，五类共用合同
@@ -116,6 +153,24 @@ host 合同包（纯类型+校验+参考实现）→ client 交互包（纯逻�
 - `temp/integration-test-runs/2026-08-28T14-32-40Z-client-flow/` — client
   jsdom 集成闭环（选区→工具条→Composer→提交事件；批注→提案→逐位置审批→
   版本围栏应用 receipt；漂移协调），输出无敏感键。
+
+### 测试与证据矩阵
+
+| 覆盖项 | 测试位置 |
+|---|---|
+| 文件源码选区 / 五类锚点合同 | host `tests/anchors.spec.ts`、`tests/node.spec.ts` |
+| Markdown 渲染选区映射（有/无提示、倒置提示） | client `tests/unit/dom-anchors.spec.tsx` |
+| 跨块选择、折叠选区 | client `tests/unit/dom-anchors.spec.tsx` |
+| 滚出视口边缘锚点 / 翻转 / 键盘 / Esc / 窄图标 | client `tests/unit/toolbar.spec.tsx` |
+| 归一化坐标缩放、高 DPI、越界 clamp | client `tests/unit/image-region.spec.ts`、`tests/unit/AnnotationCanvas.spec.tsx` |
+| ≥20 多位置批注、矩形拖拽、上限截断 | client `tests/unit/AnnotationCanvas.spec.tsx` |
+| Composer 展开/收缩、preview-first、评论不调模型、历史 | client `tests/unit/composer.spec.ts` |
+| 部分批准、依赖冲突、版本冲突行 | host `tests/proposal.spec.ts`、client `tests/unit/approval.spec.ts` |
+| 补丁依赖阻断（依赖组） | host `tests/node.spec.ts` |
+| 文件版本冲突 → reconcile | host `tests/node.spec.ts`、client `tests/integration/flow.spec.tsx` |
+| 不可信上下文 / receipt 脱敏 / patch 字符串拒绝 | host `tests/anchors.spec.ts`、`tests/node.spec.ts`、`tests/batch.spec.ts` |
+| jsdom 端到端闭环（选择→提交事件；批注→审批→应用） | client `tests/integration/flow.spec.tsx` |
+| 真实产物冒烟（ModuleLoader/kill-switch/dispose） | bundle `scripts/smoke-bundle.mjs` |
 
 ### Compatibility verdict
 

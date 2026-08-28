@@ -134,3 +134,29 @@ Agent 修改提案 MUST 按位置拆分为 Proposal Hunk，每个位置 MUST 独
 #### Scenario: 键盘完成全流程
 - **WHEN** 键盘用户不使用鼠标完成选择、评论、发送与逐位置审批
 - **THEN** 全流程可达且每步焦点可见
+
+### Requirement: 能力账本必须冻结 V1/V2 边界
+能力账本 MUST 冻结为：V1 交付文本选区、Markdown 源码映射、选区编辑、Agent 局部修改 diff、逐位置审批、可见区域与完整页面截图批注、多点联合提交与迷你 Composer；系统窗口/完整桌面截图 SHALL 保留独立 Desktop owner 于 V2；评论跨会话恢复 SHALL 作为 V2 committed 前置独立 OpenSpec，V1 MUST NOT 部分实现或移除其扩展点；多人实时协作 SHALL 保持 exploratory 且不承诺时间表；无审批自动修改 MUST 永久拒绝。
+
+#### Scenario: V1 擅自实现跨会话恢复
+- **WHEN** 任何后续变更试图在 V1 内把评论线程持久化为跨会话状态
+- **THEN** 该变更必须先升级或替代本 capability 的 V2 边界，不得以兼容名义部分实现
+
+#### Scenario: 引入无审批自动修改
+- **WHEN** 任何后续提案引入 auto-apply 或跳过逐位置审批的应用路径
+- **THEN** 该提案与已冻结的 rejected 账本冲突，必须先重开产品决策而不是静默合入
+
+#### Scenario: 多人协作提前排期
+- **WHEN** 有人在 V1 排期中承诺多人实时评论
+- **THEN** 以账本 exploratory 状态驳回，需独立 change 与 owner 决策
+
+### Requirement: 截图入口必须只暴露当前来源可交付的范围
+截图入口 MUST 按 capability 渲染：Web capture 可用时入口 MUST 只包含"当前可见区域"与"完整页面"；系统窗口与完整桌面入口 MUST 在 Desktop capture owner 就位前不渲染或禁用并显示原因。
+
+#### Scenario: Web 入口清单
+- **WHEN** 用户在 Web 工作台打开截图批注入口
+- **THEN** 可选项只有可见区域与完整页面，不存在可点击的窗口/桌面项
+
+#### Scenario: 更多菜单发起联合批注
+- **WHEN** 用户从浮动操作条"更多"中选择"加入批注组"
+- **THEN** 当前锚点加入 Review Batch，可与同一截图的其他标记一起联合提交给 Agent
