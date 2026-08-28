@@ -1,0 +1,39 @@
+{
+  "name": "@yeisme/dsh-selection-host",
+  "version": "0.1.0-rc.1",
+  "description": "DSH selection & annotation host: selection anchor protocol, annotation batches, multi-position proposals, version-fenced apply and layered capture contracts",
+  "license": "MIT",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.mts",
+      "default": "./lib/index.mjs"
+    },
+    "./node": {
+      "types": "./lib/node.d.mts",
+      "default": "./lib/node.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.json && tsdown src/index.ts src/node.ts --out-dir lib --format esm --dts --clean",
+    "test:integration": "node scripts/run-integration-tests.mjs"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

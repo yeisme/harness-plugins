@@ -1,0 +1,13 @@
+# Yeisme DSH Selection & Annotation bundle.
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-selection-annotation
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/dsh-selection-annotation
+#
+# This bundle adds one independently identifiable profile row. Conversation
+# runtime, file writes and screenshot bytes stay with their owners; this row
+# only grafts the selection toolbar + compact composer overlay and exposes
+# the annotation/approval controllers for the host bridge.
+- insert:
+    - id: dsh-selection-annotation
+      name: '@yeisme/dsh-selection-annotation'
