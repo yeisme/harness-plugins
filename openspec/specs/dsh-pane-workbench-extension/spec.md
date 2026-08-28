@@ -51,13 +51,19 @@ The production Pane Workbench apply path SHALL register `dsh.tool-details` into 
 - **THEN** the Core Tool Details registration、both slot occupants and layout adapter SHALL be removed idempotently
 - **AND** no core view callback SHALL survive the disposed generation
 
-### Requirement: Pane Workbench SHALL fail clearly on a pre-Core host contract
+### Requirement: Pane Workbench SHALL require the Core host contract
 
-The unified Core Pane bundle SHALL require the DSH layout version that provides the Core Pane adapter and render callback. It MUST NOT silently load the dual-sidebars combination against an older host seam.
+The Pane Workbench client plugin SHALL require `workspace.core-pane.v1`、`shell.workspace.right`、`shell.workspace.bottom` and `ctx.workspaceLayout`. It SHALL register only the two workspace occupants and one Core owner. Missing or partial seams MUST fail with an actionable compatibility error. The plugin MUST NOT register `details`、`shell.overlay`、`sidebar.footer.action` or patch `ctx.layout` methods as fallback.
 
-#### Scenario: Workspace slots exist but the Core bridge is missing
+#### Scenario: Complete Core seam is available
 
-- **WHEN** Pane Workbench detects Right/Bottom slots and `ctx.workspaceLayout` without the required Core contract
-- **THEN** plugin load SHALL fail with an actionable compatibility message
-- **AND** it MUST NOT register `details`、`shell.overlay` or a second sidebar as fallback
+- **WHEN** all required slots、service and Core version are present
+- **THEN** Pane Workbench SHALL attach one owner and register Right/Bottom occupants
+- **AND** Tool Details SHALL open through the attached Core adapter
+
+#### Scenario: Old or partial host loads the new bundle
+
+- **WHEN** any required Core seam is absent or has a different version
+- **THEN** plugin load SHALL fail before providing `paneWorkbench`
+- **AND** no overlay、footer action、Details column or monkey patch SHALL be installed
 
