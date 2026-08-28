@@ -1,7 +1,7 @@
 {
   "name": "@yeisme/dsh-terminal",
   "version": "0.1.0-rc.1",
-  "description": "DSH Pane Workbench terminal view backed by xterm.js and an owner-authorized terminal attachment",
+  "description": "DSH Web terminal bundle: terminalPane Remote over official ctx.terminals + pane console view (xterm path stays duplex-seam gated)",
   "main": "lib/index.js",
   "scripts": {
     "test": "vitest run",
@@ -23,8 +23,11 @@
   },
   "files": [
     "lib/index.js",
+    "lib/module.js",
+    "lib/client.js",
     "lib/types/**/*.js",
     "lib/types/**/*.d.ts",
+    "cordis.patch.yml",
     "README.md"
   ],
   "exports": {
@@ -32,13 +35,20 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
     "./module": "./lib/module.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
   "dependencies": {
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.6",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/xterm": "6.0.0",
     "@yeisme/dsh-terminal-host": "workspace:*",
+    "@yeisme/dsh-client-ui-surface": "workspace:^",
     "@yeisme/dsh-workbench-core": "workspace:*",
     "react": "^18.3.1"
   },
@@ -46,6 +56,23 @@
     "@types/react": "~18.3.31",
     "tsdown": "^0.22.14",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.7"
-  }
+    "vitest": "^3.2.7",
+    "@testing-library/react": "^16.1.0",
+    "jsdom": "^30.0.1",
+    "react-dom": "^18.2.0",
+    "@types/react-dom": "~18.3.1"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-runtime"
+      ],
+      "platform": "web"
+    }
+  },
+  "bundle": "pnpm --filter @yeisme/dsh-terminal-host build && tsc -p tsconfig.json && tsdown"
 }

@@ -159,3 +159,50 @@ export function createTerminalHostPlaceholder(): TerminalHostV1 {
     },
   })
 }
+
+export {
+  TERMINAL_PANE_HOST_PLUGIN_NAME,
+  TERMINAL_PANE_MAX_READ_LINES,
+  TERMINAL_PANE_MAX_SEND_WAIT_MS,
+  TERMINAL_PANE_MAX_SESSIONS_PER_OWNER,
+  TERMINAL_PANE_REMOTE_SERVICE_KEY,
+  TERMINAL_PANE_SPEC_VERSION,
+  terminalPaneFailure,
+} from './wire.ts'
+export type {
+  TerminalPaneCloseInputV1,
+  TerminalPaneCloseOkV1,
+  TerminalPaneCloseResult,
+  TerminalPaneFailureCode,
+  TerminalPaneFailureV1,
+  TerminalPaneListOkV1,
+  TerminalPaneListResult,
+  TerminalPaneProbeOkV1,
+  TerminalPaneProbeResult,
+  TerminalPaneReadInputV1,
+  TerminalPaneReadOkV1,
+  TerminalPaneReadResult,
+  TerminalPaneSendInputV1,
+  TerminalPaneSendOkV1,
+  TerminalPaneSendResult,
+  TerminalPaneSignal,
+  TerminalPaneSignalInputV1,
+  TerminalPaneSignalOkV1,
+  TerminalPaneSignalResult,
+  TerminalPaneSpawnInputV1,
+  TerminalPaneSpawnOkV1,
+  TerminalPaneSpawnResult,
+  TerminalPaneStatus,
+  TerminalPaneSummaryV1,
+  TerminalPaneWaitReason,
+} from './wire.ts'
+export {
+  TerminalPaneAdapter,
+  createTerminalPaneAdapter,
+  isAgentsService,
+  terminalsContractGaps,
+} from './adapter.ts'
+export type { AgentsServiceFace, TerminalsServiceFace, TerminalPaneOwner } from './adapter.ts'
+export { TerminalPaneRemoteService, terminalPaneRemoteMarkers } from './remote.ts'
+export { apply as terminalPaneHostApply, inject as terminalPaneHostInject, name as terminalPaneHostName } from './plugin.ts'
+export { default as terminalPaneHostPlugin } from './plugin.ts'

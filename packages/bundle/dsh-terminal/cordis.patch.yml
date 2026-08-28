@@ -1,0 +1,20 @@
+# Yeisme DSH terminal bundle.
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-terminal
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/dsh-terminal
+#
+# One profile row composing the terminalPane Remote (Host face: official
+# ctx.terminals adaptation, owner-scoped line-oriented projection) with the
+# Web console view (./client): owner session picker, terminal list, bounded
+# scrollback, line sends, SIGINT, close. The xterm.js InteractiveTerminal
+# path stays probe-gated on the official duplex seam (TerminalHostV2) and is
+# unchanged by this bundle.
+#
+# Compatibility anchor: the terminals capability family ships upstream from
+# 0.1.1-rc.2 (packages/terminal/). On older releases the host row stays
+# loadable and terminalPane.probe reports serviceAvailable:false — the view
+# and /terminal command render an honest disabled reason, no fake output.
+- insert:
+    - id: dsh-terminal
+      name: '@yeisme/dsh-terminal'

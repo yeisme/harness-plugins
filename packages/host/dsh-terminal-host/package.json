@@ -9,8 +9,8 @@
   },
   "exports": {
     ".": {
-      "types": "./lib/index.d.mts",
-      "default": "./lib/index.mjs"
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -21,11 +21,26 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "build": "tsc -p tsconfig.json && tsdown src/index.ts --out-dir lib --format esm --dts --clean"
+    "build": "tsc -p tsconfig.json && tsdown"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
+    "@deepseek-ai/cordis": "^4.0.1",
     "tsdown": "^0.22.14",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
-  }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
+    "@deepseek-ai/cordis": "^4.0.1"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-typert-protocol": {
+      "optional": true
+    },
+    "@deepseek-ai/cordis": {
+      "optional": true
+    }
+  },
+  "build": "tsc -p tsconfig.json && tsdown"
 }
