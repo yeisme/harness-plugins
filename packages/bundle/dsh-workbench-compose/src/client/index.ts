@@ -9,6 +9,8 @@
 
 import { createElement, type ReactNode } from 'react'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Surface, SurfaceState } from '@yeisme/dsh-client-ui-surface'
 import {
   createFileTreeHostAdapter,
   FileDocumentPanel,
@@ -21,7 +23,7 @@ export { NS, en, zh } from './composed-workbench.tsx'
 export type { ComposeKey } from './composed-workbench.tsx'
 
 export const name = 'dsh-workbench-compose'
-export const inject = ['slots', 'workspaces', 'paneWorkbench'] as const
+export const inject = ['slots', 'workspaces'] as const
 
 interface PaneWorkbenchFace {
   registerView(input: unknown): () => void
@@ -38,14 +40,11 @@ function FileTreePaneView({ adapter }: { readonly adapter?: FileTreeHostAdapter 
   const loadChildren = fileTree.status === 'ready' ? fileTree.loadChildren : undefined
   const entries = fileTree.status === 'ready' ? fileTree.entries : []
   const retry = fileTree.retry
-  return createElement('div', { 'data-dsh-file-tree-pane': true },
+  return createElement(Surface, { kind: 'navigator', 'data-dsh-file-tree-pane': true },
     fileTree.status === 'loading'
-      ? createElement('p', null, 'Loading file tree…')
+      ? createElement(SurfaceState, { phase: 'loading', title: 'Loading file tree…' })
       : fileTree.status === 'error'
-        ? createElement('div', null,
-          createElement('p', null, `Failed to load file tree: ${fileTree.error ?? 'unknown error'}`),
-          createElement('button', { type: 'button', onClick: retry }, 'Retry'),
-        )
+        ? createElement(SurfaceState, { phase: 'error', title: 'Failed to load file tree', description: fileTree.error ?? 'unknown error', action: createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: retry }, 'Retry') })
         : createElement(FileDocumentPanel, {
           tabId: 'files',
           entries,
@@ -56,8 +55,13 @@ function FileTreePaneView({ adapter }: { readonly adapter?: FileTreeHostAdapter 
 }
 
 function installPaneFileTree(ctx: ClientContext): () => void {
-  const pane = ctx.get('paneWorkbench') as PaneWorkbenchFace | undefined
-  if (pane === undefined) throw new Error('dsh-workbench-compose requires Pane Workbench V2; the deprecated sidebar workbench is not a production fallback')
+  let pane: PaneWorkbenchFace | undefined
+  try {
+    pane = ctx.get('paneWorkbench') as PaneWorkbenchFace | undefined
+  } catch {
+    pane = undefined
+  }
+  if (pane === undefined || typeof pane.registerView !== 'function') return () => {}
   const workspaces = ctx.get('workspaces') as {
     listDirectory(path?: string, signal?: AbortSignal): Promise<DirectoryListingLike>
   } | undefined
@@ -101,7 +105,7 @@ function installPaneFileTree(ctx: ClientContext): () => void {
     id: 'dsh-file-tree-open',
     order: 20,
     inject: (): { readonly openPane: () => void } => ({ openPane }),
-  }, () => createElement('button', { type: 'button', onClick: openPane }, 'File Tree'))))
+  }, () => createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: openPane }, 'File Tree'))))
 
   return () => {
     for (const dispose of disposers.reverse()) dispose()

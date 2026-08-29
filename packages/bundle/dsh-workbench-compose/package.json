@@ -5,6 +5,7 @@
   "main": "lib/index.js",
   "scripts": {
     "test": "vitest run",
+    "test:integration": "node scripts/run-experience-integration.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsc -p tsconfig.json && tsdown",
     "demo": "vite demo"
@@ -89,6 +90,8 @@
     "react": "^18.3.1"
   },
   "dependencies": {
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.6",
+    "@yeisme/dsh-client-ui-surface": "workspace:^",
     "@yeisme/dsh-pane-workbench": "workspace:*",
     "@yeisme/dsh-terminal": "workspace:*"
   }

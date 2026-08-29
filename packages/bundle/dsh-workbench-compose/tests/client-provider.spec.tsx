@@ -27,8 +27,11 @@ function fakeContext(withPane = true): ClientContext {
 }
 
 describe('dsh-workbench-compose client provider', () => {
-  it('depends on Pane Workbench and does not register a sidebar workbench', () => {
-    expect(inject).toEqual(['slots', 'workspaces', 'paneWorkbench'])
+  it('declares only the always-present services; Pane Workbench is probed', () => {
+    // paneWorkbench is resolved via ctx.get and degrades to a no-op when the
+    // overlay is absent — a hard inject would leave the client pending on
+    // hosts that never provide it.
+    expect(inject).toEqual(['slots', 'workspaces'])
   })
 
   it('registers file.tree and opens it in the right workspace', async () => {
@@ -51,7 +54,12 @@ describe('dsh-workbench-compose client provider', () => {
     expect(typeof dispose).toBe('function')
   })
 
-  it('reports an explicit compatibility error instead of mounting the old sidebar', async () => {
-    await expect(apply(fakeContext(false))).rejects.toThrow(/Pane Workbench V2/u)
+  it('degrades to a no-op without Pane Workbench and never mounts the old sidebar', async () => {
+    const ctx = fakeContext(false)
+    const dispose = await apply(ctx)
+    expect(typeof dispose).toBe('function')
+    expect(ctx.slots.inject).not.toHaveBeenCalled()
+    dispose()
+    expect(ctx.slots.inject).not.toHaveBeenCalledWith('sidebar.footer.action', expect.any(Function))
   })
 })

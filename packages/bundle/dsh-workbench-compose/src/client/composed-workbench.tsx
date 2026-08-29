@@ -8,8 +8,10 @@
  * @module @yeisme/dsh-workbench-compose/client
  */
 
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useMemo, useState } from 'react'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Surface, SurfaceContextBar } from '@yeisme/dsh-client-ui-surface'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { CommandPalette, WorkbenchShell } from '@yeisme/dsh-workbench-core/client'
 import type { WorkbenchTabV1 } from '@yeisme/dsh-workbench-core'
@@ -45,18 +47,14 @@ const MEDIA_TAB_ID = 'media'
 const FILE_TAB_IDS = new Set(['files', 'documents'])
 const TERMINAL_TAB_ID = 'terminal'
 
-const styles: Record<'layer' | 'panel' | 'header' | 'commandButton' | 'body' | 'grid' | 'trigger' | 'placeholder' | 'placeholderTitle' | 'placeholderBody', CSSProperties> = {
-  layer: { position: 'relative', display: 'grid', gap: 6, width: '100%', padding: 4 },
-  panel: { display: 'grid', gap: 8, padding: 10, borderRadius: 8, border: '1px solid var(--dsh-color-border, #3d4550)', background: 'var(--dsh-color-layer, #18202b)' },
-  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, fontWeight: 600 },
-  commandButton: { minHeight: 24, padding: '0 8px', borderRadius: 6, border: '1px solid var(--dsh-color-border, #3d4550)', background: 'transparent', color: 'inherit', cursor: 'pointer' },
-  body: { display: 'grid', gap: 8, minHeight: 80, fontSize: 12 },
-  grid: { display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' },
-  trigger: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', minHeight: 32 },
-  placeholder: { display: 'grid', gap: 4, padding: 12, borderRadius: 8, border: '1px dashed var(--dsh-color-border, #3d4550)' },
-  placeholderTitle: { fontWeight: 600 },
-  placeholderBody: { opacity: 0.72 },
-}
+const styles = `
+[data-dsh-workbench-compose]{position:relative;display:grid;gap:6px;width:100%;padding:4px}
+[data-dsh-workbench-compose] .dwc-panel{min-height:80px;border:1px solid var(--vk-border-l2);border-radius:8px}
+[data-dsh-workbench-compose] .dwc-grid{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
+[data-dsh-workbench-compose] .dwc-placeholder{display:grid;gap:4px;padding:12px;border:1px dashed var(--vk-border-l2);border-radius:8px}
+[data-dsh-workbench-compose] .dwc-placeholder strong{font-weight:600}[data-dsh-workbench-compose] .dwc-placeholder span{color:var(--vk-text-tertiary)}
+[data-dsh-workbench-compose] .dwc-trigger{width:100%}
+`
 
 export function ComposedWorkbench({ wide, t, hostProjection = emptyHostProjection, onRunCommand, terminalState, terminalStatus, fileTreeAdapter, fileTreeRootPath, useSessions, useWorkspaces }: ComposedWorkbenchProps & ComposedWorkbenchExtraProps) {
   const [open, setOpen] = useState(false)
@@ -85,7 +83,7 @@ export function ComposedWorkbench({ wide, t, hostProjection = emptyHostProjectio
     if (tab.id === MEDIA_TAB_ID) {
       if (media.length === 0) return <p>{t('empty')}</p>
       return (
-        <div style={styles.grid}>
+        <div className="dwc-grid">
           {media.map(item => (
             <RichMediaCard
               key={`${item.owner}:${item.ref}`}
@@ -114,24 +112,20 @@ export function ComposedWorkbench({ wide, t, hostProjection = emptyHostProjectio
       return <TerminalPanel state={terminalState} status={terminalStatus} />
     }
     return (
-      <div style={styles.placeholder}>
-        <span style={styles.placeholderTitle}>{t('placeholderTitle')}</span>
-        <span style={styles.placeholderBody}>{t('placeholderBody')}</span>
+      <div className="dwc-placeholder">
+        <strong>{t('placeholderTitle')}</strong>
+        <span>{t('placeholderBody')}</span>
       </div>
     )
   }
 
   return (
-    <div style={styles.layer} data-dsh-workbench-compose>
+    <Surface kind="micro" data-dsh-workbench-compose>
+      <style>{styles}</style>
       {open && (
-        <section style={styles.panel} aria-label={t('aria')}>
-          <header style={styles.header}>
-            <span>{t('aria')}</span>
-            <button type="button" style={styles.commandButton} onClick={() => { setCommandOpen(value => !value) }}>
-              {t('commands')}
-            </button>
-          </header>
-          <div style={styles.body}>
+        <Surface kind="workspace" className="dwc-panel" aria-label={t('aria')}>
+          <SurfaceContextBar title={t('aria')} actions={<Button type="button" size="sm" variant="toolbar" onClick={() => { setCommandOpen(value => !value) }}>{t('commands')}</Button>} />
+          <div className="ys-body">
             <WorkbenchShell
               tabs={tabs}
               activeTabId={activeTabId}
@@ -140,7 +134,7 @@ export function ComposedWorkbench({ wide, t, hostProjection = emptyHostProjectio
               status={`${tabs.length} tabs · ${commands.length} commands`}
             />
           </div>
-        </section>
+        </Surface>
       )}
       {commandOpen && (
         <CommandPalette
@@ -149,9 +143,11 @@ export function ComposedWorkbench({ wide, t, hostProjection = emptyHostProjectio
           onClose={() => { setCommandOpen(false) }}
         />
       )}
-      <button
+      <Button
         type="button"
-        style={styles.trigger}
+        size="sm"
+        variant={open ? 'primary' : 'toolbar'}
+        className="dwc-trigger"
         data-active={open || undefined}
         aria-label={t('aria')}
         aria-expanded={open}
@@ -159,8 +155,8 @@ export function ComposedWorkbench({ wide, t, hostProjection = emptyHostProjectio
       >
         <span>{t('trigger')}</span>
         {wide && <span aria-hidden="true">▦</span>}
-      </button>
-    </div>
+      </Button>
+    </Surface>
   )
 }
 

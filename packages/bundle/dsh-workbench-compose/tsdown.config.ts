@@ -8,6 +8,7 @@ const clientExternals = [
   'react-dom/client',
   '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-client-runtime/client',
+  '@deepseek-ai/dsh-client-ui-primitives',
   '@deepseek-ai/dsh-client-ui-slots',
   '@deepseek-ai/dsh-client-ui-sidebar',
   '@deepseek-ai/dsh-client-locale',
@@ -24,8 +25,13 @@ const node = {
   outputOptions: { codeSplitting: false },
 } as const
 
+const nodeAliases = {
+  '@yeisme/dsh-file-document': fileURLToPath(new URL('../dsh-file-document/src/module.ts', import.meta.url)),
+  '@yeisme/dsh-terminal': fileURLToPath(new URL('../dsh-terminal/src/module.ts', import.meta.url)),
+} as const
+
 export default defineConfig([
-  { ...node, entry: ['lib/types/index.js'] },
+  { ...node, entry: ['lib/types/index.js'], alias: nodeAliases, deps: { alwaysBundle: [/^@yeisme\/dsh-(?:file-document|terminal)$/u] } },
   {
     // 组合的 workspace bundle 经 alias 直连源码并整体内联：ModuleLoader
     // 单文件契约下，client.js 不得残留对 @yeisme/* 包的外部 require。
