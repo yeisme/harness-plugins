@@ -63,6 +63,7 @@
   },
   "dependencies": {
     "@yeisme/dsh-client-ui-command-experience-core": "workspace:*",
+    "@yeisme/dsh-client-ui-command-experience-tui": "workspace:*",
     "@yeisme/dsh-command-experience-host": "workspace:*"
   },
   "devDependencies": {

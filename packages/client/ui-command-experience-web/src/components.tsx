@@ -5,14 +5,27 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import type { CommandExperienceEntryV1 } from '@yeisme/dsh-client-ui-command-experience-core';
+import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives';
+import {
+  Surface,
+  SurfaceActionBar,
+  SurfaceContextBar,
+  SurfaceState,
+} from '@yeisme/dsh-client-ui-surface';
+import type {
+  CommandExperienceEntryV1,
+  CommandReducerState,
+} from '@yeisme/dsh-client-ui-command-experience-core';
 import {
   commandStableKey,
+  createInitialState,
   evaluateDangerGate,
   generateCorrelationId,
   groupByCategory,
   isCommandExecutable,
   projectBoundedWindow,
+  resolveKeyAction,
+  resolveKeymap,
   retainSelectionAnchor,
   resolveAssistQuery,
   selectorStableKey,
@@ -24,7 +37,7 @@ import type {
   PendingReceiptProps,
   SelectorItem,
 } from './types';
-import { useCommandNavigation } from './hooks';
+import { commandKeyEventFromDom } from './hooks';
 import { getCommandAccessibilityLabel, getCommandDisabledReason, sanitizeCommandDescription } from './utils';
 
 export const CommandMenu: React.FC<CommandMenuProps> = ({
@@ -36,7 +49,6 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
   onRestoreFocus,
 }) => {
   const { showCategories = true, showDisabledCommands = true } = options;
-  const inputRef = useRef<HTMLInputElement>(null);
   const composerRestoreRef = useRef<HTMLButtonElement>(null);
   const query = state.draft || state.query || '';
   const resolution = useMemo(() => resolveAssistQuery(commands, query || '/'), [commands, query]);
@@ -45,8 +57,22 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
     [resolution.candidates, showDisabledCommands],
   );
 
-  const { selectedCommand, navigateUp, navigateDown, resetSelection, navigateToCommand } =
-    useCommandNavigation(visibleCommands, state.selectedCommand ?? resolution.selected);
+  const keymap = useMemo(
+    () => resolveKeymap(options.keyboardShortcuts),
+    [options.keyboardShortcuts],
+  );
+  const candidateKeys = useMemo(
+    () => visibleCommands.map((command) => commandStableKey(command.canonicalName)),
+    [visibleCommands],
+  );
+  const cursorCommand = useMemo(() => {
+    if (state.cursorKey === null) {
+      return null;
+    }
+    return visibleCommands.find(
+      (command) => commandStableKey(command.canonicalName) === state.cursorKey,
+    ) ?? null;
+  }, [state.cursorKey, visibleCommands]);
 
   const categories = useMemo(() => groupByCategory(visibleCommands), [visibleCommands]);
 
@@ -66,67 +92,113 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
     dispatch({ type: 'DISPATCH', correlationId: generateCorrelationId() });
   }, [dispatch]);
 
+  const restoreFocus = useCallback(() => {
+    onRestoreFocus?.();
+    composerRestoreRef.current?.focus();
+  }, [onRestoreFocus]);
+
+  // Stale cursor policy: typing refilters the candidate list after dispatch,
+  // so a cursor key that no longer resolves is dropped here — never snapped
+  // to a neighbor — letting auto-select resume on the next resolution.
   useEffect(() => {
-    if (resolution.selected && state.state === 'assist') {
-      dispatch({ type: 'SELECT_COMMAND', command: resolution.selected });
-      navigateToCommand(resolution.selected);
+    if (state.cursorKey !== null && !candidateKeys.includes(state.cursorKey)) {
+      dispatch({ type: 'CLEAR_CURSOR' });
     }
-  }, [resolution.selected, state.state, dispatch, navigateToCommand]);
+  }, [candidateKeys, state.cursorKey, dispatch]);
+
+  // Auto-select the exact/safe-unique match unless the keyboard cursor has
+  // moved elsewhere: the cursor outranks discovery's implicit selection.
+  useEffect(() => {
+    if (!resolution.selected || state.state !== 'assist') {
+      return;
+    }
+    const selectedKey = commandStableKey(resolution.selected.canonicalName);
+    if (state.cursorMoved && state.cursorKey !== selectedKey) {
+      return;
+    }
+    dispatch({ type: 'SELECT_COMMAND', command: resolution.selected });
+  }, [resolution.selected, state.state, state.cursorMoved, state.cursorKey, dispatch]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (state.state === 'idle' && !query.startsWith('/')) {
+        // Palette toggle still opens the menu from idle.
+        const toggle = resolveKeyAction({
+          event: commandKeyEventFromDom(event),
+          state,
+          config: keymap,
+          context: { candidateKeys, commands: visibleCommands },
+        });
+        if (toggle.kind === 'toggle') {
+          event.preventDefault();
+          dispatch({ type: 'START_ASSIST', query: '/', draft: '/' });
+        }
         return;
       }
-      if (event.key === 'ArrowDown' || (event.ctrlKey && event.key === 'n')) {
-        event.preventDefault();
-        navigateDown();
-      } else if (event.key === 'ArrowUp' || (event.ctrlKey && event.key === 'p')) {
-        event.preventDefault();
-        navigateUp();
-      } else if (event.key === 'Escape') {
+
+      const resolutionAction = resolveKeyAction({
+        event: commandKeyEventFromDom(event),
+        state,
+        config: keymap,
+        context: { candidateKeys, commands: visibleCommands },
+      });
+
+      if (resolutionAction.kind === 'action') {
+        const action = resolutionAction.action;
+        if (action.type === 'MOVE_SELECTION' || action.type === 'UPDATE_QUERY') {
+          event.preventDefault();
+          dispatch(action.type === 'UPDATE_QUERY'
+            ? { type: 'UPDATE_QUERY', query: action.query, candidateKeys }
+            : action);
+          return;
+        }
+        if (action.type === 'CANCEL') {
+          event.preventDefault();
+          dispatch(action);
+          restoreFocus();
+          return;
+        }
+        dispatch(action);
+        return;
+      }
+
+      if (resolutionAction.kind === 'toggle') {
         event.preventDefault();
         dispatch({ type: 'CANCEL' });
-        resetSelection();
-        onRestoreFocus?.();
-        composerRestoreRef.current?.focus();
-      } else if (event.key === 'Enter') {
+        restoreFocus();
+        return;
+      }
+
+      if (resolutionAction.kind === 'execute-cursor') {
         event.preventDefault();
-        executeSelected(selectedCommand ?? resolution.selected ?? state.selectedCommand);
+        executeSelected(cursorCommand ?? resolution.selected ?? state.selectedCommand);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
-    state.state,
-    state.selectedCommand,
+    state,
     query,
-    navigateUp,
-    navigateDown,
-    dispatch,
-    resetSelection,
-    executeSelected,
-    selectedCommand,
+    keymap,
+    candidateKeys,
+    visibleCommands,
+    cursorCommand,
     resolution.selected,
-    onRestoreFocus,
+    executeSelected,
+    restoreFocus,
   ]);
-
-  useEffect(() => {
-    if (state.state === 'idle' && state.draft.startsWith('/')) {
-      inputRef.current?.focus();
-    }
-  }, [state.state, state.draft]);
 
   if (state.state === 'idle' && !state.draft.startsWith('/') && !query.startsWith('/')) {
     return null;
   }
 
-  const activeCommand = selectedCommand ?? resolution.selected ?? state.selectedCommand;
+  const activeCommand = cursorCommand ?? resolution.selected ?? state.selectedCommand;
   const activeDescendant = activeCommand ? commandStableKey(activeCommand.canonicalName) : undefined;
 
   return (
-    <div className={`command-menu ${className}`} role="dialog" aria-label="Command Menu" aria-modal="true">
+    <Modal open onClose={() => { dispatch({ type: 'CANCEL' }); restoreFocus(); }} title="Command Menu" headless>
+      <Surface kind="dialog" className={`command-menu ${className}`} aria-label="Command Menu">
       <button
         ref={composerRestoreRef}
         type="button"
@@ -134,8 +206,9 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
         aria-label="Restore composer focus"
         tabIndex={-1}
       />
-      <input
-        ref={inputRef}
+      <SurfaceContextBar title="Command Menu" description="Search and run an available command." />
+      <div className="ys-body">
+      <Input
         type="text"
         value={query}
         onChange={(event) => {
@@ -155,7 +228,11 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
         autoFocus
       />
 
-      <ul id="command-list" role="listbox" className="command-list" aria-label="Available commands">
+      <div className="command-menu-announcer" role="status" aria-live="polite">
+        {activeCommand ? `/${activeCommand.canonicalName}` : ''}
+      </div>
+
+      <ul id="command-list" role="listbox" className="command-list ys-list" aria-label="Available commands">
         {Array.from(categories.entries()).map(([category, cmds]) => (
           <React.Fragment key={category}>
             {showCategories && (
@@ -175,7 +252,11 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
                   aria-disabled={!executable}
                   className={`command-item ${isSelected ? 'selected' : ''} ${disabledReason ? 'disabled' : ''}`}
                   onClick={() => executable && executeSelected(command)}
-                  onMouseEnter={() => navigateToCommand(command)}
+                  onMouseEnter={() => dispatch({
+                    type: 'MOVE_SELECTION',
+                    index: candidateKeys.indexOf(commandStableKey(command.canonicalName)),
+                    candidateKeys,
+                  })}
                   aria-label={getCommandAccessibilityLabel(command)}
                 >
                   <span className="command-canonical">/{command.canonicalName}</span>
@@ -191,7 +272,9 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
           </React.Fragment>
         ))}
       </ul>
-    </div>
+      </div>
+      </Surface>
+    </Modal>
   );
 };
 
@@ -208,13 +291,16 @@ export const CommandSelector: React.FC<CommandSelectorProps> = ({
   initialValue,
 }) => {
   const { placeholder = 'Select...', maxItems } = options;
+  const keymap = useMemo(
+    () => resolveKeymap(options.keyboardShortcuts),
+    [options.keyboardShortcuts],
+  );
   const [isOpen, setIsOpen] = React.useState(state?.state === 'selector');
   const [query, setQuery] = React.useState('');
   const [selectedKey, setSelectedKey] = React.useState<string | null>(
     state?.selectedRef ? selectorStableKey(selectorType, state.selectedRef) : initialValue ? selectorStableKey(selectorType, initialValue.id) : null,
   );
-  const inputRef = useRef<HTMLInputElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (state?.state === 'selector') {
@@ -264,56 +350,64 @@ export const CommandSelector: React.FC<CommandSelectorProps> = ({
     onSelect?.(item);
     setIsOpen(false);
     setQuery('');
-    triggerRef.current?.focus();
+    triggerRef.current?.querySelector('button')?.focus();
   }, [dispatch, onSelect, selectorType]);
 
   const handleClose = useCallback(() => {
     setIsOpen(false);
     dispatch?.({ type: 'CANCEL' });
     onClose?.();
-    triggerRef.current?.focus();
+    triggerRef.current?.querySelector('button')?.focus();
   }, [dispatch, onClose]);
 
-  const selectedIndex = projection.selectedIndex >= 0
-    ? projection.items.findIndex((item) => item.key === projection.selectedKey)
-    : -1;
-
   const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
-    switch (event.key) {
-      case 'ArrowDown': {
+    const selectorState: CommandReducerState = { ...createInitialState(), state: 'selector' };
+    const keys = keyedItems.map((item) => item.key);
+    const resolution = resolveKeyAction({
+      event: commandKeyEventFromDom(event.nativeEvent),
+      state: selectorState,
+      config: keymap,
+      context: { candidateKeys: keys, commands: [] },
+    });
+
+    if (resolution.kind === 'action') {
+      const action = resolution.action;
+      if (action.type === 'MOVE_SELECTION') {
         event.preventDefault();
-        const next = keyedItems[Math.min((selectedIndex < 0 ? -1 : keyedItems.findIndex((item) => item.key === selectedKey)) + 1, keyedItems.length - 1)];
-        if (next) setSelectedKey(next.key);
-        break;
+        const currentIdx = selectedKey === null ? -1 : keys.indexOf(selectedKey);
+        let nextIdx: number;
+        if (action.index !== undefined) {
+          nextIdx = Math.max(0, Math.min(action.index, keys.length - 1));
+        } else {
+          nextIdx = Math.max(-1, Math.min(currentIdx + (action.delta ?? 0), keys.length - 1));
+        }
+        const next = nextIdx >= 0 ? keyedItems[nextIdx] : undefined;
+        if (next) {
+          setSelectedKey(next.key);
+        }
+        return;
       }
-      case 'ArrowUp': {
-        event.preventDefault();
-        const current = keyedItems.findIndex((item) => item.key === selectedKey);
-        const prev = keyedItems[Math.max(current - 1, 0)];
-        if (prev) setSelectedKey(prev.key);
-        break;
-      }
-      case 'Enter': {
-        event.preventDefault();
-        const current = keyedItems.find((item) => item.key === selectedKey) ?? projection.items[0];
-        if (current) handleSelect(current);
-        break;
-      }
-      case 'Escape':
+      if (action.type === 'CANCEL') {
         event.preventDefault();
         handleClose();
-        break;
-      default:
-        break;
+        return;
+      }
+      return;
     }
-  }, [handleClose, handleSelect, keyedItems, projection.items, selectedIndex, selectedKey]);
+
+    if (resolution.kind === 'execute-cursor') {
+      event.preventDefault();
+      const current = keyedItems.find((item) => item.key === selectedKey) ?? projection.items[0];
+      if (current) handleSelect(current);
+    }
+  }, [handleClose, handleSelect, keyedItems, projection.items, selectedKey, keymap]);
 
   const activeDescendant = projection.selectedKey ?? undefined;
 
   return (
-    <div className={`command-selector command-selector--${selectorType}`}>
-      <button
-        ref={triggerRef}
+    <Surface kind="micro" className={`command-selector command-selector--${selectorType}`}>
+      <div ref={triggerRef}>
+      <Button
         type="button"
         onClick={() => setIsOpen(true)}
         className="command-selector-trigger"
@@ -322,17 +416,14 @@ export const CommandSelector: React.FC<CommandSelectorProps> = ({
         aria-controls={`${selectorType}-list`}
       >
         {initialValue?.label || placeholder}
-      </button>
+      </Button>
+      </div>
 
-      {isOpen && (
-        <div
-          role="dialog"
-          className="command-selector-dropdown"
-          aria-modal="true"
-          aria-label={`Select ${selectorType}`}
-        >
-          <input
-            ref={inputRef}
+      <Modal open={isOpen} onClose={handleClose} title={`Select ${selectorType}`} headless>
+        <Surface kind="dialog" className="command-selector-dropdown" aria-label={`Select ${selectorType}`}>
+          <SurfaceContextBar title={`Select ${selectorType}`} />
+          <div className="ys-body">
+          <Input
             type="text"
             value={query}
             onChange={(event) => {
@@ -377,9 +468,10 @@ export const CommandSelector: React.FC<CommandSelectorProps> = ({
               ))
             )}
           </ul>
-        </div>
-      )}
-    </div>
+          </div>
+        </Surface>
+      </Modal>
+    </Surface>
   );
 };
 
@@ -389,10 +481,11 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   customMessage,
   preview = null,
   receiptCapable = true,
+  keyboardShortcuts,
 }) => {
   const command = state.selectedCommand;
   const dangerLevel = command?.danger || 'safe';
-  const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const keymap = useMemo(() => resolveKeymap(keyboardShortcuts), [keyboardShortcuts]);
   const gate = command
     ? evaluateDangerGate({ command, preview, receiptCapable })
     : { allowed: false, staged: true, reason: 'No command selected', grade: 'safe' as const };
@@ -410,12 +503,20 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
 
   useEffect(() => {
     if (command && dangerLevel !== 'safe') {
-      confirmButtonRef.current?.focus();
       const handleKeyDown = (event: KeyboardEvent) => {
-        if (event.key === 'Escape') {
+        const resolution = resolveKeyAction({
+          event: commandKeyEventFromDom(event),
+          state,
+          config: keymap,
+          context: { candidateKeys: [], commands: [] },
+        });
+        if (resolution.kind !== 'action') {
+          return;
+        }
+        if (resolution.action.type === 'CANCEL') {
           event.preventDefault();
           handleCancel();
-        } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && gate.allowed) {
+        } else if (resolution.action.type === 'CONFIRM' && gate.allowed) {
           event.preventDefault();
           handleConfirm();
         }
@@ -424,51 +525,45 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
       return () => window.removeEventListener('keydown', handleKeyDown);
     }
     return undefined;
-  }, [command, dangerLevel, handleConfirm, handleCancel, gate.allowed]);
+  }, [command, dangerLevel, handleConfirm, handleCancel, gate.allowed, state, keymap]);
 
   if (!command || dangerLevel === 'safe') {
     return null;
   }
 
   return (
-    <div
-      role="dialog"
-      className={`confirmation-dialog confirmation-dialog--${dangerLevel}`}
-      aria-modal="true"
-      aria-labelledby="confirmation-title"
-      aria-describedby="confirmation-description"
-    >
-      <h2 id="confirmation-title" className="confirmation-title">
-        Confirm {dangerLevel} action
-      </h2>
-      <p id="confirmation-description" className="confirmation-message">
-        {customMessage || `Are you sure you want to execute "${command.canonicalName}"?`}
-      </p>
+    <Modal open onClose={handleCancel} title={`Confirm ${dangerLevel} action`} headless>
+      <Surface kind="dialog" className={`confirmation-dialog confirmation-dialog--${dangerLevel}`}>
+      <SurfaceContextBar title={`Confirm ${dangerLevel} action`} />
+      <div className="ys-body">
+      <p className="confirmation-message">{customMessage || `Are you sure you want to execute "${command.canonicalName}"?`}</p>
       {preview && (
         <p className="confirmation-preview">{preview.impactSummary}</p>
       )}
       {!gate.allowed && gate.reason && (
-        <p role="status" className="confirmation-blocked">{gate.reason}</p>
+        <SurfaceState phase="disabled" title="Action unavailable" description={gate.reason} />
       )}
-      <div className="confirmation-actions" role="group" aria-label="Confirmation actions">
-        <button
+      </div>
+      <SurfaceActionBar className="confirmation-actions" role="group" aria-label="Confirmation actions">
+        <Button
           onClick={handleCancel}
           className="confirmation-btn confirmation-btn--cancel"
           aria-label="Cancel this action"
         >
           Cancel (Esc)
-        </button>
-        <button
-          ref={confirmButtonRef}
+        </Button>
+        <Button
+          variant="primary"
           onClick={handleConfirm}
           className="confirmation-btn confirmation-btn--confirm"
           aria-label={`Confirm ${dangerLevel} action`}
           disabled={!gate.allowed}
         >
           Confirm (Ctrl+Enter)
-        </button>
-      </div>
-    </div>
+        </Button>
+      </SurfaceActionBar>
+      </Surface>
+    </Modal>
   );
 };
 
@@ -476,10 +571,12 @@ export const PendingReceipt: React.FC<PendingReceiptProps> = ({
   state,
   receiptStatus,
   dispatch,
+  keyboardShortcuts,
 }) => {
   const command = state.selectedCommand;
   const status = receiptStatus ?? state.receipt.status;
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const keymap = useMemo(() => resolveKeymap(keyboardShortcuts), [keyboardShortcuts]);
 
   const handleDismiss = useCallback(() => {
     dispatch({ type: 'RESET' });
@@ -501,14 +598,20 @@ export const PendingReceipt: React.FC<PendingReceiptProps> = ({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' || (event.key === 'd' && (event.ctrlKey || event.metaKey))) {
+      const resolution = resolveKeyAction({
+        event: commandKeyEventFromDom(event),
+        state,
+        config: keymap,
+        context: { candidateKeys: [], commands: [] },
+      });
+      if (resolution.kind === 'close-receipt') {
         event.preventDefault();
         handleDismiss();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleDismiss]);
+  }, [handleDismiss, state, keymap]);
 
   const statusInfo = status === 'success'
     ? { text: 'Completed', aria: 'Command completed successfully' }
@@ -521,7 +624,8 @@ export const PendingReceipt: React.FC<PendingReceiptProps> = ({
           : { text: 'Pending', aria: 'Command is pending' };
 
   return (
-    <div
+    <Surface
+      kind="micro"
       role="status"
       className={`pending-receipt pending-receipt--${status ?? 'pending'}`}
       aria-live="polite"
@@ -539,14 +643,14 @@ export const PendingReceipt: React.FC<PendingReceiptProps> = ({
       {state.correlationId && (
         <span className="receipt-correlation">{state.correlationId}</span>
       )}
-      <button
+      <Button
         onClick={handleDismiss}
         className="receipt-dismiss"
         aria-label="Dismiss notification (Ctrl+D)"
         title="Dismiss (Ctrl+D)"
       >
         ×
-      </button>
-    </div>
+      </Button>
+    </Surface>
   );
 };

@@ -31,6 +31,8 @@ export const createInitialState = (): CommandReducerState => ({
   draft: '',
   selectionStart: null,
   selectionEnd: null,
+  cursorKey: null,
+  cursorMoved: false,
   error: null,
 });
 
@@ -57,7 +59,13 @@ export function commandReducer(
         draft: action.draft,
       };
 
-    case 'UPDATE_QUERY':
+    case 'UPDATE_QUERY': {
+      // Stale cursor policy: when the adapter provides the new candidate
+      // keys and the cursor key vanished, clear the cursor. Never snap to
+      // a neighbor (retainSelectionAnchor philosophy).
+      const cursorVanished = state.cursorKey !== null
+        && action.candidateKeys !== undefined
+        && !action.candidateKeys.includes(state.cursorKey);
       return {
         ...state,
         state: state.state === 'selected' ? 'assist' : state.state,
@@ -68,7 +76,9 @@ export function commandReducer(
         selectedCommand: state.state === 'assist' || state.state === 'selected'
           ? null
           : state.selectedCommand,
+        ...(cursorVanished ? { cursorKey: null, cursorMoved: false } : {}),
       };
+    }
 
     case 'SELECT_COMMAND':
       return {
@@ -78,7 +88,40 @@ export function commandReducer(
         query: action.command.canonicalName,
         arguments: {},
         selectedRef: null,
+        cursorKey: null,
+        cursorMoved: false,
         error: null,
+      };
+
+    case 'MOVE_SELECTION': {
+      const keys = action.candidateKeys;
+      if (keys.length === 0) {
+        return state;
+      }
+      const currentIndex = state.cursorKey === null ? -1 : keys.indexOf(state.cursorKey);
+      let nextIndex: number;
+      if (action.index !== undefined) {
+        nextIndex = Math.max(0, Math.min(action.index, keys.length - 1));
+      } else {
+        const delta = action.delta ?? 0;
+        nextIndex = Math.max(-1, Math.min(currentIndex + delta, keys.length - 1));
+      }
+      const cursorKey = nextIndex >= 0 ? keys[nextIndex] ?? null : null;
+      return {
+        ...state,
+        cursorKey,
+        cursorMoved: cursorKey !== null,
+      };
+    }
+
+    case 'CLEAR_CURSOR':
+      if (state.cursorKey === null && !state.cursorMoved) {
+        return state;
+      }
+      return {
+        ...state,
+        cursorKey: null,
+        cursorMoved: false,
       };
 
     case 'SET_ARGUMENTS':
@@ -316,6 +359,19 @@ export const actions = {
   setSelectedRef: (ref: string | null): CommandReducerAction => ({
     type: 'SET_SELECTED_REF',
     ref,
+  }),
+
+  moveSelection: (
+    move: { delta?: number; index?: number },
+    candidateKeys: readonly string[],
+  ): CommandReducerAction => ({
+    type: 'MOVE_SELECTION',
+    ...move,
+    candidateKeys,
+  }),
+
+  clearCursor: (): CommandReducerAction => ({
+    type: 'CLEAR_CURSOR',
   }),
 
   openSelector: (): CommandReducerAction => ({

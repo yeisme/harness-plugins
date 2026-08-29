@@ -16,6 +16,7 @@ import { normalizeCommandEntry } from './directory';
 
 export interface OwnerCapabilitySnapshot {
   readonly availableActions: ReadonlySet<string>;
+  readonly surfaces?: ReadonlySet<string>;
 }
 
 interface P0Seed {
@@ -29,19 +30,27 @@ interface P0Seed {
   readonly coverage: CommandCoverage;
   readonly hint?: string;
   readonly selectorKey?: string;
+  readonly schemaKey?: string;
   readonly requiredAction?: string;
+  readonly requiredSurface?: string;
 }
 
 const P0_SEEDS: readonly P0Seed[] = [
   { canonicalName: 'help', aliases: ['h', '?'], description: 'Show command help', category: 'discovery', actionKind: 'local', owner: 'client', danger: 'safe', coverage: 'adapted' },
   { canonicalName: 'commands', description: 'List available commands', category: 'discovery', actionKind: 'inspect', owner: 'client', danger: 'safe', coverage: 'equivalent' },
   { canonicalName: 'status', description: 'Show runtime status', category: 'discovery', actionKind: 'inspect', owner: 'dsh', danger: 'safe', coverage: 'staged', requiredAction: 'status' },
-  { canonicalName: 'plugins', description: 'Inspect installed plugins', category: 'discovery', actionKind: 'inspect', owner: 'host', danger: 'safe', coverage: 'equivalent' },
-  { canonicalName: 'mcp', description: 'Inspect MCP servers', category: 'discovery', actionKind: 'inspect', owner: 'host', danger: 'safe', coverage: 'equivalent' },
-  { canonicalName: 'skills', description: 'Inspect installed skills', category: 'discovery', actionKind: 'inspect', owner: 'host', danger: 'safe', coverage: 'equivalent' },
-  { canonicalName: 'agent', aliases: ['subagents'], description: 'Pick the main agent or a subagent thread', category: 'session', actionKind: 'owner-action', owner: 'dsh', danger: 'safe', coverage: 'equivalent', selectorKey: 'threadRef', requiredAction: 'open-thread' },
+  { canonicalName: 'plugins', description: 'Inspect installed plugins', category: 'discovery', actionKind: 'inspect', owner: 'host', danger: 'safe', coverage: 'equivalent', schemaKey: 'inspect:plugins' },
+  { canonicalName: 'mcp', description: 'Inspect MCP servers', category: 'discovery', actionKind: 'inspect', owner: 'host', danger: 'safe', coverage: 'equivalent', schemaKey: 'inspect:mcp', requiredSurface: 'mcpInspector' },
+  { canonicalName: 'skills', description: 'Inspect installed skills', category: 'discovery', actionKind: 'inspect', owner: 'host', danger: 'safe', coverage: 'equivalent', schemaKey: 'inspect:skills', requiredSurface: 'agentContext' },
+  { canonicalName: 'pane', description: 'Open a workspace pane', category: 'discovery', actionKind: 'navigation', owner: 'host', danger: 'safe', coverage: 'adapted', hint: '[kind]', selectorKey: 'paneKind', schemaKey: 'inspect:pane', requiredSurface: 'paneWorkbench' },
+  { canonicalName: 'explorer', aliases: ['files'], description: 'Open the file explorer pane', category: 'discovery', actionKind: 'navigation', owner: 'host', danger: 'safe', coverage: 'adapted', schemaKey: 'inspect:explorer', requiredSurface: 'explorer' },
+  { canonicalName: 'git', description: 'Open the source control pane', category: 'discovery', actionKind: 'navigation', owner: 'host', danger: 'safe', coverage: 'adapted', schemaKey: 'inspect:git', requiredSurface: 'sourceControl' },
+  { canonicalName: 'agent', aliases: ['agents', 'subagents'], description: 'Pick the main agent or a subagent thread', category: 'session', actionKind: 'owner-action', owner: 'dsh', danger: 'safe', coverage: 'equivalent', selectorKey: 'threadRef', requiredAction: 'open-thread' },
   { canonicalName: 'preset', description: 'Select an agent preset', category: 'model', actionKind: 'owner-action', owner: 'dsh', danger: 'safe', coverage: 'equivalent', selectorKey: 'presetRef', requiredAction: 'apply-preset' },
   { canonicalName: 'resume', aliases: ['r'], description: 'Resume a saved session', category: 'session', actionKind: 'owner-action', owner: 'dsh', danger: 'safe', coverage: 'equivalent', selectorKey: 'sessionId', requiredAction: 'open-session' },
+  { canonicalName: 'session', aliases: ['sessions'], description: 'Manage sessions: switch, rename, archive, restore', category: 'session', actionKind: 'owner-action', owner: 'dsh', danger: 'safe', coverage: 'adapted', selectorKey: 'sessionId', requiredAction: 'open-session', hint: '[switch|rename|archive|restore] [args]' },
+  { canonicalName: 'archive', description: 'Archive a session (owner preview required)', category: 'session', actionKind: 'owner-action', owner: 'dsh', danger: 'confirm', coverage: 'staged', selectorKey: 'sessionId', requiredAction: 'archive-session' },
+  { canonicalName: 'delete', description: 'Delete a session (owner preview required)', category: 'session', actionKind: 'owner-action', owner: 'dsh', danger: 'destructive', coverage: 'staged', selectorKey: 'sessionId', requiredAction: 'delete-session' },
   { canonicalName: 'new', description: 'Start a new chat', category: 'session', actionKind: 'owner-action', owner: 'dsh', danger: 'safe', coverage: 'equivalent', requiredAction: 'new-chat' },
   { canonicalName: 'fork', description: 'Fork the current chat', category: 'session', actionKind: 'owner-action', owner: 'dsh', danger: 'confirm', coverage: 'equivalent', requiredAction: 'fork-chat' },
   { canonicalName: 'rename', description: 'Rename the current session', category: 'session', actionKind: 'owner-action', owner: 'dsh', danger: 'safe', coverage: 'equivalent', hint: '<title>', requiredAction: 'rename-session' },
@@ -61,11 +70,21 @@ const P0_SEEDS: readonly P0Seed[] = [
   { canonicalName: 'quit', aliases: ['exit'], description: 'Quit the current client surface', category: 'lifecycle', actionKind: 'local', owner: 'client', danger: 'confirm', coverage: 'equivalent' },
 ];
 
-const INSPECT_COMMANDS = new Set(['help', 'commands', 'status', 'plugins', 'mcp', 'skills', 'diff', 'plan', 'goal']);
+const INSPECT_COMMANDS = new Set(['help', 'commands', 'status', 'plugins', 'mcp', 'skills', 'pane', 'explorer', 'git', 'diff', 'plan', 'goal']);
+
+const SURFACE_REASONS: Record<string, string> = {
+  mcpInspector: 'MCP inspector plugin not installed',
+  agentContext: 'Agent Context pane not installed',
+  paneWorkbench: 'Pane Workbench is not installed',
+  explorer: 'Explorer pane is not installed',
+  sourceControl: 'Source Control pane is not installed',
+};
 
 export function buildP0Catalog(capabilities: OwnerCapabilitySnapshot = { availableActions: new Set() }): CommandExperienceEntryV1[] {
+  const surfaces = capabilities.surfaces ?? new Set<string>();
   return P0_SEEDS.map((seed) => {
-    const missing = seed.requiredAction !== undefined && !capabilities.availableActions.has(seed.requiredAction)
+    const missingAction = seed.requiredAction !== undefined && !capabilities.availableActions.has(seed.requiredAction)
+    const missingSurface = seed.requiredSurface !== undefined && !surfaces.has(seed.requiredSurface)
     const notApplicable = seed.coverage === 'not-applicable'
     const entry: CommandExperienceEntryV1 = {
       canonicalName: seed.canonicalName,
@@ -75,6 +94,7 @@ export function buildP0Catalog(capabilities: OwnerCapabilitySnapshot = { availab
       input: {
         ...(seed.hint === undefined ? {} : { hint: seed.hint }),
         ...(seed.selectorKey === undefined ? {} : { selectorKey: seed.selectorKey }),
+        ...(seed.schemaKey === undefined ? {} : { schemaKey: seed.schemaKey }),
       },
       surfaces: ['web', 'tui'],
       actionKind: seed.actionKind,
@@ -82,9 +102,11 @@ export function buildP0Catalog(capabilities: OwnerCapabilitySnapshot = { availab
       danger: seed.danger,
       availability: notApplicable
         ? { state: 'disabled', reason: 'not applicable on DSH' }
-        : missing
+        : missingAction
           ? { state: 'disabled', reason: `missing owner action ${seed.requiredAction}` }
-          : { state: 'available' },
+          : missingSurface
+            ? { state: 'disabled', reason: SURFACE_REASONS[seed.requiredSurface!] ?? `missing surface ${seed.requiredSurface}` }
+            : { state: 'available' },
       coverage: seed.coverage,
     }
     return normalizeCommandEntry(entry)
@@ -94,6 +116,15 @@ export function buildP0Catalog(capabilities: OwnerCapabilitySnapshot = { availab
 export function inspectCommandsMutateState(canonicalName: string): boolean {
   return !INSPECT_COMMANDS.has(canonicalName.replace(/^\//, ''))
 }
+
+/**
+ * Canonical names the official DSH runtime already owns (`dsh-command-goal`,
+ * plan mode). The `/` directory still lists them, but the host projection
+ * must never register them: the official registry is first-come with hard
+ * duplicate failures, and a hot-plug bundle claiming these names first would
+ * crash the official plugins' boot.
+ */
+export const OFFICIAL_OWNED_INSPECT_NAMES: ReadonlySet<string> = new Set(['goal', 'plan'])
 
 export function sharedActionIdentity(left: string, right: string, catalog: readonly CommandExperienceEntryV1[]): boolean {
   const resolve = (name: string): string => {

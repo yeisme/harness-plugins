@@ -385,4 +385,83 @@ describe('reducer', () => {
       expect(recovered.error).toBeTruthy();
     });
   });
+
+  describe('MOVE_SELECTION', () => {
+    const keys = ['a', 'b', 'c'];
+
+    it('moves by delta and clamps at both ends', () => {
+      let state = createInitialState();
+      state = commandReducer(state, actions.moveSelection({ delta: 1 }, keys));
+      expect(state.cursorKey).toBe('a');
+      expect(state.cursorMoved).toBe(true);
+
+      state = commandReducer(state, actions.moveSelection({ delta: 1 }, keys));
+      expect(state.cursorKey).toBe('b');
+
+      state = commandReducer(state, actions.moveSelection({ delta: 5 }, keys));
+      expect(state.cursorKey).toBe('c');
+
+      state = commandReducer(state, actions.moveSelection({ delta: -9 }, keys));
+      expect(state.cursorKey).toBeNull();
+      expect(state.cursorMoved).toBe(false);
+    });
+
+    it('jumps to an explicit index', () => {
+      let state = createInitialState();
+      state = commandReducer(state, actions.moveSelection({ index: 2 }, keys));
+      expect(state.cursorKey).toBe('c');
+      state = commandReducer(state, actions.moveSelection({ index: 99 }, keys));
+      expect(state.cursorKey).toBe('c');
+    });
+
+    it('is a no-op without candidates', () => {
+      const state = createInitialState();
+      const next = commandReducer(state, actions.moveSelection({ delta: 1 }, []));
+      expect(next).toBe(state);
+    });
+  });
+
+  describe('cursor staleness', () => {
+    const keys = ['a', 'b'];
+
+    it('clears a vanished cursor on UPDATE_QUERY without snapping to a neighbor', () => {
+      let state = createInitialState();
+      state = commandReducer(state, actions.moveSelection({ index: 1 }, keys));
+      expect(state.cursorKey).toBe('b');
+
+      state = commandReducer(state, { type: 'UPDATE_QUERY', query: '/x', candidateKeys: ['a'] });
+      expect(state.cursorKey).toBeNull();
+      expect(state.cursorMoved).toBe(false);
+    });
+
+    it('keeps a still-valid cursor on UPDATE_QUERY', () => {
+      let state = createInitialState();
+      state = commandReducer(state, actions.moveSelection({ index: 0 }, keys));
+      state = commandReducer(state, { type: 'UPDATE_QUERY', query: '/a', candidateKeys: ['a'] });
+      expect(state.cursorKey).toBe('a');
+    });
+
+    it('resets the cursor when a command is selected', () => {
+      let state = createInitialState();
+      state = commandReducer(state, actions.moveSelection({ index: 1 }, keys));
+      state = commandReducer(state, actions.selectCommand(mockCommand));
+      expect(state.cursorKey).toBeNull();
+      expect(state.cursorMoved).toBe(false);
+    });
+
+    it('CLEAR_CURSOR drops a stale cursor so auto-select can resume', () => {
+      let state = createInitialState();
+      state = commandReducer(state, actions.moveSelection({ index: 1 }, ['a', 'b']));
+      // Typing path: UPDATE_QUERY carries no candidate keys, so the adapter
+      // clears the cursor explicitly once the refiltered list drops the key.
+      state = commandReducer(state, { type: 'UPDATE_QUERY', query: '/x' });
+      expect(state.cursorKey).toBe('b');
+      state = commandReducer(state, actions.clearCursor());
+      expect(state.cursorKey).toBeNull();
+      expect(state.cursorMoved).toBe(false);
+      // Clearing an already-clear cursor is a no-op (same reference).
+      const cleared = state;
+      expect(commandReducer(state, actions.clearCursor())).toBe(cleared);
+    });
+  });
 });

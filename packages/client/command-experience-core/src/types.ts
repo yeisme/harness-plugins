@@ -175,6 +175,12 @@ export interface CommandReducerState {
   selectionStart: number | null;
   selectionEnd: number | null;
 
+  /** Stable key of the keyboard-moved candidate cursor (null = none) */
+  cursorKey: string | null;
+
+  /** True once the cursor has been moved and still points at a candidate */
+  cursorMoved: boolean;
+
   /** Error message (if any) */
   error: string | null;
 }
@@ -184,10 +190,12 @@ export interface CommandReducerState {
  */
 export type CommandReducerAction =
   | { type: 'START_ASSIST'; query: string; draft: string }
-  | { type: 'UPDATE_QUERY'; query: string }
+  | { type: 'UPDATE_QUERY'; query: string; candidateKeys?: readonly string[] }
   | { type: 'SELECT_COMMAND'; command: CommandExperienceEntryV1 }
   | { type: 'SET_ARGUMENTS'; args: Record<string, unknown> }
   | { type: 'SET_SELECTED_REF'; ref: string | null }
+  | { type: 'MOVE_SELECTION'; delta?: number; index?: number; candidateKeys: readonly string[] }
+  | { type: 'CLEAR_CURSOR' }
   | { type: 'OPEN_SELECTOR' }
   | { type: 'REQUEST_CONFIRMATION' }
   | { type: 'CONFIRM' }

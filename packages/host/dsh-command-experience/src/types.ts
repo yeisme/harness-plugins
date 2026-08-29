@@ -92,7 +92,7 @@ export interface OwnerImpactPreview {
 
 export interface OwnerActionDescriptor {
   /** Action type */
-  type: 'open-thread' | 'open-session' | 'new-chat' | 'fork-chat' | 'rename-session' | 'compact-context' | 'delete-session' | 'archive-session' | 'apply-preset' | 'set-model' | 'set-reasoning' | 'set-permissions';
+  type: 'open-thread' | 'open-session' | 'new-chat' | 'fork-chat' | 'rename-session' | 'compact-context' | 'delete-session' | 'archive-session' | 'restore-session' | 'apply-preset' | 'set-model' | 'set-reasoning' | 'set-permissions';
 
   /** Opaque reference for the action target */
   targetRef: ThreadRef | SessionRef | null;

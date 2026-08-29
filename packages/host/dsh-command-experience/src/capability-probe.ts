@@ -72,6 +72,10 @@ export async function probeCapabilities(): Promise<CapabilityProbeResult> {
           reason: 'Session projection not available in DSH runtime',
         });
         result.unavailableCommands.push({
+          command: '/session',
+          reason: 'Session projection not available in DSH runtime',
+        });
+        result.unavailableCommands.push({
           command: '/new',
           reason: 'Session action not available in DSH runtime',
         });

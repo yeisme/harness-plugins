@@ -4,10 +4,11 @@
  * React hooks that consume the shared directory and reducer.
  */
 
-import { useCallback, useMemo, useReducer, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import type {
   CommandExperienceEntryV1,
   CommandFilterOptions,
+  CommandKeyEvent,
   CommandReducerAction,
   CommandReducerState,
 } from '@yeisme/dsh-client-ui-command-experience-core';
@@ -21,7 +22,21 @@ import {
   generateCorrelationId,
   isCommandExecutable,
   resolveAssistQuery,
+  resolveKeyAction,
+  resolveKeymap,
 } from '@yeisme/dsh-client-ui-command-experience-core';
+import type { CommandKeyboardShortcuts } from './types';
+
+/** Normalize a DOM keyboard event into the shared logical key event. */
+export function commandKeyEventFromDom(event: KeyboardEvent): CommandKeyEvent {
+  return {
+    key: event.key,
+    ctrl: event.ctrlKey,
+    meta: event.metaKey,
+    alt: event.altKey,
+    shift: event.shiftKey,
+  };
+}
 
 export function useCommandDirectory(
   commands: readonly CommandExperienceEntryV1[],
@@ -86,6 +101,46 @@ export function useCommandState(
     state,
     dispatch,
   };
+}
+
+/**
+ * Window-level palette toggle (default Ctrl+K / Cmd+K).
+ *
+ * Opens the command assist from any idle page state. The listener is
+ * disabled when `enabled` is false so hosts that own the binding can opt
+ * out and avoid double handling.
+ */
+export function useCommandPaletteToggle(options: {
+  readonly dispatch: (action: CommandReducerAction) => void;
+  readonly enabled?: boolean;
+  readonly shortcuts?: CommandKeyboardShortcuts;
+  readonly onOpen?: () => void;
+}): void {
+  const { dispatch, enabled = true, shortcuts, onOpen } = options;
+
+  useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
+    const config = resolveKeymap(shortcuts);
+    const idleState = createInitialState();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const resolution = resolveKeyAction({
+        event: commandKeyEventFromDom(event),
+        state: idleState,
+        config,
+        context: { candidateKeys: [], commands: [] },
+      });
+      if (resolution.kind !== 'toggle') {
+        return;
+      }
+      event.preventDefault();
+      dispatch({ type: 'START_ASSIST', query: '/', draft: '/' });
+      onOpen?.();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [dispatch, enabled, shortcuts, onOpen]);
 }
 
 export function useCommandNavigation(

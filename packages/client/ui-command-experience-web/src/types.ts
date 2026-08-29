@@ -62,10 +62,20 @@ export interface CommandKeyboardShortcuts {
   navigateUp?: string[];
   /** Navigate down */
   navigateDown?: string[];
+  /** Jump to the first candidate (default: Home) */
+  moveFirst?: string[];
+  /** Jump to the last candidate (default: End) */
+  moveLast?: string[];
   /** Execute selected command */
   execute?: string[];
   /** Cancel/close */
   cancel?: string[];
+  /** Confirm a danger gate (default: Ctrl+Enter / Cmd+Enter; bare Enter never confirms) */
+  confirmExecute?: string[];
+  /** Close a receipt (default: Escape / Ctrl+D / Cmd+D) */
+  closeReceipt?: string[];
+  /** Complete the query to the safe unique prefix (default: Tab) */
+  tabComplete?: string[];
 }
 
 /**
@@ -104,6 +114,8 @@ export interface CommandSelectorOptions {
   showDisabled?: boolean;
   /** Custom placeholder text */
   placeholder?: string;
+  /** Custom keyboard shortcuts for the picker list */
+  keyboardShortcuts?: CommandKeyboardShortcuts;
 }
 
 /**
@@ -126,6 +138,8 @@ export interface ConfirmationDialogProps {
   } | null;
   /** Whether the owner can emit a receipt */
   receiptCapable?: boolean;
+  /** Custom keyboard shortcuts for confirm/cancel */
+  keyboardShortcuts?: CommandKeyboardShortcuts;
 }
 
 /**
@@ -138,4 +152,6 @@ export interface PendingReceiptProps {
   receiptStatus?: ReceiptStatus | null;
   /** Dispatch function */
   dispatch: (action: CommandReducerAction) => void;
+  /** Custom keyboard shortcuts for dismissing the receipt */
+  keyboardShortcuts?: CommandKeyboardShortcuts;
 }

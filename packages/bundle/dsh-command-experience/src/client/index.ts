@@ -1,22 +1,33 @@
 /**
  * DSH Command Experience Client Entry Point
  *
- * Client-side exports for Web integration.
- * Directly includes core functionality to avoid external workspace requires.
+ * ModuleLoader face. Workspace packages are inlined by tsdown so this
+ * file stays self-contained: no external @yeisme require at runtime.
  */
 
-// Inline core exports to satisfy bundle contract
-// Full web adapter implementation will be added in tasks 4.x
-export const commandExperienceWebAdapter = 'web-adapter-external';
+import { bindSlashRuntime, type SlashBindContext } from '../slash-bind.ts';
 
-// Placeholder for core exports - these will be properly implemented
-// when the full web adapter is developed
-export const types = {
-  // Core types will be exported here
-};
+export { commandExperienceTuiAdapter } from '@yeisme/dsh-client-ui-command-experience-tui';
 
-// Temporary export for bundle contract compliance
-export const bundlePlaceholder = {
-  version: '0.1.0-rc.1',
-  status: 'placeholder',
-};
+/**
+ * The React web adapter cannot ship inside this ModuleLoader bundle:
+ * React stays external by contract. Hosts consume it directly from
+ * @yeisme/dsh-client-ui-command-experience-web. This descriptor names that
+ * handoff instead of faking an adapter value.
+ */
+export const commandExperienceWebAdapterRef = {
+  packageName: '@yeisme/dsh-client-ui-command-experience-web',
+  bundled: false,
+  reason: 'React is an external peer dependency; the web adapter ships as its own package',
+} as const;
+
+export const name = 'dsh-command-experience';
+export const inject: readonly string[] = [];
+
+/** Live slash directory on the web client. Missing pane/commands seams fail closed. */
+export function apply(ctx: SlashBindContext): () => void {
+  return bindSlashRuntime(ctx).dispose;
+}
+
+const DshCommandExperienceClientPlugin = { name, inject, apply };
+export default DshCommandExperienceClientPlugin;

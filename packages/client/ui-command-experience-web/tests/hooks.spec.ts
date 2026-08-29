@@ -7,10 +7,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import {
+  commandKeyEventFromDom,
   useCommandDirectory,
   useCommandState,
   useCommandNavigation,
   useCommandExecutor,
+  useCommandPaletteToggle,
   useCommandSelector,
 } from '../src/hooks';
 import type { CommandExperienceEntryV1 } from '@yeisme/dsh-client-ui-command-experience-core';
@@ -230,5 +232,55 @@ describe('useCommandSelector', () => {
     });
 
     expect(result.current.query).toBe('search term');
+  });
+});
+
+describe('commandKeyEventFromDom', () => {
+  it('normalizes DOM keyboard events into logical key events', () => {
+    expect(commandKeyEventFromDom({
+      key: 'ArrowDown', ctrlKey: false, metaKey: false, altKey: false, shiftKey: false,
+    } as KeyboardEvent)).toEqual({ key: 'ArrowDown', ctrl: false, meta: false, alt: false, shift: false });
+
+    expect(commandKeyEventFromDom({
+      key: 'k', ctrlKey: true, metaKey: false, altKey: false, shiftKey: false,
+    } as KeyboardEvent)).toEqual({ key: 'k', ctrl: true, meta: false, alt: false, shift: false });
+  });
+});
+
+describe('useCommandPaletteToggle', () => {
+  it('opens the palette on ctrl+k and stays inert when disabled', async () => {
+    const { result } = renderHook(() => useCommandState());
+    const onOpen = vi.fn();
+    renderHook(() => useCommandPaletteToggle({
+      dispatch: result.current.dispatch,
+      onOpen,
+    }));
+
+    expect(result.current.state.state).toBe('idle');
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
+    });
+    expect(result.current.state.state).toBe('assist');
+    expect(result.current.state.query).toBe('/');
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing when disabled or when another key is pressed', async () => {
+    const { result } = renderHook(() => useCommandState());
+    renderHook(() => useCommandPaletteToggle({
+      dispatch: result.current.dispatch,
+      enabled: false,
+    }));
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
+    });
+    expect(result.current.state.state).toBe('idle');
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', bubbles: true }));
+    });
+    expect(result.current.state.state).toBe('idle');
   });
 });

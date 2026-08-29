@@ -3,6 +3,7 @@ import {
   createArchiveRequest,
   createDeleteRequest,
   createMockAdapter,
+  createRestoreRequest,
   prepareDestructiveSubmit,
   type OwnerImpactPreview,
 } from '../src/index';
@@ -68,6 +69,16 @@ describe('owner preview danger matrix', () => {
     expect(decision.allowed).toBe(false);
     expect(decision.reason).toBe('Plugin must not recursively delete');
     expect(decision.request).toBeNull();
+  });
+
+  it('creates restore requests as safe receipt-gated actions without preview', () => {
+    const restore = createRestoreRequest('session:opaque-1', 'corr-r');
+
+    expect(restore.action.type).toBe('restore-session');
+    expect(restore.action.danger).toBe('safe');
+    expect(restore.action.targetRef).toBe('session:opaque-1');
+    expect(restore.action.preview).toBeUndefined();
+    expect(restore.correlationId).toBe('corr-r');
   });
 
   it('submits only the owner-authored target after preview', async () => {

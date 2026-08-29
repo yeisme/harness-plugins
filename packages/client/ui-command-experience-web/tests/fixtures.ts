@@ -29,6 +29,7 @@ export const WEB_COMMAND_CATALOG: CommandExperienceEntryV1[] = [
   commandFixture({ canonicalName: 'help', category: 'discovery', actionKind: 'local', owner: 'client', description: 'Show command help' }),
   commandFixture({ canonicalName: 'agent', description: 'Switch agent or thread', input: { selectorKey: 'threadRef' } }),
   commandFixture({ canonicalName: 'resume', description: 'Resume a saved session', input: { selectorKey: 'sessionId' } }),
+  commandFixture({ canonicalName: 'session', aliases: ['sessions'], description: 'Manage sessions: switch, rename, archive, restore', input: { selectorKey: 'sessionId' } }),
   commandFixture({ canonicalName: 'rename', description: 'Rename the current session', input: { schemaKey: 'title' } }),
   commandFixture({
     canonicalName: 'status',

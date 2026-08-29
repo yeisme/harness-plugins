@@ -34,6 +34,22 @@ dsh plugin --profile tui remove @yeisme/dsh-command-experience
 - Idempotent receipt handling
 - Stale detection and recovery
 
+### Live directory and pane hot-plug
+- P0 catalog, pane launcher commands, and host `commands` projections share one `/` directory
+- New picker-visible panes appear under `/pane` without editing this package
+- `presentation.launcher: true` publishes `/creator-open`; optional `slash.name` publishes `/creator`
+- Uninstalling a pane removes its rows immediately; reserved names stay with P0
+
+### `/mcp` `/skills` `/plugins`
+- Host plane: registered as real official commands (menu rows + durable
+  `command/run` / `command/done` records) once the `commands` service is up
+- `/mcp` opens or points at the Tools inspector conversation view
+- `/skills` opens Agent Context on the skills tab
+- `/plugins` lists loaded plugin ids locally from the cordis loader entry
+  table (the same source as the official plugin inventory)
+- Missing surfaces stay visible and disabled with a reason; execution
+  returns that reason as an explicit text result
+
 ### `/agent` Thread Picker
 - Switch between main agent and subagent threads
 - Hierarchical thread projection from DSH
@@ -45,6 +61,32 @@ dsh plugin --profile tui remove @yeisme/dsh-command-experience
 - Local filtering without building local index
 - Owner-authored open action with receipt
 - Failure keeps current session and draft
+
+### `/session` Session Hub
+- Management hub layered over the same `open-session` channel as `/resume`
+- Pick a session, then choose an action: Switch, Rename, Archive, Restore
+- `/session archive` pre-arms archive mode; `/session rename <title>` deep-links
+- Archive routes through the owner preview and receipt gates and refuses
+  recursive payloads; the hub never offers delete
+- Archived targets swap the Archive action for Restore
+- Missing owner actions stay visible and disabled with a reason
+
+### `/archive` and `/delete` (staged)
+- Standalone catalog entries with `confirm` / `destructive` danger grades
+- Stay staged and disabled until the owner supplies a preview and a
+  receipt path; no impact data is invented client-side
+
+### Shared Keymap (mouse-free operation)
+- One binding table drives Web and TUI: `Ctrl/Cmd+K` toggle,
+  arrows / `Ctrl+N` / `Ctrl+P` navigation, `Home` / `End` jumps,
+  `Enter` execute, `Escape` cancel, `Tab` safe-prefix completion,
+  `Ctrl/Cmd+Enter` confirm (bare `Enter` never confirms a danger gate),
+  `Escape` / `Ctrl+D` close a receipt
+- Bare `j` / `k` stay opt-in config: they would swallow query letters
+- Cursor movement lives in the shared reducer; a vanished candidate
+  clears the cursor instead of snapping to a neighbor
+- Shortcut bindings live in adapter configuration, never in command
+  metadata (the sanitizer rejects shortcut fields in descriptors)
 
 ### Legacy Compatibility
 - `:` alias for `/` (with migration hints)
@@ -65,15 +107,21 @@ Complete coverage matrix tracking:
 - `/help` - Command help
 - `/commands` - Command palette
 - `/status` - System status
-- `/plugins` - Plugin management
-- `/mcp` - MCP servers
-- `/skills` - Skills management
+- `/plugins` - List loaded plugins
+- `/mcp` - Open MCP / Tools inspector
+- `/skills` - Open Agent Context skills
+- `/pane` - Open a workspace pane
+- `/explorer` / `/files` - Open the file explorer pane
+- `/git` - Open source control
 
 ### Session & Navigation
 - `/new` - Create new chat
 - `/resume` - Resume saved session
+- `/session` - Session management hub (switch / rename / archive / restore)
 - `/rename` - Rename session
 - `/fork` - Fork current chat
+- `/archive` - Archive session (staged, owner preview required)
+- `/delete` - Delete session (staged, owner preview required)
 - `/agent` - Switch agent thread
 - `/subagents` - View subagents
 
@@ -105,9 +153,33 @@ Complete coverage matrix tracking:
 @yeisme/dsh-command-experience (bundle)
 ├── @yeisme/dsh-client-ui-command-experience-core (shared types & reducer)
 ├── @yeisme/dsh-command-experience-host (DSH adapter)
-├── Web adapter (future tasks 4.x)
-└── TUI adapter (future tasks 5.x)
+├── @yeisme/dsh-client-ui-command-experience-web (Web contribution adapter)
+└── @yeisme/dsh-client-ui-command-experience-tui (TUI console contribution adapter)
 ```
+
+The TUI adapter probes a public `registerCommandConsole` / `contributeCommandConsole` seam. Missing seams fail closed: the contribution stays unregistered with an explicit reason. No fake console, no host patching, and no RPC on first discovery. Canonical `/` assist, the `:` legacy alias (with a migration hint), `/agent` thread picker, and `/resume` session picker all resolve against the shared catalog. Missing owner actions stay visible and disabled with a reason.
+
+### Host registration contract
+
+The host face (`src/index.ts` → `bindSlashRuntime`) follows three rules that
+only surface in the real loader (unit-test fakes are synchronously ready and
+hide all of them; see `openspec/changes/dsh-slash-directory-hotplug-v1` design
+§D5):
+
+1. **Wait for `commands`.** The plugin declares `inject: ['commands']`. With an
+   empty inject the loader fiber can start before dsh-base provides the
+   service, and the fail-closed skip silently drops every registration.
+2. **Yield official names.** The official registry is first-come with hard
+   duplicate failures. `OFFICIAL_OWNED_INSPECT_NAMES` (`goal`, `plan`) never
+   project to the host, and every registration re-checks `find()` first —
+   claiming `goal` before `dsh-command-goal` fails the whole plugin tree.
+3. **Project the loader entry table.** The host context has no `plugins`
+   service and `registry.keys()` is not the plugin list; surface probes and
+   `/plugins` read `ctx.loader.entries()` (id + module name + phase), the
+   same source as `@deepseek-ai/dsh-host-plugin-inventory`.
+
+A running `dsh` server holds its imports — rebuild (`pnpm build`) and restart
+the profile before retesting registration changes.
 
 ## Requirements
 

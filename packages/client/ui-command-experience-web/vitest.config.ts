@@ -12,7 +12,12 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./tests/setup.ts'],
-    include: ['./tests/**/*.spec.ts'],
+    include: ['./tests/**/*.spec.{ts,tsx}'],
+    server: {
+      deps: {
+        inline: ['@deepseek-ai/dsh-client-ui-primitives'],
+      },
+    },
   },
   resolve: {
     alias: {

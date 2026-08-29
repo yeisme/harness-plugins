@@ -5,7 +5,7 @@
  * issue RPC or mutate owner state.
  */
 
-import type { CommandExperienceEntryV1 } from './types';
+import type { CommandExperienceEntryV1, CommandSurface } from './types';
 import {
   filterCommands,
   findExactMatch,
@@ -45,10 +45,12 @@ export function isSlashAssistInput(input: string): boolean {
 export function resolveAssistQuery(
   commands: readonly CommandExperienceEntryV1[],
   input: string,
+  options: { readonly surface?: CommandSurface } = {},
 ): AssistResolution {
   const token = parseSlashToken(input);
+  const surface = options.surface ?? 'web';
   const surfaceCommands = sortCommands(
-    filterCommands(commands, { surface: 'web', includeHidden: false }),
+    filterCommands(commands, { surface, includeHidden: false }),
     'category',
   );
 
@@ -85,7 +87,12 @@ export function resolveAssistQuery(
   };
 }
 
-function findSafeUniquePrefix(
+/**
+ * Unique prefix is safe only when it identifies exactly one executable
+ * command. Exported so the shared keymap can complete Tab without issuing
+ * RPC or mutating owner state.
+ */
+export function findSafeUniquePrefix(
   commands: readonly CommandExperienceEntryV1[],
   prefix: string,
 ): CommandExperienceEntryV1 | null {

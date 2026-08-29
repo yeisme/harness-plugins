@@ -38,6 +38,7 @@ export {
   createApplyPresetRequest,
   createCompactRequest,
   createArchiveRequest,
+  createRestoreRequest,
   createDeleteRequest,
   prepareDestructiveSubmit,
   isValidReceipt,

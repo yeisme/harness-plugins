@@ -24,6 +24,9 @@ export {
   PendingReceipt,
 } from './components';
 
+export { SessionActionMenu } from './session-hub';
+export type { SessionActionMenuProps } from './session-hub';
+
 // Hooks
 export {
   useCommandDirectory,

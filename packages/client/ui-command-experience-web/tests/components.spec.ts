@@ -313,6 +313,135 @@ describe('long-list projection', () => {
   });
 });
 
+
+describe('CommandMenu keymap wiring', () => {
+  it('opens the palette with Ctrl+K from idle', async () => {
+    const user = userEvent.setup();
+    const store = createStore();
+
+    render(React.createElement(Harness, {
+      store,
+      children: (state, dispatch) => React.createElement(CommandMenu, {
+        state,
+        dispatch,
+        commands: WEB_COMMAND_CATALOG,
+      }),
+    }));
+
+    expect(screen.queryByRole('textbox', { name: /command input/i })).not.toBeInTheDocument();
+
+    await user.keyboard('{Control>}k{/Control}');
+    expect(store.getState().state).toBe('assist');
+    expect(store.getState().query).toBe('/');
+    expect(await screen.findByRole('textbox', { name: /command input/i })).toHaveValue('/');
+  });
+
+  it('moves the cursor with arrows and executes the cursor row, refusing disabled rows', async () => {
+    const user = userEvent.setup();
+    const store = createStore();
+    store.dispatch({ type: 'START_ASSIST', query: '/', draft: '/' });
+
+    render(React.createElement(Harness, {
+      store,
+      children: (state, dispatch) => React.createElement(CommandMenu, {
+        state,
+        dispatch,
+        commands: WEB_COMMAND_CATALOG,
+      }),
+    }));
+
+    await user.keyboard('{ArrowDown}');
+    expect(store.getState().cursorKey).toBe('cmd:help');
+
+    await user.keyboard('{ArrowDown}');
+    expect(store.getState().cursorKey).toBe('cmd:status');
+    expect(store.getState().selectedCommand).toBeNull();
+
+    // Enter on a disabled cursor row must not dispatch anything.
+    await user.keyboard('{Enter}');
+    expect(store.getState().state).not.toBe('dispatching');
+    expect(store.getState().selectedCommand).toBeNull();
+
+    await user.keyboard('{ArrowUp}');
+    await user.keyboard('{Enter}');
+    expect(store.getState().selectedCommand?.canonicalName).toBe('help');
+  });
+
+  it('resumes auto-select after typing filters away a moved cursor', async () => {
+    const user = userEvent.setup();
+    const store = createStore();
+    store.dispatch({ type: 'START_ASSIST', query: '/', draft: '/' });
+
+    render(React.createElement(Harness, {
+      store,
+      children: (state, dispatch) => React.createElement(CommandMenu, {
+        state,
+        dispatch,
+        commands: WEB_COMMAND_CATALOG,
+      }),
+    }));
+
+    await user.keyboard('{ArrowDown}{ArrowDown}');
+    expect(store.getState().cursorKey).toBe('cmd:status');
+    expect(store.getState().cursorMoved).toBe(true);
+
+    await user.click(screen.getByRole('textbox', { name: /command input/i }));
+    await user.keyboard('help');
+
+    // The typing path carries no candidate keys, so the stale cursor must be
+    // cleared by the refilter effect (never snapped) and auto-select resumes.
+    await waitFor(() => {
+      expect(store.getState().cursorMoved).toBe(false);
+      expect(store.getState().selectedCommand?.canonicalName).toBe('help');
+      expect(store.getState().state).toBe('selected');
+    });
+  });
+
+  it('jumps to first and last candidates with Home and End', async () => {
+    const user = userEvent.setup();
+    const store = createStore();
+    store.dispatch({ type: 'START_ASSIST', query: '/', draft: '/' });
+
+    render(React.createElement(Harness, {
+      store,
+      children: (state, dispatch) => React.createElement(CommandMenu, {
+        state,
+        dispatch,
+        commands: WEB_COMMAND_CATALOG,
+      }),
+    }));
+
+    await user.keyboard('{End}');
+    const last = WEB_COMMAND_CATALOG.length; // sorted candidates
+    expect(store.getState().cursorMoved).toBe(true);
+    await user.keyboard('{Home}');
+    expect(store.getState().cursorKey).toBe('cmd:help');
+    expect(last).toBeGreaterThan(1);
+  });
+
+  it('completes a safe unique prefix with Tab', async () => {
+    const user = userEvent.setup();
+    const store = createStore();
+    store.dispatch({ type: 'START_ASSIST', query: '/', draft: '/' });
+
+    render(React.createElement(Harness, {
+      store,
+      children: (state, dispatch) => React.createElement(CommandMenu, {
+        state,
+        dispatch,
+        commands: WEB_COMMAND_CATALOG,
+      }),
+    }));
+
+    const input = screen.getByRole('textbox', { name: /command input/i });
+    await user.clear(input);
+    await user.type(input, '/hel');
+    await user.keyboard('{Tab}');
+    expect(store.getState().draft).toBe('/help');
+    expect(store.getState().selectedCommand?.canonicalName).toBe('help');
+  });
+});
+
 describe('malicious descriptor fixture', () => {
   it('sanitizes plugin description/icon/category and rejects execution injection', () => {
     const sanitized = sanitizeCommandDescriptor(MALICIOUS_PLUGIN_DESCRIPTOR);

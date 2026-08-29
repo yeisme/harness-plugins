@@ -8,10 +8,18 @@
 // Re-export core types and utilities for Web/TUI adapters
 export * from '@yeisme/dsh-client-ui-command-experience-core';
 
+import { commandExperienceTuiAdapter } from '@yeisme/dsh-client-ui-command-experience-tui';
+
+export { commandExperienceTuiAdapter };
+
 // Web adapter lives in @yeisme/dsh-client-ui-command-experience-web.
-// TUI adapter is a later wave (5.x).
-export const commandExperienceWebAdapter = 'web-adapter-external';
-export const commandExperienceTuiAdapter = null;
+// React stays external, so this bundle ships a handoff descriptor, not a
+// fake adapter value.
+export const commandExperienceWebAdapterRef = {
+  packageName: '@yeisme/dsh-client-ui-command-experience-web',
+  bundled: false,
+  reason: 'React is an external peer dependency; the web adapter ships as its own package',
+} as const;
 
 // Module loader registration
 if (typeof window !== 'undefined' && (window as any).__ModuleLoader__) {
@@ -24,7 +32,7 @@ if (typeof window !== 'undefined' && (window as any).__ModuleLoader__) {
       // Export the core functionality
       Object.assign(exports, {
         // Core exports will be added here
-        commandExperienceWebAdapter,
+        commandExperienceWebAdapterRef,
         commandExperienceTuiAdapter,
       });
 

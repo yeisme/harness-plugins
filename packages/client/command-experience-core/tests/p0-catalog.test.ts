@@ -35,9 +35,68 @@ describe('P0 catalog adapters', () => {
     const catalog = buildP0Catalog()
     expect(sharedActionIdentity('quit', 'exit', catalog)).toBe(true)
     expect(sharedActionIdentity('agent', 'subagents', catalog)).toBe(true)
+    expect(sharedActionIdentity('agent', 'agents', catalog)).toBe(true)
     expect(sharedActionIdentity('new', 'fork', catalog)).toBe(false)
     const logout = catalog.find((item) => item.canonicalName === 'logout')
     expect(logout?.danger).toBe('confirm')
+  })
+
+  it('seeds the session hub and staged archive/delete commands', () => {
+    const catalog = buildP0Catalog()
+    const session = catalog.find((item) => item.canonicalName === 'session')
+    expect(session).toMatchObject({
+      category: 'session',
+      actionKind: 'owner-action',
+      danger: 'safe',
+      coverage: 'adapted',
+    })
+    expect(session?.aliases).toContain('sessions')
+    expect(session?.input.selectorKey).toBe('sessionId')
+    expect(sharedActionIdentity('session', 'sessions', catalog)).toBe(true)
+
+    const archive = catalog.find((item) => item.canonicalName === 'archive')
+    expect(archive).toMatchObject({
+      danger: 'confirm',
+      coverage: 'staged',
+    })
+    expect(archive?.availability).toEqual({
+      state: 'disabled',
+      reason: 'missing owner action archive-session',
+    })
+
+    const del = catalog.find((item) => item.canonicalName === 'delete')
+    expect(del).toMatchObject({
+      danger: 'destructive',
+      coverage: 'staged',
+    })
+    expect(del?.availability.state).toBe('disabled')
+  })
+
+  it('disables inspect navigation until the owning surface is present', () => {
+    const catalog = buildP0Catalog()
+    expect(catalog.find((item) => item.canonicalName === 'mcp')?.availability).toEqual({
+      state: 'disabled',
+      reason: 'MCP inspector plugin not installed',
+    })
+    expect(catalog.find((item) => item.canonicalName === 'pane')?.availability.state).toBe('disabled')
+    const ready = buildP0Catalog({
+      availableActions: new Set(),
+      surfaces: new Set(['mcpInspector', 'agentContext', 'paneWorkbench', 'explorer', 'sourceControl']),
+    })
+    expect(ready.find((item) => item.canonicalName === 'mcp')?.availability.state).toBe('available')
+    expect(ready.find((item) => item.canonicalName === 'explorer')?.aliases).toContain('files')
+    expect(ready.find((item) => item.canonicalName === 'git')?.availability.state).toBe('available')
+  })
+
+  it('derives /session availability from open-session like /resume', () => {
+    const catalog = buildP0Catalog({
+      availableActions: new Set(['open-session']),
+    })
+    const session = catalog.find((item) => item.canonicalName === 'session')
+    const resume = catalog.find((item) => item.canonicalName === 'resume')
+    expect(session?.availability.state).toBe('available')
+    expect(resume?.availability.state).toBe('available')
+    expect(inspectCommandsMutateState('session')).toBe(true)
   })
 
   it('rejects ledger rows that have no owner or verify command', () => {

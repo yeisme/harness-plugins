@@ -40,7 +40,9 @@
     "build": "tsdown src/index.ts src/client.ts --out-dir lib --format esm --dts --clean"
   },
   "dependencies": {
-    "@yeisme/dsh-client-ui-command-experience-core": "workspace:^"
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.6",
+    "@yeisme/dsh-client-ui-command-experience-core": "workspace:^",
+    "@yeisme/dsh-client-ui-surface": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

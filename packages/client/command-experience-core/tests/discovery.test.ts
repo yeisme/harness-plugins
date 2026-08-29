@@ -86,4 +86,18 @@ describe('resolveAssistQuery', () => {
     expect(parseSlashToken('/agent')).toBe('agent');
     expect(parseSlashToken('  /Help  ')).toBe('help');
   });
+
+  it('filters the local directory to the requested surface', () => {
+    const mixed: CommandExperienceEntryV1[] = [
+      command({ canonicalName: 'help', surfaces: ['web', 'tui'] }),
+      command({ canonicalName: 'web-only', surfaces: ['web'] }),
+      command({ canonicalName: 'tui-only', surfaces: ['tui'] }),
+    ];
+
+    const web = resolveAssistQuery(mixed, '/');
+    const tui = resolveAssistQuery(mixed, '/', { surface: 'tui' });
+
+    expect(web.candidates.map((entry) => entry.canonicalName)).toEqual(['help', 'web-only']);
+    expect(tui.candidates.map((entry) => entry.canonicalName)).toEqual(['help', 'tui-only']);
+  });
 });

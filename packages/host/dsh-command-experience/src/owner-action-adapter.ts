@@ -202,6 +202,25 @@ export function createArchiveRequest(
 }
 
 /**
+ * Create restore session action request. Restoring an archived session is
+ * a safe receipt-gated owner action; no preview is required.
+ */
+export function createRestoreRequest(
+  sessionRef: SessionRef,
+  correlationId: string,
+): OwnerActionRequest {
+  return {
+    action: {
+      type: 'restore-session',
+      targetRef: sessionRef,
+      parameters: {},
+      danger: 'safe',
+    },
+    correlationId,
+  };
+}
+
+/**
  * Create delete session action request. Preview is required before submit.
  * The plugin must not attach descendant lists or filesystem paths.
  */
