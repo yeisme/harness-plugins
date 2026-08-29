@@ -120,6 +120,7 @@ export type PaneStatus = z.infer<typeof PaneStatusSchema>
 export const PaneContextSchema = z.object({
   tenantRef: OpaqueRefSchema.optional(),
   workspaceRef: OpaqueRefSchema,
+  projectRef: OpaqueRefSchema.optional(),
   sessionRef: OpaqueRefSchema.optional(),
   principalRef: OpaqueRefSchema.optional(),
   revision: z.string().min(1).max(160),
@@ -160,11 +161,22 @@ export const PaneViewDescriptorSchema = z.object({
 }).strict()
 export type PaneViewDescriptorV1 = z.infer<typeof PaneViewDescriptorSchema>
 
+const SLASH_NAME = /^[a-z][a-z0-9-]{1,31}$/
+
+export const PaneCommandSlashSchema = z.object({
+  name: z.string().regex(SLASH_NAME),
+  aliases: z.array(z.string().regex(SLASH_NAME)).max(4).optional(),
+  hint: z.string().min(1).max(80).optional(),
+  category: z.enum(['discovery', 'session', 'model', 'work', 'lifecycle', 'pane']).optional(),
+}).strict()
+export type PaneCommandSlashV1 = z.infer<typeof PaneCommandSlashSchema>
+
 export const PaneCommandDescriptorSchema = z.object({
   id: IdentifierSchema,
   label: LabelSchema,
   permission: IdentifierSchema.optional(),
   presentation: PanePresentationSchema.optional(),
+  slash: PaneCommandSlashSchema.optional(),
 }).strict()
 export type PaneCommandDescriptorV1 = z.infer<typeof PaneCommandDescriptorSchema>
 

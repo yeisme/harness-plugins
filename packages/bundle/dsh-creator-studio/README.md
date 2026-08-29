@@ -9,6 +9,8 @@ Creator Studio 是基于 Pane Workbench 和 Desktop Workbench 的任务优先创
 - Pinax：资料、世界观、人物卡和上下文引用。
 - Anatomia：内容分析、质量指标和结构诊断。
 
+“创作”是唯一常驻入口，只打开 Creator Home。文字、视觉、音频、完整做剧、资料、跨 owner 资产、分析、生成队列和审批队列均作为独立 Pane 按需打开。资产默认当前项目，可显式切换到当前授权 tenant 的全部项目；生成与审批事实来自 Ordo 安全投影。
+
 ## 本地安装
 
 ```sh
@@ -35,4 +37,4 @@ await ctx.plugin(CreatorStudioPlugin)
 const disposeEikona = registerCreatorStudioOwner(ctx, eikonaAdapter)
 ```
 
-每个 adapter 只返回安全投影、短期媒体访问授权和 owner receipt。动作只按当前 server-authored descriptor 执行一次；`unknown`、`partial`、`cancel_unknown`、stale cursor 或上下文漂移都要求 owner reconcile，不会自动重试或替换 writer。
+每个 adapter 只返回安全投影、短期媒体访问授权和 owner receipt；可选 `listAssets` 为全部项目资产查询提供 Host 侧有界数据。动作只按当前 server-authored descriptor 执行一次；`unknown`、`partial`、`cancel_unknown`、stale cursor 或上下文漂移都要求 owner reconcile，不会自动重试或替换 writer。

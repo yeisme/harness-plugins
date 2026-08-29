@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import CreatorStudioPlugin, {
   CREATOR_STUDIO_EXPECTED_CONTEXT,
@@ -22,6 +22,7 @@ function expectedContext(): CreatorStudioContextV1 {
   return {
     tenantRef: 'tenant:one',
     workspaceRef: 'workspace:one',
+    projectRef: 'project:one',
     sessionRef: 'session:one',
     principalRef: 'principal:one',
     revision: '1',
@@ -31,6 +32,13 @@ function expectedContext(): CreatorStudioContextV1 {
     policyRevision: '1',
     runtimeGeneration: 'runtime:1',
   }
+}
+
+function provideTypert(ctx: Context) {
+  const unregister = vi.fn()
+  const register = vi.fn(() => unregister)
+  ctx.provide('typert', { register })
+  return { register, unregister }
 }
 
 function eikonaAdapter(): CreatorOwnerAdapterV1 {
@@ -61,6 +69,7 @@ describe('@yeisme/dsh-creator-studio bundle', () => {
   it('mounts one shared directory and one safe Remote', async () => {
     const ctx = new Context()
     contexts.push(ctx)
+    const typert = provideTypert(ctx)
     ctx.provide(CREATOR_STUDIO_EXPECTED_CONTEXT, expectedContext())
     const plugin = await ctx.plugin(CreatorStudioPlugin)
     registerCreatorStudioOwner(ctx, eikonaAdapter())
@@ -70,15 +79,27 @@ describe('@yeisme/dsh-creator-studio bundle', () => {
     const snapshot = await remote.snapshot()
     expect(snapshot.owners.find(owner => owner.owner === 'eikona')).toMatchObject({ status: 'ready' })
     expect(snapshot.owners).toHaveLength(6)
+    expect(typert.register).toHaveBeenCalledWith(expect.objectContaining({
+      face: 'host',
+      invocations: expect.arrayContaining([
+        expect.objectContaining({ namespace: 'creatorStudio', method: 'snapshot' }),
+        expect.objectContaining({ namespace: 'creatorStudio', method: 'dispatch' }),
+        expect.objectContaining({ namespace: 'creatorStudio', method: 'resolveArtifact' }),
+        expect.objectContaining({ namespace: 'creatorStudio', method: 'assets' }),
+        expect.objectContaining({ namespace: 'creatorStudio', method: 'decideApproval' }),
+      ]),
+    }))
 
     await plugin.dispose()
     expect(ctx.get('creatorStudio')).toBeUndefined()
     expect(ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY)).toBeUndefined()
+    expect(typert.unregister).toHaveBeenCalledOnce()
   })
 
   it('reference-counts compatible loader rows without duplicating services', async () => {
     const ctx = new Context()
     contexts.push(ctx)
+    provideTypert(ctx)
     ctx.provide(CREATOR_STUDIO_EXPECTED_CONTEXT, expectedContext())
     const first = await ctx.plugin(CreatorStudioPlugin)
     const second = await ctx.plugin({ name: 'creator-studio-compat-test', inject: [], apply })

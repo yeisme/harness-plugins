@@ -1,0 +1,47 @@
+{
+  "name": "@yeisme/dsh-language-intelligence-host",
+  "version": "0.1.0-rc.1",
+  "description": "Host-side typed LSP and bounded AST intelligence for DSH file panes",
+  "main": "lib/index.mjs",
+  "scripts": {
+    "test": "pnpm run build && vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json && tsdown src/index.ts src/node.ts --out-dir lib --format esm --dts --clean"
+  },
+  "license": "MIT",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.mts",
+      "default": "./lib/index.mjs"
+    },
+    "./node": {
+      "types": "./lib/node.d.mts",
+      "default": "./lib/node.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**",
+    "README.md"
+  ],
+  "dependencies": {
+    "@vscode/tree-sitter-wasm": "0.3.1",
+    "@yeisme/dsh-file-host": "workspace:*",
+    "jsonc-parser": "3.3.1",
+    "mdast-util-from-markdown": "2.0.3",
+    "vscode-jsonrpc": "9.0.2",
+    "vscode-languageserver-protocol": "3.18.3",
+    "web-tree-sitter": "0.26.3",
+    "yaml": "2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

@@ -1,0 +1,37 @@
+diff --git a/lib/support.js b/lib/support.js
+index ef60feaa76a9faac7bb445ae5d8b5f0f4861be72..1ffe65d3ce878beafea89eaf661114c338040817 100644
+--- a/lib/support.js
++++ b/lib/support.js
+@@ -32,7 +32,7 @@ else {
+ }
+ 
+ try {
+-    exports.nodestream = !!require("readable-stream").Readable;
++    exports.nodestream = false;
+ } catch(e) {
+     exports.nodestream = false;
+ }
+diff --git a/package.json b/package.json
+index 3fa81de96b758c0ee9f783e2b6e696bf6b976860..ce2f9df8d4d09e8c066b6678eec20f009c8606a8 100644
+--- a/package.json
++++ b/package.json
+@@ -17,7 +17,7 @@
+       "name": "Franz Buchinger"
+     },
+     {
+-      "name": "António Afonso"
++      "name": "Ant\u00f3nio Afonso"
+     },
+     {
+       "name": "David Duponchel"
+@@ -26,9 +26,8 @@
+       "name": "yiminghe"
+     }
+   ],
+-  "main": "./lib/index",
++  "main": "./dist/jszip.min.js",
+   "browser": {
+-    "./lib/index": "./dist/jszip.min.js",
+     "readable-stream": "./lib/readable-stream-browser.js"
+   },
+   "types": "./index.d.ts",

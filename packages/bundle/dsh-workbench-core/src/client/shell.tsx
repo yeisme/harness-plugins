@@ -10,6 +10,8 @@
  */
 
 import { useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Surface } from '@yeisme/dsh-client-ui-surface'
 import type { WorkbenchTabV1 } from '../types.ts'
 
 export interface WorkbenchShellProps {
@@ -29,83 +31,14 @@ export interface WorkbenchShellProps {
   status?: string | undefined
 }
 
-const styles: Record<'root' | 'tabs' | 'tab' | 'active' | 'close' | 'panel' | 'status', React.CSSProperties> = {
-  root: {
-    display: 'grid',
-    gridTemplateRows: 'auto minmax(0, 1fr) auto',
-    width: '100%',
-    height: '100%',
-    minWidth: 0,
-    minHeight: 0,
-    overflow: 'hidden',
-    color: 'var(--dsw-alias-label-primary, #f2f2f4)',
-    background: 'var(--dsw-alias-bg-base, #151517)',
-  },
-  tabs: {
-    display: 'flex',
-    flexWrap: 'nowrap',
-    gap: 3,
-    minWidth: 0,
-    minHeight: 52,
-    padding: '8px 14px 7px',
-    overflowX: 'auto',
-    overflowY: 'hidden',
-    background: 'var(--dsw-alias-bg-layer-1, #232324)',
-    borderBottom: '1px solid var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.12))',
-    scrollbarWidth: 'thin',
-  },
-  tab: {
-    display: 'inline-flex',
-    flex: '0 0 auto',
-    alignItems: 'center',
-    gap: 7,
-    minHeight: 36,
-    padding: '0 11px',
-    color: 'var(--dsw-alias-label-secondary, #c6c6cb)',
-    background: 'transparent',
-    borderWidth: 1,
-    borderStyle: 'solid',
-    borderColor: 'transparent',
-    borderRadius: 8,
-    cursor: 'pointer',
-    userSelect: 'none',
-  },
-  active: {
-    color: 'var(--dsw-alias-label-primary, #f2f2f4)',
-    background: 'var(--dsw-alias-button-ghost-active-fill, #343438)',
-    borderColor: 'var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.12))',
-  },
-  close: {
-    display: 'inline-grid',
-    placeItems: 'center',
-    width: 26,
-    height: 26,
-    padding: 0,
-    color: 'var(--dsw-alias-label-tertiary, #92929b)',
-    background: 'transparent',
-    border: '1px solid transparent',
-    borderRadius: 6,
-    cursor: 'pointer',
-    fontSize: 16,
-    lineHeight: 1,
-  },
-  panel: {
-    minWidth: 0,
-    minHeight: 0,
-    overflow: 'auto',
-    padding: 'clamp(14px, 2.2vw, 26px)',
-    background: 'var(--dsw-alias-bg-base, #151517)',
-  },
-  status: {
-    minHeight: 28,
-    padding: '6px 14px',
-    color: 'var(--dsw-alias-label-tertiary, #92929b)',
-    background: 'var(--dsw-alias-bg-layer-1, #232324)',
-    borderTop: '1px solid var(--dsw-alias-border-l1, rgba(255, 255, 255, 0.06))',
-    fontSize: 11,
-    fontVariantNumeric: 'tabular-nums',
-  },
-}
+const styles = `
+[data-dsh-workbench-core]{display:grid;grid-template-rows:auto minmax(0,1fr) auto;width:100%;height:100%;min-height:0}
+[data-dsh-workbench-tabs]{display:flex;flex-wrap:nowrap;gap:3px;min-width:0;min-height:52px;padding:8px 14px 7px;overflow-x:auto;overflow-y:hidden;background:var(--vk-bg-layer-1);border-bottom:1px solid var(--vk-border-l2);scrollbar-width:thin}
+[data-dsh-workbench-tab]{display:inline-flex;flex:0 0 auto;align-items:center;gap:7px;min-height:36px;padding:0 11px;color:var(--vk-text-secondary);background:transparent;border:1px solid transparent;border-radius:8px;cursor:pointer;user-select:none}
+[data-dsh-workbench-tab][data-active]{color:var(--vk-text-primary);background:var(--vk-fill-active);border-color:var(--vk-border-l2)}
+[data-dsh-workbench-panel]{min-width:0;min-height:0;overflow:auto;padding:clamp(14px,2.2cqi,26px);background:var(--vk-bg-base)}
+[data-dsh-workbench-status]{min-height:28px;padding:6px 14px;color:var(--vk-text-tertiary);background:var(--vk-bg-layer-1);border-top:1px solid var(--vk-border-l1);font-size:11px;font-variant-numeric:tabular-nums}
+`
 
 /** Accessible workbench shell with tablist semantics. */
 export function WorkbenchShell({ tabs, activeTabId, onSelectTab, onCloseTab, onReorderTabs, renderTab, status }: WorkbenchShellProps) {
@@ -171,8 +104,9 @@ export function WorkbenchShell({ tabs, activeTabId, onSelectTab, onCloseTab, onR
   }
 
   return (
-    <div style={styles.root} data-dsh-workbench-core>
-      <div style={styles.tabs} role="tablist" aria-label="Workbench" data-dsh-workbench-tabs onKeyDown={handleTablistKeyDown}>
+    <Surface kind="workspace" data-dsh-workbench-core>
+      <style>{styles}</style>
+      <div role="tablist" aria-label="Workbench" data-dsh-workbench-tabs onKeyDown={handleTablistKeyDown}>
         {tabs.map((tab, index) => (
           <div
             key={tab.id}
@@ -183,7 +117,6 @@ export function WorkbenchShell({ tabs, activeTabId, onSelectTab, onCloseTab, onR
             aria-selected={tab.id === active?.id}
             data-dsh-workbench-tab={tab.id}
             data-active={tab.id === active?.id || undefined}
-            style={tab.id === active?.id ? { ...styles.tab, ...styles.active } : styles.tab}
             draggable
             onClick={() => { onSelectTab(tab.id) }}
             onKeyDown={event => { handleTabKeyDown(tab, event) }}
@@ -194,9 +127,10 @@ export function WorkbenchShell({ tabs, activeTabId, onSelectTab, onCloseTab, onR
           >
             <span>{tab.title}</span>
             {tab.closable && onCloseTab !== undefined && (
-              <button
+              <Button
                 type="button"
-                style={styles.close}
+                size="sm"
+                variant="toolbar"
                 aria-label={`Close ${tab.title}`}
                 onClick={event => {
                   event.stopPropagation()
@@ -204,16 +138,16 @@ export function WorkbenchShell({ tabs, activeTabId, onSelectTab, onCloseTab, onR
                 }}
               >
                 ×
-              </button>
+              </Button>
             )}
           </div>
         ))}
       </div>
-      <div style={styles.panel} role="tabpanel" data-dsh-workbench-panel>
+      <div role="tabpanel" data-dsh-workbench-panel>
         {active === undefined ? null : renderTab(active)}
       </div>
-      {status !== undefined && <div style={styles.status} role="status" data-dsh-workbench-status>{status}</div>}
-    </div>
+      {status !== undefined && <div role="status" data-dsh-workbench-status>{status}</div>}
+    </Surface>
   )
 }
 

@@ -16,6 +16,10 @@ describe('FileEntryV1 validation', () => {
     expect(isFileEntry(base)).toBe(true)
   })
 
+  it('accepts the additive edit capability', () => {
+    expect(validateFileEntry({ ...base, capabilities: ['preview', 'open', 'edit'] }).ok).toBe(true)
+  })
+
   it('rejects a raw path in id or name', () => {
     expect(validateFileEntry({ ...base, id: '/etc/passwd' }).ok).toBe(false)
     expect(validateFileEntry({ ...base, name: '../secret.txt' }).ok).toBe(false)

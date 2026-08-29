@@ -8,6 +8,7 @@ import {
   PANE_EVENT_SCHEMA,
   PANE_INTENT_SCHEMA,
   PANE_PLUGIN_SCHEMA,
+  PaneContextSchema,
   PaneEventEnvelopeSchema,
   PaneActionDescriptorSchema,
   PaneActionRequestSchema,
@@ -59,13 +60,52 @@ describe('pane protocol', () => {
         retention: 'snapshot',
         singleton: false,
       }],
-      commands: [{ id: 'pinax.open', label: 'Open note', permission: 'notes.read' }],
+      commands: [{
+        id: 'pinax.open',
+        label: 'Open note',
+        permission: 'notes.read',
+        slash: { name: 'pinax', aliases: ['notes'], category: 'pane' },
+      }],
       artifactKinds: ['pinax.note'],
       compatibility: { dshApiRange: '0.1.0-rc.6', experimental: true },
     })
 
     expect(parsed.id).toBe('yeisme.notes-preview')
     expect(parsed.faces.observation.provided).toBe(true)
+    expect(parsed.commands[0]?.slash).toEqual({ name: 'pinax', aliases: ['notes'], category: 'pane' })
+  })
+
+  it('accepts commands without slash and rejects unsafe slash names', () => {
+    const base = {
+      schema: PANE_PLUGIN_SCHEMA,
+      id: 'yeisme.notes-preview',
+      version: '0.1.0-rc.1',
+      owner: { id: 'pinax' },
+      faces: {
+        host: { provided: true, capabilities: [] },
+        client: { provided: true, capabilities: ['pane.view'] },
+        composition: { provided: false, capabilities: [] },
+        observation: { provided: false, capabilities: [] },
+      },
+      capabilities: { required: [], optional: [] },
+      permissions: [],
+      views: [],
+      artifactKinds: [],
+      compatibility: { dshApiRange: '*', experimental: true },
+    }
+    expect(PanePluginDefinitionSchema.safeParse({
+      ...base,
+      commands: [{ id: 'pinax.open', label: 'Open note' }],
+    }).success).toBe(true)
+    expect(PanePluginDefinitionSchema.safeParse({
+      ...base,
+      commands: [{ id: 'pinax.open', label: 'Open note', slash: { name: 'Open Note' } }],
+    }).success).toBe(false)
+  })
+
+  it('accepts an optional project ref without requiring it from old contexts', () => {
+    expect(PaneContextSchema.parse({ workspaceRef: 'workspace:one', revision: '1' })).toEqual({ workspaceRef: 'workspace:one', revision: '1' })
+    expect(PaneContextSchema.parse({ workspaceRef: 'workspace:one', projectRef: 'project:one', revision: '1' })).toEqual({ workspaceRef: 'workspace:one', projectRef: 'project:one', revision: '1' })
   })
 
   it('rejects a view without a client face', () => {

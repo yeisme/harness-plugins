@@ -1,0 +1,44 @@
+{
+  "type": "module",
+  "name": "@yeisme/dsh-client-ui-command-experience-tui",
+  "version": "0.1.0-rc.1",
+  "description": "DSH TUI command experience: console contribution adapter over the shared command directory and reducer",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.mts",
+      "default": "./lib/index.mjs"
+    },
+    "./client": {
+      "types": "./lib/index.d.mts",
+      "default": "./lib/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [],
+      "platform": "tui"
+    }
+  },
+  "files": [
+    "lib/**",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "build": "tsdown src/index.ts --out-dir lib --format esm --dts --clean"
+  },
+  "dependencies": {
+    "@yeisme/dsh-client-ui-command-experience-core": "workspace:^"
+  },
+  "devDependencies": {
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

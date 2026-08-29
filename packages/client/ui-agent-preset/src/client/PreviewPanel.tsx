@@ -12,7 +12,14 @@
  * - Focus returns to trigger on close
  */
 
-import React, { useEffect, useRef, useCallback, useState } from 'react'
+import React, { useEffect, useCallback, useState } from 'react'
+import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  Surface,
+  SurfaceActionBar,
+  SurfaceContextBar,
+  SurfaceState,
+} from '@yeisme/dsh-client-ui-surface'
 import type {
   ExtendedCompositionPreview,
   PreviewPanelProps,
@@ -241,11 +248,8 @@ function PermissionsDisplay({ permissions }: { permissions: PermissionPreset }) 
 export function PreviewPanel({
   presetId,
   isOpen,
-  onClose,
-  triggerRef
+  onClose
 }: PreviewPanelProps): React.ReactElement | null {
-  const modalRef = useRef<HTMLDivElement>(null)
-  const previousActiveRef = useRef<HTMLElement | null>(null)
   const [state, setState] = React.useState<PreviewPanelState>({
     preview: null,
     loading: false,
@@ -284,88 +288,26 @@ export function PreviewPanel({
     }
   }, [isOpen, presetId])
 
-  // Focus management: save previous active element, focus modal on open
-  useEffect(() => {
-    if (isOpen) {
-      previousActiveRef.current = document.activeElement as HTMLElement
-      // Focus first focusable element in modal
-      setTimeout(() => {
-        const firstFocusable = modalRef.current?.querySelector<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
-        firstFocusable?.focus()
-      }, 0)
-    } else {
-      // Return focus to trigger when closing
-      triggerRef?.current?.focus()
-    }
-  }, [isOpen, triggerRef])
-
-  // Keyboard handler: Escape to close
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose()
-      }
-    },
-    [isOpen, onClose]
-  )
-
-  // Focus trap within modal
-  const handleFocus = useCallback((e: React.FocusEvent) => {
-    if (!isOpen || !modalRef.current) return
-
-    // If focus moved outside modal, bring it back
-    if (!modalRef.current?.contains(e.relatedTarget as Node)) {
-      const firstFocusable = modalRef.current?.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      )
-      firstFocusable?.focus()
-    }
-  }, [isOpen])
-
   if (!isOpen) return null
 
   return (
-    <div
-      className="dsh-preview-overlay"
-      role="presentation"
-      onClick={onClose}
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      title={`Preset Preview: ${presetId}`}
+      closeLabel="Close preview"
+      headless
     >
-      <div
-        ref={modalRef}
-        className="dsh-preview-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="dsh-preview-title"
-        onKeyDown={handleKeyDown}
-        onBlur={handleFocus}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="dsh-preview-header">
-          <h2 id="dsh-preview-title" className="dsh-preview-title">
-            Preset Preview: {presetId}
-          </h2>
-          <button
-            className="dsh-preview-close"
-            onClick={onClose}
-            aria-label="Close preview"
-          >
-            ×
-          </button>
-        </header>
+      <Surface kind="dialog" className="dsh-preview-panel">
+        <SurfaceContextBar title={`Preset Preview: ${presetId}`} />
 
-        <div className="dsh-preview-content">
+        <div className="dsh-preview-content ys-body">
           {state.loading && (
-            <div className="dsh-preview-loading" role="status" aria-live="polite">
-              Loading preview...
-            </div>
+            <SurfaceState className="dsh-preview-loading" phase="loading" title="Loading preview..." />
           )}
 
           {state.error && (
-            <div className="dsh-preview-error" role="alert" aria-live="assertive">
-              Error: {state.error}
-            </div>
+            <SurfaceState className="dsh-preview-error" phase="error" title="Preview unavailable" description={state.error} />
           )}
 
           {state.preview && (
@@ -449,13 +391,13 @@ export function PreviewPanel({
           )}
         </div>
 
-        <footer className="dsh-preview-footer">
+        <SurfaceActionBar className="dsh-preview-footer">
           <p className="dsh-preview-note">
             This is a read-only preview. No sessions or agents are started.
           </p>
-        </footer>
-      </div>
-    </div>
+        </SurfaceActionBar>
+      </Surface>
+    </Modal>
   )
 }
 
@@ -467,7 +409,6 @@ export function PreviewAction({
   label = 'Preview',
   onClick
 }: PreviewActionProps): React.ReactElement {
-  const triggerRef = useRef<HTMLButtonElement>(null)
   const [isOpen, setIsOpen] = useState(false)
 
   const handleClick = useCallback(() => {
@@ -484,21 +425,19 @@ export function PreviewAction({
 
   return (
     <>
-      <button
-        ref={triggerRef}
+      <Button
         className="dsh-preview-action-button"
         onClick={handleClick}
         aria-label={`Preview preset ${presetId}`}
         type="button"
       >
         {label}
-      </button>
+      </Button>
 
       <PreviewPanel
         presetId={presetId}
         isOpen={isOpen}
         onClose={handleClose}
-        triggerRef={triggerRef}
       />
     </>
   )

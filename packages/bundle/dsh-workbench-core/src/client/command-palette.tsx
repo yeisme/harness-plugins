@@ -9,7 +9,9 @@
  * @module @yeisme/dsh-workbench-core/client
  */
 
-import { useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
+import { useMemo, useState, type KeyboardEvent } from 'react'
+import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Surface } from '@yeisme/dsh-client-ui-surface'
 import type { WorkbenchCommandV1 } from '../types.ts'
 
 export interface CommandPaletteProps {
@@ -27,16 +29,16 @@ interface CommandSection {
   commands: readonly WorkbenchCommandV1[]
 }
 
-const styles: Record<'overlay' | 'panel' | 'input' | 'list' | 'item' | 'active' | 'group' | 'empty', CSSProperties> = {
-  overlay: { position: 'fixed', inset: 0, zIndex: 1000, display: 'grid', placeItems: 'start center', paddingTop: 80, background: 'color-mix(in srgb, var(--dsh-color-layer, #0b0f14) 60%, transparent)' },
-  panel: { width: 'min(520px, calc(100vw - 32px))', display: 'grid', gap: 4, padding: 8, borderRadius: 8, border: '1px solid var(--dsh-color-border, #3d4550)', background: 'var(--dsh-color-layer, #18202b)' },
-  input: { minHeight: 32, padding: '0 8px', borderRadius: 6, border: '1px solid var(--dsh-color-border, #3d4550)', background: 'transparent', color: 'inherit' },
-  list: { display: 'grid', gap: 2, maxHeight: 280, overflow: 'auto' },
-  item: { display: 'flex', alignItems: 'center', gap: 8, minHeight: 30, padding: '0 8px', borderRadius: 6, borderWidth: 1, borderStyle: 'solid', borderColor: 'transparent', background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer' },
-  active: { borderColor: 'var(--dsh-color-border, #3d4550)', background: 'var(--dsh-color-layer-2, #202b38)' },
-  group: { padding: '6px 8px 2px', fontSize: 11, fontWeight: 600, opacity: 0.68, textTransform: 'uppercase', letterSpacing: 0.04 },
-  empty: { padding: 8, opacity: 0.72 },
-}
+const styles = `
+[data-dsh-command-palette]{width:min(520px,calc(100vw - 32px));min-height:0}
+[data-dsh-command-palette] .wcp-body{display:grid;gap:4px;padding:8px}
+[data-dsh-command-palette] .wcp-list{display:grid;gap:2px;max-height:280px;overflow:auto}
+[data-dsh-command-palette] .wcp-item{display:flex;width:100%;justify-content:space-between;text-align:left}
+[data-dsh-command-palette] .wcp-item[aria-selected='true']{background:var(--vk-fill-selected);border-color:var(--vk-border-l2)}
+[data-dsh-command-palette] .wcp-group{padding:6px 8px 2px;color:var(--vk-text-tertiary);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+[data-dsh-command-palette] .wcp-shortcut{opacity:.6}
+[data-dsh-command-palette] .wcp-empty{padding:8px;color:var(--vk-text-tertiary)}
+`
 
 function groupCommands(
   commands: readonly WorkbenchCommandV1[],
@@ -77,7 +79,6 @@ export function CommandPalette({ commands, onRunCommand, onClose, groupLabels, r
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
   const [recentIds, setRecentIds] = useState<string[]>([])
-  const inputRef = useRef<HTMLInputElement | null>(null)
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -127,43 +128,46 @@ export function CommandPalette({ commands, onRunCommand, onClose, groupLabels, r
   }
 
   return (
-    <div style={styles.overlay} role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
-      <div style={styles.panel} role="dialog" aria-modal="true" aria-label="Workbench commands" onKeyDown={handleKeyDown}>
-        <input
-          ref={inputRef}
-          style={styles.input}
+    <Modal open onClose={onClose} title="Workbench commands" closeLabel="Close command palette" headless>
+      <Surface kind="dialog" data-dsh-command-palette onKeyDown={handleKeyDown}>
+        <style>{styles}</style>
+        <div className="wcp-body">
+        <Input
           autoFocus
           placeholder="Type a command…"
           value={query}
           onChange={event => { setQuery(event.target.value); setActiveIndex(0) }}
         />
-        <div style={styles.list} role="listbox" aria-label="Commands">
-          {optionCommands.length === 0 && <div style={styles.empty}>No commands match.</div>}
+        <div className="wcp-list" role="listbox" aria-label="Commands">
+          {optionCommands.length === 0 && <div className="wcp-empty">No commands match.</div>}
           {sections.map(section => (
             <div key={section.label}>
-              <div style={styles.group} role="presentation">{section.label === 'Recent' ? recentLabel : section.label}</div>
+              <div className="wcp-group" role="presentation">{section.label === 'Recent' ? recentLabel : section.label}</div>
               {section.commands.map(command => {
                 const globalIndex = optionCommands.findIndex(candidate => candidate.id === command.id)
                 return (
-                  <button
+                  <Button
                     key={command.id}
                     type="button"
+                    size="sm"
+                    variant="toolbar"
+                    className="wcp-item"
                     role="option"
                     aria-selected={globalIndex === activeIndex}
-                    style={globalIndex === activeIndex ? { ...styles.item, ...styles.active } : styles.item}
                     onMouseEnter={() => { setActiveIndex(globalIndex) }}
                     onClick={() => { run(command.id) }}
                   >
                     <span>{command.title}</span>
-                    {command.shortcutHint !== undefined && <span style={{ opacity: 0.6 }}>{command.shortcutHint}</span>}
-                  </button>
+                    {command.shortcutHint !== undefined && <span className="wcp-shortcut">{command.shortcutHint}</span>}
+                  </Button>
                 )
               })}
             </div>
           ))}
         </div>
-      </div>
-    </div>
+        </div>
+      </Surface>
+    </Modal>
   )
 }
 

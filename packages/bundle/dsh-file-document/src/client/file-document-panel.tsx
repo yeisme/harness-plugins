@@ -10,6 +10,8 @@
  */
 
 import { useEffect, useMemo, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Surface, SurfaceContextBar, SurfaceState } from '@yeisme/dsh-client-ui-surface'
 import type { FileEntryKind, FileEntryV1 } from '../types.ts'
 import {
   buildFileTree,
@@ -54,7 +56,7 @@ const styles = {
     maxWidth: 1120,
     minHeight: '100%',
     margin: '0 auto',
-    color: 'var(--dsw-alias-label-primary, #f2f2f4)',
+    color: 'var(--vk-text-primary)',
   },
   header: {
     display: 'flex',
@@ -66,7 +68,7 @@ const styles = {
   eyebrow: {
     display: 'block',
     marginBottom: 5,
-    color: 'var(--dsw-alias-label-tertiary, #92929b)',
+    color: 'var(--vk-text-tertiary)',
     fontSize: 10,
     fontWeight: 700,
     letterSpacing: '0.12em',
@@ -79,7 +81,7 @@ const styles = {
   },
   description: {
     margin: '6px 0 0',
-    color: 'var(--dsw-alias-label-tertiary, #92929b)',
+    color: 'var(--vk-text-tertiary)',
     fontSize: 13,
     lineHeight: 1.5,
   },
@@ -90,9 +92,9 @@ const styles = {
     minWidth: 52,
     minHeight: 28,
     padding: '0 10px',
-    color: 'var(--dsw-alias-label-secondary, #c6c6cb)',
-    background: 'var(--dsw-alias-bg-layer-1, #232324)',
-    border: '1px solid var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.12))',
+    color: 'var(--vk-text-secondary)',
+    background: 'var(--vk-bg-layer-1)',
+    border: '1px solid var(--vk-border-l2)',
     borderRadius: 999,
     fontSize: 11,
     fontVariantNumeric: 'tabular-nums',
@@ -101,8 +103,8 @@ const styles = {
     display: 'grid',
     gap: 5,
     padding: 6,
-    background: 'var(--dsw-alias-bg-layer-1, #232324)',
-    border: '1px solid var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.12))',
+    background: 'var(--vk-bg-layer-1)',
+    border: '1px solid var(--vk-border-l2)',
     borderRadius: 12,
   },
   row: {
@@ -123,7 +125,7 @@ const styles = {
     width: 22,
     height: 22,
     padding: 0,
-    color: 'var(--dsw-alias-label-secondary, #c6c6cb)',
+    color: 'var(--vk-text-secondary)',
     background: 'transparent',
     border: '1px solid transparent',
     borderRadius: 6,
@@ -135,7 +137,7 @@ const styles = {
     placeItems: 'center',
     width: 22,
     height: 22,
-    color: 'var(--dsw-alias-label-tertiary, #92929b)',
+    color: 'var(--vk-text-tertiary)',
     background: 'transparent',
     borderRadius: 6,
     fontSize: 9,
@@ -155,7 +157,7 @@ const styles = {
     flexWrap: 'wrap',
     gap: 8,
     paddingLeft: 32,
-    color: 'var(--dsw-alias-label-tertiary, #92929b)',
+    color: 'var(--vk-text-tertiary)',
     fontSize: 11,
   },
   empty: {
@@ -165,20 +167,20 @@ const styles = {
     gap: 8,
     minHeight: 250,
     padding: 32,
-    color: 'var(--dsw-alias-label-tertiary, #92929b)',
+    color: 'var(--vk-text-tertiary)',
     textAlign: 'center',
-    background: 'var(--dsw-alias-bg-layer-1, #232324)',
-    border: '1px dashed var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.12))',
+    background: 'var(--vk-bg-layer-1)',
+    border: '1px dashed var(--vk-border-l2)',
     borderRadius: 14,
   },
   emptyIcon: {
     width: 42,
     height: 42,
     marginBottom: 2,
-    color: 'var(--dsw-alias-label-tertiary, #92929b)',
+    color: 'var(--vk-text-tertiary)',
   },
   emptyTitle: {
-    color: 'var(--dsw-alias-label-primary, #f2f2f4)',
+    color: 'var(--vk-text-primary)',
     fontSize: 15,
     fontWeight: 650,
   },
@@ -189,22 +191,22 @@ const styles = {
     maxHeight: 520,
     marginTop: 8,
     overflow: 'auto',
-    color: 'var(--dsw-alias-label-secondary, #c6c6cb)',
-    background: 'var(--dsw-alias-bg-base, #151517)',
-    border: '1px solid var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.12))',
+    color: 'var(--vk-text-secondary)',
+    background: 'var(--vk-bg-base)',
+    border: '1px solid var(--vk-border-l2)',
     borderRadius: 10,
   },
   selected: {
-    background: 'var(--dsw-alias-button-ghost-active-fill, #343438)',
-    border: '1px solid var(--dsw-alias-border-l3, rgba(255, 255, 255, 0.16))',
+    background: 'var(--vk-fill-active)',
+    border: '1px solid var(--vk-border-l2)',
   },
   openButton: {
     minHeight: 24,
     marginLeft: 'auto',
     padding: '0 8px',
-    color: 'var(--dsw-alias-label-secondary, #c6c6cb)',
+    color: 'var(--vk-text-secondary)',
     background: 'transparent',
-    border: '1px solid var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.12))',
+    border: '1px solid var(--vk-border-l2)',
     borderRadius: 6,
     cursor: 'pointer',
     fontSize: 11,
@@ -214,8 +216,8 @@ const styles = {
     gap: 10,
     minWidth: 0,
     padding: 12,
-    background: 'var(--dsw-alias-bg-layer-1, #232324)',
-    border: '1px solid var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.12))',
+    background: 'var(--vk-bg-layer-1)',
+    border: '1px solid var(--vk-border-l2)',
     borderRadius: 12,
   },
   previewHeader: {
@@ -237,9 +239,9 @@ const styles = {
   previewButton: {
     minHeight: 30,
     padding: '0 9px',
-    color: 'var(--dsw-alias-label-secondary, #c6c6cb)',
+    color: 'var(--vk-text-secondary)',
     background: 'transparent',
-    border: '1px solid var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.12))',
+    border: '1px solid var(--vk-border-l2)',
     borderRadius: 7,
     cursor: 'pointer',
     fontSize: 11,
@@ -252,9 +254,9 @@ const styles = {
     maxHeight: 560,
     overflow: 'auto',
     padding: 10,
-    color: 'var(--dsw-alias-label-secondary, #c6c6cb)',
-    background: 'var(--dsw-alias-bg-base, #151517)',
-    border: '1px solid var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.12))',
+    color: 'var(--vk-text-secondary)',
+    background: 'var(--vk-bg-base)',
+    border: '1px solid var(--vk-border-l2)',
     borderRadius: 9,
   },
   previewImage: { display: 'block', maxWidth: '100%', maxHeight: 520, objectFit: 'contain' as const },
@@ -262,7 +264,7 @@ const styles = {
   previewText: { width: '100%', margin: 0, whiteSpace: 'pre-wrap' as const, overflowWrap: 'anywhere' as const, fontFamily: 'var(--ds-font-family-code, monospace)', fontSize: 12, lineHeight: 1.55 },
   loading: {
     padding: '4px 12px 4px 52px',
-    color: 'var(--dsw-alias-label-tertiary, #92929b)',
+    color: 'var(--vk-text-tertiary)',
     fontSize: 11,
   },
   error: {
@@ -270,7 +272,7 @@ const styles = {
     alignItems: 'center',
     gap: 8,
     padding: '6px 12px 6px 52px',
-    color: 'var(--dsw-alias-state-error-secondary, #f25a5a)',
+    color: 'var(--vk-state-error)',
     fontSize: 11,
   },
 } satisfies Record<string, CSSProperties>
@@ -279,10 +281,10 @@ const panelStyles = `
 [data-dsh-file-document-panel], [data-dsh-file-document-panel] * { box-sizing: border-box; }
 [data-dsh-file-document-panel] { font-size: var(--dsh-wb-font-size, 13px); font-family: var(--dsw-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif); }
 [data-dsh-file-tree-row] { transition: background var(--ds-transition-duration-fast, .1s) ease, border-color var(--ds-transition-duration-fast, .1s) ease; }
-[data-dsh-file-tree-row]:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(255,255,255,.08)) !important; }
-[data-dsh-file-tree-row]:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #79a8ff); outline-offset: 1px; }
-[data-dsh-file-tree-toggle]:hover, [data-dsh-file-open-button]:hover, [data-dsh-file-retry]:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(255,255,255,.08)) !important; color: var(--dsw-alias-label-primary, #f2f2f4) !important; }
-[data-dsh-file-tree-toggle]:focus-visible, [data-dsh-file-open-button]:focus-visible, [data-dsh-file-retry]:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #79a8ff); outline-offset: 1px; }
+[data-dsh-file-tree-row]:hover { background: var(--vk-fill-hover) !important; }
+[data-dsh-file-tree-row]:focus-visible { outline: 2px solid var(--vk-accent); outline-offset: 1px; }
+[data-dsh-file-tree-toggle]:hover, [data-dsh-file-open-button]:hover, [data-dsh-file-retry]:hover { background: var(--vk-fill-hover) !important; color: var(--vk-text-primary) !important; }
+[data-dsh-file-tree-toggle]:focus-visible, [data-dsh-file-open-button]:focus-visible, [data-dsh-file-retry]:focus-visible { outline: 2px solid var(--vk-accent); outline-offset: 1px; }
 [data-dsh-file-document-panel][data-compact='true'] { gap: 8px; max-width: none; margin: 0; padding: 8px; min-height: 100%; }
 [data-dsh-file-document-panel][data-compact='true'] [data-dsh-file-tree] { padding: 2px; border-radius: 8px; }
 [data-dsh-file-document-panel][data-compact='true'] [data-dsh-file-tree-row] { min-height: 28px; }
@@ -324,15 +326,6 @@ function FileKindIcon({ kind }: { readonly kind: FileEntryKind }) {
   return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d={path} />
   </svg>
-}
-
-function EmptyFolderIcon() {
-  return (
-    <svg style={styles.emptyIcon} viewBox="0 0 48 48" fill="none" aria-hidden="true">
-      <path d="M5.5 13.5A4.5 4.5 0 0 1 10 9h9l4 5h15a4.5 4.5 0 0 1 4.5 4.5v17A4.5 4.5 0 0 1 38 40H10a4.5 4.5 0 0 1-4.5-4.5v-22Z" stroke="currentColor" strokeWidth="2.4" />
-      <path d="M6 18h36" stroke="currentColor" strokeWidth="2.4" />
-    </svg>
-  )
 }
 
 function formatBytes(bytes: number | undefined): string | undefined {
@@ -613,58 +606,15 @@ export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOp
   }, [selectedEntry, loadText, textById])
 
   return (
-    <section aria-label={tabId} data-dsh-file-document-panel data-compact={compact ? 'true' : undefined} style={compact ? { ...styles.root, gap: 8, maxWidth: 'none', margin: 0 } : styles.root}>
+    <Surface kind="navigator" aria-label={tabId} data-dsh-file-document-panel data-compact={compact ? 'true' : undefined} style={compact ? { ...styles.root, gap: 8, maxWidth: 'none', margin: 0 } : styles.root}>
       <style data-dsh-file-document-styles>{panelStyles}</style>
-      {compact
-        ? (
-          <header style={{ ...styles.header, alignItems: 'center', gap: 8 }}>
-            <h2 style={{ ...styles.heading, fontSize: 13, fontWeight: 650 }}>{tabId === 'files' ? '文件' : '文档'}</h2>
-            <span style={{ ...styles.count, minWidth: 36, minHeight: 22, fontSize: 10 }}>{visible.length}</span>
-          </header>
-        )
-        : (
-          <header style={styles.header}>
-            <div>
-              <span style={styles.eyebrow}>{tabId === 'files' ? 'WORKSPACE FILES' : 'DOCUMENT VIEWER'}</span>
-              <h2 style={styles.heading}>{tabId === 'files' ? '文件浏览器' : '文档预览'}</h2>
-              <p style={styles.description}>
-                {tabId === 'files' ? '浏览当前工作区中的目录和文件。' : '查看可预览的文本、图片与 PDF。'}
-              </p>
-            </div>
-            <span style={styles.count}>{visible.length} 项</span>
-          </header>
-        )}
+      <SurfaceContextBar title={compact ? (tabId === 'files' ? '文件' : '文档') : (tabId === 'files' ? '文件浏览器' : '文档预览')} description={compact ? undefined : (tabId === 'files' ? '浏览当前工作区中的目录和文件。' : '查看可预览的文本、图片与 PDF。')} status={<span style={styles.count}>{visible.length} 项</span>} />
       {loading
-        ? (
-          <div style={styles.empty} data-dsh-file-empty>
-            <EmptyFolderIcon />
-            <strong style={styles.emptyTitle}>正在加载文件</strong>
-            <span style={styles.emptyBody}>正在读取当前工作区的目录结构…</span>
-          </div>
-        )
+        ? <SurfaceState phase="loading" title="正在加载文件" description="正在读取当前工作区的目录结构…" data-dsh-file-empty />
         : error !== undefined
-          ? (
-            <div style={styles.empty} role="alert" data-dsh-file-empty>
-              <EmptyFolderIcon />
-              <strong style={styles.emptyTitle}>文件加载失败</strong>
-              <span style={styles.emptyBody}>{error}</span>
-              {onRetry !== undefined && (
-                <button type="button" data-dsh-file-retry style={{ ...styles.openButton, marginLeft: 0 }} onClick={onRetry}>重试</button>
-              )}
-            </div>
-          )
+          ? <SurfaceState phase="error" title="文件加载失败" description={error} action={onRetry === undefined ? undefined : <Button type="button" size="sm" variant="toolbar" data-dsh-file-retry onClick={onRetry}>重试</Button>} data-dsh-file-empty />
           : tree.length === 0
-        ? (
-          <div style={styles.empty} data-dsh-file-empty>
-            <EmptyFolderIcon />
-            <strong style={styles.emptyTitle}>{tabId === 'files' ? '文件源尚未连接' : '还没有可预览的文档'}</strong>
-            <span style={styles.emptyBody}>
-              {tabId === 'files'
-                ? '连接工作区文件服务后，目录会自动显示在这里。'
-                : '选择可预览的文本、图片或 PDF 后，内容会显示在这里。'}
-            </span>
-          </div>
-        )
+        ? <SurfaceState phase="empty" title={tabId === 'files' ? '文件源尚未连接' : '还没有可预览的文档'} description={tabId === 'files' ? '连接工作区文件服务后，目录会自动显示在这里。' : '选择可预览的文本、图片或 PDF 后，内容会显示在这里。'} data-dsh-file-empty />
           : (
             <>
               <div style={styles.tree} role="tree" aria-label={tabId === 'files' ? 'Files' : 'Documents'} data-dsh-file-tree>
@@ -698,7 +648,7 @@ export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOp
               )}
             </>
           )}
-    </section>
+    </Surface>
   )
 }
 

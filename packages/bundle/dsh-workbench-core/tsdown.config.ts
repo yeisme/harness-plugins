@@ -7,6 +7,7 @@ const clientExternals = [
   'react-dom/client',
   '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-client-runtime/client',
+  '@deepseek-ai/dsh-client-ui-primitives',
   '@deepseek-ai/dsh-client-ui-slots',
 ] as const
 
@@ -34,6 +35,7 @@ export default defineConfig([
     sourcemap: true,
     clean: false,
     deps: {
+      alwaysBundle: [/^@yeisme\//u],
       neverBundle: [...clientExternals],
     },
     outputOptions: {

@@ -28,7 +28,9 @@
     "lib/types/**/*.js",
     "lib/types/**/*.d.ts",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    null,
+    "lib/host.js"
   ],
   "exports": {
     ".": {
@@ -41,26 +43,31 @@
     },
     "./module": "./lib/module.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./host": {
+      "types": "./lib/types/host.d.ts",
+      "default": "./lib/host.js"
+    }
   },
   "dependencies": {
     "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.6",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/xterm": "6.0.0",
-    "@yeisme/dsh-terminal-host": "workspace:*",
     "@yeisme/dsh-client-ui-surface": "workspace:^",
+    "@yeisme/dsh-terminal-host": "workspace:*",
     "@yeisme/dsh-workbench-core": "workspace:*",
     "react": "^18.3.1"
   },
   "devDependencies": {
-    "@types/react": "~18.3.31",
-    "tsdown": "^0.22.14",
-    "typescript": "^5.9.3",
-    "vitest": "^3.2.7",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
     "@testing-library/react": "^16.1.0",
+    "@types/react": "~18.3.31",
+    "@types/react-dom": "~18.3.1",
     "jsdom": "^30.0.1",
     "react-dom": "^18.2.0",
-    "@types/react-dom": "~18.3.1"
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
   },
   "dsh": {
     "bundle": {
@@ -74,5 +81,8 @@
       "platform": "web"
     }
   },
-  "bundle": "pnpm --filter @yeisme/dsh-terminal-host build && tsc -p tsconfig.json && tsdown"
+  "bundle": "pnpm --filter @yeisme/dsh-terminal-host build && tsc -p tsconfig.json && tsdown",
+  "peerDependencies": {
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6"
+  }
 }

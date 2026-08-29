@@ -1,21 +1,51 @@
 /**
  * @yeisme/dsh-session-cookie-manager client entry.
  *
- * Phase 1 is mount-free: no DSH public slot exists yet for account panels,
- * so the shell wires `registerLoginProfilesPaneViews` on the Pane Workbench
- * surface; nothing is registered implicitly and nothing is faked.
+ * ModuleLoader requires a function or `{ apply }`. Missing Pane Workbench
+ * stays fail-closed: the plugin loads, does not throw, and does not fake a
+ * slot or cookie jar.
  *
  * @module @yeisme/dsh-session-cookie-manager/client
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import {
+  registerLoginProfilesPaneViews,
+  type ProfilesPaneSurface,
+} from '@yeisme/dsh-client-ui-session-cookie-manager'
 
 export * from '@yeisme/dsh-client-ui-session-cookie-manager'
 
 export const clientName = 'dsh-session-cookie-manager/client'
 export const clientInject: readonly string[] = []
 
-/** Client lifecycle: intentionally empty in Phase 1 (see module docs). */
-export function applyClient(_ctx: Context): void {
-  // client side intentionally mount-free until the shell wiring point
+function resolvePaneSurface(ctx: Context): ProfilesPaneSurface | undefined {
+  try {
+    const candidate = (ctx as { get?(name: string): unknown }).get?.('paneWorkbench')
+    if (candidate !== null && typeof candidate === 'object' && typeof (candidate as ProfilesPaneSurface).registerView === 'function') {
+      return candidate as ProfilesPaneSurface
+    }
+  } catch {
+    // Official DSH and incomplete hosts stay fail-closed.
+  }
+  return undefined
 }
+
+/** Client lifecycle for ModuleLoader. Missing Pane Workbench is a no-op, not a throw. */
+export function apply(ctx: Context): () => void {
+  const pane = resolvePaneSurface(ctx)
+  if (pane === undefined) return () => {}
+  try {
+    return registerLoginProfilesPaneViews(pane)
+  } catch {
+    return () => {}
+  }
+}
+
+/** @deprecated Use `apply`. Kept so older tests that imported applyClient still typecheck. */
+export function applyClient(ctx: Context): () => void {
+  return apply(ctx)
+}
+
+const DshSessionCookieManagerClientPlugin = { apply }
+export default DshSessionCookieManagerClientPlugin

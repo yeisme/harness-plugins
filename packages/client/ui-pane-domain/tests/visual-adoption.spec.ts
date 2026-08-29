@@ -34,7 +34,7 @@ function baseSnapshot(overrides: Partial<DomainSnapshotV1> = {}): DomainSnapshot
 describe('domain pane visual adoption', () => {
   it('注入样式串逐字节等于 buildPanelStyles({scope:"pane-domain"})，token fallback 单点', () => {
     const { container, root } = render(baseSnapshot())
-    const style = container.querySelector('style')?.textContent ?? ''
+    const style = container.querySelector('style[data-pane-domain-styles]')?.textContent ?? ''
     expect(style).toBe(buildPanelStyles({ scope: 'pane-domain' }))
     expect(style.split('--dsw-alias-bg-base').length - 1).toBe(1)
     expect(style).toContain('[data-pane-domain] .vk-header')

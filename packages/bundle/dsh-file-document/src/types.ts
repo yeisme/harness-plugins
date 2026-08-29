@@ -24,8 +24,8 @@ export interface FileEntryV1 {
   size?: number
   /** Optional safe summary. */
   summary?: string
-  /** Capability flags: preview/open/download. */
-  capabilities: readonly ('preview' | 'open' | 'download')[]
+  /** Capability flags: preview/open/download/edit. */
+  capabilities: readonly ('preview' | 'open' | 'download' | 'edit')[]
 }
 
 export type FileEntryValidation =
@@ -67,7 +67,7 @@ export function validateFileEntry(value: unknown): FileEntryValidation {
   if (summary !== undefined && (typeof summary !== 'string' || summary.length > SUMMARY_MAX)) {
     return { ok: false, error: `summary invalid for ${String(id)}` }
   }
-  if (!isStringArray(capabilities) || capabilities.some(capability => !['preview', 'open', 'download'].includes(capability))) {
+  if (!isStringArray(capabilities) || capabilities.some(capability => !['preview', 'open', 'download', 'edit'].includes(capability))) {
     return { ok: false, error: `capabilities invalid for ${String(id)}` }
   }
   const result: FileEntryV1 = {

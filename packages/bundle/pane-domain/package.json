@@ -35,7 +35,7 @@
   ],
   "dependencies": {
     "@yeisme/dsh-client-ui-pane-domain": "0.1.0-rc.1",
-    "@yeisme/dsh-pane-workbench": "0.1.0-rc.1"
+    "@yeisme/dsh-pane-workbench": "0.1.0-rc.2"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

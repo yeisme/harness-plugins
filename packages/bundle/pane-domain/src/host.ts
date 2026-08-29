@@ -16,7 +16,7 @@ import {
   DOMAIN_OWNERS,
   mountDomainOwnerSource,
   type DomainOwnerEventTransport,
-} from '@yeisme/dsh-client-ui-pane-domain'
+} from '@yeisme/dsh-client-ui-pane-domain/host'
 
 /** owner adapter 注入 typed transport 的稳定 Host key。 */
 export function paneDomainOwnerTransportKey(owner: (typeof DOMAIN_OWNERS)[number]): string {

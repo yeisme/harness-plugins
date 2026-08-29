@@ -7,6 +7,7 @@ const clientExternals = [
   'react-dom',
   'react-dom/client',
   '@deepseek-ai/cordis',
+  '@deepseek-ai/dsh-client-ui-primitives',
 ] as const
 
 const node = {

@@ -1,0 +1,26 @@
+diff --git a/lib/docx/docx-reader.js b/lib/docx/docx-reader.js
+index f343dae8e0a63dcad95c38dfbc5f09732cf79494..3beb146326b3ca747b535bad9fdcd84d0df97ab1 100644
+--- a/lib/docx/docx-reader.js
++++ b/lib/docx/docx-reader.js
+@@ -15,7 +15,7 @@ var numberingXml = require("./numbering-xml");
+ var stylesReader = require("./styles-reader");
+ var notesReader = require("./notes-reader");
+ var commentsReader = require("./comments-reader");
+-var Files = require("./files").Files;
++var Files = require("../../browser/docx/files").Files;
+ 
+ 
+ function read(docxFile, input, options) {
+diff --git a/lib/index.js b/lib/index.js
+index 48dfb91b059ea02361f60fb08a0a4f6241284373..20632e112f03724b936a53c92941567757364ae0 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -6,7 +6,7 @@ var DocumentConverter = require("./document-to-html").DocumentConverter;
+ var convertElementToRawText = require("./raw-text").convertElementToRawText;
+ var readStyle = require("./style-reader").readStyle;
+ var readOptions = require("./options-reader").readOptions;
+-var unzip = require("./unzip");
++var unzip = require("../browser/unzip");
+ var Result = require("./results").Result;
+ 
+ exports.convertToHtml = convertToHtml;

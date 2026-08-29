@@ -16,6 +16,10 @@
       "types": "./lib/client.d.mts",
       "default": "./lib/client.mjs"
     },
+    "./host": {
+      "types": "./lib/host.d.mts",
+      "default": "./lib/host.mjs"
+    },
     "./package.json": "./package.json"
   },
   "dsh": {
@@ -34,9 +38,11 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "build": "tsdown src/index.ts src/client.ts --out-dir lib --format esm --dts --clean"
+    "build": "tsdown src/index.ts src/client.ts src/host.ts --out-dir lib --format esm --dts --clean"
   },
   "dependencies": {
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.6",
+    "@yeisme/dsh-client-ui-surface": "workspace:^",
     "@yeisme/dsh-client-ui-visual-kit": "workspace:^",
     "@yeisme/dsh-pane-protocol": "workspace:^"
   },

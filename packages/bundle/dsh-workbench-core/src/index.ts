@@ -8,6 +8,8 @@
  * @module @yeisme/dsh-workbench-core
  */
 
+import type { Context } from '@deepseek-ai/cordis'
+
 export { WorkbenchRegistry } from './registry.ts'
 export type { WorkbenchRegistrySnapshot } from './registry.ts'
 export {
@@ -22,3 +24,12 @@ export type {
   WorkbenchTabV1,
   WorkbenchTabScope,
 } from './types.ts'
+
+export const name = 'dsh-workbench-core'
+export const inject: readonly string[] = []
+
+/** No-op Host lifecycle. Browser UI lives in `./client`. */
+export function apply(_ctx: Context): void {}
+
+const DshWorkbenchCorePlugin = { name, inject, apply }
+export default DshWorkbenchCorePlugin

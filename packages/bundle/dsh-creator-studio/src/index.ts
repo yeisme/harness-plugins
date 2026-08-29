@@ -22,15 +22,30 @@ export {
   CreatorStudioOwnerDirectory,
   validateCreatorActionDescriptor,
   validateCreatorActionReceipt,
+  validateCreatorApprovalDecision,
+  validateCreatorAsset,
+  validateCreatorAssetPage,
+  validateCreatorAssetQuery,
+  validateCreatorOwnerAssetList,
   validateCreatorMediaAccess,
   validateCreatorOwnerSnapshot,
   validateCreatorStudioContext,
   validateCreatorStudioSnapshot,
 } from '@yeisme/dsh-creator-studio-host'
 export type {
+  CreatorApprovalDecisionV1,
+  CreatorApprovalV1,
+  CreatorAssetPageV1,
+  CreatorAssetQueryV1,
+  CreatorAssetScopeV1,
+  CreatorAssetV1,
+  CreatorGenerationRunV1,
   CreatorJobV1,
   CreatorMediaAccessV1,
+  CreatorOperationsProjectionV1,
   CreatorOwnerAdapterV1,
+  CreatorOwnerAssetQueryV1,
+  CreatorOwnerAssetListV1,
   CreatorOwnerProjectionV1,
   CreatorOwnerSnapshotV1,
   CreatorProductionV1,
@@ -45,12 +60,76 @@ export type {
 
 type FiberHandle = { dispose(): Promise<void> }
 
+interface TypertRegistryFace {
+  register(contribution: typeof creatorStudioTypertContribution): (() => void | Promise<void>) | undefined
+}
+
+const creatorStudioTypertContribution = {
+  package: '@yeisme/dsh-creator-studio-host',
+  face: 'host',
+  schemas: [],
+  model: {
+    services: [{
+      key: 'creatorStudio',
+      exportName: 'CreatorStudioGateway',
+      summary: 'Safe Creator Studio owner projection and action gateway.',
+      tags: [],
+      members: [
+        { kind: 'method', name: 'snapshot', signature: 'snapshot(): Promise<CreatorStudioSnapshotV1>' },
+        { kind: 'method', name: 'dispatch', signature: 'dispatch(input: unknown): Promise<PaneActionReceiptV1>' },
+        { kind: 'method', name: 'resolveArtifact', signature: 'resolveArtifact(input: unknown): Promise<CreatorMediaAccessV1 | null>' },
+        { kind: 'method', name: 'assets', signature: 'assets(input: unknown): Promise<CreatorAssetPageV1>' },
+        { kind: 'method', name: 'decideApproval', signature: 'decideApproval(input: unknown): Promise<PaneActionReceiptV1>' },
+      ],
+      types: [],
+    }],
+    events: [],
+    objects: [],
+  },
+  invocations: [
+    {
+      id: '@yeisme/dsh-creator-studio-host#creatorStudio/snapshot',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'snapshot',
+      invocation: { kind: 'direct' }, parameters: [], result: { mode: 'src-json' },
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host#creatorStudio/dispatch',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'dispatch',
+      invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }],
+      result: { mode: 'src-json' },
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host#creatorStudio/resolveArtifact',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'resolveArtifact',
+      invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }],
+      result: { mode: 'src-json' },
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host#creatorStudio/assets',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'assets',
+      invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }],
+      result: { mode: 'src-json' },
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host#creatorStudio/decideApproval',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'decideApproval',
+      invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }],
+      result: { mode: 'src-json' },
+    },
+  ],
+} as const
+
 type SharedCreatorStudioMount = {
   references: number
   tail: Promise<void>
   bridge?: FiberHandle | undefined
   directory?: CreatorStudioOwnerDirectory | undefined
   disposeDirectory?: (() => void) | undefined
+  unregisterTypert?: (() => void | Promise<void>) | undefined
 }
 
 const CREATOR_STUDIO_MOUNTS = Symbol.for('yeisme.dsh-creator-studio.host-mounts.v1')
@@ -109,6 +188,9 @@ async function acquireCreatorStudio(ctx: Context): Promise<() => Promise<void>> 
     if (current.bridge === undefined && root.get('creatorStudio') === undefined) {
       current.bridge = await root.plugin(CreatorStudioGateway)
     }
+    if (current.unregisterTypert === undefined) {
+      current.unregisterTypert = (root.get('typert') as TypertRegistryFace | undefined)?.register(creatorStudioTypertContribution)
+    }
   })
   current.tail = setup.catch(() => undefined)
   try {
@@ -131,9 +213,12 @@ async function releaseCreatorStudio(root: Context, mount: SharedCreatorStudioMou
   const teardown = mount.tail.then(async () => {
     const bridge = mount.bridge
     const disposeDirectory = mount.disposeDirectory
+    const unregisterTypert = mount.unregisterTypert
     mount.bridge = undefined
     mount.directory = undefined
     mount.disposeDirectory = undefined
+    mount.unregisterTypert = undefined
+    await unregisterTypert?.()
     await bridge?.dispose()
     disposeDirectory?.()
     const store = mounts()
@@ -154,13 +239,13 @@ export const creatorStudioBundleV1 = {
   id: 'dsh-creator-studio',
   version: '0.1.0-rc.1',
   owners: ['eikona', 'scaena', 'sonora', 'auctra', 'pinax', 'anatomia'],
-  tasks: ['text', 'image', 'audio', 'video', 'review', 'analysis', 'context', 'operations'],
+  tasks: ['text', 'image', 'audio', 'video', 'review', 'analysis', 'context', 'operations', 'assets', 'generation', 'approval'],
 } as const
 
 export type CreatorStudioBundleV1 = typeof creatorStudioBundleV1
 
 export const name = 'dsh-creator-studio'
-export const inject: readonly string[] = []
+export const inject = ['typert'] as const
 
 export async function apply(ctx: Context): Promise<() => Promise<void>> {
   return acquireCreatorStudio(ctx)

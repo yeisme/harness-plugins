@@ -30,7 +30,7 @@ test('built host entry mounts domain.<owner> owner sources when transports are i
   }
   const { Context } = await import('@deepseek-ai/cordis')
   const host = (await import(hostPath)).default
-  const { sonoraSnapshotRead } = await import('@yeisme/dsh-client-ui-pane-domain')
+  const { sonoraSnapshotRead } = await import('@yeisme/dsh-client-ui-pane-domain/host')
   const ctx = new Context()
   t.after(async () => { await ctx.fiber.dispose() })
   const context = { workspaceRef: 'workspace:demo', revision: '1' }
@@ -71,7 +71,7 @@ test('built host entry mounts domain.auctra and domain.eikona owner sources when
   }
   const { Context } = await import('@deepseek-ai/cordis')
   const host = (await import(hostPath)).default
-  const { auctraSnapshotRead, eikonaSnapshotRead } = await import('@yeisme/dsh-client-ui-pane-domain')
+  const { auctraSnapshotRead, eikonaSnapshotRead } = await import('@yeisme/dsh-client-ui-pane-domain/host')
   const ctx = new Context()
   t.after(async () => { await ctx.fiber.dispose() })
   const context = { workspaceRef: 'workspace:demo', revision: '5' }

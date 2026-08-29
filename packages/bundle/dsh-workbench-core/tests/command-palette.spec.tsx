@@ -24,7 +24,7 @@ describe('CommandPalette', () => {
   it('runs the active command on Enter', () => {
     const onRunCommand = vi.fn()
     render(<CommandPalette commands={commands} onRunCommand={onRunCommand} onClose={vi.fn()} />)
-    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter' })
+    fireEvent.keyDown(screen.getByPlaceholderText('Type a command…'), { key: 'Enter' })
     expect(onRunCommand).toHaveBeenCalledWith('media.open')
   })
 

@@ -17,4 +17,4 @@
 # and /terminal command render an honest disabled reason, no fake output.
 - insert:
     - id: dsh-terminal
-      name: '@yeisme/dsh-terminal'
+      name: '@yeisme/dsh-terminal/host'

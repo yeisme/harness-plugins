@@ -11,9 +11,11 @@ const clientExternals = [
 ] as const
 
 const node = {
+  outDir: 'lib',
   format: ['esm'],
   platform: 'node',
   target: 'es2024',
+  fixedExtension: false,
   dts: false,
   sourcemap: true,
   clean: false,
@@ -28,7 +30,7 @@ export default defineConfig([
     alias: {
       '@yeisme/dsh-terminal-host': fileURLToPath(new URL('../../host/dsh-terminal-host/lib/types/index.js', import.meta.url)),
     },
-    entry: ['lib/types/index.js'],
+    entry: { host: 'lib/types/host.js' },
     deps: {
       alwaysBundle: [/^@yeisme\//u],
       // Typert decorators keep their Remote marker table in module-private
@@ -62,6 +64,7 @@ export default defineConfig([
     },
     outputOptions: {
       codeSplitting: false,
+      entryFileNames: 'host.js',
       entryFileNames: 'client.js',
       banner: 'window.__ModuleLoader__.load({ id: "@yeisme/dsh-terminal", factory: (require) => {',
       footer: 'return module.exports; } });',
