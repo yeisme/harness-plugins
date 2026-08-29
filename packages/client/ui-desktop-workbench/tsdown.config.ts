@@ -1,4 +1,5 @@
 import { defineConfig } from 'tsdown'
+import { fileURLToPath } from 'node:url'
 
 const clientExternals = [
   'react',
@@ -6,6 +7,8 @@ const clientExternals = [
   'react-dom',
   'react-dom/client',
   '@yeisme/dsh-workbench-core',
+  '@yeisme/dsh-workbench-core/client',
+  '@deepseek-ai/dsh-client-ui-primitives',
 ] as const
 
 const node = {
@@ -22,6 +25,10 @@ const node = {
 export default defineConfig([
   { ...node, entry: ['lib/types/index.js'] },
   {
+    alias: {
+      '@yeisme/dsh-client-ui-structured-content': fileURLToPath(new URL('../ui-structured-content/src/index.ts', import.meta.url)),
+      '@yeisme/dsh-client-ui-visual-kit': fileURLToPath(new URL('../ui-visual-kit/src/index.ts', import.meta.url)),
+    },
     entry: { client: 'lib/types/client/index.js' },
     outDir: 'lib',
     format: 'cjs',
@@ -31,6 +38,7 @@ export default defineConfig([
     sourcemap: true,
     clean: false,
     deps: {
+      alwaysBundle: [/^@yeisme\//u],
       neverBundle: [...clientExternals],
     },
     outputOptions: {

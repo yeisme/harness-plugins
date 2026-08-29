@@ -25,20 +25,30 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "build": "tsc -p tsconfig.json && tsdown"
+    "build": "tsc -p tsconfig.json && tsdown",
+    "test:integration": "node scripts/run-integration-tests.mjs"
   },
   "dependencies": {
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.7",
+    "@yeisme/dsh-client-ui-semantic-file-editor": "workspace:*",
+    "@yeisme/dsh-client-ui-session-tags": "workspace:*",
+    "@yeisme/dsh-client-ui-structured-content": "workspace:*",
+    "@yeisme/dsh-client-ui-surface": "workspace:^",
+    "@yeisme/dsh-client-ui-visual-kit": "workspace:*",
     "@yeisme/dsh-file-document": "workspace:*",
     "@yeisme/dsh-file-host": "workspace:*",
+    "@yeisme/dsh-git-host": "workspace:*",
     "@yeisme/dsh-notify-host": "workspace:*",
+    "@yeisme/dsh-ordo-agent-ops": "workspace:*",
     "@yeisme/dsh-session-manager": "workspace:*",
     "@yeisme/dsh-terminal": "workspace:*",
     "@yeisme/dsh-terminal-host": "workspace:*",
-    "@yeisme/dsh-workbench-core": "workspace:*"
+    "@yeisme/dsh-workbench-core": "workspace:*",
+    "fflate": "0.8.3"
   },
   "devDependencies": {
-    "@types/react": "~18.3.31",
     "@testing-library/react": "^16.1.0",
+    "@types/react": "~18.3.31",
     "jsdom": "^30.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

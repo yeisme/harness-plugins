@@ -1,5 +1,12 @@
 /** Local Pane view for the Subagent Monitor. */
 import { createElement, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  Surface,
+  SurfaceContextBar,
+  SurfaceSection,
+  SurfaceState,
+} from '@yeisme/dsh-client-ui-surface'
 import { SubagentMonitorController } from './controller.js'
 import type { SubagentPaneNodeV1, SubagentStatus } from './projection.js'
 
@@ -8,36 +15,27 @@ export interface SubagentMonitorViewProps {
 }
 
 const SUBAGENT_STYLES = `
-[data-pane-subagent-monitor]{display:flex;min-width:0;min-height:100%;height:100%;flex-direction:column;color:var(--dsw-alias-label-primary,#f2f2f4);background:var(--dsw-alias-bg-base,#171719);font:13px/1.45 var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif)}
-[data-pane-subagent-monitor] .psa-toolbar{display:flex;min-height:38px;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.1));background:var(--dsw-alias-bg-elevated,#1c1c1f)}
-[data-pane-subagent-monitor] .psa-summary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-tertiary,#92929b);font-size:12px}
-[data-pane-subagent-monitor] button{min-height:28px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--dsw-alias-label-secondary,#c6c6cb);cursor:pointer;font:inherit}
-[data-pane-subagent-monitor] button:hover:not(:disabled),[data-pane-subagent-monitor] button:focus-visible{background:var(--dsw-alias-fill-hover,rgba(255,255,255,.08));color:var(--dsw-alias-label-primary,#fff);outline:2px solid var(--dsw-alias-state-business-primary,#79a8ff);outline-offset:-2px}
-[data-pane-subagent-monitor] button:disabled{cursor:not-allowed;opacity:.45}
-[data-pane-subagent-monitor] .psa-refresh{margin-left:auto;padding:0 9px;border-color:var(--dsw-alias-border-l2,rgba(255,255,255,.12));background:var(--dsw-alias-bg-layer-1,#29292d)}
-[data-pane-subagent-monitor] .psa-empty{margin:auto;max-width:280px;padding:24px;text-align:center;color:var(--dsw-alias-label-tertiary,#92929b)}
-[data-pane-subagent-monitor] .psa-empty strong{display:block;margin-bottom:6px;color:var(--dsw-alias-label-primary,#f2f2f4);font-size:14px}
+[data-pane-subagent-monitor]{height:100%}
+[data-pane-subagent-monitor] .psa-summary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--vk-text-tertiary);font-size:12px}
 [data-pane-subagent-monitor] .psa-tree{min-height:0;flex:1;overflow:auto;padding:6px}
 [data-pane-subagent-monitor] .psa-node{display:grid;min-width:0;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:4px;min-height:34px;border-radius:7px}
-[data-pane-subagent-monitor] .psa-node:hover{background:var(--dsw-alias-fill-hover,rgba(255,255,255,.05))}
+[data-pane-subagent-monitor] .psa-node:hover{background:var(--vk-fill-hover)}
 [data-pane-subagent-monitor] .psa-disclosure{width:24px;padding:0;border:0}
-[data-pane-subagent-monitor] .psa-leaf{display:grid;width:24px;place-items:center;color:var(--dsw-alias-label-quaternary,#676770)}
+[data-pane-subagent-monitor] .psa-leaf{display:grid;width:24px;place-items:center;color:var(--vk-text-quaternary)}
 [data-pane-subagent-monitor] .psa-select{display:flex;min-width:0;align-items:center;gap:7px;padding:0 6px;text-align:left}
-[data-pane-subagent-monitor] .psa-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-primary,#ececf1)}
-[data-pane-subagent-monitor] .psa-badge{flex:none;padding:1px 6px;border-radius:999px;background:var(--dsw-alias-bg-layer-1,#29292d);color:var(--dsw-alias-label-tertiary,#92929b);font-size:10px}
-[data-pane-subagent-monitor] .psa-status[data-status='running']{background:rgba(62,166,109,.18);color:#88d5a7}
-[data-pane-subagent-monitor] .psa-status[data-status='failed']{background:rgba(242,90,90,.16);color:#f39494}
-[data-pane-subagent-monitor] .psa-status[data-status='completed']{background:rgba(121,168,255,.16);color:#a9c9ff}
-[data-pane-subagent-monitor] .psa-metrics{color:var(--dsw-alias-label-quaternary,#777780);font-size:11px;white-space:nowrap}
-[data-pane-subagent-monitor] .psa-open{margin-right:2px;padding:0 7px;color:var(--dsw-alias-label-tertiary,#92929b);font-size:11px}
-[data-pane-subagent-monitor] .psa-detail{display:grid;gap:9px;padding:10px;border-top:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.1));background:var(--dsw-alias-bg-elevated,#1c1c1f)}
+[data-pane-subagent-monitor] .psa-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--vk-text-primary)}
+[data-pane-subagent-monitor] .psa-badge{flex:none;padding:1px 6px;border-radius:999px;background:var(--vk-bg-layer-2);color:var(--vk-text-tertiary);font-size:10px}
+[data-pane-subagent-monitor] .psa-status[data-status='running']{background:color-mix(in srgb,var(--vk-tone-info) 18%,transparent);color:var(--vk-tone-info)}
+[data-pane-subagent-monitor] .psa-status[data-status='failed']{background:color-mix(in srgb,var(--vk-tone-critical) 16%,transparent);color:var(--vk-tone-critical)}
+[data-pane-subagent-monitor] .psa-status[data-status='completed']{background:color-mix(in srgb,var(--vk-tone-positive) 16%,transparent);color:var(--vk-tone-positive)}
+[data-pane-subagent-monitor] .psa-metrics{color:var(--vk-text-quaternary);font-size:11px;white-space:nowrap}
+[data-pane-subagent-monitor] .psa-open{margin-right:2px;padding:0 7px;color:var(--vk-text-tertiary);font-size:11px}
 [data-pane-subagent-monitor] .psa-detail-head{display:flex;align-items:center;gap:8px}
 [data-pane-subagent-monitor] .psa-detail-head strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 [data-pane-subagent-monitor] .psa-detail-actions{display:flex;flex-wrap:wrap;gap:6px}
-[data-pane-subagent-monitor] .psa-detail-actions button{padding:0 9px;border-color:var(--dsw-alias-border-l2,rgba(255,255,255,.12));background:var(--dsw-alias-bg-layer-1,#29292d)}
 [data-pane-subagent-monitor] .psa-followup{display:flex;min-width:0;gap:6px}
-[data-pane-subagent-monitor] .psa-followup input{min-width:0;min-height:30px;flex:1;padding:0 9px;border:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.14));border-radius:7px;background:var(--dsw-alias-bg-base,#171719);color:var(--dsw-alias-label-primary,#fff);font:inherit}
-[data-pane-subagent-monitor] .psa-feedback{color:var(--dsw-alias-label-tertiary,#92929b);font-size:12px}
+[data-pane-subagent-monitor] .psa-followup input{min-width:0;flex:1}
+[data-pane-subagent-monitor] .psa-feedback{color:var(--vk-text-tertiary);font-size:12px}
 `
 
 const STATUS_LABEL: Record<SubagentStatus, string> = {
@@ -68,7 +66,7 @@ function NodeRow(props: {
 }): ReactNode {
   const isExpanded = props.expanded.has(props.node.ref)
   const disclosure = props.node.hasChildren
-    ? createElement('button', {
+    ? createElement(Button, {
       type: 'button',
       className: 'psa-disclosure',
       'aria-label': `${isExpanded ? '折叠' : '展开'} ${props.node.label}`,
@@ -93,13 +91,13 @@ function NodeRow(props: {
     style: { paddingLeft: `${props.node.depth * 16}px` },
   },
     disclosure,
-    createElement('button', { type: 'button', className: 'psa-select', onClick: () => props.onSelect(props.node) },
+    createElement(Button, { type: 'button', className: 'psa-select', onClick: () => props.onSelect(props.node) },
       createElement('span', { className: 'psa-label', 'data-pane-subagent-label': true }, props.node.label),
       createElement('span', { className: 'psa-badge', 'data-pane-subagent-mode': true }, props.node.mode === 'continuable' ? '可继续' : '单次'),
       createElement('span', { className: 'psa-badge psa-status', 'data-status': props.node.status, 'data-pane-subagent-status-text': true }, STATUS_LABEL[props.node.status]),
       metrics === '' ? null : createElement('span', { className: 'psa-metrics', 'data-pane-subagent-metrics': true }, metrics),
     ),
-    createElement('button', {
+    createElement(Button, {
       type: 'button',
       className: 'psa-open',
       'aria-label': `在主会话打开 ${props.node.label}`,
@@ -147,29 +145,37 @@ export function SubagentMonitorView(props: SubagentMonitorViewProps): ReactNode 
   const summary = projection.rootSessionId === ''
     ? '未选择会话'
     : `${projection.runningCount} 运行中 · ${inactiveCount} 非活动${projection.totalTokens === undefined ? '' : ` · ${formatTokens(projection.totalTokens)} tok`}`
-  return createElement('section', {
+  return createElement(Surface, {
+    kind: 'navigator',
     'data-pane-subagent-monitor': true,
     'aria-label': 'Subagent Monitor',
   },
     createElement('style', { 'data-pane-subagent-styles': true }, SUBAGENT_STYLES),
-    createElement('header', { className: 'psa-toolbar' },
-      createElement('span', { className: 'psa-summary', role: 'status', 'aria-live': 'polite' }, summary),
-      createElement('button', {
+    createElement(SurfaceContextBar, {
+      title: 'Subagent Monitor',
+      status: createElement('span', { className: 'psa-summary', role: 'status', 'aria-live': 'polite' }, summary),
+      actions: createElement(Button, {
         type: 'button',
         className: 'psa-refresh',
         disabled: projection.rootSessionId === '',
         onClick: () => props.controller.refresh(),
       }, '刷新'),
-    ),
+    }),
     projection.rootSessionId === ''
-      ? createElement('div', { className: 'psa-empty', role: 'status' },
-        createElement('strong', null, '未选择会话'),
-        createElement('span', null, '选择一个主会话后，这里会显示它实际启动的子 Agent。'))
+      ? createElement('div', { className: 'ys-body' }, createElement(SurfaceState, {
+        className: 'psa-empty',
+        phase: 'empty',
+        title: '未选择会话',
+        description: '选择一个主会话后，这里会显示它实际启动的子 Agent。',
+      }))
       : projection.nodes.length === 0
-        ? createElement('div', { className: 'psa-empty', role: 'status' },
-          createElement('strong', null, '当前会话还没有子 Agent'),
-          createElement('span', null, '通过 DSH 的 subagent 工具启动后，这里会显示真实运行状态、耗时和 token。'))
-        : createElement('div', { className: 'psa-tree', role: 'tree', 'aria-label': 'Subagent tree' },
+        ? createElement('div', { className: 'ys-body' }, createElement(SurfaceState, {
+          className: 'psa-empty',
+          phase: 'empty',
+          title: '当前会话还没有子 Agent',
+          description: '通过 DSH 的 subagent 工具启动后，这里会显示真实运行状态、耗时和 token。',
+        }))
+        : createElement('div', { className: 'ys-body psa-tree', role: 'tree', 'aria-label': 'Subagent tree' },
           visibleNodes.map(node => createElement(NodeRow, {
             key: node.ref,
             node,
@@ -182,13 +188,12 @@ export function SubagentMonitorView(props: SubagentMonitorViewProps): ReactNode 
         ),
     selected === undefined
       ? null
-      : createElement('footer', { className: 'psa-detail', 'data-pane-subagent-detail': selected.ref },
+      : createElement('div', { className: 'ys-body' }, createElement(SurfaceSection, { className: 'psa-detail', title: selected.label, 'data-pane-subagent-detail': selected.ref },
         createElement('div', { className: 'psa-detail-head' },
-          createElement('strong', null, selected.label),
           createElement('span', { className: 'psa-badge psa-status', 'data-status': selected.status }, STATUS_LABEL[selected.status]),
         ),
         createElement('div', { className: 'psa-detail-actions' },
-          createElement('button', {
+          createElement(Button, {
             type: 'button',
             onClick: () => {
               void props.controller.peek(selected).then(result => {
@@ -196,9 +201,9 @@ export function SubagentMonitorView(props: SubagentMonitorViewProps): ReactNode 
               })
             },
           }, '查看最近记录'),
-          createElement('button', { type: 'button', onClick: () => props.controller.openInMain(selected) }, '在主会话打开'),
+          createElement(Button, { type: 'button', onClick: () => props.controller.openInMain(selected) }, '在主会话打开'),
           selected.mode === 'continuable'
-            ? createElement('button', {
+            ? createElement(Button, {
               type: 'button',
               onClick: () => {
                 void props.controller.interrupt(selected).then(result => {
@@ -210,14 +215,14 @@ export function SubagentMonitorView(props: SubagentMonitorViewProps): ReactNode 
         ),
         selected.mode === 'continuable'
           ? createElement('div', { className: 'psa-followup' },
-            createElement('input', {
+            createElement(Input, {
               type: 'text',
               value: draft,
               'aria-label': `给 ${selected.label} 发送后续消息`,
               placeholder: '发送后续消息',
               onChange: event => setDraft(event.currentTarget.value),
             }),
-            createElement('button', {
+            createElement(Button, {
               type: 'button',
               disabled: draft.trim().length === 0,
               onClick: () => {
@@ -232,7 +237,7 @@ export function SubagentMonitorView(props: SubagentMonitorViewProps): ReactNode 
           )
           : null,
         feedback === undefined ? null : createElement('span', { className: 'psa-feedback', role: 'status', 'data-pane-subagent-feedback': true }, feedback),
-      ),
+      )),
   )
 }
 

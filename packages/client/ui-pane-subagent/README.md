@@ -1,6 +1,6 @@
 # @yeisme/dsh-client-ui-pane-subagent
 
-Experimental Subagent Monitor for the Yeisme Pane Workbench. It registers a `subagent.monitor` Pane view and a session-header "Agents" entry that opens the view without replacing the main conversation.
+Experimental Subagent Monitor for the Yeisme Pane Workbench. It registers a `subagent.monitor` Pane view and a session-header Agents icon that opens the view without replacing the main conversation. The icon is disabled with a reason when `paneWorkbench` is missing.
 
 The view consumes only DSH-owned `ctx.sessions.list` snapshots and uses `ctx.sessions.openSubagent()` only for explicit "Open in Main". It does not create a second subagent tree or scheduler.
 
