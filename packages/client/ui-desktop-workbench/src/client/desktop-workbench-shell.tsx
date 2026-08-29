@@ -8,6 +8,8 @@
  */
 
 import { useState, type ReactNode } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Surface } from '@yeisme/dsh-client-ui-surface'
 import { WorkbenchShell } from '@yeisme/dsh-workbench-core/client'
 import type { WorkbenchTabV1 } from '@yeisme/dsh-workbench-core'
 import type { SessionManagerHostV1, SessionSummaryV1 } from '@yeisme/dsh-session-manager'
@@ -31,16 +33,11 @@ export interface DesktopWorkbenchShellProps {
   onClose?: (() => void) | undefined
 }
 
-function initialSidebarVisibility(): boolean {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true
-  return window.matchMedia('(min-width: 821px)').matches
-}
-
 export function DesktopWorkbenchShell({ tabs, renderTab, sessionHost, onOpenSession, lineageOf, status, onClose }: DesktopWorkbenchShellProps) {
   const [activeTabId, setActiveTabId] = useState<string>(tabs[0]?.id ?? '')
-  const [sidebarVisible, setSidebarVisible] = useState(initialSidebarVisibility)
+  const [sidebarVisible, setSidebarVisible] = useState(true)
   return (
-    <div data-dsh-desktop-workbench data-sidebar-visible={String(sidebarVisible)}>
+    <Surface kind="workspace" data-dsh-desktop-workbench data-sidebar-visible={String(sidebarVisible)}>
       <style data-dsh-desktop-workbench-styles>{desktopWorkbenchStyles}</style>
       <div data-dsh-desktop-shell-sidebar>
         <SessionSidebar host={sessionHost ?? fallbackHost} onOpenSession={onOpenSession} lineageOf={lineageOf} />
@@ -48,16 +45,16 @@ export function DesktopWorkbenchShell({ tabs, renderTab, sessionHost, onOpenSess
       <main data-dsh-desktop-main>
         <header data-dsh-desktop-toolbar>
           <div data-dsh-desktop-toolbar-group>
-            <button
+            <Button
               type="button"
-              data-dsh-desktop-toolbar-button="sidebar"
+              size="sm"
+              variant="toolbar"
               aria-label={sidebarVisible ? '隐藏会话侧栏' : '显示会话侧栏'}
               aria-expanded={sidebarVisible}
               onClick={() => { setSidebarVisible(value => !value) }}
             >
-              <span aria-hidden="true">{sidebarVisible ? '◧' : '▤'}</span>
-              <span data-label>{sidebarVisible ? '隐藏会话' : '显示会话'}</span>
-            </button>
+              <span data-dsh-desktop-toolbar-button="sidebar"><span aria-hidden="true">{sidebarVisible ? '◧' : '▤'}</span><span data-label>{sidebarVisible ? '隐藏会话' : '显示会话'}</span></span>
+            </Button>
             <div data-dsh-desktop-product>
               <small>DSH WORKBENCH</small>
               <strong>桌面工作台</strong>
@@ -66,15 +63,15 @@ export function DesktopWorkbenchShell({ tabs, renderTab, sessionHost, onOpenSess
           <div data-dsh-desktop-toolbar-actions>
             <span data-dsh-desktop-status>{status ?? `${tabs.length} 个工作区视图`}</span>
             {onClose !== undefined && (
-              <button
+              <Button
                 type="button"
-                data-dsh-desktop-toolbar-button="close"
+                size="sm"
+                variant="toolbar"
                 aria-label="返回 DSH 会话"
                 onClick={onClose}
               >
-                <span aria-hidden="true">×</span>
-                <span data-label>返回会话</span>
-              </button>
+                <span data-dsh-desktop-toolbar-button="close"><span aria-hidden="true">×</span><span data-label>返回会话</span></span>
+              </Button>
             )}
           </div>
         </header>
@@ -88,7 +85,7 @@ export function DesktopWorkbenchShell({ tabs, renderTab, sessionHost, onOpenSess
           />
         </div>
       </main>
-    </div>
+    </Surface>
   )
 }
 

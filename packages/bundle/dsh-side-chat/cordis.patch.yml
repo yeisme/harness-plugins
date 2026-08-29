@@ -1,0 +1,15 @@
+# Yeisme DSH side chat bundle.
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-side-chat
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/dsh-side-chat
+#
+# One profile row composing the side chat pane. The Host face is a no-op: the
+# pane reads and writes exclusively through official client services
+# (ISessions.binding()/fork(), optional runtime create(), SessionFace prompt
+# and ConversationSnapshot) and never calls sessions.open()/clear() — the
+# main conversation selection is untouched. Closing the pane only detaches
+# the local subscription; attached sessions stay in the list.
+- insert:
+    - id: dsh-side-chat
+      name: '@yeisme/dsh-side-chat'

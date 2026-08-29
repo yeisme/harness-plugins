@@ -123,6 +123,35 @@ describe('computeRetryTarget', () => {
     expect(computeRetryTarget(snapshot, 'missing' as MessageId)).toEqual({ ok: false, reason: 'not-found' })
   })
 
+  it('never falls back to a later prompt for an exactly matched assistant', () => {
+    // a1's prompt scrolled out of the window; the newest prompt must not be
+    // silently re-sent as "retry a1".
+    const snapshot = snapshotWith(
+      [assistant(1, 1, 'a1'), textUser(6, 'later'), assistant(7, 2, 'a2')],
+      new Map([[1, 2], [2, 8]]),
+    )
+    expect(computeRetryTarget(snapshot, 'a1' as MessageId)).toEqual({ ok: false, reason: 'not-found' })
+  })
+
+  it('falls back to the newest prompt only for the single-tail heuristic', () => {
+    const snapshot = snapshotWith([textUser(6, 'later')], new Map([[1, 5]]))
+    snapshot.chat = {
+      nodes: {
+        values: () => [{
+          kind: 'turn-tail',
+          seq: 9,
+          data: { closing: { finalNode: assistant(3, 2, 'durable-2') } },
+        }][Symbol.iterator](),
+      },
+    } as never
+    // Per-entry UUID addresses the only completed tail; its seq is not
+    // comparable with the legacy window, so the newest prompt is the fallback.
+    expect(computeRetryTarget(snapshot, 'entry-uuid' as MessageId)).toMatchObject({
+      ok: true,
+      target: { kind: 'retry', seq: 3, boundarySeq: 5, text: 'later' },
+    })
+  })
+
   it('disables non-text prompts', () => {
     const snapshot = snapshotWith(
       [imageUser(6), assistant(7, 2, 'a2')],

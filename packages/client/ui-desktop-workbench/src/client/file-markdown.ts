@@ -61,7 +61,10 @@ function renderBlock(block: string): string {
   return `<p>${lines.map(line => inlineMarkdown(line)).join('<br />')}</p>`
 }
 
-/** Convert Markdown source into a small HTML subset. Source is escaped first. */
+/**
+ * Convert Markdown source into a small legacy HTML subset. Source is escaped first.
+ * @deprecated FileOpenPane now uses DSH MarkdownText for GFM and table parity.
+ */
 export function renderMarkdown(source: string): string {
   const parts: string[] = []
   const fence = /```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g
@@ -69,7 +72,9 @@ export function renderMarkdown(source: string): string {
   let match = fence.exec(source)
   while (match !== null) {
     parts.push(source.slice(cursor, match.index).split(/\n{2,}/).map(renderBlock).join(''))
-    parts.push(`<pre><code>${escapeHtml(match[2] ?? '')}</code></pre>`)
+    const lang = (match[1] ?? '').trim().toLowerCase()
+    const className = lang === 'mermaid' ? ' class="language-mermaid"' : ''
+    parts.push(`<pre><code${className}>${escapeHtml(match[2] ?? '')}</code></pre>`)
     cursor = match.index + match[0].length
     match = fence.exec(source)
   }

@@ -81,6 +81,47 @@ function disabled(reason: RewriteDisableReason): RewriteDecision {
   return { ok: false, reason }
 }
 
+function sameMessageId(left: MessageId | undefined, right: MessageId): boolean {
+  return left !== undefined && (left === right || String(left) === String(right))
+}
+
+interface AddressedAssistant {
+  readonly node: Extract<ConversationNode, { kind: 'assistant' }>
+  /**
+   * True when the node matched messageId exactly. False when it came from the
+   * single-tail heuristic: only that path may fall back to the newest prompt,
+   * because its seq is not comparable with the legacy window.
+   */
+  readonly exact: boolean
+}
+
+function assistantForMessage(snapshot: ConversationSnapshot, messageId: MessageId): AddressedAssistant | undefined {
+  const legacy = snapshot.nodes.find((node): node is Extract<ConversationNode, { kind: 'assistant' }> =>
+    node.kind === 'assistant' && sameMessageId(node.messageId, messageId),
+  )
+  if (legacy !== undefined) return { node: legacy, exact: true }
+
+  // Current DSH renders the action strip from the incremental turn-tail node.
+  // Older histories can omit that final assistant from the top-level legacy
+  // window while retaining it as closing.finalNode in the Chat target.
+  const chatNodes = snapshot.chat?.nodes?.values?.() ?? []
+  const tailFinals: Extract<ConversationNode, { kind: 'assistant' }>[] = []
+  for (const node of chatNodes) {
+    if (node.kind !== 'turn-tail' || typeof node.data !== 'object' || node.data === null) continue
+    const closing = (node.data as { closing?: { finalNode?: ConversationNode } | null }).closing
+    const finalNode = closing?.finalNode
+    if (finalNode?.kind !== 'assistant') continue
+    if (sameMessageId(finalNode.messageId, messageId)) return { node: finalNode, exact: true }
+    tailFinals.push(finalNode)
+  }
+  // Some rc.7 slot runtimes deliver a per-entry UUID that differs from the
+  // durable finalNode.messageId. With exactly one completed Turn tail there is
+  // still one unambiguous addressed assistant; never guess when several exist.
+  const [onlyTail] = tailFinals
+  if (tailFinals.length === 1 && onlyTail !== undefined) return { node: onlyTail, exact: false }
+  return undefined
+}
+
 /** Optional first-round support: only true when `session.forkBeforeMessage` is bound. */
 export interface RewriteBoundaryOptions {
   readonly firstRound?: boolean
@@ -107,12 +148,15 @@ export function computeRetryTarget(
 ): RewriteDecision {
   if (snapshot.removed) return disabled('removed')
 
-  const assistant = snapshot.nodes.find((node): node is Extract<ConversationNode, { kind: 'assistant'; messageId?: MessageId }> =>
-    node.kind === 'assistant' && node.messageId === messageId,
-  )
-  if (assistant === undefined) return disabled('not-found')
+  const addressed = assistantForMessage(snapshot, messageId)
+  if (addressed === undefined) return disabled('not-found')
+  const assistant = addressed.node
 
+  // Only the heuristic single-tail match may fall back to the newest prompt:
+  // its seq is not comparable with the legacy window. An exact match must find
+  // its own prompt — falling back here would silently retry a later turn.
   const prompt = findPromptBefore(snapshot.nodes, assistant.seq)
+    ?? (addressed.exact ? null : findPromptBefore(snapshot.nodes, Number.POSITIVE_INFINITY))
   if (prompt === null) return disabled('not-found')
   if (!isTextOnly(prompt.content)) return disabled('not-text')
 

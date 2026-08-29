@@ -26,6 +26,8 @@ describe('ChatRewriteController', () => {
     expect(host.prompt).toHaveBeenCalledWith(CHILD, 'second')
     expect(host.open).toHaveBeenCalledWith(CHILD)
     expect(controller.store.getSnapshot()).toEqual({ phase: 'opened', activeKey: 'retry:a1', errorCode: null, errorMessage: null })
+    const getSnapshot = controller.store.getSnapshot
+    expect(getSnapshot().phase).toBe('opened')
   })
 
   it('single-flights concurrent submissions', async () => {

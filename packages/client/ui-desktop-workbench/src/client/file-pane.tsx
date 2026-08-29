@@ -9,6 +9,7 @@
  */
 
 import { useCallback, useMemo } from 'react'
+import { Surface, SurfaceState } from '@yeisme/dsh-client-ui-surface'
 import { FileDocumentPanel, useFileTree, type FileEntryV1, type FileTreeHostAdapter } from '@yeisme/dsh-file-document'
 import { probeFileWatch, type FileHostV1 } from '@yeisme/dsh-file-host'
 
@@ -58,8 +59,8 @@ export function FilePane({ host, tabId = 'files', resolvePreviewUrl, onOpenEntry
     return result.content
   }, [host])
   return (
-    <section data-dsh-file-pane data-file-watch={watch.live ? 'live' : 'ondemand'} data-freshness={watch.freshness}>
-      {compact ? null : <p role="status" data-dsh-file-watch-reason>{watch.reason}</p>}
+    <Surface kind="navigator" data-dsh-file-pane data-file-watch={watch.live ? 'live' : 'ondemand'} data-freshness={watch.freshness}>
+      {compact ? null : <SurfaceState className="dwo-file-watch" phase={watch.freshness === 'fresh' ? 'success' : 'stale'} title={watch.reason} data-dsh-file-watch-reason />}
       <FileDocumentPanel
         tabId={tabId}
         entries={fileTree.entries}
@@ -74,7 +75,7 @@ export function FilePane({ host, tabId = 'files', resolvePreviewUrl, onOpenEntry
         error={fileTree.status === 'error' ? fileTree.error : undefined}
         onRetry={fileTree.retry}
       />
-    </section>
+    </Surface>
   )
 }
 

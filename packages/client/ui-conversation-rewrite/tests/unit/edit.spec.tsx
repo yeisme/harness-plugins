@@ -22,6 +22,8 @@ describe('EditInlineEditor', () => {
     const onSave = vi.fn()
     render(<EditInlineEditor {...base} onSave={onSave} />)
     const textarea = screen.getByRole('textbox', { name: '编辑消息…' })
+    expect(screen.getByRole('button', { name: '保存' }).querySelector('svg')?.getAttribute('data-test-icon')).toBe('check')
+    expect(screen.getByRole('button', { name: '取消' }).querySelector('svg')?.getAttribute('data-test-icon')).toBe('close')
     fireEvent.change(textarea, { target: { value: 'edited' } })
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     expect(onSave).toHaveBeenCalledWith('edited')
@@ -55,7 +57,9 @@ describe('EditInlineEditor', () => {
 
   it('shows saving state and disables controls', () => {
     render(<EditInlineEditor {...base} saving />)
-    expect(screen.getByRole('button', { name: '保存中…' }).disabled).toBe(true)
+    const saving = screen.getByRole('button', { name: '保存中…' })
+    expect(saving.disabled).toBe(true)
+    expect(saving.querySelector('svg')?.getAttribute('data-test-icon')).toBe('loading')
     expect(screen.getByRole('textbox', { name: '编辑消息…' }).disabled).toBe(true)
   })
 

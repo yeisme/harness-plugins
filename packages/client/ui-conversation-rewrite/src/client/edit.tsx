@@ -11,6 +11,15 @@
  */
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import {
+  Button,
+  IconCheckOutline16,
+  IconCloseOutline16,
+  IconEditOutline16,
+  IconLoadingOutline16,
+  Tooltip,
+} from '@deepseek-ai/dsh-client-ui-primitives'
+import { Surface, SurfaceActionBar } from '@yeisme/dsh-client-ui-surface'
 import { computeEditTarget, disableReasonKey } from './boundary.ts'
 import type { ChatRewriteController } from './controller.ts'
 import { NS, type ConversationRewriteKey } from './locales.ts'
@@ -34,8 +43,10 @@ export interface EditInlineEditorProps {
   readonly onCancel: () => void
 }
 
-/** Screen-reader-only text style: visible to assistive tech, silent visually. */
-const srOnlyStyle = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' } as const
+const EDIT_STYLES = `
+[data-dsh-conversation-rewrite-edit]{display:grid;gap:8px;min-width:0}
+[data-dsh-conversation-rewrite-edit] .cr-sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+`
 
 /** 纯展示的内联编辑器：保存/取消/Escape，空内容不提交。 */
 export function EditInlineEditor({ initialText, saving, error, saveLabel, cancelLabel, savingLabel, emptyLabel, placeholder, hint, onSave, onCancel }: EditInlineEditorProps) {
@@ -70,7 +81,10 @@ export function EditInlineEditor({ initialText, saving, error, saveLabel, cancel
   }
 
   return (
-    <div data-dsh-conversation-rewrite-edit role="group" aria-label={placeholder}>
+    <Surface kind="micro" data-dsh-conversation-rewrite-edit role="group" aria-label={placeholder}>
+      <style>{EDIT_STYLES}</style>
+      <label className="ys-field">
+      <span>{placeholder}</span>
       <textarea
         value={text}
         aria-label={placeholder}
@@ -81,15 +95,35 @@ export function EditInlineEditor({ initialText, saving, error, saveLabel, cancel
         onChange={(event) => { setText(event.target.value); setEmpty(false) }}
         onKeyDown={handleKeyDown}
       />
+      </label>
       {empty && <span id={emptyId} role="alert">{emptyLabel}</span>}
       {error !== undefined && error !== null && <span id={errorId} role="alert">{error}</span>}
       <span id={hintId}>{hint}</span>
-      {saving === true && <span role="status" style={srOnlyStyle}>{savingLabel}</span>}
-      <span style={{ display: 'inline-flex', gap: 4 }}>
-        <button type="button" disabled={saving === true} onClick={handleSave}>{saving === true ? savingLabel : saveLabel}</button>
-        <button type="button" disabled={saving === true} onClick={onCancel}>{cancelLabel}</button>
-      </span>
-    </div>
+      {saving === true && <span role="status" className="cr-sr-only">{savingLabel}</span>}
+      <SurfaceActionBar>
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={<IconCloseOutline16 size={14} aria-hidden="true" />}
+          disabled={saving === true}
+          onClick={onCancel}
+        >
+          {cancelLabel}
+        </Button>
+        <Button
+          variant="primary"
+          size="sm"
+          icon={saving === true
+            ? <IconLoadingOutline16 size={14} aria-hidden="true" />
+            : <IconCheckOutline16 size={14} aria-hidden="true" />}
+          disabled={saving === true}
+          aria-busy={saving === true}
+          onClick={handleSave}
+        >
+          {saving === true ? savingLabel : saveLabel}
+        </Button>
+      </SurfaceActionBar>
+    </Surface>
   )
 }
 
@@ -97,14 +131,18 @@ export function EditInlineEditor({ initialText, saving, error, saveLabel, cancel
 export function makeEditAction(controller: ChatRewriteController) {
   return function EditAction({ seq, useSession, sessionId, t }: EditActionProps) {
     const snapshot = useSession((value) => value)
-    const state = useSyncExternalStore(controller.store.subscribe, controller.store.getSnapshot)
+    const state = useSyncExternalStore(
+      listener => controller.store.subscribe(listener),
+      () => controller.store.getSnapshot(),
+      () => controller.store.getSnapshot(),
+    )
     const firstRound = controller.supportsFirstRound()
     const decision = useMemo(
       () => computeEditTarget(snapshot, seq, { firstRound }),
       [snapshot, seq, firstRound],
     )
     const [editing, setEditing] = useState(false)
-    const triggerRef = useRef<HTMLButtonElement | null>(null)
+    const triggerRef = useRef<HTMLSpanElement | null>(null)
     const activeKey = `edit:${seq}`
     const saving = state.phase === 'submitting' && state.activeKey === activeKey
     const error = state.phase === 'error' && state.activeKey === activeKey ? state.errorMessage : null
@@ -113,7 +151,7 @@ export function makeEditAction(controller: ChatRewriteController) {
       if (state.phase === 'opened' && state.activeKey === activeKey) {
         setEditing(false)
         controller.reset()
-        triggerRef.current?.focus()
+        triggerRef.current?.querySelector('button')?.focus()
       }
     }, [state.phase, state.activeKey, activeKey, controller])
 
@@ -122,20 +160,24 @@ export function makeEditAction(controller: ChatRewriteController) {
       const disabledReason = !decision.ok ? t(disableReasonKey(decision.reason, 'edit') as ConversationRewriteKey) : undefined
       // 6.5：非纯文本消息（附件/图片）走显式禁用，原因 sr-only 呈现，不静默改写。
       return (
-        <>
-          <button
-            ref={triggerRef}
-            type="button"
-            disabled={disabled}
-            title={disabledReason}
-            onClick={() => { if (decision.ok) setEditing(true) }}
-          >
-            {t('edit.trigger')}
-          </button>
+        <Surface kind="micro">
+          <Tooltip label={t('edit.trigger')} side="bottom" delayMs={500} disabled={disabled}>
+            <span ref={triggerRef}>
+            <Button
+              type="button"
+              disabled={disabled}
+              aria-label={t('edit.trigger')}
+              title={disabledReason}
+              onClick={() => { if (decision.ok) setEditing(true) }}
+            >
+              <IconEditOutline16 size={16} aria-hidden="true" />
+            </Button>
+            </span>
+          </Tooltip>
           {disabled && disabledReason !== undefined && (
-            <span role="note" style={srOnlyStyle}>{disabledReason}</span>
+            <span role="note" className="cr-sr-only">{disabledReason}</span>
           )}
-        </>
+        </Surface>
       )
     }
 
@@ -155,7 +197,7 @@ export function makeEditAction(controller: ChatRewriteController) {
         }}
         onCancel={() => {
           setEditing(false)
-          requestAnimationFrame(() => { triggerRef.current?.focus() })
+          requestAnimationFrame(() => { triggerRef.current?.querySelector('button')?.focus() })
         }}
       />
     )

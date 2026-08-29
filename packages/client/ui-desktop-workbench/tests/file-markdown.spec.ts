@@ -15,6 +15,12 @@ describe('file markdown preview', () => {
     expect(html).toContain('<pre><code>const n = 1\n</code></pre>')
   })
 
+  it('marks mermaid fences so the shared hydrator can find them', () => {
+    const html = renderMarkdown('```mermaid\ngraph TD\nA-->B\n```')
+    expect(html).toContain('class="language-mermaid"')
+    expect(html).toContain('graph TD')
+  })
+
   it('escapes raw HTML and rejects non-http links', () => {
     expect(escapeHtml('<script>')).toBe('&lt;script&gt;')
     const html = renderMarkdown('see [x](javascript:alert(1)) and [ok](https://example.com)')

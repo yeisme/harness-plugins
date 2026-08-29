@@ -9,6 +9,8 @@
  */
 
 import { useEffect, useState } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Surface, SurfaceContextBar, SurfaceState } from '@yeisme/dsh-client-ui-surface'
 import type { NotificationHostV1, NotificationEventV1 } from '@yeisme/dsh-notify-host'
 
 export interface NotificationCenterProps {
@@ -46,24 +48,13 @@ export function NotificationCenter({ host }: NotificationCenterProps) {
   const unreadCount = notifications.filter(notification => !notification.read).length
 
   return (
-    <section aria-label="Notifications" data-dsh-notification-center>
-      <header data-dsh-panel-heading>
-        <div>
-          <h2>通知{unreadCount > 0 ? `（${unreadCount}）` : ''}</h2>
-          <p>集中查看审批、任务与 Agent 完成事件。</p>
-        </div>
-        <div data-dsh-notification-actions>
-          <button type="button" onClick={() => void run(() => host.markAllRead())}>全部已读</button>
-          <button type="button" onClick={() => void run(() => host.clear())}>清理</button>
-        </div>
-      </header>
-      {loading && <div data-dsh-panel-empty><strong>正在加载通知</strong><span>请稍候…</span></div>}
-      {error !== null && <div role="alert" data-dsh-panel-empty><strong>通知加载失败</strong><span>{error}</span></div>}
+    <Surface kind="navigator" aria-label="Notifications" data-dsh-notification-center>
+      <SurfaceContextBar title={`通知${unreadCount > 0 ? `（${unreadCount}）` : ''}`} description="集中查看审批、任务与 Agent 完成事件。" actions={<span data-dsh-notification-actions><Button type="button" size="sm" variant="toolbar" onClick={() => void run(() => host.markAllRead())}>全部已读</Button><Button type="button" size="sm" variant="toolbar" onClick={() => void run(() => host.clear())}>清理</Button></span>} />
+      <div className="ys-body">
+      {loading && <SurfaceState phase="loading" title="正在加载通知" description="请稍候…" data-dsh-panel-empty />}
+      {error !== null && <SurfaceState phase="error" title="通知加载失败" description={error} data-dsh-panel-empty />}
       {notifications.length === 0 && !loading && error === null && (
-        <div data-dsh-panel-empty>
-          <strong>暂时没有新通知</strong>
-          <span>需要处理的审批和已完成任务会显示在这里。</span>
-        </div>
+        <SurfaceState phase="empty" title="暂时没有新通知" description="需要处理的审批和已完成任务会显示在这里。" data-dsh-panel-empty />
       )}
       {notifications.length > 0 && (
         <ul>
@@ -72,13 +63,14 @@ export function NotificationCenter({ host }: NotificationCenterProps) {
               <strong>{notification.title}</strong>
               {notification.summary !== undefined && <span>{notification.summary}</span>}
               {!notification.read && (
-                <button type="button" onClick={() => void run(() => host.markRead(notification.id))}>标记已读</button>
+                <Button type="button" size="sm" variant="toolbar" onClick={() => void run(() => host.markRead(notification.id))}>标记已读</Button>
               )}
             </li>
           ))}
         </ul>
       )}
-    </section>
+      </div>
+    </Surface>
   )
 }
 

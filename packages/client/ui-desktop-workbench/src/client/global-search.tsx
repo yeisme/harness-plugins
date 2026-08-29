@@ -9,6 +9,8 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
+import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Surface, SurfaceContextBar, SurfaceState } from '@yeisme/dsh-client-ui-surface'
 import type { SessionManagerHostV1, SessionSummaryV1 } from '@yeisme/dsh-session-manager'
 
 export interface GlobalSearchProps {
@@ -56,17 +58,12 @@ export function GlobalSearch({ host, onOpenSession }: GlobalSearchProps) {
   const results = useMemo(() => sessions.filter(session => matches(session, query)), [sessions, query])
 
   return (
-    <section aria-label="Global search" data-dsh-global-search>
-      <header data-dsh-panel-heading>
-        <div>
-          <h2>历史搜索</h2>
-          <p>跨工作区查找活跃与归档会话。</p>
-        </div>
-        <span data-dsh-session-count>{results.length} 条</span>
-      </header>
-      <label data-dsh-search-field>
+    <Surface kind="navigator" aria-label="Global search" data-dsh-global-search>
+      <SurfaceContextBar title="历史搜索" description="跨工作区查找活跃与归档会话。" status={<span data-dsh-session-count>{results.length} 条</span>} />
+      <div className="ys-body">
+      <label className="ys-field" data-dsh-search-field>
         <span>搜索历史会话</span>
-        <input
+        <Input
           type="search"
           aria-label="搜索历史会话"
           placeholder="标题、标签或工作区"
@@ -74,21 +71,18 @@ export function GlobalSearch({ host, onOpenSession }: GlobalSearchProps) {
           onChange={event => { setQuery(event.currentTarget.value) }}
         />
       </label>
-      {loading && <div data-dsh-panel-empty><strong>正在检索历史</strong><span>请稍候…</span></div>}
-      {error !== null && <div role="alert" data-dsh-panel-empty><strong>历史加载失败</strong><span>{error}</span></div>}
+      {loading && <SurfaceState phase="loading" title="正在检索历史" description="请稍候…" data-dsh-panel-empty />}
+      {error !== null && <SurfaceState phase="error" title="历史加载失败" description={error} data-dsh-panel-empty />}
       {!loading && error === null && results.length === 0 && (
-        <div data-dsh-panel-empty>
-          <strong>没有匹配的会话</strong>
-          <span>尝试缩短关键词，或改用工作区与标签名称。</span>
-        </div>
+        <SurfaceState phase="empty" title="没有匹配的会话" description="尝试缩短关键词，或改用工作区与标签名称。" data-dsh-panel-empty />
       )}
       {!loading && error === null && results.length > 0 && (
         <ul>
           {results.map(session => (
             <li key={session.sessionId}>
-              <button type="button" onClick={() => onOpenSession?.(session.sessionId)}>
+              <Button type="button" size="sm" variant="toolbar" onClick={() => onOpenSession?.(session.sessionId)}>
                 {session.title ?? session.sessionId}
-              </button>
+              </Button>
               <span>{session.workspaceName ?? session.workspaceRef ?? '未分组'}</span>
               {session.archived && <span>已归档</span>}
               {session.labels.length > 0 && <span>{session.labels.join(' · ')}</span>}
@@ -96,7 +90,8 @@ export function GlobalSearch({ host, onOpenSession }: GlobalSearchProps) {
           ))}
         </ul>
       )}
-    </section>
+      </div>
+    </Surface>
   )
 }
 

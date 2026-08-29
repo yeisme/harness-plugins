@@ -10,6 +10,8 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
+import { Input } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Surface, SurfaceContextBar, SurfaceState } from '@yeisme/dsh-client-ui-surface'
 import type {
   SessionManagerHostV1,
   SessionMutationReceiptV1,
@@ -158,17 +160,11 @@ export function SessionSidebar({ host, onOpenSession, onMutation, lineageOf }: S
   )
 
   return (
-    <aside aria-label="Sessions" data-dsh-session-sidebar>
-      <header data-dsh-session-sidebar-header>
-        <div>
-          <h2>会话</h2>
-          <p>跨工作区管理运行记录</p>
-        </div>
-        <span data-dsh-session-count aria-label={`${active.length} 个活跃会话`}>{active.length}</span>
-      </header>
-      <label data-dsh-session-search>
+    <Surface kind="navigator" role="complementary" aria-label="Sessions" data-dsh-session-sidebar>
+      <SurfaceContextBar title="会话" description="跨工作区管理运行记录" status={<span data-dsh-session-count aria-label={`${active.length} 个活跃会话`}>{active.length}</span>} />
+      <label className="ys-field" data-dsh-session-search>
         <span>搜索会话</span>
-        <input
+        <Input
           type="search"
           aria-label="搜索会话"
           placeholder="标题、标签或工作区"
@@ -177,13 +173,10 @@ export function SessionSidebar({ host, onOpenSession, onMutation, lineageOf }: S
         />
       </label>
       <div data-dsh-session-scroll>
-        {loading && <div data-dsh-panel-empty><strong>正在加载会话</strong><span>请稍候…</span></div>}
-        {error !== null && <div role="alert" data-dsh-panel-empty><strong>会话加载失败</strong><span>{error}</span></div>}
+        {loading && <SurfaceState phase="loading" title="正在加载会话" description="请稍候…" data-dsh-panel-empty />}
+        {error !== null && <SurfaceState phase="error" title="会话加载失败" description={error} data-dsh-panel-empty />}
         {!loading && error === null && activeGroups.length === 0 && archivedGroups.length === 0 && (
-          <div data-dsh-panel-empty>
-            <strong>还没有可管理的会话</strong>
-            <span>接入会话服务后，活跃与归档记录会显示在这里。</span>
-          </div>
+          <SurfaceState phase="empty" title="还没有可管理的会话" description="接入会话服务后，活跃与归档记录会显示在这里。" data-dsh-panel-empty />
         )}
         {activeGroups.map(renderGroup)}
         {archivedGroups.length > 0 && (
@@ -193,7 +186,7 @@ export function SessionSidebar({ host, onOpenSession, onMutation, lineageOf }: S
           </details>
         )}
       </div>
-    </aside>
+    </Surface>
   )
 }
 

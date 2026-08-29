@@ -46,11 +46,9 @@ class SnapshotStoreImpl implements ChatRewriteSnapshotStore {
     this.state = init
   }
 
-  getSnapshot(): ChatRewriteViewState {
-    return this.state
-  }
+  readonly getSnapshot = (): ChatRewriteViewState => this.state
 
-  subscribe(fn: () => void): () => void {
+  readonly subscribe = (fn: () => void): () => void => {
     this.listeners.add(fn)
     return () => { this.listeners.delete(fn) }
   }
