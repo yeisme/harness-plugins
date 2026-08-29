@@ -1,0 +1,15 @@
+# Yeisme DSH token usage bundle.
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-token-usage
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/dsh-token-usage
+#
+# One profile row composing the Host ledger + DeepSeek balance Remote with
+# the Web panel. The ledger folds official sessionProjections tokenUsage
+# deltas (process scope); the browser never sees credentials, raw URLs, or
+# provider payloads. The Client entry probes paneWorkbench and falls back to
+# a shell.overlay dialog; a missing tokenUsage Remote keeps the Tokens entry
+# visible but disabled with a readable reason.
+- insert:
+    - id: dsh-token-usage
+      name: '@yeisme/dsh-token-usage'
