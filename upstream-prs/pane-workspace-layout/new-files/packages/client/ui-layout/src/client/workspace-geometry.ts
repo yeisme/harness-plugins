@@ -1,8 +1,6 @@
 /** Pure AppFrame workspace geometry solver. */
 import {
   clampWidth,
-  DETAILS_MAX,
-  DETAILS_MIN,
   SIDEBAR_COLLAPSED,
   SIDEBAR_MAX,
   SIDEBAR_MIN,
@@ -22,7 +20,6 @@ export interface WorkspaceGeometryInput {
   readonly width: number
   readonly height: number
   readonly sidebar: number
-  readonly details: number
   readonly workspace: WorkspaceLayoutSnapshot
 }
 
@@ -32,7 +29,6 @@ export interface WorkspaceGeometry {
   readonly conversationHeight: number
   readonly rightWidth: number
   readonly bottomHeight: number
-  readonly detailsWidth: number
   readonly rightMode: WorkspaceRegionMode
   readonly bottomMode: WorkspaceRegionMode
   readonly coverRegion?: WorkspaceRegion
@@ -59,7 +55,6 @@ function covered(
     conversationHeight: Math.max(0, input.height),
     rightWidth: 0,
     bottomHeight: 0,
-    detailsWidth: 0,
     rightMode: region === 'right' ? mode : input.workspace.attached ? 'rail' : 'hidden',
     bottomMode: region === 'bottom' ? mode : 'hidden',
     coverRegion: region,
@@ -86,29 +81,10 @@ export function computeWorkspaceGeometry(input: WorkspaceGeometryInput): Workspa
     ? Math.min(WORKSPACE_RIGHT_MAX, Math.max(WORKSPACE_RIGHT_MIN, Math.round(workspace.rightWidth)), maxRightByRatio)
     : rail
   let rightMode: WorkspaceRegionMode = workspace.attached ? (rightPreferredOpen ? 'dock' : 'rail') : 'hidden'
-  let detailsWidth = workspace.corePaneHostAttached || input.details === 0
-    ? 0
-    : clampWidth(input.details, DETAILS_MIN, DETAILS_MAX)
-
   if (rightPreferredOpen && maxRightByRatio < WORKSPACE_RIGHT_MIN) {
     if (workspace.activeRegion === 'right') return covered({ ...input, width, height }, sidebar, 'right', 'sheet')
     rightWidth = rail
     rightMode = 'rail'
-  }
-
-  if (detailsWidth > 0 && rightPreferredOpen && rightMode === 'dock' && rightWidth + detailsWidth + CONVERSATION_MIN_WIDTH > available) {
-    if (workspace.auxiliaryPriority === 'details') {
-      rightWidth = rail
-      rightMode = 'rail'
-    } else {
-      detailsWidth = 0
-    }
-  }
-
-  if (detailsWidth > 0) {
-    const detailsAvailable = available - rightWidth - CONVERSATION_MIN_WIDTH
-    if (detailsAvailable >= DETAILS_MIN) detailsWidth = Math.min(detailsWidth, detailsAvailable)
-    else detailsWidth = 0
   }
 
   if (rightMode === 'dock' && rightWidth + CONVERSATION_MIN_WIDTH > available) {
@@ -117,7 +93,7 @@ export function computeWorkspaceGeometry(input: WorkspaceGeometryInput): Workspa
     rightMode = 'rail'
   }
 
-  let conversationWidth = Math.max(0, available - rightWidth - detailsWidth)
+  let conversationWidth = Math.max(0, available - rightWidth)
   let bottomHeight = 0
   let bottomMode: WorkspaceRegionMode = 'hidden'
   if (bottomPreferredOpen) {
@@ -138,7 +114,6 @@ export function computeWorkspaceGeometry(input: WorkspaceGeometryInput): Workspa
     conversationHeight: Math.max(0, height - bottomHeight),
     rightWidth,
     bottomHeight,
-    detailsWidth,
     rightMode,
     bottomMode,
   }

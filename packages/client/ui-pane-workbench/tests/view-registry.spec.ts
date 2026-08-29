@@ -108,4 +108,19 @@ describe('local pane view registry', () => {
       i18n: { namespace: 'https://untrusted.example/i18n', labelKey: 'views.notes.label' },
     }, environment)).toThrow(PaneViewRegistrationError)
   })
+
+  it('admits additive provider-approved restore declarations and rejects unknown fields', () => {
+    const environment = { capabilities: new Set<string>() }
+    const restored = parsePaneViewRegistration({
+      descriptor: pluginDefinition('pinax.notes-preview').views[0],
+      component: () => null,
+      restore: { state: true, rendition: true },
+    }, environment)
+    expect(restored.restore).toEqual({ state: true, rendition: true })
+    expect(() => parsePaneViewRegistration({
+      descriptor: pluginDefinition('pinax.notes-preview').views[0],
+      component: () => null,
+      restore: { state: true, rendition: true, dom: true },
+    }, environment)).toThrow(PaneViewRegistrationError)
+  })
 })

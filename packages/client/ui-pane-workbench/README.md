@@ -6,9 +6,10 @@ Yeisme 的 DSH 双区域 Pane Workbench client。生产插件通过官方
 Sheet、Tool selection 与具体 Details 内容；本包拥有唯一 Core Pane 的 registry、
 Pane tree、Tab/group、选择、拖拽和安全视图元数据。
 
-生产路径不会注册 `shell.overlay`，不会覆盖 DSH 左侧会话栏，也不会读取或 patch Web
-Shell DOM。旧 `PaneWorkbenchChrome` / `PaneWorkbenchLauncher` 仅作为一个 RC 的 story 与
-迁移测试兼容导出。
+生产路径只注册 `shell.workspace.right` / `shell.workspace.bottom`，不覆盖 DSH 左侧会话栏，
+也不读取或 patch Web Shell DOM。宿主必须提供完整 `workspace.core-pane.v1`；旧
+`PaneWorkbenchLauncher`、`sidebar.footer.action`、`shell.overlay` 停靠和独立 `details`
+兼容路径已经删除。
 
 ## 开发
 
@@ -30,10 +31,12 @@ pnpm --filter @yeisme/dsh-client-ui-pane-workbench run test:integration
   切换、持久化恢复和跨区移动会原子地反映到两个 root。
 - `ctx.workspaceLayout.attach()` 只有一个 live owner。卸载时会依次释放两个 slot、layout
   handle、drag coordinator、session/persistence subscriptions，不留下轨道或网格预留。
-- `dsh.tool-details` 是隐藏的内置 provider：Bash 等工具详情通过 Core host adapter 打开，
-  和其他视图共用 Tab、Right/Bottom move、split、最大化与关闭行为，不再挂第二套 Details 栏。
-- DSH 缺少两个 workspace slot、`ctx.workspaceLayout` 或 `workspace.core-pane.v1` 时加载明确
-  失败，不回退 overlay，也不允许 Core Pane 与 legacy Details 并排挂载。
+- 临时 `dsh.tool-details` 侧栏已移除；工具调用只保留对话内联详情，不再打开 Right Pane。
+- DSH 必须同时具备两个 workspace slot、`ctx.workspaceLayout` 与 `workspace.core-pane.v1`；
+  `apply()` 只挂 Right/Bottom occupant，任一合同缺失都在提供 `paneWorkbench` 前失败。
+- npm peer floor 为 `@deepseek-ai/dsh-client-ui-layout >=0.1.1-rc.3`；新旧 DSH/Pane RC
+  不可混装，回滚时必须恢复上一组完整 RC。
+- `layout.openDetails()` 的兼容事件会被 Core adapter 安全忽略。
 
 ## 导航与交互
 

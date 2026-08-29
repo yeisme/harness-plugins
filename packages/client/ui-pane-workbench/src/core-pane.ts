@@ -1,4 +1,4 @@
-import { createElement, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import type { PaneWorkbenchController } from './controller.js'
 import { registerExplorerProvider } from './explorer/provider.js'
 import { registerFilePreviewProvider } from './explorer/file-preview.js'
@@ -18,27 +18,8 @@ export function isPaneCoreViewId(id: string): id is PaneCoreViewId {
   return id === DSH_TOOL_DETAILS_VIEW_KIND || id === DSH_WORKSPACE_DESIGNER_VIEW_KIND
 }
 
-function ToolDetailsCoreView({ hostContent }: PaneLocalViewProps): ReactNode {
-  return hostContent ?? createElement('section', { className: 'pwr-empty', role: 'status' },
-    createElement('p', null, 'Tool details are unavailable in this DSH host.'),
-  )
-}
-
 /** Registers DSH-owned surfaces as local-only providers in the canonical Pane registry. */
 export function registerPaneWorkbenchCoreViews(registry: PaneViewRegistry): () => void {
-  const disposeToolDetails = registry.registerView({
-    descriptor: {
-      kind: DSH_TOOL_DETAILS_VIEW_KIND,
-      label: 'Tool Details',
-      componentKey: 'dsh-tool-details',
-      role: 'inspector',
-      preferredRegion: 'right',
-      retention: 'recreate',
-      singleton: true,
-    },
-    component: ToolDetailsCoreView,
-    showInPicker: false,
-  })
   const disposeDesigner = registry.registerView({
     descriptor: {
       kind: DSH_WORKSPACE_DESIGNER_VIEW_KIND,
@@ -51,7 +32,7 @@ export function registerPaneWorkbenchCoreViews(registry: PaneViewRegistry): () =
     },
     component: WorkspaceDesignerCoreView,
     showInPicker: false,
-    i18n: { namespace: 'paneWorkbench', labelKey: 'designer.title' },
+    i18n: { namespace: 'paneWorkbench', labelKey: 'designer.title', descriptionKey: 'designer.description' },
   })
   const disposeExplorer = registerExplorerProvider(registry)
   const disposeFiles = registerFilePreviewProvider(registry)
@@ -61,24 +42,13 @@ export function registerPaneWorkbenchCoreViews(registry: PaneViewRegistry): () =
     disposeFiles()
     disposeExplorer()
     disposeDesigner()
-    disposeToolDetails()
   }
 }
 
 export function openPaneWorkbenchCoreView(controller: PaneWorkbenchController, id: PaneCoreViewId): void {
   switch (id) {
     case DSH_TOOL_DETAILS_VIEW_KIND:
-      controller.openView({
-        kind: DSH_TOOL_DETAILS_VIEW_KIND,
-        resourceKey: DSH_TOOL_DETAILS_RESOURCE_KEY,
-        role: 'inspector',
-        preferredRegion: 'right',
-        retention: 'recreate',
-        singleton: true,
-        preview: true,
-        pinned: false,
-        title: 'Tool Details',
-      })
+      // Compatibility ingress only: the temporary tool-details side pane was removed.
       return
     case DSH_WORKSPACE_DESIGNER_VIEW_KIND:
       controller.openView({

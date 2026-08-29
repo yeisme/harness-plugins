@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { createElement } from 'react'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { PaneWorkbenchController } from '../src/controller.js'
 import {
@@ -70,7 +70,65 @@ describe('V4 Task 6.3 Designer Core View', () => {
     expect(document.querySelector('[data-pane-designer-slot="palette"]')).toBeTruthy()
     expect(document.querySelector('[data-pane-designer-slot="canvas"]')).toBeTruthy()
     expect(document.querySelector('[data-pane-designer-slot="inspector"]')).toBeTruthy()
-    expect(document.querySelector('[data-pane-designer-providers]')?.getAttribute('data-pane-designer-providers')).toBe('placeholder')
+    const designerRoot = document.querySelector('[data-pane-designer-providers]')
+    expect(designerRoot?.getAttribute('data-pane-designer-providers')).toBe('registry')
+    expect(document.querySelector('[data-designer-palette-kind="dsh.explorer"]')).toBeTruthy()
+    expect(document.querySelector('[data-designer-palette-kind="dsh.source-control"]')).toBeTruthy()
+    expect(document.querySelector('[data-designer-palette-kind="dsh.workspace-designer"]')).toBeNull()
+    expect(document.querySelector('[data-designer-palette-kind="dsh.tool-details"]')).toBeNull()
+    expect(document.querySelector('[data-designer-palette-kind="file.preview"]')).toBeNull()
+  })
+
+  it('places a live extra registration from the chrome-mounted Designer without mounting that view', () => {
+    const registry = new PaneViewRegistry({ capabilities: new Set() })
+    registerPaneWorkbenchCoreViews(registry)
+    registry.registerView({
+      descriptor: {
+        kind: 'notes.inbox',
+        label: 'notes.inbox',
+        componentKey: 'notes-inbox',
+        role: 'content',
+        preferredRegion: 'right',
+        retention: 'recreate',
+        singleton: false,
+      },
+      component: () => createElement('div', { 'data-live-view': 'notes.inbox' }, 'live:notes.inbox'),
+      showInPicker: true,
+    })
+    registry.registerView({
+      descriptor: {
+        kind: 'hidden.inspector',
+        label: 'hidden.inspector',
+        componentKey: 'hidden-inspector',
+        role: 'inspector',
+        preferredRegion: 'right',
+        retention: 'recreate',
+        singleton: true,
+      },
+      component: () => createElement('div', { 'data-live-view': 'hidden.inspector' }, 'live:hidden'),
+      showInPicker: false,
+    })
+    const controller = new PaneWorkbenchController({ registry })
+    openPaneWorkbenchCoreView(controller, DSH_WORKSPACE_DESIGNER_VIEW_KIND)
+    render(createElement(PaneRegionChrome, {
+      region: 'right',
+      mode: 'dock',
+      width: 480,
+      height: 800,
+      visible: true,
+      maximized: true,
+      registry,
+      controller,
+    }))
+    expect(screen.getByRole('option', { name: 'notes.inbox' })).toBeTruthy()
+    expect(screen.queryByRole('option', { name: 'hidden.inspector' })).toBeNull()
+    expect(screen.queryByRole('option', { name: 'dsh.workspace-designer' })).toBeNull()
+    fireEvent.click(screen.getByRole('option', { name: 'notes.inbox' }))
+    const placed = document.querySelector('[data-designer-placement="notes.inbox"]')
+    expect(placed?.getAttribute('data-designer-placement-region')).toBe('right')
+    expect(placed?.getAttribute('data-designer-placement-role')).toBe('content')
+    expect(document.querySelector('[data-live-view="notes.inbox"]')).toBeNull()
+    expect(document.body.textContent).not.toContain('live:notes.inbox')
   })
 })
 

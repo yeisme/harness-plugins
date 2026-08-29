@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   PaneDragCoordinator,
   createDragGhostPayload,
@@ -118,6 +118,44 @@ describe('V4 Task 3.5-3.8 drag coordinator', () => {
     expect(dispatched).toBe(0)
     expect(coordinator.getSnapshot().drag.status).toBe('idle')
     expect(coordinator.getSnapshot().generation).toBe(generation)
+  })
+
+  it('uses real default timestamps so a drag can leave the source pane after the sticky interval', () => {
+    const frames = scheduler()
+    const state = workspaceWithView()
+    const viewId = Object.keys(state.views)[0]!
+    const clock = vi.spyOn(performance, 'now')
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(20)
+      .mockReturnValueOnce(120)
+    const coordinator = new PaneDragCoordinator(() => state, intent => reducePaneWorkspace(state, intent), frames)
+    try {
+      coordinator.begin(viewId, 0, 0)
+      coordinator.move(20, 0, { groupId: 'group:right:content', edge: 'center', enabled: true })
+      frames.flush()
+      coordinator.move(20, 600, { groupId: 'group:bottom:utility', edge: 'center', enabled: true })
+      frames.flush()
+      expect(coordinator.getSnapshot().target?.groupId).toBe('group:bottom:utility')
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it('lets an explicit release target win when the pointer stops inside a new attachment zone', () => {
+    const frames = scheduler()
+    let state = workspaceWithView()
+    const viewId = Object.keys(state.views)[0]!
+    const coordinator = new PaneDragCoordinator(() => state, intent => {
+      const result = reducePaneWorkspace(state, intent)
+      state = result.state
+      return result
+    }, frames)
+    coordinator.begin(viewId, 0, 0, 'fine', 0)
+    coordinator.move(20, 0, { groupId: 'group:right:content', edge: 'center', enabled: true }, 20)
+    frames.flush()
+    const result = coordinator.drop({ groupId: 'group:bottom:utility', edge: 'center', enabled: true })
+    expect(result?.accepted).toBe(true)
+    expect(state.views[viewId]?.groupId).toBe('group:bottom:utility')
   })
 
   it('reuses pointer target math for keyboard move and disabled reasons', () => {

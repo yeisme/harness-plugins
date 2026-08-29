@@ -124,6 +124,19 @@ describe('sessionGroupings registry', () => {
 })
 
 describe('deriveExternalGroups', () => {
+  it('accepts additive parent and semantic color hints without changing old providers', () => {
+    const provider = fakeSessionGroupingProvider({
+      id: 'functions',
+      groups: [
+        { id: 'workspace:w1', label: 'Alpha', sessionIds: [] },
+        { id: 'function:research', parentId: 'workspace:w1', color: 'chart-1', label: 'Research', sessionIds: [sid('a')] },
+      ],
+    })
+    expect(provider.getSnapshot().groups[1]).toMatchObject({ parentId: 'workspace:w1', color: 'chart-1' })
+    const legacy = fakeSessionGroupingProvider({ id: 'legacy', groups: [{ id: 'g', label: 'G', sessionIds: [] }] })
+    expect(Object.keys(legacy.getSnapshot().groups[0]!)).toEqual(['id', 'label', 'sessionIds'])
+  })
+
   it('repeats a multi-group session in each group and dedupes inside one group', () => {
     const sessions = list(summary('a', 1), summary('b', 2))
     const groups = deriveExternalGroups(sessions, 'p', {

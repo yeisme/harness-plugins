@@ -1,46 +1,43 @@
-# pane-workspace-layout / unified-core-pane
+# pane-workspace-layout
 
-dsh 统一 Core Pane seam（Right/Bottom docking、AppFrame host adapter、Tool Details 路由与 legacy 回退）
+dsh Core Pane workspace layout plus native/plugin conversation-tab mirroring (right/bottom docking, no legacy Details column)
 
-- Archived: 2026-08-20T15:44:01Z
-- Rebased onto upstream/master: `b150a551b8d`（dsh 0.1.1-rc.2）
-- 历史来源分支：`yeisme/deepseek-harness` `pr/pane-workspace-layout`（commit `ed708fc43`）。本地归档已继续演进到 Core Pane v1，尚未推送 fork、创建或更新 PR。
-- Status: local staging ready；只维护可审查 patch，不执行外部写入。
-- `changes.patch`：相对上述精确 upstream 基线生成的零上下文 tracked diff，包含四列两行 AppFrame、`workspace.core-pane.v1`、`ctx.layout.openDetails/closeDetails` Core-first 路由、owner renderer、session lifecycle 与 one-RC legacy Details 回退；`apply.sh` 固定使用 `git apply --unidiff-zero`。
-- `new-files/`：workspace geometry/layout、聚焦 spec、更新后的 browser evidence runner 与 implemented Agent Note。
-- `evidence.tar.gz`：2026-08-20 旧 docking browser baseline，仅用于历史对照；Core Tool Details runner 已更新，但本次未重新采集浏览器截图。
-- Apply: `./apply.sh <clean-checkout>`。
-
-## Core Pane 合同
-
-- `ctx.workspaceLayout.corePaneVersion === 'workspace.core-pane.v1'`。
-- `attach(ownerId, preference, corePaneHost?)` 保持旧两参数调用有效；可选 host 只接受 `dsh.tool-details`。
-- attach host 后，Right/Bottom owner props 通过 `renderCoreView(id)` 获取 DSH 自有 Details occupant；legacy Details column 不挂载 occupant，也不占宽度。
-- host 缺席或 dispose 后，`ctx.layout.openDetails/closeDetails` 继续走原 Details store/column。
-- 独立 Details geometry 与 `auxiliaryPriority` 保留一个 RC，后续删除必须另开稳定合同变更。
-
-## 本地验证
-
-```text
-focused vitest: 5 files, 102 tests passed
-host build: pnpm run build:lib:host passed
-focused client tsc: ui-layout + ui-conversation passed
-focused oxlint: passed
-translation pairing: 1004 pairs passed
-agent note format: 597 notes passed
-```
+- Archived: 2026-08-27T11:56:37Z
+- Base commit: `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e` (deepseek-harness, dsh 0.1.0-rc.8 merge)
+- `changes.patch`: diff of tracked files (includes staged additions).
+- `new-files/`: untracked source files to copy in (apply.sh handles this).
+- Apply: `./apply.sh <clean-checkout>` then run the package tests listed below.
 
 ## Files
-
 ```
- packages/client/ui-conversation/src/client/chat/ChatNodeSeat.tsx
- packages/client/ui-conversation/src/client/chat/ChatView.tsx
- packages/client/ui-conversation/src/client/contract/slots.ts
- packages/client/ui-conversation/tests/chat-view.client.spec.tsx
- packages/client/ui-layout/README.{md,zh.md,i18n.yaml}
- packages/client/ui-layout/package.json
- packages/client/ui-layout/src/client/AppFrame.{tsx,module.css}
- packages/client/ui-layout/src/client/{index,service,workspace-geometry,workspace-layout}.ts
- packages/client/ui-layout/tests/{app-frame,apply,workspace-geometry,workspace-layout}*
- .agents/notes/implemented/feature/2026-08-20-dsh-pane-workspace-layout.{md,zh.md,i18n.yaml}
+ packages/client/ui-conversation/package.json       |   2 +-
+ .../client/ui-conversation/src/client/apply.ts     |  24 +-
+ .../src/client/chat/ChatNodeSeat.tsx               |  31 +-
+ .../ui-conversation/src/client/chat/ChatView.tsx   |   3 +-
+ .../ui-conversation/src/client/contract/slots.ts   |  15 +
+ .../src/client/skeleton/ConversationSession.tsx    |  43 ++-
+ .../tests/chat-view.client.spec.tsx                |  10 +
+ .../ui-conversation/tests/skeleton.client.spec.tsx |  28 +-
+ packages/client/ui-layout/README.i18n.yaml         |   4 +-
+ packages/client/ui-layout/README.md                |  16 +-
+ packages/client/ui-layout/README.zh.md             |  16 +-
+ packages/client/ui-layout/package.json             |   4 +-
+ .../ui-layout/src/client/AppFrame.module.css       | 145 ++++++---
+ packages/client/ui-layout/src/client/AppFrame.tsx  | 324 +++++++++++++--------
+ packages/client/ui-layout/src/client/index.ts      |  45 ++-
+ packages/client/ui-layout/src/client/service.ts    |  15 +-
+ packages/client/ui-layout/src/client/stores.ts     |  20 +-
+ .../ui-layout/tests/app-frame.client.spec.tsx      | 127 +++-----
+ .../client/ui-layout/tests/apply.client.spec.ts    |  38 ++-
+ .../ui-layout/tests/layout-store.client.spec.ts    |  31 +-
+ .../client/ui-layout/tests/service.client.spec.ts  |  24 +-
+# untracked additions:
+.agents/notes/implemented/feature/2026-08-20-dsh-pane-workspace-layout.i18n.yaml
+.agents/notes/implemented/feature/2026-08-20-dsh-pane-workspace-layout.md
+.agents/notes/implemented/feature/2026-08-20-dsh-pane-workspace-layout.zh.md
+packages/client/ui-layout/scripts/run-workspace-browser-evidence.mjs
+packages/client/ui-layout/src/client/workspace-geometry.ts
+packages/client/ui-layout/src/client/workspace-layout.ts
+packages/client/ui-layout/tests/workspace-geometry.client.spec.ts
+packages/client/ui-layout/tests/workspace-layout.client.spec.ts
 ```

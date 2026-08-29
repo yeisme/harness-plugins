@@ -5,12 +5,14 @@ import {
 } from '@deepseek-ai/dsh-client-ui-layout/src/client/workspace-layout.ts'
 
 describe('WorkspaceLayoutController', () => {
+  const host = () => ({ open: vi.fn(), close: vi.fn() })
+
   it('attaches one owner, normalizes defaults, updates and disposes symmetrically', () => {
     const controller = new WorkspaceLayoutController()
     expect(controller.corePaneVersion).toBe(WORKSPACE_CORE_PANE_VERSION)
     const listener = vi.fn()
     controller.subscribe(listener)
-    const handle = controller.attach('pane-workbench', { rightVisible: false, bottomVisible: false })
+    const handle = controller.attach('pane-workbench', { rightVisible: false, bottomVisible: false }, host())
     expect(handle.getSnapshot()).toMatchObject({
       attached: true,
       ownerId: 'pane-workbench',
@@ -18,10 +20,9 @@ describe('WorkspaceLayoutController', () => {
       bottomVisible: false,
       rightWidth: 480,
       bottomRatio: 0.34,
-      corePaneHostAttached: false,
     })
     handle.update({ rightVisible: true, activeRegion: 'right' })
-    expect(controller.getSnapshot()).toMatchObject({ rightVisible: true, activeRegion: 'right', auxiliaryPriority: 'workspace' })
+    expect(controller.getSnapshot()).toMatchObject({ rightVisible: true, activeRegion: 'right' })
     handle.dispose()
     handle.dispose()
     expect(controller.getSnapshot().attached).toBe(false)
@@ -30,19 +31,17 @@ describe('WorkspaceLayoutController', () => {
 
   it('fails a duplicate live attach without replacing the original owner', () => {
     const controller = new WorkspaceLayoutController()
-    const first = controller.attach('first')
-    expect(() => controller.attach('second')).toThrow(/owner already attached/)
+    const first = controller.attach('first', {}, host())
+    expect(() => controller.attach('second', {}, host())).toThrow(/owner already attached/)
     first.update({ bottomVisible: true })
     expect(controller.getSnapshot()).toMatchObject({ ownerId: 'first', bottomVisible: true })
   })
 
-  it('tracks Details priority and clears transient maximize', () => {
+  it('clears transient maximize', () => {
     const controller = new WorkspaceLayoutController()
-    const handle = controller.attach('pane', { rightVisible: true, maximizedRegion: 'right' })
-    controller.noteDetailsOpened()
-    expect(controller.getSnapshot().auxiliaryPriority).toBe('details')
+    const handle = controller.attach('pane', { rightVisible: true, maximizedRegion: 'right' }, host())
     handle.update({ activeRegion: 'bottom', bottomVisible: true })
-    expect(controller.getSnapshot()).toMatchObject({ auxiliaryPriority: 'workspace', maximizedRegion: 'right' })
+    expect(controller.getSnapshot()).toMatchObject({ maximizedRegion: 'right' })
     controller.restoreMaximized()
     expect(controller.getSnapshot().maximizedRegion).toBeUndefined()
   })
@@ -51,23 +50,21 @@ describe('WorkspaceLayoutController', () => {
     const controller = new WorkspaceLayoutController()
     const host = { open: vi.fn(), close: vi.fn() }
     const handle = controller.attach('pane', {}, host)
-    expect(controller.getSnapshot().corePaneHostAttached).toBe(true)
-    expect(controller.openCorePane('dsh.tool-details')).toBe(true)
-    expect(controller.closeCorePane('dsh.tool-details')).toBe(true)
+    controller.openCorePane('dsh.tool-details')
+    controller.closeCorePane('dsh.tool-details')
     expect(host.open).toHaveBeenCalledWith('dsh.tool-details')
     expect(host.close).toHaveBeenCalledWith('dsh.tool-details')
 
     handle.dispose()
-    expect(controller.getSnapshot().corePaneHostAttached).toBe(false)
-    expect(controller.openCorePane('dsh.tool-details')).toBe(false)
-    expect(controller.closeCorePane('dsh.tool-details')).toBe(false)
+    expect(() => { controller.openCorePane('dsh.tool-details') }).toThrow(/Core Pane owner is required/)
+    expect(() => { controller.closeCorePane('dsh.tool-details') }).toThrow(/Core Pane owner is required/)
   })
 
   it('ignores stale handle writes after disposal and allows a fresh generation', () => {
     const controller = new WorkspaceLayoutController()
-    const stale = controller.attach('pane')
+    const stale = controller.attach('pane', {}, host())
     stale.dispose()
-    const live = controller.attach('pane')
+    const live = controller.attach('pane', {}, host())
     stale.update({ rightVisible: true })
     expect(controller.getSnapshot().rightVisible).toBe(false)
     live.update({ rightVisible: true })

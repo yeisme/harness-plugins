@@ -1,4 +1,13 @@
-import { createElement, useMemo, type KeyboardEvent, type ReactNode } from 'react'
+import { createElement, useMemo, useState, type KeyboardEvent, type ReactNode, type UIEvent } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  Surface,
+  SurfaceActionBar,
+  SurfaceContextBar,
+  SurfaceSection,
+  SurfaceState,
+  type SurfacePhase,
+} from '@yeisme/dsh-client-ui-surface'
 import { t } from '../i18n/locale.js'
 import type { PaneLocalViewProps } from '../view-registry.js'
 import { windowVirtualRows } from '../virtual-window.js'
@@ -43,6 +52,7 @@ export interface SourceControlActionsV1 {
   readonly onDiscard?: (file: GitChangedFileV1) => void
   readonly onCommit?: (message: string) => void
   readonly onRefresh?: () => void
+  readonly onHistory?: () => void
   readonly onSelectRepository?: (option: GitRepositoryOptionV1) => void
   readonly onBranchAction?: (action: 'create' | 'switch' | 'delete') => void
   readonly onWorktreeAction?: (action: 'create' | 'remove', row?: GitWorktreeRowV1) => void
@@ -74,6 +84,27 @@ function recoveryLabel(phase: GitShellPhaseV1): string {
   return t('git.changes')
 }
 
+function surfacePhase(phase: GitShellPhaseV1): SurfacePhase {
+  if (phase === 'error') return 'error'
+  if (phase === 'stale') return 'stale'
+  if (phase === 'partial') return 'partial'
+  if (phase === 'offline') return 'disabled'
+  if (phase === 'loading') return 'loading'
+  return 'success'
+}
+
+function actionButton(label: string, onClick: (() => void) | undefined, options: { readonly primary?: boolean; readonly disabled?: boolean; readonly title?: string } = {}): ReactNode {
+  if (onClick === undefined) return null
+  return createElement(Button, {
+    type: 'button',
+    size: 'sm',
+    variant: options.primary === true ? 'primary' : 'toolbar',
+    disabled: options.disabled,
+    title: options.title,
+    onClick,
+  }, label)
+}
+
 export function GitChangesList(props: {
   readonly files: readonly GitChangedFileV1[]
   readonly viewportHeight?: number
@@ -81,7 +112,9 @@ export function GitChangesList(props: {
   readonly mutationDisabled?: boolean
   readonly actions?: SourceControlActionsV1
 }): ReactNode {
-  const windowed = windowVirtualRows(props.files, props.scrollTop ?? 0, props.viewportHeight ?? 420, GIT_CHANGES_ROW_HEIGHT)
+  const [localScrollTop, setLocalScrollTop] = useState(props.scrollTop ?? 0)
+  const scrollTop = props.scrollTop ?? localScrollTop
+  const windowed = windowVirtualRows(props.files, scrollTop, props.viewportHeight ?? 420, GIT_CHANGES_ROW_HEIGHT)
   const onRowKey = (event: KeyboardEvent<HTMLElement>, file: GitChangedFileV1): void => {
     if (event.key === 'Enter') props.actions?.onOpenDiff?.(file)
     if (event.key === ' ') { event.preventDefault(); props.actions?.onOpenFile?.(file) }
@@ -91,7 +124,11 @@ export function GitChangesList(props: {
     className: 'pwr-git-changes',
     role: 'listbox',
     'aria-label': t('git.changes'),
-    style: { height: props.viewportHeight ?? 420, overflow: 'auto' },
+    'data-git-scroll-region': 'changes',
+    onScroll: (event: UIEvent<HTMLDivElement>) => {
+      if (props.scrollTop === undefined) setLocalScrollTop(event.currentTarget.scrollTop)
+    },
+    style: { height: props.viewportHeight ?? 420, overflow: 'auto', overscrollBehavior: 'contain' },
   },
     createElement('div', { style: { height: windowed.height, position: 'relative' } },
       createElement('div', { style: { transform: `translateY(${windowed.offset}px)` } },
@@ -101,16 +138,18 @@ export function GitChangesList(props: {
           tabIndex: 0,
           'data-git-file': file.fileRef,
           'data-git-status': file.status,
-          className: 'pwr-git-row',
-          style: { height: GIT_CHANGES_ROW_HEIGHT, minHeight: GIT_CHANGES_ROW_HEIGHT, display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' },
+          className: 'pwr-git-row ys-row',
+          style: { height: GIT_CHANGES_ROW_HEIGHT, minHeight: GIT_CHANGES_ROW_HEIGHT, overflow: 'hidden' },
           onClick: () => props.actions?.onOpenDiff?.(file),
           onKeyDown: (event: KeyboardEvent<HTMLElement>) => onRowKey(event, file),
         },
-          createElement('span', { className: 'pwr-git-status', 'data-status-token': gitChangeStatusToken(file.status) }, gitChangeStatusToken(file.status)),
-          createElement('span', { className: 'pwr-git-name' }, file.name),
-          createElement('button', { type: 'button', onClick: (event: KeyboardEvent<HTMLElement> | { stopPropagation(): void }) => { event.stopPropagation(); props.actions?.onOpenDiff?.(file) } }, t('git.diff')),
-          createElement('button', { type: 'button', onClick: (event: { stopPropagation(): void }) => { event.stopPropagation(); props.actions?.onOpenFile?.(file) } }, t('explorer.openFile')),
-          props.mutationDisabled === true ? null : createElement('button', { type: 'button', onClick: (event: { stopPropagation(): void }) => { event.stopPropagation(); props.actions?.onStage?.(file) } }, t('git.stage')),
+          createElement('span', { className: 'pwr-git-status vk-badge', 'data-status-token': gitChangeStatusToken(file.status) }, gitChangeStatusToken(file.status)),
+          createElement('span', { className: 'pwr-git-name ys-row-main' }, createElement('strong', null, file.name)),
+          createElement('span', { className: 'ys-row-actions' },
+            props.actions?.onOpenDiff === undefined ? null : createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: (event: { stopPropagation(): void }) => { event.stopPropagation(); props.actions?.onOpenDiff?.(file) } }, t('git.diff')),
+            props.actions?.onOpenFile === undefined ? null : createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: (event: { stopPropagation(): void }) => { event.stopPropagation(); props.actions?.onOpenFile?.(file) } }, t('explorer.openFile')),
+            props.mutationDisabled === true || props.actions?.onStage === undefined ? null : createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: (event: { stopPropagation(): void }) => { event.stopPropagation(); props.actions?.onStage?.(file) } }, t('git.stage')),
+          ),
         )),
       ),
     ),
@@ -119,11 +158,20 @@ export function GitChangesList(props: {
 
 export function GitDiffView(props: { readonly window: GitDiffWindowStateV1 }): ReactNode {
   const complete = gitDiffLooksComplete(props.window)
-  return createElement('section', { className: 'pwr-git-diff', 'data-git-diff-complete': complete },
-    createElement('header', null, `${props.window.loaded}/${props.window.total}`),
+  return createElement(Surface, {
+    kind: 'inspector',
+    className: 'pwr-git-diff',
+    'data-git-diff-complete': complete,
+    style: { height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  },
+    createElement(SurfaceContextBar, { context: `${props.window.loaded}/${props.window.total}` }),
     props.window.binary
       ? createElement('p', { role: 'status' }, t('git.binaryFallback'))
-      : createElement('ol', null, ...props.window.hunks.filter(hunk => hunk.loaded).map(hunk =>
+      : createElement('ol', {
+        'data-git-scroll-region': 'diff',
+        tabIndex: 0,
+        style: { flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain' },
+      }, ...props.window.hunks.filter(hunk => hunk.loaded).map(hunk =>
         createElement('li', { key: hunk.hunkRef, 'data-hunk': hunk.hunkRef }, hunk.header))),
     complete ? null : createElement('p', { role: 'status', 'data-git-diff-unloaded': true }, t('git.diffUnloaded')),
   )
@@ -132,11 +180,13 @@ export function GitDiffView(props: { readonly window: GitDiffWindowStateV1 }): R
 export function SourceControlShell(props: SourceControlShellProps): ReactNode {
   const grouped = useMemo(() => groupGitChanges(props.shell.files), [props.shell.files])
   const visible = visibleGitChangeGroups(props.shell.files)
+  const stagedCount = grouped.staged.length
   const remoteGate = props.remoteGate ?? createGitRemoteGate(false, [], t('git.remoteUnavailable'))
   const remoteReason = gitRemoteReadOnlyReason(remoteGate)
-  return createElement('section', { className: 'pwr-source-control', 'data-git-phase': props.shell.phase },
-    createElement('header', { className: 'pwr-source-control-header' },
-      createElement('label', null, t('git.repository'),
+  const branch = `${t('git.branch')}: ${props.shell.branch ?? '—'} ${props.shell.upstream ?? ''} +${props.shell.ahead}/-${props.shell.behind}`
+  const refresh = actionButton(t('explorer.refresh'), props.actions?.onRefresh)
+  const repositorySelect = createElement('label', { className: 'ys-field pwr-repository-field' },
+      createElement('span', null, t('git.repository')),
         createElement('select', {
           'aria-label': t('git.repository'),
           value: props.shell.worktreeRef ?? '',
@@ -145,57 +195,65 @@ export function SourceControlShell(props: SourceControlShellProps): ReactNode {
             if (option !== undefined) props.actions?.onSelectRepository?.(option)
           },
         }, ...(props.repositories ?? []).map(option => createElement('option', { key: option.worktreeRef, value: option.worktreeRef }, option.label))),
-      ),
-      createElement('p', { className: 'pwr-git-branch' }, `${t('git.branch')}: ${props.shell.branch ?? '—'} ${props.shell.upstream ?? ''} +${props.shell.ahead}/-${props.shell.behind}`),
-    ),
-    createElement('form', {
-      className: 'pwr-git-composer',
+  )
+  const composer = stagedCount === 0 ? null : createElement('form', {
+      className: 'pwr-git-composer vk-card',
       onSubmit: (event: { preventDefault(): void }) => {
         event.preventDefault()
         if (props.mutationDisabled === true) return
         props.actions?.onCommit?.(props.shell.commitMessage)
       },
     },
-      createElement('label', null, t('git.commitMessage'),
+      createElement('label', { className: 'ys-field' }, createElement('span', null, t('git.commitMessage')),
         createElement('textarea', { 'aria-label': t('git.commitMessage'), value: props.shell.commitMessage, readOnly: true }),
       ),
-      createElement('button', { type: 'submit', disabled: props.mutationDisabled === true || props.shell.commitMessage.trim() === '' }, t('git.commit')),
-    ),
-    props.shell.phase === 'ready' ? null : createElement('div', { className: 'pwr-git-state', role: 'status', 'data-git-recovery': props.shell.recoveryAction ?? 'refresh' },
-      recoveryLabel(props.shell.phase),
-      createElement('button', { type: 'button', onClick: () => props.actions?.onRefresh?.() }, t('explorer.refresh')),
-    ),
-    ...visible.map(groupId => createElement('section', { key: groupId, className: 'pwr-git-group', 'data-git-group': groupId },
-      createElement('h3', null, `${t(groupId === 'merge' ? 'git.merge' : groupId === 'staged' ? 'git.staged' : groupId === 'untracked' ? 'git.untracked' : 'git.changes')} (${grouped[groupId].length})`),
+      createElement(Button, { type: 'submit', size: 'sm', variant: 'primary', disabled: props.mutationDisabled === true || props.shell.commitMessage.trim() === '' }, t('git.commit')),
+    )
+  const state = props.shell.phase === 'ready' ? null : createElement(SurfaceState, {
+    className: 'pwr-git-state',
+    phase: surfacePhase(props.shell.phase),
+    title: recoveryLabel(props.shell.phase),
+    description: props.shell.phase === 'clean' || props.shell.phase === 'empty'
+      ? props.shell.recentCommit ?? branch
+      : props.shell.reason ?? props.mutationReason,
+    'data-git-recovery': props.shell.recoveryAction ?? 'refresh',
+  })
+  const mutationNotice = props.mutationDisabled === true && props.mutationReason !== undefined
+    ? createElement('div', { className: 'vk-alert', 'data-tone': 'warn', role: 'status' }, props.mutationReason)
+    : null
+  return createElement(Surface, { kind: 'navigator', className: 'pwr-source-control', 'data-git-phase': props.shell.phase },
+    createElement(SurfaceContextBar, { context: branch, actions: createElement('div', { className: 'ys-row-actions' }, repositorySelect, refresh) }),
+    createElement('div', { className: 'ys-body' },
+      state,
+      mutationNotice,
+      composer,
+      ...visible.map(groupId => createElement(SurfaceSection, { key: groupId, className: 'pwr-git-group', 'data-git-group': groupId, title: t(groupId === 'merge' ? 'git.merge' : groupId === 'staged' ? 'git.staged' : groupId === 'untracked' ? 'git.untracked' : 'git.changes'), meta: grouped[groupId].length },
       createElement(GitChangesList, { files: grouped[groupId], viewportHeight: props.viewportHeight, scrollTop: props.scrollTop, mutationDisabled: props.mutationDisabled, actions: props.actions }),
-    )),
-    createElement('footer', { className: 'pwr-git-actions' },
-      props.branchGate !== undefined && gitBranchActionVisible(props.branchGate, 'create')
-        ? createElement('button', { type: 'button', onClick: () => props.actions?.onBranchAction?.('create') }, t('git.branchCreate'))
+      )),
+    ),
+    createElement(SurfaceActionBar, { className: 'pwr-git-actions', sticky: true },
+      actionButton('History', props.actions?.onHistory),
+      props.branchGate !== undefined && gitBranchActionVisible(props.branchGate, 'create') && props.actions?.onBranchAction !== undefined
+        ? actionButton(t('git.branchCreate'), () => props.actions?.onBranchAction?.('create'))
         : null,
-      props.worktreeGate !== undefined && gitWorktreeActionVisible(props.worktreeGate, 'create')
-        ? createElement('button', { type: 'button', onClick: () => props.actions?.onWorktreeAction?.('create') }, t('git.worktreeCreate'))
+      props.worktreeGate !== undefined && gitWorktreeActionVisible(props.worktreeGate, 'create') && props.actions?.onWorktreeAction !== undefined
+        ? actionButton(t('git.worktreeCreate'), () => props.actions?.onWorktreeAction?.('create'))
         : null,
       ...(props.worktrees ?? []).map(row => {
         const blocker = blockWorktreeRemove(row)
         const enabled = props.worktreeGate !== undefined && gitWorktreeActionVisible(props.worktreeGate, 'remove') && !blocker.blocked
-        return createElement('button', {
-          key: row.worktreeRef,
-          type: 'button',
-          disabled: !enabled,
-          title: blocker.blocked ? blocker.reason : undefined,
-          'data-ordo-deeplink': blocker.deepLink,
-          onClick: () => { if (enabled) props.actions?.onWorktreeAction?.('remove', row) },
-        }, row.label)
+        return createElement('span', { key: row.worktreeRef, 'data-ordo-deeplink': blocker.deepLink },
+          createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', disabled: !enabled, title: blocker.blocked ? blocker.reason : undefined, onClick: () => { if (enabled) props.actions?.onWorktreeAction?.('remove', row) } }, row.label),
+        )
       }),
-      remoteReason === undefined && gitRemoteActionVisible(remoteGate, 'fetch')
-        ? createElement('button', { type: 'button', onClick: () => props.actions?.onRemoteAction?.('fetch') }, t('git.fetch'))
+      remoteReason === undefined && gitRemoteActionVisible(remoteGate, 'fetch') && props.actions?.onRemoteAction !== undefined
+        ? actionButton(t('git.fetch'), () => props.actions?.onRemoteAction?.('fetch'))
         : null,
-      remoteReason === undefined && gitRemoteActionVisible(remoteGate, 'pull')
-        ? createElement('button', { type: 'button', onClick: () => props.actions?.onRemoteAction?.('pull') }, t('git.pull'))
+      remoteReason === undefined && gitRemoteActionVisible(remoteGate, 'pull') && props.actions?.onRemoteAction !== undefined
+        ? actionButton(t('git.pull'), () => props.actions?.onRemoteAction?.('pull'))
         : null,
-      remoteReason === undefined && gitRemoteActionVisible(remoteGate, 'push')
-        ? createElement('button', { type: 'button', onClick: () => props.actions?.onRemoteAction?.('push') }, t('git.push'))
+      remoteReason === undefined && gitRemoteActionVisible(remoteGate, 'push') && props.actions?.onRemoteAction !== undefined
+        ? actionButton(t('git.push'), () => props.actions?.onRemoteAction?.('push'))
         : createElement('p', { role: 'status', 'data-git-remote-readonly': true }, remoteReason ?? `${t('git.aheadBehind')}: +${props.remote?.ahead ?? props.shell.ahead}/-${props.remote?.behind ?? props.shell.behind}`),
     ),
   )

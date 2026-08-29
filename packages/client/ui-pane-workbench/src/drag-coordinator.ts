@@ -66,6 +66,10 @@ const IDLE: PaneDragCoordinatorSnapshot = Object.freeze({
   dispatchCount: 0,
 })
 
+function dragTimestamp(): number {
+  return typeof globalThis.performance?.now === 'function' ? globalThis.performance.now() : Date.now()
+}
+
 const defaultScheduler: PaneFrameSchedulerV1 = {
   request: callback => typeof globalThis.requestAnimationFrame === 'function'
     ? globalThis.requestAnimationFrame(callback)
@@ -162,7 +166,7 @@ export class PaneDragCoordinator {
   private readonly listeners = new Set<() => void>()
   private snapshot: PaneDragCoordinatorSnapshot = IDLE
   private scheduled: unknown
-  private pendingPoint?: { x: number; y: number; target?: PaneDragTargetV1 }
+  private pendingPoint?: { x: number; y: number; target?: PaneDragTargetV1; now: number }
   private lastTargetAt = 0
   private lastPublishedTarget?: PaneDragTargetV1
   private dispatchCount = 0
@@ -182,7 +186,7 @@ export class PaneDragCoordinator {
     return () => { this.listeners.delete(listener) }
   }
 
-  begin(viewId: string, x: number, y: number, pointer?: PanePointerKind | PaneDragPointerEventV1, now = 0): void {
+  begin(viewId: string, x: number, y: number, pointer?: PanePointerKind | PaneDragPointerEventV1, now = dragTimestamp()): void {
     if (typeof pointer !== 'string' && pointer !== undefined && shouldIgnoreDragStart(pointer)) return
     this.generation += 1
     this.lastPoint = { x, y }
@@ -190,15 +194,16 @@ export class PaneDragCoordinator {
     this.publish(this.generation, '')
   }
 
-  move(x: number, y: number, target?: PaneDragTargetV1, now = 0): PaneDragStateV1 {
+  move(x: number, y: number, target?: PaneDragTargetV1, now = dragTimestamp()): PaneDragStateV1 {
     this.lastPoint = { x, y }
-    this.pendingPoint = { x, y, target }
+    this.pendingPoint = { x, y, target, now }
     if (this.scheduled !== undefined) return this.session.state
     this.scheduled = this.scheduler.request(() => {
       this.scheduled = undefined
       const pending = this.pendingPoint
       if (pending === undefined) return
-      const next = this.session.move(pending.x, pending.y, this.stabilizeTarget(pending.target, now), now)
+      this.pendingPoint = undefined
+      const next = this.session.move(pending.x, pending.y, this.stabilizeTarget(pending.target, pending.now), pending.now)
       const resolvedTarget = next.status === 'dragging' ? next.target : undefined
       const announcement = resolvedTarget === undefined
         ? ''
@@ -210,8 +215,11 @@ export class PaneDragCoordinator {
     return this.session.state
   }
 
-  drop(): PaneWorkspaceReducerResultV1 | undefined {
+  drop(targetOverride?: PaneDragTargetV1): PaneWorkspaceReducerResultV1 | undefined {
     this.flushVisual()
+    if (targetOverride !== undefined && this.session.state.status === 'dragging') {
+      this.session.move(this.lastPoint.x, this.lastPoint.y, targetOverride, dragTimestamp())
+    }
     const sourceViewId = this.session.state.status === 'dragging' ? this.session.state.viewId : undefined
     const target = this.session.drop()
     if (sourceViewId === undefined || target === undefined) {
@@ -285,7 +293,7 @@ export class PaneDragCoordinator {
     this.scheduled = undefined
     const pending = this.pendingPoint
     if (pending === undefined) return
-    this.session.move(pending.x, pending.y, pending.target)
+    this.session.move(pending.x, pending.y, pending.target, pending.now)
     this.pendingPoint = undefined
   }
 
@@ -315,5 +323,3 @@ export class PaneDragCoordinator {
 export function isReducedMotion(preference: PaneMotionPreference, systemReduced: boolean): boolean {
   return preference === 'reduced' || (preference === 'system' && systemReduced)
 }
-
-

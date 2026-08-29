@@ -12,8 +12,6 @@ function workspace(overrides: Partial<WorkspaceLayoutSnapshot> = {}): WorkspaceL
     bottomRatio: 0.34,
     activeRegion: 'right',
     maximizedRegion: undefined,
-    corePaneHostAttached: false,
-    auxiliaryPriority: 'workspace',
     ...overrides,
   }
 }
@@ -30,7 +28,6 @@ describe('computeWorkspaceGeometry', () => {
       width,
       height: 900,
       sidebar,
-      details: 0,
       workspace: workspace({ rightVisible: true }),
     })
     expect(result.rightMode).toBe(mode)
@@ -41,39 +38,19 @@ describe('computeWorkspaceGeometry', () => {
   })
 
   it('reserves only a 44px rail when attached and closed', () => {
-    const result = computeWorkspaceGeometry({ width: 1440, height: 900, sidebar: 280, details: 0, workspace: workspace() })
+    const result = computeWorkspaceGeometry({ width: 1440, height: 900, sidebar: 280, workspace: workspace() })
     expect(result).toMatchObject({ rightMode: 'rail', rightWidth: 44, conversationWidth: 1116 })
   })
 
-  it('lets the last explicit auxiliary surface win without rewriting preferences', () => {
-    const detailsWins = computeWorkspaceGeometry({
-      width: 1243,
-      height: 900,
-      sidebar: 280,
-      details: 360,
-      workspace: workspace({ rightVisible: true, auxiliaryPriority: 'details' }),
-    })
-    expect(detailsWins).toMatchObject({ rightMode: 'rail', rightWidth: 44, detailsWidth: 360, conversationWidth: 559 })
-
-    const workspaceWins = computeWorkspaceGeometry({
-      width: 1243,
-      height: 900,
-      sidebar: 280,
-      details: 360,
-      workspace: workspace({ rightVisible: true, auxiliaryPriority: 'workspace' }),
-    })
-    expect(workspaceWins).toMatchObject({ rightMode: 'dock', rightWidth: 480, detailsWidth: 0, conversationWidth: 483 })
-  })
-
-  it('removes legacy Details geometry whenever a Core Pane host is attached', () => {
+  it('has no independent Details geometry', () => {
     const result = computeWorkspaceGeometry({
       width: 1440,
       height: 900,
       sidebar: 280,
-      details: 360,
-      workspace: workspace({ rightVisible: true, corePaneHostAttached: true, auxiliaryPriority: 'details' }),
+      workspace: workspace({ rightVisible: true }),
     })
-    expect(result).toMatchObject({ rightMode: 'dock', rightWidth: 480, detailsWidth: 0, conversationWidth: 680 })
+    expect(result).toMatchObject({ rightMode: 'dock', rightWidth: 480, conversationWidth: 680 })
+    expect(result).not.toHaveProperty('detailsWidth')
   })
 
   it('docks Bottom when the conversation height floor fits and sheets it otherwise', () => {
@@ -81,7 +58,6 @@ describe('computeWorkspaceGeometry', () => {
       width: 1440,
       height: 900,
       sidebar: 280,
-      details: 0,
       workspace: workspace({ bottomVisible: true, activeRegion: 'bottom' }),
     })
     expect(docked).toMatchObject({ bottomMode: 'dock', bottomHeight: 306, conversationHeight: 594 })
@@ -90,7 +66,6 @@ describe('computeWorkspaceGeometry', () => {
       width: 768,
       height: 400,
       sidebar: 0,
-      details: 0,
       workspace: workspace({ bottomVisible: true, activeRegion: 'bottom' }),
     })
     expect(sheet).toMatchObject({ bottomMode: 'sheet', coverRegion: 'bottom', sidebar: 56 })
@@ -101,14 +76,12 @@ describe('computeWorkspaceGeometry', () => {
       width: 1440,
       height: 900,
       sidebar: 280,
-      details: 360,
       workspace: workspace({ rightVisible: true, maximizedRegion: 'right' }),
     })
     expect(result).toMatchObject({
       sidebar: 280,
       conversationWidth: 1160,
       rightMode: 'maximized',
-      detailsWidth: 0,
       coverRegion: 'right',
     })
   })

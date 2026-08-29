@@ -28,6 +28,10 @@ export interface SessionGroupingGroupV1Alpha1 {
   readonly id: string
   readonly label: string
   readonly sessionIds: readonly SessionId[]
+  /** Optional provider-local parent group id for a two-level hierarchy. */
+  readonly parentId?: string
+  /** Optional semantic color token; the Browser owns its visual mapping. */
+  readonly color?: string
 }
 
 /**
@@ -116,6 +120,8 @@ interface RegistrationRecord {
  * their own ctx (the Service proxy binds effects to the caller's fiber).
  */
 export class SessionGroupings extends Service {
+  /** Additive renderer capabilities used by providers before emitting hierarchy hints. */
+  readonly capabilities = Object.freeze({ hierarchy: true, semanticColor: true })
   private readonly records = new Map<string, RegistrationRecord>()
   private nextSeq = 0
   private revision = 0

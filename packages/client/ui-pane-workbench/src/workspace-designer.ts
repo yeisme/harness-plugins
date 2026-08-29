@@ -1,4 +1,4 @@
-import type { PaneRegionId, PaneWorkspaceV1 } from './workspace.js'
+import type { PaneGroupV1, PaneRegionId, PaneWorkspaceV1 } from './workspace.js'
 import {
   inspectWorkspaceApplyUx,
   restoreWorkspaceFromRollback,
@@ -19,6 +19,60 @@ import {
 } from './workspace-draft.js'
 
 export const DESIGNER_HISTORY_LIMIT = 20
+
+/**
+ * Typical `registerPaneWorkbenchCoreViews` palette:
+ * appear — `dsh.explorer`, `dsh.source-control`
+ * hidden — `dsh.workspace-designer`, `dsh.tool-details`, `file.preview`
+ * Capability-denied kinds never enter the registry snapshot.
+ */
+export interface DesignerPaletteRegistrationV1 {
+  readonly descriptor: {
+    readonly kind: string
+    readonly label: string
+    readonly role: PaneGroupV1['role']
+    readonly preferredRegion: 'right' | 'bottom' | 'either'
+    readonly singleton: boolean
+  }
+  readonly showInPicker?: boolean
+}
+
+export interface DesignerPaletteEntryV1 {
+  readonly kind: string
+  readonly label: string
+  readonly region: PaneRegionId
+  readonly role: PaneGroupV1['role']
+  readonly singleton?: boolean
+}
+
+export function designerPaletteRegion(preferred: 'right' | 'bottom' | 'either'): PaneRegionId {
+  return preferred === 'bottom' ? 'bottom' : 'right'
+}
+
+export function listDesignerPaletteEntries(
+  registrations: readonly DesignerPaletteRegistrationV1[],
+): readonly DesignerPaletteEntryV1[] {
+  return registrations
+    .filter(registration => registration.showInPicker !== false)
+    .map(registration => ({
+      kind: registration.descriptor.kind,
+      label: registration.descriptor.label,
+      region: designerPaletteRegion(registration.descriptor.preferredRegion),
+      role: registration.descriptor.role,
+      ...(registration.descriptor.singleton ? { singleton: true } : {}),
+    }))
+}
+
+export function placementFromDesignerPaletteEntry(
+  entry: DesignerPaletteEntryV1,
+): PaneWorkspaceProviderPlacementV1 {
+  return {
+    kind: entry.kind,
+    region: entry.region,
+    role: entry.role,
+    ...(entry.singleton === true ? { singleton: true } : {}),
+  }
+}
 
 export type DesignerMutationKindV1 =
   | 'place'

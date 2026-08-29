@@ -75,3 +75,15 @@ export const PANE_FILE_GIT_V2_CAPABILITIES = Object.freeze([
   GIT_REMOTE_ACTIONS_CAPABILITY,
   GIT_WORKTREE_ACTIONS_CAPABILITY_V2,
 ] as const)
+
+/**
+ * Experience Tier seam probe points (workspace-capability-matrix). These are
+ * structural probe coordinates only: the plugin reads ctx services and never
+ * fakes, polls, or persists the result. Unpublished seams stay `missing`.
+ */
+export const COMMAND_SURFACE_CONTEXT_KEY = 'commands' as const
+export const TERMINAL_HOST_CONTEXT_KEY = 'dsh.terminalHost' as const
+export const PREVIEW_RESOURCE_CONTEXT_KEY = 'dsh.previewResource' as const
+export const ARTIFACT_INTENT_CONTEXT_KEY = 'dsh.artifactIntents' as const
+export const PREVIEW_RESOURCE_CAPABILITY = 'PreviewResourceV1' as const
+export const ARTIFACT_INTENT_CAPABILITY = 'ArtifactIntentV1' as const

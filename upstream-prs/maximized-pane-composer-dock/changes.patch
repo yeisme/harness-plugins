@@ -1,0 +1,95 @@
+diff --git a/packages/client/ui-layout/src/client/AppFrame.module.css b/packages/client/ui-layout/src/client/AppFrame.module.css
+--- a/packages/client/ui-layout/src/client/AppFrame.module.css
++++ b/packages/client/ui-layout/src/client/AppFrame.module.css
+@@ -82,6 +82,35 @@
+   visibility: hidden;
+   pointer-events: none;
+ }
++
++/* A maximized Pane keeps the native conversation composer usable at the page
++ * bottom. The ConversationRoot stays mounted, but only its composer seat is
++ * raised above the Pane; transcript/header chrome remains hidden. */
++.frame[data-workspace-composer='bottom-overlay'] .centerCol {
++  pointer-events: none;
++  z-index: 11;
++}
++
++.frame[data-workspace-composer='bottom-overlay'] .centerCol :global([data-composer-seat]) {
++  visibility: visible;
++  pointer-events: auto;
++}
++
++/* Blank/new-session ConversationRoots normally center the full hero stack.
++ * Under a maximized Pane only the native input card is useful, so keep the
++ * seat at the bottom and suppress the hero headline/glow without remounting
++ * the draft-bearing composer tree. */
++.frame[data-workspace-composer='bottom-overlay'] .centerCol :global([data-phase='hero']) :global([data-conversation-scroll]) {
++  justify-content: flex-end;
++}
++
++.frame[data-workspace-composer='bottom-overlay'] .centerCol :global([data-phase='hero']) :global([data-composer-seat]) > * {
++  visibility: hidden;
++}
++
++.frame[data-workspace-composer='bottom-overlay'] .centerCol :global([data-phase='hero']) :global([data-composer-card]) {
++  visibility: visible;
++}
+ 
+ .frame[data-workspace-cover='right'] .rightWorkspaceCol,
+ .frame[data-workspace-cover='bottom'] .bottomWorkspaceCol {
+diff --git a/packages/client/ui-layout/src/client/AppFrame.tsx b/packages/client/ui-layout/src/client/AppFrame.tsx
+--- a/packages/client/ui-layout/src/client/AppFrame.tsx
++++ b/packages/client/ui-layout/src/client/AppFrame.tsx
+@@ -220,6 +220,7 @@ export function AppFrame({ useStore, useSessions, actions, renderSlot, workspace
+       data-bottom-mode={geometry.bottomMode}
+       data-core-pane-host={workspace.attached || undefined}
+       data-workspace-cover={geometry.coverRegion}
++      data-workspace-composer={geometry.rightMode === 'maximized' || geometry.bottomMode === 'maximized' ? 'bottom-overlay' : undefined}
+       data-dragging={dragging || undefined}
+     >
+       <div className={css.sidebarCol}>
+diff --git a/packages/client/ui-layout/tests/app-frame.client.spec.tsx b/packages/client/ui-layout/tests/app-frame.client.spec.tsx
+--- a/packages/client/ui-layout/tests/app-frame.client.spec.tsx
++++ b/packages/client/ui-layout/tests/app-frame.client.spec.tsx
+@@ -68,7 +68,17 @@ function mountFrame(options: { coreHost?: WorkspaceCorePaneHost } = {}) {
+   const renderSlot = ((key: string, owner: object) => {
+     slotCalls.push({ key, props: owner })
+     if (key === 'sidebar') return <div data-testid="sidebar-content" />
+-    if (key === 'conversation') return <div data-testid="center-content" />
++    if (key === 'conversation') return (
++      <div data-phase="hero" data-testid="center-content">
++        <div data-conversation-scroll="">
++          <div data-testid="transcript-content" />
++          <div data-composer-seat="" data-testid="composer-seat">
++            <div data-testid="hero-content" />
++            <div data-composer-card="" data-testid="composer-card" />
++          </div>
++        </div>
++      </div>
++    )
+     if (key === 'details') return <div data-testid="details-content" />
+     if (key === 'conversation.empty') return <div data-testid="empty-content" />
+     return <div data-testid="other-content" />
+@@ -209,6 +219,22 @@ describe('AppFrame', () => {
+     expect(host.close).toHaveBeenCalledTimes(2)
+   })
+ 
++  it.each(['right', 'bottom'] as const)('keeps only the native composer interactive above a maximized %s Pane', (region) => {
++    const host = { open: vi.fn(), close: vi.fn() }
++    const { frame, workspaceLayout, workspaceHandle, getByTestId } = mountFrame({ coreHost: host })
++    act(() => { workspaceHandle?.update({ ...(region === 'right' ? { rightVisible: true } : { bottomVisible: true }), maximizedRegion: region }) })
++
++    expect(frame.getAttribute('data-workspace-cover')).toBe(region)
++    expect(frame.getAttribute('data-workspace-composer')).toBe('bottom-overlay')
++    expect(getByTestId('center-content')).toBeTruthy()
++    expect(getByTestId('transcript-content')).toBeTruthy()
++    expect(getByTestId('composer-seat')).toBeTruthy()
++    expect(getByTestId('composer-card')).toBeTruthy()
++
++    act(() => { workspaceLayout.restoreMaximized() })
++    expect(frame.hasAttribute('data-workspace-composer')).toBe(false)
++  })
++
+   it('sidebar slot receives live concession output as owner props', () => {
+     const { slotCalls } = mountFrame()
+     expect(slotCalls.find(c => c.key === 'sidebar')!.props).toEqual({ collapsed: false, width: 280 })

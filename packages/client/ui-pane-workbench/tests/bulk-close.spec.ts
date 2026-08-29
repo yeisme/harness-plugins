@@ -34,6 +34,25 @@ function populated(): PaneWorkspaceV1 {
 }
 
 describe('V4 Task 3.4 Bulk Close', () => {
+  it('safe-first close commits recoverable tabs and reports protected reasons without changing legacy atomic semantics', () => {
+    let state = createPaneWorkspace()
+    state = apply(state, { type: 'open_view', request: view({ kind: 'file.text', resourceKey: 'file:clean', title: 'clean' }) })
+    state = apply(state, { type: 'open_view', request: view({ kind: 'file.text', resourceKey: 'file:dirty', title: 'dirty', dirty: true }) })
+    state = apply(state, { type: 'open_view', request: view({ kind: 'job.output', resourceKey: 'job:running', title: 'running', metadata: { lifecycle: 'running' } }) })
+    state = apply(state, { type: 'open_view', request: view({ kind: 'terminal.session', resourceKey: 'terminal:one', title: 'terminal' }) })
+    state = apply(state, { type: 'open_view', request: view({ kind: 'file.text', resourceKey: 'file:confirm', title: 'confirm', closePolicy: 'confirm' }) })
+    state = apply(state, { type: 'open_view', request: view({ kind: 'file.text', resourceKey: 'file:deny', title: 'deny', closePolicy: 'deny' }) })
+    const groupId = Object.values(state.views)[0]!.groupId
+    const safe = reducePaneWorkspace(state, { type: 'bulk_close_safe', groupId, mode: 'group' })
+    expect(safe.accepted).toBe(true)
+    expect(Object.values(safe.state.views).map(item => item.resourceKey)).not.toContain('file:clean')
+    expect(safe.details?.bulkCloseSafe?.protectedViews.map(item => item.reason)).toEqual(['dirty', 'running', 'terminal', 'confirm', 'deny'])
+
+    const legacy = reducePaneWorkspace(state, { type: 'bulk_close', groupId, mode: 'group' })
+    expect(legacy.accepted).toBe(false)
+    expect(Object.keys(legacy.state.views)).toEqual(Object.keys(state.views))
+  })
+
   it('rejects Close Group when any target is deny and leaves every tab in place', () => {
     const state = populated()
     const before = Object.keys(state.views).sort()

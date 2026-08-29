@@ -1,32 +1,18 @@
 diff --git a/apps/cli/README.md b/apps/cli/README.md
-index 9a8d722b0..47a395aae 100644
+index 9a8d722b04..9fca5b6ad9 100644
 --- a/apps/cli/README.md
 +++ b/apps/cli/README.md
-@@ -12,6 +12,7 @@ The `dsh` command is the product launcher for profiles: ordered stacks of plugin
- | `dsh --profile headless "job"` | Run one fresh persisted session, print the final answer, and exit. |
- | `dsh web` | Alias of `--profile web`. |
- | `dsh plugin --profile <name> <pnpm args>` | Manage a profile's plugins by forwarding to pnpm in the profile directory. |
+@@ -14,0 +15 @@ The `dsh` command is the product launcher for profiles: ordered stacks of plugin
 +| `dsh auth token create/list/revoke` | Manage DSH remote-access tokens; plaintext is printed once at creation. |
- 
- The invoking directory is the default workspace root. The `web` and `headless` profiles auto-initialize on first use from shipped templates; any other profile must be created through `dsh plugin`.
- 
-@@ -21,6 +22,8 @@ The launcher parses only its own flags and hands everything after them to the bo
- 
- ```sh
- dsh --profile web --port 8080       # --port belongs to the web app
-+dsh --profile web --host 0.0.0.0 --token "$(dsh auth token create --name remote --scope admin)"   # remote web with token auth
+@@ -23,0 +25,3 @@ dsh --profile web --port 8080       # --port belongs to the web app
++dsh auth token create --name remote --scope admin
++dsh --profile web --host 0.0.0.0 --auth token-store --no-open   # remote web with digest-only token auth
 +dsh auth token list                  # list stored token metadata
- dsh --profile tui --resume <id>     # example, assuming the tui profile is installed; --resume belongs to the terminal app
- dsh --profile headless "run the tests"
- dsh --profile web --help            # the web app's flags, not the launcher's
 diff --git a/apps/cli/src/args.ts b/apps/cli/src/args.ts
-index 27d92dcf6..716bbd668 100644
+index 27d92dcf66..716bbd6687 100644
 --- a/apps/cli/src/args.ts
 +++ b/apps/cli/src/args.ts
-@@ -44,8 +44,15 @@ interface PluginInvocation {
-   args: string[]
- }
- 
+@@ -46,0 +47,7 @@ interface PluginInvocation {
 +/** Manage DSH remote-access tokens. */
 +interface AuthInvocation {
 +  mode: 'auth'
@@ -34,16 +20,10 @@ index 27d92dcf6..716bbd668 100644
 +  args: string[]
 +}
 +
- /** The resolved `dsh` invocation. Help, version, and errors exit inside {@link parseDshArgs}. */
+@@ -48 +55 @@ interface PluginInvocation {
 -export type DshInvocation = ProfileInvocation | DumpConfigInvocation | PluginInvocation
 +export type DshInvocation = ProfileInvocation | DumpConfigInvocation | PluginInvocation | AuthInvocation
- 
- /** Launcher flags shared by the default command and the `web` alias. */
- interface BootOptions {
-@@ -180,6 +187,18 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
-       resolved = { mode: 'plugin', profile: options.profile, args }
-     })
- 
+@@ -182,0 +190,12 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
 +  const auth = program.command('auth').description('manage DSH remote-access tokens')
 +  auth
 +    .helpOption(false)
@@ -56,33 +36,21 @@ index 27d92dcf6..716bbd668 100644
 +      resolved = { mode: 'auth', args }
 +    })
 +
-   try {
-     program.parse(argv, { from: 'user' })
-   } catch (error) {
 diff --git a/apps/cli/src/bin.ts b/apps/cli/src/bin.ts
-index 9aa44f8b2..b48c77012 100644
+index 9aa44f8b22..b48c770128 100644
 --- a/apps/cli/src/bin.ts
 +++ b/apps/cli/src/bin.ts
-@@ -47,6 +47,11 @@ switch (invocation.mode) {
-     runDumpConfig(invocation.profile, invocation.defaultOnly, invocation.patches)
-     break
-   }
+@@ -49,0 +50,5 @@ switch (invocation.mode) {
 +  case 'auth': {
 +    const { runAuth } = await import('./auth.ts')
 +    process.exit(await runAuth(invocation.args))
 +    break
 +  }
-   default:
-     invocation satisfies never
-     throw new Error(`dsh: unhandled invocation mode ${JSON.stringify(invocation)}`)
 diff --git a/apps/cli/tests/args.spec.ts b/apps/cli/tests/args.spec.ts
-index b76326d79..98579d2b8 100644
+index b76326d799..98579d2b83 100644
 --- a/apps/cli/tests/args.spec.ts
 +++ b/apps/cli/tests/args.spec.ts
-@@ -57,6 +57,15 @@ describe('parseDshArgs', () => {
-       .toEqual({ mode: 'plugin', profile: 'tui', args: ['add', '--save-dev', 'x'] })
-   })
- 
+@@ -59,0 +60,9 @@ describe('parseDshArgs', () => {
 +  it('routes the auth token subcommand', () => {
 +    expect(parse(['auth', 'token', 'create', '--name', 'admin']))
 +      .toEqual({ mode: 'auth', args: ['token', 'create', '--name', 'admin'] })
@@ -92,246 +60,173 @@ index b76326d79..98579d2b8 100644
 +      .toEqual({ mode: 'auth', args: ['token', 'revoke', 'abc'] })
 +  })
 +
-   it('routes profile and web config dumps', () => {
-     expect(parse(['--profile', 'web', '--dump-config']))
-       .toEqual({ mode: 'dump-config', profile: 'web', defaultOnly: false, patches: [] })
 diff --git a/packages/bundle/web-app/README.md b/packages/bundle/web-app/README.md
-index c8a6874bc..2dafb7495 100644
+index c8a6874bc0..3aea4bff96 100644
 --- a/packages/bundle/web-app/README.md
 +++ b/packages/bundle/web-app/README.md
-@@ -2,7 +2,7 @@
- 
- English | [中文](README.zh.md)
- 
+@@ -5 +5 @@ English | [中文](README.zh.md)
 -The dsh browser-surface bundle. [`cordis.patch.yml`](cordis.patch.yml) rides over [`dsh-base`](../base/README.md): it sets the coding persona, inserts the Web host rows (webserver, API gateway, workspace, projection cache, storage) and the browser plugin roster, the always-on client-plugin reload chain ([`dsh-client-hmr`](../../client/hmr/README.md), idle until a rebuild watcher rewrites client bundles), and mounts this package's `web-runtime` glue plugin (config `{openBrowser, printUrl, surfaceContext, trustedHosts}`). That plugin resolves the built frontend dist through `@deepseek-ai/dsh-web-frontend`'s exports, samples bind-dependent LAN trust once, provides it as `webRuntime` to the browser-trust fence and client roster, mounts the [`frontend-static`](../../host/frontend-static/README.md) fallback owner, and registers the harness-source and web-surface prompt sections plus the bash-visible `DSH_WEB_URL` runtime variable when `surfaceContext` is true. After its Loader tree settles, it prints the `dsh web:` URL line when `printUrl` is true and opens the canonical host URL in the default browser when `openBrowser` is true and the inherited `SSH_CONNECTION` and `SSH_TTY` are blank or absent. An SSH launch keeps the URL line but suppresses browser handoff because the SSH client or editor owns the local forwarded address. Immediately before a handoff, the runtime prints `dsh web: opening the default browser; pass --no-open to disable`. A short-lived Node helper runs the maintained platform opener with the canonical scrubbed child environment. On Windows it stays alive until the short-lived PowerShell launcher exits, because `open` reports spawn before that launcher has handed the URL to the shell; elsewhere the helper stops after the opener accepts spawn. A helper failure writes a diagnostic with its reason and the manual URL to stderr without stopping the server, and no path waits for the browser to exit. This bundle also owns the app command line: the ordinary `web-startup` provider ([`src/startup.ts`](src/startup.ts)) injects `ctx.cmdlineArgs` ([`dsh-cmdline`](../../boot/cmdline/README.md)), parses `--host`, `--port`, repeatable `--trusted-host`, `--no-open`, and the app's `--help`, then provides `webStartup`; browser opening defaults on for local launches, and `--no-open` turns it off for this invocation. It rejects `--host 0.0.0.0` before publishing that service because the CLI intentionally does not support all-interfaces binding yet. Flag-configured rows inject the service and read it directly from lazy config, so nothing binds a port before argument resolution and `dsh --profile web --help` starts no server. [`dsh-headless`](../headless/README.md) is a sibling surface over the same base and does not mount this bundle.
-+The dsh browser-surface bundle. [`cordis.patch.yml`](cordis.patch.yml) rides over [`dsh-base`](../base/README.md): it sets the coding persona, inserts the Web host rows (webserver, API gateway, workspace, projection cache, storage) and the browser plugin roster, the always-on client-plugin reload chain ([`dsh-client-hmr`](../../client/hmr/README.md), idle until a rebuild watcher rewrites client bundles), and mounts this package's `web-runtime` glue plugin (config `{openBrowser, printUrl, surfaceContext, trustedHosts, token}`). That plugin resolves the built frontend dist through `@deepseek-ai/dsh-web-frontend`'s exports, samples bind-dependent LAN trust once, provides it as `webRuntime` to the browser-trust fence and client roster, mounts the [`frontend-static`](../../host/frontend-static/README.md) fallback owner, and registers the harness-source and web-surface prompt sections plus the bash-visible `DSH_WEB_URL` runtime variable when `surfaceContext` is true. After its Loader tree settles, it prints the `dsh web:` URL line when `printUrl` is true and opens the canonical host URL in the default browser when `openBrowser` is true and the inherited `SSH_CONNECTION` and `SSH_TTY` are blank or absent. An SSH launch keeps the URL line but suppresses browser handoff because the SSH client or editor owns the local forwarded address. Immediately before a handoff, the runtime prints `dsh web: opening the default browser; pass --no-open to disable`. A short-lived Node helper runs the maintained platform opener with the canonical scrubbed child environment. On Windows it stays alive until the short-lived PowerShell launcher exits, because `open` reports spawn before that launcher has handed the URL to the shell; elsewhere the helper stops after the opener accepts spawn. A helper failure writes a diagnostic with its reason and the manual URL to stderr without stopping the server, and no path waits for the browser to exit. This bundle also owns the app command line: the ordinary `web-startup` provider ([`src/startup.ts`](src/startup.ts)) injects `ctx.cmdlineArgs` ([`dsh-cmdline`](../../boot/cmdline/README.md)), parses `--host`, `--port`, repeatable `--trusted-host`, `--no-open`, `--token`, and the app's `--help`, then provides `webStartup`; browser opening defaults on for local launches, and `--no-open` turns it off for this invocation. `--host 0.0.0.0` is allowed only when `--token` (or `DSH_ACCESS_TOKEN`) supplies a bearer token, so remote deployments start behind the built-in token gate. Flag-configured rows inject the service and read it directly from lazy config, so nothing binds a port before argument resolution and `dsh --profile web --help` starts no server. [`dsh-headless`](../headless/README.md) is a sibling surface over the same base and does not mount this bundle.
- 
- ## Model retry defaults
- 
++The dsh browser-surface bundle. [`cordis.patch.yml`](cordis.patch.yml) rides over [`dsh-base`](../base/README.md): it inserts the Web host rows and browser plugin roster, then mounts this package's `web-runtime` glue plugin (config `{openBrowser, printUrl, surfaceContext, trustedHosts, auth, token}`). The command provider parses `--host`, `--port`, repeatable `--trusted-host`, `--no-open`, `--auth`, the deprecated compatibility `--token`, and `--help`. `--host 0.0.0.0` is allowed only with `--auth token-store` or the compatibility ingress. The taught production path reads the digest-only `$DSH_HOME/auth.json` generated by `dsh auth token` and never puts plaintext in process arguments. Browser opening defaults on for local launches; `--no-open` turns it off. Nothing binds a port before argument resolution, and `dsh --profile web --help` starts no server.
 diff --git a/packages/bundle/web-app/cordis.patch.yml b/packages/bundle/web-app/cordis.patch.yml
-index 61151bdc6..0503fe3cb 100644
+index 61151bdc65..d65585eb27 100644
 --- a/packages/bundle/web-app/cordis.patch.yml
 +++ b/packages/bundle/web-app/cordis.patch.yml
-@@ -142,6 +142,7 @@
-         printUrl: true
-         surfaceContext: true
-         trustedHosts: !!js ctx.webStartup.trustedHosts
+@@ -144,0 +145,2 @@
++        auth: !!js ctx.webStartup.auth
 +        token: !!js ctx.webStartup.token
- 
-     # The client-plugin reload chain, always mounted: it is idle until a
-     # rebuild watcher (pnpm run dev:web) actually rewrites client bundles. It
-@@ -169,6 +170,7 @@
-         # A deployment adding authorities keeps this expression and concatenates
-         # its literals, for example: ['app.internal', ...ctx.webRuntime.trustedHosts].
-         trustedHosts: !!js ctx.webRuntime.trustedHosts
+@@ -171,0 +174 @@
 +        tokenAuth: !!js ctx.webRuntime.tokenAuth
- 
-     - id: api-remotes
-       name: '@deepseek-ai/dsh-api-remotes'
 diff --git a/packages/bundle/web-app/src/index.ts b/packages/bundle/web-app/src/index.ts
-index 696531043..ea19fe167 100644
+index 6965310437..732d352665 100644
 --- a/packages/bundle/web-app/src/index.ts
 +++ b/packages/bundle/web-app/src/index.ts
-@@ -25,6 +25,7 @@ import type {} from '@deepseek-ai/cordis-plugin-loader'
- import type {} from '@deepseek-ai/dsh-host-webserver'
- import type {} from '@deepseek-ai/dsh-system-prompt'
- import type {} from '@deepseek-ai/dsh-shell-env'
+@@ -16 +16,2 @@ import { createRequire } from 'node:module'
+-import { networkInterfaces } from 'node:os'
++import { homedir, networkInterfaces } from 'node:os'
++import { join, resolve } from 'node:path'
+@@ -27,0 +29 @@ import type {} from '@deepseek-ai/dsh-shell-env'
 +import type { DshTokenAuthConfig } from '@deepseek-ai/dsh-client-connection'
- 
- /** Stable Cordis plugin name. */
- export const name = 'web-app'
-@@ -53,6 +54,8 @@ export interface Config {
-   surfaceContext: boolean
-   /** Explicit `--trusted-host` authorities from this invocation. */
-   trustedHosts: string[]
+@@ -55,0 +58,4 @@ export interface Config {
++  /** Remote authentication mode. */
++  auth?: 'none' | 'token-store'
 +  /** `--token` from this invocation; enables remote authentication. */
 +  token?: string
- }
- 
- export const Config: z<Config> = z.object({
-@@ -60,6 +63,7 @@ export const Config: z<Config> = z.object({
-   printUrl: z.boolean().default(true),
-   surfaceContext: z.boolean().default(true),
-   trustedHosts: z.array(String).default([]),
+@@ -62,0 +69,2 @@ export const Config: z<Config> = z.object({
++  auth: z.union([z.const('none'), z.const('token-store')]).default('none'),
 +  token: z.string(),
- })
- 
- /** Bind-dependent Web values shared by the trust fence and URL display. */
-@@ -68,6 +72,8 @@ export interface WebRuntimeValues {
-   lanAddresses: string[]
-   /** LAN literals followed by explicit invocation authorities. */
-   trustedHosts: string[]
+@@ -70,0 +79,2 @@ export interface WebRuntimeValues {
 +  /** Built-in bearer-token authentication for remote access. */
 +  tokenAuth?: DshTokenAuthConfig
- }
- 
- /** Environment variable naming the canonical local URL of this Web GUI. */
-@@ -224,7 +230,12 @@ export const internals: {
-  * @param config - validated {@link Config}.
-  */
- export function apply(ctx: Context, config: Config): void {
+@@ -140,0 +151,5 @@ export function resolveLanTrust(bindHost: string, extra: readonly string[]): Web
++function authStorePath(): string {
++  const configured = process.env.DSH_HOME
++  return join(configured === undefined || configured.trim() === '' ? join(homedir(), '.dsh') : resolve(configured), 'auth.json')
++}
++
+@@ -227 +242,8 @@ export function apply(ctx: Context, config: Config): void {
 -  const runtime = resolveLanTrust(ctx.webServer.host, config.trustedHosts)
 +  const runtime: WebRuntimeValues = {
 +    ...resolveLanTrust(ctx.webServer.host, config.trustedHosts),
-+    ...config.token === undefined ? {} : {
++    ...config.auth === 'token-store' ? {
++      tokenAuth: { storePath: authStorePath() },
++    } : config.token === undefined ? {} : {
 +      tokenAuth: { tokens: [{ token: config.token, scopes: ['admin'] }] },
 +    },
 +  }
-   // The loopback URL belongs to this host. Under SSH, the operator reaches it
-   // through a local forwarding address that this process cannot derive.
-   const handoffBrowser = config.openBrowser && !launchedThroughSsh(ctx)
 diff --git a/packages/bundle/web-app/src/startup.ts b/packages/bundle/web-app/src/startup.ts
-index 9faad244d..07bbb5b1a 100644
+index 9faad244dd..fa4cf689df 100644
 --- a/packages/bundle/web-app/src/startup.ts
 +++ b/packages/bundle/web-app/src/startup.ts
-@@ -19,7 +19,6 @@ export const inject = ['cmdlineArgs']
- /** Service provided by this ordinary plugin and injected by flag-configured rows. */
- export const WEB_STARTUP_SERVICE = 'webStartup'
- 
+@@ -22 +21,0 @@ export const WEB_STARTUP_SERVICE = 'webStartup'
 -/** What the web rows read from {@link WEB_STARTUP_SERVICE}. */
- export interface WebStartupValues {
-   /** Whether this invocation opens the default browser after startup. */
-   openBrowser: boolean
-@@ -29,6 +28,8 @@ export interface WebStartupValues {
-   port?: number
-   /** Explicit `--trusted-host` authorities, in argument order. */
-   trustedHosts: string[]
+@@ -31,0 +31,4 @@ export interface WebStartupValues {
++  /** Remote authentication mode. */
++  auth: 'none' | 'token-store'
 +  /** `--token`, absent when the invocation did not name one. */
 +  token?: string
- }
- 
- /** The web flag family, as commander parsed it. */
-@@ -37,6 +38,7 @@ interface WebOptions {
-   open: boolean
-   port?: string
-   trustedHost?: string[]
+@@ -35,0 +39 @@ interface WebOptions {
++  auth: string
+@@ -39,0 +44 @@ interface WebOptions {
 +  token?: string
- }
- 
- /**
-@@ -52,11 +54,13 @@ function webCommand(): Command {
-     .option('--no-open', 'do not open the Web UI in the default browser')
-     .option('--port <port>', 'listen port; pass 0 to let the OS pick a free one')
-     .option('--trusted-host <authority...>', 'extra authority the /api browser-trust fence accepts (host or host:port; repeatable)')
-+    .option('--token <token>', 'bearer token required for remote /api and WebSocket access; required with --host 0.0.0.0')
-     .addHelpText('after', `
- Examples:
-   dsh --profile web                          serve on the composed host and port
-   dsh --profile web --no-open                serve without opening a browser
-   dsh --profile web --port 8080              serve on another port
-+  dsh --profile web --host 0.0.0.0 --token dsh_xxx   serve remotely with token auth
- `)
- }
- 
-@@ -71,8 +75,9 @@ export function apply(ctx: Context): void {
-   const program = webCommand()
-   program.action(() => {
-     const options = program.opts<WebOptions>()
+@@ -50,0 +56 @@ function webCommand(): Command {
++    .option('--auth <mode>', 'remote authentication mode (none or token-store)', 'none')
+@@ -54,0 +61 @@ function webCommand(): Command {
++    .option('--token <token>', 'deprecated compatibility token; prefer --auth token-store')
+@@ -59,0 +67 @@ Examples:
++  dsh --profile web --host 0.0.0.0 --auth token-store   serve remotely with the dsh auth token store
+@@ -74,2 +82,7 @@ export function apply(ctx: Context): void {
 -    if (options.host === '0.0.0.0') {
 -      program.error('error: --host 0.0.0.0 is intentionally not supported yet for safety: it would expose remote code execution to the network; use 127.0.0.1 instead')
 +    const token = options.token ?? process.env.DSH_ACCESS_TOKEN
-+    if (options.host === '0.0.0.0' && (token === undefined || token === '')) {
-+      program.error('error: --host 0.0.0.0 requires remote authentication; pass --token <token> or set DSH_ACCESS_TOKEN')
-     }
-     if (options.port !== undefined && !/^\d+$/.test(options.port)) {
-       program.error(`error: --port must be a number, got ${JSON.stringify(options.port)}`)
-@@ -82,6 +87,7 @@ export function apply(ctx: Context): void {
-       ...options.host !== undefined && { host: options.host },
-       ...options.port !== undefined && { port: Number(options.port) },
-       trustedHosts: options.trustedHost ?? [],
++    if (options.auth !== 'none' && options.auth !== 'token-store') {
++      program.error(`error: --auth must be "none" or "token-store", got ${JSON.stringify(options.auth)}`)
++    }
++    const auth = options.auth as 'none' | 'token-store'
++    if (options.host === '0.0.0.0' && auth !== 'token-store' && (token === undefined || token === '')) {
++      program.error('error: --host 0.0.0.0 requires remote authentication; pass --auth token-store')
+@@ -84,0 +98,2 @@ export function apply(ctx: Context): void {
++      auth,
 +      ...token !== undefined && token !== '' && { token },
-     } satisfies WebStartupValues)
-   })
-   parseCmdline(ctx, program)
 diff --git a/packages/bundle/web-app/tests/startup.spec.ts b/packages/bundle/web-app/tests/startup.spec.ts
-index ba3806232..6ccff0025 100644
+index ba3806232c..188b29d463 100644
 --- a/packages/bundle/web-app/tests/startup.spec.ts
 +++ b/packages/bundle/web-app/tests/startup.spec.ts
-@@ -59,6 +59,7 @@ export const apply = ctx => globalThis.__webStartupApply(ctx)
-     '    openBrowser: !!js ctx.webStartup.openBrowser',
-     '    port: !!js ctx.webStartup.port ?? 3080',
-     '    trustedHosts: !!js ctx.webStartup.trustedHosts',
+@@ -61,0 +62,2 @@ export const apply = ctx => globalThis.__webStartupApply(ctx)
++    '    auth: !!js ctx.webStartup.auth',
 +    '    token: !!js ctx.webStartup.token',
-     '- id: provider',
-     `  name: ${pathToFileURL(join(dir, 'provider.mjs')).href}`,
-     '',
-@@ -134,11 +135,41 @@ describe('web command-line provider', () => {
-     expect(observed.exits).toEqual([1])
-   })
- 
+@@ -102,0 +105 @@ describe('web command-line provider', () => {
++      auth: 'none',
+@@ -110 +113 @@ describe('web command-line provider', () => {
+-    expect(values).toEqual({ openBrowser: true, trustedHosts: [] })
++    expect(values).toEqual({ openBrowser: true, trustedHosts: [], auth: 'none' })
+@@ -115,0 +119 @@ describe('web command-line provider', () => {
++      auth: 'none',
+@@ -137 +141 @@ describe('web command-line provider', () => {
 -  it('rejects the intentionally unsupported all-interfaces host before the consumer activates', async () => {
 +  it('rejects the all-interfaces host without remote authentication', async () => {
-     const { values, observed } = await bootProvider(['--host', '0.0.0.0'])
+@@ -139 +143 @@ describe('web command-line provider', () => {
 -    expect(observed.out).toContain('--host 0.0.0.0 is intentionally not supported yet for safety: it would expose remote code execution to the network; use 127.0.0.1 instead')
-+    expect(observed.out).toContain('--host 0.0.0.0 requires remote authentication; pass --token <token> or set DSH_ACCESS_TOKEN')
-     expect(values).toBeUndefined()
-     expect(observed.readerConfig).toBeUndefined()
-     expect(observed.exits).toEqual([1])
-   })
++    expect(observed.out).toContain('--host 0.0.0.0 requires remote authentication; pass --auth token-store')
+@@ -143,0 +148,37 @@ describe('web command-line provider', () => {
 +
-+  it('allows the all-interfaces host when a token is supplied', async () => {
-+    const { values, observed } = await bootProvider(['--host', '0.0.0.0', '--token', 'dsh_test'])
++  it('allows the all-interfaces host with the token store', async () => {
++    const { values, observed } = await bootProvider(['--host', '0.0.0.0', '--auth', 'token-store'])
 +    expect(values).toEqual({
 +      host: '0.0.0.0',
 +      openBrowser: true,
 +      trustedHosts: [],
-+      token: 'dsh_test',
++      auth: 'token-store',
 +    })
 +    expect(observed.readerConfig).toEqual({
 +      host: '0.0.0.0',
 +      openBrowser: true,
 +      port: 3080,
 +      trustedHosts: [],
-+      token: 'dsh_test',
++      auth: 'token-store',
 +    })
 +    expect(observed.exits).toEqual([])
 +  })
 +
 +  it('publishes --token for loopback deployments too', async () => {
 +    const { values, observed } = await bootProvider(['--token', 'dsh_loop'])
-+    expect(values).toEqual({ openBrowser: true, trustedHosts: [], token: 'dsh_loop' })
++    expect(values).toEqual({ openBrowser: true, trustedHosts: [], auth: 'none', token: 'dsh_loop' })
 +    expect(observed.readerConfig).toEqual({
 +      host: '127.0.0.1',
 +      openBrowser: true,
 +      port: 3080,
 +      trustedHosts: [],
++      auth: 'none',
 +      token: 'dsh_loop',
 +    })
 +  })
- })
++
++  it('rejects an unknown auth mode', async () => {
++    const { values, observed } = await bootProvider(['--auth', 'password'])
++    expect(observed.out).toContain('--auth must be "none" or "token-store"')
++    expect(values).toBeUndefined()
++  })
 diff --git a/packages/client/connection/README.md b/packages/client/connection/README.md
-index 71ef204a5..17701f7de 100644
+index 71ef204a58..b3167a7b80 100644
 --- a/packages/client/connection/README.md
 +++ b/packages/client/connection/README.md
-@@ -6,7 +6,15 @@ Wire consumer layer: the client plugin's apply mounts `ctx.connection` (shared a
- 
- ## /api browser-trust fence
- 
+@@ -9 +9,9 @@ Wire consumer layer: the client plugin's apply mounts `ctx.connection` (shared a
 -The node half guards every entry under `/api` before bridging or upgrading (`src/api-request-trust.ts`). Every request — browser-marked or not — must present a `Host` that is a loopback authority or matches a `trustedHosts` entry: exact on `host:port` entries, any port on port-less entries, both sides compared through WHATWG normalization (DNS-rebinding defense). There is deliberately no shortcut for unmarked HTTP requests: over plain HTTP a browser attaches neither `Origin` nor Fetch-Metadata to image and navigation reads, so an unmarked request may still be a rebound browser read with a readable response, and Host is the one header rebinding cannot forge; a browser WebSocket handshake carries `Origin` and passes the same comparison. Non-browser clients pass the same fence via loopback, deployment-derived LAN IP literals, or a declared authority. When markers are present, an attached `Origin` must equal the Host authority, and an explicit `sec-fetch-site: cross-site` marker is refused. A `trustedHosts` entry that is not a bare, canonical `host[:port]` authority — one WHATWG parsing reads back exactly as written — fails the plugin load loudly: parsing would otherwise quietly authorize the hostname inside `harness.internal/path`, or broaden a dangling-colon or zero-padded port to an any-port grant. HTTP failures answer plain 403 before any RPC dispatch; upgrade failures reject the handshake before any event stream starts. Non-loopback compositions must trust their serving authorities explicitly: the Web runtime derives LAN IP literals from an all-interfaces server config, while `trustedHosts` in cordis.yml and the CLI's `--trusted-host` flag declare named authorities. `dsh web --host 0.0.0.0` is intentionally unsupported until remote access has an authentication layer. The fence is a reachability policy, not authentication; the Web carrier provides no authentication layer. Decision record: [the api browser-trust boundary Agent Note](../../../.agents/notes/implemented/architecture/2026-07-28-api-browser-trust-boundary.md).
-+The node half guards every entry under `/api` before bridging or upgrading (`src/api-request-trust.ts`). Every request — browser-marked or not — must present a `Host` that is a loopback authority or matches a `trustedHosts` entry: exact on `host:port` entries, any port on port-less entries, both sides compared through WHATWG normalization (DNS-rebinding defense). There is deliberately no shortcut for unmarked HTTP requests: over plain HTTP a browser attaches neither `Origin` nor Fetch-Metadata to image and navigation reads, so an unmarked request may still be a rebound browser read with a readable response, and Host is the one header rebinding cannot forge; a browser WebSocket handshake carries `Origin` and passes the same comparison. Non-browser clients pass the same fence via loopback, deployment-derived LAN IP literals, or a declared authority. When markers are present, an attached `Origin` must equal the Host authority, and an explicit `sec-fetch-site: cross-site` marker is refused. A `trustedHosts` entry that is not a bare, canonical `host[:port]` authority — one WHATWG parsing reads back exactly as written — fails the plugin load loudly: parsing would otherwise quietly authorize the hostname inside `harness.internal/path`, or broaden a dangling-colon or zero-padded port to an any-port grant. HTTP failures answer plain 403 before any RPC dispatch; upgrade failures reject the handshake before any event stream starts. Non-loopback compositions must trust their serving authorities explicitly: the Web runtime derives LAN IP literals from an all-interfaces server config, while `trustedHosts` in cordis.yml and the CLI's `--trusted-host` flag declare named authorities. `dsh web --host 0.0.0.0` is supported only when the deployment also configures `tokenAuth` (the web CLI accepts `--token <token>` or `DSH_ACCESS_TOKEN`). The fence is a reachability policy, not authentication; the Web carrier provides authentication through the built-in token gate described below. Decision record: [the api browser-trust boundary Agent Note](../../../.agents/notes/implemented/architecture/2026-07-28-api-browser-trust-boundary.md).
++The node half guards every entry under `/api` before bridging or upgrading (`src/api-request-trust.ts`). Every request — browser-marked or not — must present a `Host` that is a loopback authority or matches a `trustedHosts` entry: exact on `host:port` entries, any port on port-less entries, both sides compared through WHATWG normalization (DNS-rebinding defense). There is deliberately no shortcut for unmarked HTTP requests: over plain HTTP a browser attaches neither `Origin` nor Fetch-Metadata to image and navigation reads, so an unmarked request may still be a rebound browser read with a readable response, and Host is the one header rebinding cannot forge; a browser WebSocket handshake carries `Origin` and passes the same comparison. Non-browser clients pass the same fence via loopback, deployment-derived LAN IP literals, or a declared authority. When markers are present, an attached `Origin` must equal the Host authority, and an explicit `sec-fetch-site: cross-site` marker is refused. A malformed `trustedHosts` entry fails the plugin load loudly. HTTP failures answer plain 403 before RPC dispatch; upgrade failures reject the handshake before an event stream starts. Non-loopback compositions must trust their serving authorities explicitly. `dsh web --host 0.0.0.0` is supported only when token authentication is configured; the web CLI teaches `--auth token-store`. The fence is a reachability policy, not authentication; the Web carrier provides authentication through the built-in token gate described below. Decision record: [the api browser-trust boundary Agent Note](../../../.agents/notes/implemented/architecture/2026-07-28-api-browser-trust-boundary.md).
 +
 +## Built-in token auth
 +
-+`ConnectionConfig.tokenAuth` enables first-party bearer-token admission for every `/api` HTTP request and both WebSocket downlinks. It accepts a list of opaque tokens and optional scopes (`web`, `tui`, `admin`); the default scope is `admin`. Tokens may arrive as `Authorization: Bearer <token>`, `x-dsh-access-token`, the `__Host-dsh-access-token` cookie, or the `dsh-access-token` cookie. Missing or invalid tokens receive `401` on HTTP and a rejected upgrade on WebSocket.
++`ConnectionConfig.tokenAuth` enables first-party admission for every `/api` HTTP request and both WebSocket downlinks. Production config uses `storePath`, pointing at the digest-only file generated by `dsh auth token`; the inline `tokens` form remains a compatibility ingress. Non-browser clients may send `Authorization: Bearer <token>` or `x-dsh-access-token`.
 +
-+A browser login shortcut is available at `GET /api/auth/login?token=<token>`: it validates the token, sets the `dsh-access-token` HttpOnly cookie, and redirects to `/`. `GET /api/auth/logout` clears the cookie.
++A browser exchanges a token with `POST /api/auth/token` and JSON `{ "token": "..." }`. The response contains an opaque `dsh-session` HttpOnly, SameSite=Strict cookie and redirects with `303`; the access token never enters a URL or cookie. `POST /api/auth/logout` clears the session. The gate reloads the digest store while authenticating sessions, so token revoke invalidates derived sessions without a DSH restart.
 +
 +An `admin`-scoped token also unlocks the privileged method set that otherwise stays loopback-only (`settings.*`, `credentials.*`, `host.pickDirectory`, `host.openPath`, and the agent-preset authoring methods). This is the authentication layer that makes non-loopback `dsh web` deployments safe to operate.
- 
- ## `/api` WebSocket downlinks
- 
 diff --git a/packages/client/connection/src/index.ts b/packages/client/connection/src/index.ts
-index a1764a3d5..64ebcd1ab 100644
+index a1764a3d58..375f475c36 100644
 --- a/packages/client/connection/src/index.ts
 +++ b/packages/client/connection/src/index.ts
-@@ -8,9 +8,18 @@ import { toFetchHandler } from '@deepseek-ai/dsh-host-apiproxy'
- import { API_PATH, HOST_EVENTS_PATH, MUX_EVENTS_PATH } from './api-path.ts'
- import { bridge, DEFAULT_MAX_REQUEST_BODY_BYTES } from './http-bridge.ts'
- import { assertTrustedAuthority, isTrustedApiRequest } from './api-request-trust.ts'
-+import { DSH_ACCESS_TOKEN_COOKIE_FALLBACK, DshTokenGate, type DshTokenAuthConfig } from './token-auth.ts'
- import { HostConnectionService } from './rpc-host.ts'
- import { rejectWebSocketUpgrade, WebSocketDownlinks } from './websocket-downlink.ts'
- 
+@@ -10,0 +11 @@ import { assertTrustedAuthority, isTrustedApiRequest } from './api-request-trust
++import { DSH_SESSION_COOKIE_FALLBACK, DshTokenGate, type DshTokenAuthConfig } from './token-auth.ts'
+@@ -13,0 +15,8 @@ import { rejectWebSocketUpgrade, WebSocketDownlinks } from './websocket-downlink
 +export type {
 +  DshTokenAuthConfig,
 +  DshTokenAuthRequest,
@@ -340,113 +235,113 @@ index a1764a3d5..64ebcd1ab 100644
 +  DshTokenScope,
 +} from './token-auth.ts'
 +export { DshTokenGate } from './token-auth.ts'
- export type {
-   ConnectionRpcAuthority,
-   ConnectionRpcEndpointMatcher,
-@@ -57,12 +66,19 @@ export interface ConnectionConfig {
-    * that is not a bare, canonical authority fails the plugin load.
-    */
-   trustedHosts?: string[]
+@@ -30,0 +40,18 @@ const REQUEST_ENVELOPE_HEADROOM_BYTES = 1024 * 1024
++const AUTH_EXCHANGE_MAX_BYTES = 8 * 1024
++
++async function readAuthToken(req: import('node:http').IncomingMessage): Promise<string | undefined> {
++  const chunks: Buffer[] = []
++  let size = 0
++  for await (const chunk of req) {
++    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
++    size += buffer.length
++    if (size > AUTH_EXCHANGE_MAX_BYTES) return undefined
++    chunks.push(buffer)
++  }
++  try {
++    const value = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { token?: unknown }
++    return typeof value.token === 'string' ? value.token : undefined
++  } catch {
++    return undefined
++  }
++}
+@@ -59,0 +87,6 @@ export interface ConnectionConfig {
 +  /**
 +   * Optional built-in bearer-token authentication. When present, every /api
 +   * HTTP request and both WebSocket downlinks require a valid token, and an
 +   * admin-scoped token may reach methods that otherwise stay loopback-only.
 +   */
 +  tokenAuth?: DshTokenAuthConfig
-   /** Maximum buffered JSON body for every `/api` request. Default: 300 MiB. */
-   maxRequestBodyBytes?: number
- }
- 
- export const Config: z<ConnectionConfig> = z.object({
-   trustedHosts: z.array(String).default([]),
+@@ -65,0 +99 @@ export const Config: z<ConnectionConfig> = z.object({
 +  tokenAuth: z.any(),
-   maxRequestBodyBytes: z.natural().min(1).default(DEFAULT_MAX_REQUEST_BODY_BYTES),
- })
- 
-@@ -131,6 +147,7 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
-   // The Loader resolves schema defaults; hand-built test contexts may pass none.
-   const trustedHosts = config?.trustedHosts ?? []
-   const maxRequestBodyBytes = config?.maxRequestBodyBytes ?? DEFAULT_MAX_REQUEST_BODY_BYTES
+@@ -133,0 +168 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
 +  const tokenGate = config?.tokenAuth === undefined ? undefined : new DshTokenGate(config.tokenAuth)
-   // Config boundary: a malformed entry fails the load loudly here rather than
-   // silently authorizing its hostname prefix at request time.
-   for (const entry of trustedHosts) assertTrustedAuthority(entry)
-@@ -144,7 +161,8 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
-         : undefined
-       if (method !== undefined
-         && PRIVILEGED_METHODS.has(method)
+@@ -147 +182,2 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
 -        && !isTrustedApiRequest(request, [])) {
 +        && !isTrustedApiRequest(request, [])
-+        && !(tokenGate !== undefined && tokenGate.authorizeAdmin(request))) {
-         return new Response('forbidden', { status: 403 })
-       }
-       if (request.method === 'GET' && (pathname === MUX_EVENTS_PATH || pathname === HOST_EVENTS_PATH)) {
-@@ -167,6 +185,34 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
-         res.end('forbidden')
-         return
-       }
++        && !(tokenGate !== undefined && await tokenGate.authorizeAdmin(request))) {
+@@ -169,0 +206,41 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
 +      const requestUrl = new URL(req.url ?? '/', 'http://dsh.internal')
-+      if (requestUrl.pathname === `${API_PATH}/auth/login` && req.method === 'GET') {
-+        const token = requestUrl.searchParams.get('token')
-+        if (tokenGate === undefined || token === null || tokenGate.authenticateToken(token) === undefined) {
++      if (requestUrl.pathname === `${API_PATH}/auth/token`) {
++        const contentType = req.headers['content-type']
++        if (req.method !== 'POST' || typeof contentType !== 'string' || contentType.split(';', 1)[0] !== 'application/json') {
++          res.writeHead(405, { allow: 'POST' })
++          res.end()
++          return
++        }
++        const token = await readAuthToken(req)
++        const exchanged = tokenGate === undefined || token === undefined
++          ? undefined
++          : await tokenGate.exchangeToken(token)
++        if (exchanged === undefined) {
 +          res.writeHead(401)
 +          res.end('unauthorized')
 +          return
 +        }
-+        res.writeHead(302, {
++        res.writeHead(303, {
 +          location: '/',
-+          'set-cookie': `${DSH_ACCESS_TOKEN_COOKIE_FALLBACK}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict`,
++          'cache-control': 'no-store',
++          'referrer-policy': 'no-referrer',
++          'set-cookie': `${DSH_SESSION_COOKIE_FALLBACK}=${encodeURIComponent(exchanged.session)}; Path=/; HttpOnly; SameSite=Strict`,
 +        })
 +        res.end()
 +        return
 +      }
-+      if (requestUrl.pathname === `${API_PATH}/auth/logout` && (req.method === 'GET' || req.method === 'POST')) {
-+        res.writeHead(302, {
++      if (requestUrl.pathname === `${API_PATH}/auth/logout` && req.method === 'POST') {
++        tokenGate?.logout(req)
++        res.writeHead(303, {
 +          location: '/',
-+          'set-cookie': `${DSH_ACCESS_TOKEN_COOKIE_FALLBACK}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`,
++          'cache-control': 'no-store',
++          'set-cookie': `${DSH_SESSION_COOKIE_FALLBACK}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`,
 +        })
 +        res.end()
 +        return
 +      }
-+      if (tokenGate !== undefined && !tokenGate.authorizeHttp(req)) {
++      if (tokenGate !== undefined && !await tokenGate.authorizeHttp(req)) {
 +        res.writeHead(401)
 +        res.end('unauthorized')
 +        return
 +      }
-       await bridge(req, res, fetchHandler, maxRequestBodyBytes)
-     },
-   }
-@@ -185,6 +231,10 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
-             rejectWebSocketUpgrade(socket)
-             return
-           }
-+          if (tokenGate !== undefined && !tokenGate.authorizeWebSocket(req)) {
+@@ -183 +260 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
+-        handler: (req, socket, head) => {
++        handler: async (req, socket, head) => {
+@@ -187,0 +265,4 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
++          if (tokenGate !== undefined && !await tokenGate.authorizeWebSocket(req)) {
 +            rejectWebSocketUpgrade(socket)
 +            return
 +          }
-           return handle(req, socket, head)
-         },
-       }), `client-connection: ${path} WebSocket`)
 diff --git a/packages/client/connection/tests/node-half.host.spec.ts b/packages/client/connection/tests/node-half.host.spec.ts
-index 022436d55..c5327b441 100644
+index 022436d558..97c88b1039 100644
 --- a/packages/client/connection/tests/node-half.host.spec.ts
 +++ b/packages/client/connection/tests/node-half.host.spec.ts
-@@ -75,7 +75,10 @@ function fakeResponse(): { response: ServerResponse; state: { status?: number; b
-   return { response, state }
- }
- 
+@@ -60,2 +60,2 @@ function fakeRawPost(headers: Record<string, string>, url: string, body: string)
+-function fakeResponse(): { response: ServerResponse; state: { status?: number; body?: unknown } } {
+-  const state: { status?: number; body?: unknown } = {}
++function fakeResponse(): { response: ServerResponse; state: { status?: number; body?: unknown; headers?: Record<string, string> } } {
++  const state: { status?: number; body?: unknown; headers?: Record<string, string> } = {}
+@@ -65 +65,5 @@ function fakeResponse(): { response: ServerResponse; state: { status?: number; b
+-    writeHead(value: number) { state.status = value; return this },
++    writeHead(value: number, headers?: Record<string, string>) {
++      state.status = value
++      if (headers !== undefined) state.headers = headers
++      return this
++    },
+@@ -78 +82,4 @@ function fakeResponse(): { response: ServerResponse; state: { status?: number; b
 -async function mounted(config?: { trustedHosts?: string[] }): Promise<{
 +async function mounted(config?: {
 +  trustedHosts?: string[]
-+  tokenAuth?: { tokens: { token: string; scopes?: string[] }[] }
++  tokenAuth?: { tokens: { token: string; scopes?: ('web' | 'tui' | 'admin')[] }[] }
 +}): Promise<{
-   routes: WebRoute[]
-   upgrades: WebUpgradeRoute[]
-   dispose: () => Promise<void>
-@@ -167,6 +170,55 @@ describe('connection node half', () => {
-     await dispose()
-   })
- 
+@@ -169,0 +177,58 @@ describe('connection node half', () => {
 +  it('requires a token on /api when tokenAuth is configured', async () => {
 +    const { routes, dispose } = await mounted({
 +      tokenAuth: { tokens: [{ token: 'secret', scopes: ['admin'] }] },
@@ -468,15 +363,24 @@ index 022436d55..c5327b441 100644
 +      tokenAuth: { tokens: [{ token: 'secret', scopes: ['admin'] }] },
 +    })
 +    const denied = fakeResponse()
-+    await routes[0]!.handler(fakeRequest({
++    await routes[0]!.handler(fakePost({
 +      host: '127.0.0.1:3080',
-+    }, `${API_PATH}/auth/login?token=wrong`), denied.response)
++    }, `${API_PATH}/auth/token`, { token: 'wrong' }), denied.response)
 +    expect(denied.state.status).toBe(401)
 +    const allowed = fakeResponse()
-+    await routes[0]!.handler(fakeRequest({
++    await routes[0]!.handler(fakePost({
 +      host: '127.0.0.1:3080',
-+    }, `${API_PATH}/auth/login?token=secret`), allowed.response)
-+    expect(allowed.state.status).toBe(302)
++    }, `${API_PATH}/auth/token`, { token: 'secret' }), allowed.response)
++    expect(allowed.state.status).toBe(303)
++    const cookie = allowed.state.headers?.['set-cookie']
++    expect(cookie).toMatch(/^dsh-session=/)
++    expect(cookie).not.toContain('secret')
++
++    const session = fakeResponse()
++    await routes[0]!.handler(fakeRequest({
++      host: '127.0.0.1:3080', cookie: cookie!.split(';', 1)[0]!,
++    }), session.response)
++    expect(session.state.status).not.toBe(401)
 +    await dispose()
 +  })
 +
@@ -496,18 +400,9 @@ index 022436d55..c5327b441 100644
 +    await dispose()
 +  })
 +
-   it('pins privileged methods to loopback even for a declared trusted authority', async () => {
-     const { routes, dispose } = await mounted({ trustedHosts: ['harness.example'] })
-     // The privileged set: native dialogs plus the whole settings/credential
 diff --git a/packages/client/connection/tsconfig.host.json b/packages/client/connection/tsconfig.host.json
-index 8e16ec834..4a1347bb5 100644
+index 8e16ec834a..4a1347bb5f 100644
 --- a/packages/client/connection/tsconfig.host.json
 +++ b/packages/client/connection/tsconfig.host.json
-@@ -14,6 +14,7 @@
-     "src/loopback-hostname.ts",
-     "src/rpc-host.ts",
-     "src/rpc.ts",
+@@ -16,0 +17 @@
 +    "src/token-auth.ts",
-     "src/websocket-downlink.ts"
-   ],
-   "references": [

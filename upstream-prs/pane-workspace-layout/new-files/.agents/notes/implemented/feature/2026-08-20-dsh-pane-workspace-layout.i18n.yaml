@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-20-dsh-pane-workspace-layout.md
-2026-08-20-dsh-pane-workspace-layout.md: 613a64ba6eb879ca11f83c24899f89b382520e5f
-2026-08-20-dsh-pane-workspace-layout.zh.md: 196e3f849811ac85d50954dc0f64efcd93509c3d
+2026-08-20-dsh-pane-workspace-layout.md: e9d287dca48f8ffff9f56d5fb6265235ab7398cc
+2026-08-20-dsh-pane-workspace-layout.zh.md: 139f544ee38deaa2c5bfcfee21093ad92eb2e06b

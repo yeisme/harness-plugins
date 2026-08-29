@@ -62,6 +62,7 @@ describe('V4 Task 5.2 Source Control Shell', () => {
     for (const phase of phases) {
       const view = render(createElement(SourceControlShell, {
         shell: createGitStatusShell({ phase, recoveryAction: phase === 'stale' ? 'reconcile' : 'refresh', reason: phase }),
+        actions: { onRefresh: () => undefined },
       }))
       expect(document.querySelector(`[data-git-phase="${phase}"]`)).toBeTruthy()
       expect(screen.getByRole('button', { name: 'Refresh' })).toBeTruthy()
@@ -80,6 +81,39 @@ describe('V4 Task 5.2 Source Control Shell', () => {
     const groups = [...document.querySelectorAll('[data-git-group]')].map(node => node.getAttribute('data-git-group'))
     expect(groups).toEqual(['merge', 'staged', 'untracked'])
     expect(visibleGitChangeGroups(files)).toEqual(['merge', 'staged', 'untracked'])
+  })
+
+  it('uses shared navigator chrome, hides the composer when clean, and shows recent commit', () => {
+    render(createElement(SourceControlShell, {
+      shell: createGitStatusShell({ phase: 'clean', branch: 'main', recentCommit: 'abc123 fix pane chrome' }),
+      repositories: [{ repositoryRef: 'repo:one', worktreeRef: 'wt:one', label: 'yeisme-agent' }],
+      actions: { onRefresh: () => undefined, onHistory: () => undefined },
+    }))
+    expect(document.querySelector('[data-yeisme-surface][data-surface-kind="navigator"]')).toBeTruthy()
+    expect(document.querySelector('.pwr-repository-field.ys-field')).toBeTruthy()
+    expect(screen.getByText('abc123 fix pane chrome')).toBeTruthy()
+    expect(screen.queryByRole('textbox', { name: 'Commit message' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'History' })).toBeTruthy()
+  })
+
+  it('shows the composer only for staged changes and preserves safe groups while stale', () => {
+    const staged = file({ fileRef: 'file:staged', name: 'staged.ts', status: 'staged', group: 'staged' })
+    const { rerender } = render(createElement(SourceControlShell, {
+      shell: createGitStatusShell({ phase: 'ready', commitMessage: 'fix', files: [staged] }),
+      mutationDisabled: false,
+      actions: { onCommit: () => undefined, onOpenDiff: () => undefined },
+    }))
+    expect(screen.getByRole('textbox', { name: 'Commit message' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Commit' })).toBeTruthy()
+    rerender(createElement(SourceControlShell, {
+      shell: createGitStatusShell({ phase: 'stale', reason: 'cursor gap', files: [staged] }),
+      mutationDisabled: true,
+      mutationReason: 'Reconcile required',
+      actions: { onRefresh: () => undefined, onOpenDiff: () => undefined },
+    }))
+    expect(document.querySelector('[data-git-group="staged"]')).toBeTruthy()
+    expect(screen.getByText('cursor gap')).toBeTruthy()
+    expect(screen.getByText('Reconcile required')).toBeTruthy()
   })
 })
 
@@ -110,6 +144,34 @@ describe('V4 Task 5.3 Changes List', () => {
     expect(opened).toEqual(['diff:file:0', 'file:file:0'])
     fireEvent.keyDown(first, { key: 'F10', shiftKey: true })
     expect(groupGitChanges(files).changes).toHaveLength(2_000)
+  })
+
+  it('owns its scroll position without scrolling the diff region', () => {
+    const files = Array.from({ length: 100 }, (_, index) => file({
+      fileRef: `file:${index}`,
+      name: `f${index}.ts`,
+      status: 'modified',
+      group: 'changes',
+    }))
+    render(createElement('div', null,
+      createElement(GitChangesList, { files, viewportHeight: 84 }),
+      createElement(GitDiffView, { window: createGitDiffWindow({
+        fileRef: 'file:0',
+        loaded: 1,
+        total: 1,
+        baseRevision: 'a',
+        targetRevision: 'b',
+        currentRevision: 'b',
+        hunks: [{ hunkRef: 'h1', kind: 'add', header: '@@ 1 @@', loaded: true }],
+      }) }),
+    ))
+    const changes = document.querySelector<HTMLElement>('[data-git-scroll-region="changes"]')!
+    const diff = document.querySelector<HTMLElement>('[data-git-scroll-region="diff"]')!
+    fireEvent.scroll(changes, { target: { scrollTop: 560 } })
+    expect(document.querySelector('[data-git-file="file:20"]')).toBeTruthy()
+    expect(diff.scrollTop).toBe(0)
+    expect(changes.style.overscrollBehavior).toBe('contain')
+    expect(diff.style.overscrollBehavior).toBe('contain')
   })
 })
 

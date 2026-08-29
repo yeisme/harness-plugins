@@ -20,6 +20,7 @@ export const PANE_WORKSPACE_LIMITS = Object.freeze({
 
 export type PaneViewRuntimeStatus = 'ready' | 'orphaned' | 'conflict' | 'stale'
 export type PaneBulkCloseMode = 'others' | 'right' | 'unpinned' | 'group'
+export type PaneBulkCloseProtectedReason = 'dirty' | 'running' | 'terminal' | 'confirm' | 'deny' | 'unknown'
 
 export interface PaneViewSpecV1 {
   readonly kind: string
@@ -129,6 +130,14 @@ export type PaneWorkspaceIntentV1 =
     readonly sourceViewId?: string
     readonly decision?: 'allow' | 'confirm' | 'deny'
   }
+  | {
+    readonly type: 'bulk_close_safe'
+    readonly groupId: string
+    readonly mode: PaneBulkCloseMode
+    readonly sourceViewId?: string
+    /** Optional explicit selection used by management mode across groups. */
+    readonly viewIds?: readonly string[]
+  }
   | { readonly type: 'reorder_view'; readonly viewId: string; readonly targetGroupId: string; readonly index: number }
   | { readonly type: 'move_view'; readonly viewId: string; readonly targetGroupId: string; readonly index?: number }
   | { readonly type: 'split_with_view'; readonly viewId: string; readonly targetGroupId: string; readonly edge: PaneSplitEdge }
@@ -162,6 +171,21 @@ export interface PaneWorkspaceReducerResultV1 {
   readonly accepted: boolean
   readonly reason?: string
   readonly effects: readonly PaneWorkspaceEffectV1[]
+  /** Additive typed details for intents whose caller needs a follow-up flow. */
+  readonly details?: {
+    readonly bulkCloseSafe?: PaneBulkCloseSafeOutcomeV1
+  }
+}
+
+export interface PaneBulkCloseProtectedViewV1 {
+  readonly viewId: string
+  readonly reason: PaneBulkCloseProtectedReason
+}
+
+export interface PaneBulkCloseSafeOutcomeV1 {
+  readonly targetIds: readonly string[]
+  readonly closedViewIds: readonly string[]
+  readonly protectedViews: readonly PaneBulkCloseProtectedViewV1[]
 }
 
 interface MutableSnapshot {
@@ -868,6 +892,38 @@ export function preflightBulkClose(
   return { mode, groupId, targetIds, accepted: true }
 }
 
+function protectedCloseReason(view: PaneViewInstanceV1 | undefined): PaneBulkCloseProtectedReason | undefined {
+  if (view === undefined) return 'unknown'
+  if (view.closePolicy === 'deny') return 'deny'
+  if (view.dirty) return 'dirty'
+  const lifecycle = view.metadata?.lifecycle ?? view.metadata?.status
+  if (lifecycle === 'running' || lifecycle === 'approval_required') return 'running'
+  if (view.kind.includes('terminal')) return 'terminal'
+  if (view.closePolicy === 'confirm') return 'confirm'
+  return undefined
+}
+
+/** Additive safe-first planner. Existing preflightBulkClose remains atomic. */
+export function planSafeBulkClose(
+  state: PaneWorkspaceSnapshotV1,
+  groupId: string,
+  mode: PaneBulkCloseMode,
+  sourceViewId?: string,
+  explicitViewIds?: readonly string[],
+): PaneBulkCloseSafeOutcomeV1 {
+  const targetIds = explicitViewIds === undefined
+    ? collectBulkCloseTargets(state, groupId, mode, sourceViewId)
+    : [...new Set(explicitViewIds)].filter(viewId => state.views[viewId] !== undefined)
+  const closedViewIds: string[] = []
+  const protectedViews: PaneBulkCloseProtectedViewV1[] = []
+  for (const viewId of targetIds) {
+    const reason = protectedCloseReason(state.views[viewId])
+    if (reason === undefined) closedViewIds.push(viewId)
+    else protectedViews.push({ viewId, reason })
+  }
+  return { targetIds, closedViewIds, protectedViews }
+}
+
 function chooseOpenGroup(state: PaneWorkspaceSnapshotV1, request: PaneViewSpecV1): PaneGroupV1 | undefined {
   if (request.targetGroupId !== undefined) {
     const target = state.groups[request.targetGroupId]
@@ -1020,6 +1076,30 @@ function applyBulkClose(state: PaneWorkspaceV1, intent: Extract<PaneWorkspaceInt
   return result(commit(state, snapshot), true, 'closed', `${preflight.targetIds.length} tabs closed.`)
 }
 
+function applySafeBulkClose(state: PaneWorkspaceV1, intent: Extract<PaneWorkspaceIntentV1, { type: 'bulk_close_safe' }>): PaneWorkspaceReducerResultV1 {
+  const outcome = planSafeBulkClose(state, intent.groupId, intent.mode, intent.sourceViewId, intent.viewIds)
+  if (outcome.targetIds.length === 0) {
+    return { ...result(state, false, 'empty', 'No tabs can be closed.'), details: { bulkCloseSafe: outcome } }
+  }
+  if (outcome.closedViewIds.length === 0) {
+    return { ...result(state, false, 'protected_views', `${outcome.protectedViews.length} tabs need review.`), details: { bulkCloseSafe: outcome } }
+  }
+  const snapshot = cloneSnapshot(state)
+  const affectedGroupIds = new Set(outcome.closedViewIds.map(viewId => state.views[viewId]?.groupId).filter((id): id is string => id !== undefined))
+  for (const viewId of outcome.closedViewIds) {
+    removeViewFromGroup(snapshot, viewId)
+    delete snapshot.views[viewId]
+  }
+  for (const groupId of affectedGroupIds) {
+    const group = snapshot.groups[groupId]
+    if (group !== undefined && group.tabs.length === 0 && !group.locked) removeGroup(snapshot, group.id)
+  }
+  return {
+    ...result(commit(state, snapshot), true, 'closed_safe', `${outcome.closedViewIds.length} tabs closed; ${outcome.protectedViews.length} protected.`),
+    details: { bulkCloseSafe: outcome },
+  }
+}
+
 function applyMoveView(state: PaneWorkspaceV1, intent: Extract<PaneWorkspaceIntentV1, { type: 'move_view' | 'reorder_view' }>): PaneWorkspaceReducerResultV1 {
   const view = viewFor(state, intent.viewId)
   const target = groupFor(state, intent.targetGroupId)
@@ -1149,6 +1229,7 @@ export function reducePaneWorkspace(state: PaneWorkspaceV1, intent: PaneWorkspac
     case 'open_view': return applyOpenView(state, intent.request)
     case 'close_view': return applyCloseView(state, intent)
     case 'bulk_close': return applyBulkClose(state, intent)
+    case 'bulk_close_safe': return applySafeBulkClose(state, intent)
     case 'move_view':
     case 'reorder_view': return applyMoveView(state, intent)
     case 'split_with_view': return applySplitWithView(state, intent)

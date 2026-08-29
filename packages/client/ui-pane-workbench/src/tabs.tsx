@@ -11,7 +11,7 @@
  * Maintains single controller, no nested buttons, APG roles, and existing intents.
  */
 
-import { createElement, useMemo, useState, type MouseEvent, type KeyboardEvent, type PointerEvent } from 'react'
+import { createElement, useMemo, useState, useSyncExternalStore, type MouseEvent, type KeyboardEvent, type PointerEvent } from 'react'
 import { WorkbenchIcon, type WorkbenchIconName } from './icon.js'
 import { formatT, t } from './i18n/locale.js'
 import {
@@ -69,6 +69,8 @@ export interface PaneTabStripProps {
   availableWidth: number
   onContextMenu: (viewId: string) => void
   onClose?: (viewId: string) => void
+  /** Shared management center replaces the legacy inline overflow popup when false. */
+  showOverflow?: boolean
 }
 
 export interface PaneTabActionsProps {
@@ -77,6 +79,9 @@ export interface PaneTabActionsProps {
   maximized: boolean
   controller: PaneWorkbenchController
   onOpenPicker: () => void
+  onOpenManager?: () => void
+  tabCount?: number
+  onHidePane?: () => void
   onContextMenu: (viewId: string) => void
 }
 
@@ -132,6 +137,8 @@ export function PaneTabClose(props: PaneTabCloseProps): React.ReactNode {
 // Individual tab component
 export function PaneTab(props: PaneTabProps): React.ReactNode {
   const { view, isActive, isPinned, tabIndex, group, controller, onContextMenu, onClose } = props
+  const drag = useSyncExternalStore(controller.drag.subscribe, controller.drag.getSnapshot, controller.drag.getSnapshot)
+  const isDragSource = drag.visuals.placeholderViewId === view.id
 
   const handleClick = () => {
     controller.dispatch({ type: 'activate_view', viewId: view.id })
@@ -162,7 +169,8 @@ export function PaneTab(props: PaneTabProps): React.ReactNode {
 
     if (event.key === 'Delete') {
       event.preventDefault()
-      controller.dispatch({ type: 'close_view', viewId: view.id })
+      if (onClose) onClose(view.id)
+      else controller.dispatch({ type: 'close_view', viewId: view.id })
       return
     }
 
@@ -187,6 +195,7 @@ export function PaneTab(props: PaneTabProps): React.ReactNode {
     className: `pwr-tab-item ${isPinned ? 'pwr-tab-item-pinned' : ''} ${view.preview ? 'pwr-tab-item-preview' : ''}`,
     'data-pane-tab-segment': isPinned ? 'pinned' : 'working',
     'data-pane-renderer-id': view.id,
+    'data-pane-drag-source': isDragSource || undefined,
   },
     createElement('button', {
       id: `pane-tab-${view.id}`,
@@ -244,10 +253,19 @@ export function PaneTabActions(props: PaneTabActionsProps): React.ReactNode {
       onClick: onOpenPicker,
     }, createElement(WorkbenchIcon, { name: 'add' })),
 
+    props.onOpenManager === undefined ? null : createElement('button', {
+      type: 'button',
+      className: 'pwr-tab-manager-trigger',
+      title: t('management.manageTabs'),
+      'aria-label': t('management.manageTabs'),
+      onClick: props.onOpenManager,
+    }, createElement(WorkbenchIcon, { name: 'list' }), createElement('span', null, props.tabCount ?? group.tabs.length)),
+
     activeView === undefined ? null : createElement('button', {
       type: 'button',
       title: formatT('chrome.moreActions', { name: activeView.title }),
       'aria-label': formatT('chrome.moreActions', { name: activeView.title }),
+      'aria-haspopup': 'menu',
       onClick: () => onContextMenu(activeView.id),
     }, createElement(WorkbenchIcon, { name: 'more' })),
 
@@ -260,12 +278,19 @@ export function PaneTabActions(props: PaneTabActionsProps): React.ReactNode {
       },
     }, createElement(WorkbenchIcon, { name: maximized ? 'restore' : 'maximize' })),
 
-    activeView === undefined ? null : createElement('button', {
+    activeView === undefined || props.onHidePane !== undefined ? null : createElement('button', {
       type: 'button',
       title: formatT('tab.closeWithName', { name: activeView.title }),
       'aria-label': formatT('tab.closeWithName', { name: activeView.title }),
       onClick: () => controller.dispatch({ type: 'close_view', viewId: activeView.id }),
     }, createElement(WorkbenchIcon, { name: 'close' })),
+
+    props.onHidePane === undefined ? null : createElement('button', {
+      type: 'button',
+      title: t('chrome.hideWorkbench'),
+      'aria-label': t('chrome.hideWorkbench'),
+      onClick: props.onHidePane,
+    }, createElement(WorkbenchIcon, { name: 'collapse' })),
   )
 }
 
@@ -339,7 +364,7 @@ export function PaneTabStrip(props: PaneTabStripProps): React.ReactNode {
         'data-pane-tab-segment': segment.id,
       }, visible)
     }),
-    createElement(PaneTabOverflow, {
+    props.showOverflow === false ? null : createElement(PaneTabOverflow, {
       key: 'overflow',
       group: props.group,
       views: props.state.views,

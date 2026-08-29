@@ -35,7 +35,8 @@ describe('auth store', () => {
     dirs.push(dir)
     const env = envFor(dir)
     const { token, record } = await createAuthToken({ name: 'admin', scopes: ['admin'], env })
-    expect(token.startsWith('dsh_')).toBe(true)
+    expect(token.startsWith('dshw_')).toBe(true)
+    expect(token).toMatch(/^dshw_[a-f0-9]{32}_[A-Za-z0-9_-]+$/)
     expect(record.name).toBe('admin')
     const stored = JSON.parse(readFileSync(authStorePath(env), 'utf8')) as { tokens: { tokenHash: string }[] }
     expect(stored.tokens[0]?.tokenHash).not.toContain(token)

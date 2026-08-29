@@ -46,3 +46,11 @@ export function openWorkspaceDesignerDelivery(
   openCoreView()
   return { path: 'core-view', probe }
 }
+
+/** Capabilities matrix follows the same probe-gated delivery as the Designer. */
+export function openWorkspaceCapabilitiesDelivery(
+  openCoreView: () => void,
+  adapter?: unknown,
+): { readonly path: 'core-view' | 'settings-page'; readonly probe: PaneWorkspaceSettingsPageProbeV1 } {
+  return openWorkspaceDesignerDelivery(openCoreView, adapter)
+}

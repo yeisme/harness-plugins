@@ -8,6 +8,7 @@ set -euo pipefail
 
 FORK="${FORK:-/workspaces/yeisme-agent/client/deepseek-harness}"
 DEST="${DEST:-$(cd "$(dirname "$0")" && pwd)}"
+ONLY="${ONLY:-}"
 BASE_SHA="$(git -C "$FORK" rev-parse HEAD)"
 STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -22,12 +23,13 @@ packages/client/connection/tests/node-half.host.spec.ts packages/client/connecti
   "pane-workspace-layout|packages/client/ui-conversation/src/client/chat/ChatNodeSeat.tsx \
 packages/client/ui-conversation/src/client/chat/ChatView.tsx \
 packages/client/ui-conversation/src/client/contract/slots.ts \
-packages/client/ui-conversation/tests/chat-view.client.spec.tsx \
+packages/client/ui-conversation/tests/chat-view.client.spec.tsx packages/client/ui-conversation/package.json \
 packages/client/ui-layout/README.i18n.yaml packages/client/ui-layout/README.md packages/client/ui-layout/README.zh.md \
 packages/client/ui-layout/package.json packages/client/ui-layout/src/client/AppFrame.module.css \
 packages/client/ui-layout/src/client/AppFrame.tsx packages/client/ui-layout/src/client/index.ts \
-packages/client/ui-layout/src/client/service.ts packages/client/ui-layout/tests/app-frame.client.spec.tsx \
-packages/client/ui-layout/tests/apply.client.spec.ts"
+packages/client/ui-layout/src/client/service.ts packages/client/ui-layout/src/client/stores.ts \
+packages/client/ui-layout/tests/app-frame.client.spec.tsx packages/client/ui-layout/tests/apply.client.spec.ts \
+packages/client/ui-layout/tests/layout-store.client.spec.ts packages/client/ui-layout/tests/service.client.spec.ts"
   "plan-dock|packages/client/ui-plan/README.i18n.yaml packages/client/ui-plan/README.md packages/client/ui-plan/README.zh.md \
 packages/client/ui-plan/src/client/PlanDocumentPanel.module.css packages/client/ui-plan/src/client/PlanDocumentPanel.tsx \
 packages/client/ui-plan/src/client/index.ts packages/client/ui-plan/src/client/locales.ts \
@@ -64,7 +66,7 @@ packages/client/ui-plan/tests/plan-pane-view.client.spec.ts \
 title_for() {
   case "$1" in
     login-token-auth) echo "dsh login token remote access (--token CLI auth + client token-auth + web-app wiring)" ;;
-    pane-workspace-layout) echo "dsh pane workspace layout (right/bottom docking geometry, AppFrame service, tool-call -> Details reveal)" ;;
+    pane-workspace-layout) echo "dsh Core Pane-only workspace layout (right/bottom docking, no legacy Details column)" ;;
     plan-dock) echo "dsh plan dock (PlanDocumentPanel/PlanSidebar/PlanFullscreen, plan-mode commands, command-menu snapshot)" ;;
     *) echo "$1" ;;
   esac
@@ -72,10 +74,11 @@ title_for() {
 
 for entry in "${TRACKED[@]}"; do
   slug="${entry%%|*}"; paths="${entry#*|}"
+  [ -n "$ONLY" ] && [ "$slug" != "$ONLY" ] && continue
   dir="$DEST/$slug"
   mkdir -p "$dir"
   # shellcheck disable=SC2086
-  git -C "$FORK" diff HEAD -- $paths > "$dir/changes.patch"
+  git -C "$FORK" diff --unified=0 HEAD -- $paths > "$dir/changes.patch"
   untracked_paths=""
   for u in "${UNTRACKED[@]}"; do
     [ "${u%%|*}" = "$slug" ] && untracked_paths="${u#*|}"
@@ -90,10 +93,11 @@ for entry in "${TRACKED[@]}"; do
 # Usage: ./apply.sh /path/to/deepseek-harness-checkout
 set -euo pipefail
 repo="\${1:?usage: apply.sh <deepseek-harness-checkout>}"
-git -C "\$repo" apply --check "\$(dirname "\$0")/changes.patch"
-git -C "\$repo" apply "\$(dirname "\$0")/changes.patch"
-if [ -d "\$(dirname "\$0")/new-files" ]; then
-  (cd "\$(dirname "\$0")/new-files" && tar cf - .) | (cd "\$repo" && tar xf -)
+here="\$(cd "\$(dirname "\$0")" && pwd)"
+git -C "\$repo" apply --check --unidiff-zero "\$here/changes.patch"
+git -C "\$repo" apply --unidiff-zero "\$here/changes.patch"
+if [ -d "\$here/new-files" ]; then
+  (cd "\$here/new-files" && tar cf - .) | (cd "\$repo" && tar xf -)
 fi
 echo "applied $slug"
 EOF
@@ -123,14 +127,15 @@ EOF
   echo "archived $slug ($(wc -l < "$dir/changes.patch") patch lines)"
 done
 
-# Evidence bundle for the pane-workspace-layout PR (screenshots + integration runs).
-mkdir -p "$DEST/pane-workspace-layout"
-tar czf "$DEST/pane-workspace-layout/evidence.tar.gz" -C "$FORK" \
-  temp/dsh-pane-initial.png temp/dsh-pane-files-right.png temp/dsh-pane-details-priority.png \
-  temp/dsh-pane-maximized.png temp/dsh-pane-picker.png temp/dsh-pane-terminal-bottom.png \
-  temp/dsh-session-open.png temp/integration-test-runs 2>/dev/null \
-  || echo "note: some evidence files missing, tar partial"
-echo "evidence bundle: $(du -sh "$DEST/pane-workspace-layout/evidence.tar.gz" | cut -f1)"
+# Preserve the last complete evidence bundle unless a full archive refresh is requested.
+if [ -z "$ONLY" ]; then
+  mkdir -p "$DEST/pane-workspace-layout"
+  tar czf "$DEST/pane-workspace-layout/evidence.tar.gz" -C "$FORK" \
+    temp/dsh-pane-initial.png temp/dsh-pane-files-right.png temp/dsh-pane-details-priority.png \
+    temp/dsh-pane-maximized.png temp/dsh-pane-picker.png temp/dsh-pane-terminal-bottom.png \
+    temp/dsh-session-open.png temp/integration-test-runs
+  echo "evidence bundle: $(du -sh "$DEST/pane-workspace-layout/evidence.tar.gz" | cut -f1)"
+fi
 
-echo "base-sha ${BASE_SHA}" > "$DEST/.archive-base"
+[ -n "$ONLY" ] || echo "base-sha ${BASE_SHA}" > "$DEST/.archive-base"
 echo "done"

@@ -1,4 +1,6 @@
 import { createElement, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Surface, SurfaceContextBar, SurfaceState } from '@yeisme/dsh-client-ui-surface'
 import { WorkbenchIcon, type WorkbenchIconName } from '../icon.js'
 import { t } from '../i18n/locale.js'
 import type { PaneLocalViewProps } from '../view-registry.js'
@@ -71,22 +73,23 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
     }
   }
 
-  return createElement('section', { className: 'pwr-explorer', 'data-explorer-tree': 'true' },
-    createElement('header', { className: 'pwr-explorer-header' },
-      createElement('strong', null, t('rail.explorer')),
-      createElement('nav', { className: 'pwr-explorer-crumb', 'aria-label': t('explorer.root') },
+  return createElement(Surface, { kind: 'navigator', className: 'pwr-explorer', 'data-explorer-tree': 'true' },
+    createElement(SurfaceContextBar, {
+      className: 'pwr-explorer-header',
+      title: t('rail.explorer'),
+      nav: createElement('div', { className: 'pwr-explorer-crumb', 'aria-label': t('explorer.root') },
         ...(props.breadcrumb ?? [{ ref: 'workspace', name: t('explorer.root') }]).map(segment =>
           createElement('span', { key: segment.ref, className: 'pwr-explorer-crumb-item' }, segment.name)),
       ),
-      createElement('input', {
+      actions: createElement(Input, {
         className: 'pwr-explorer-filter',
         'aria-label': t('picker.search.placeholder'),
         value: props.state.filter,
         onChange: event => emit(reduceExplorerTree(props.state, { type: 'filter', query: event.currentTarget.value })),
       }),
-    ),
+    }),
     createElement('div', {
-      className: 'pwr-explorer-tree',
+      className: 'pwr-explorer-tree ys-body',
       role: 'tree',
       tabIndex: 0,
       'aria-label': t('rail.explorer'),
@@ -105,7 +108,7 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
             'aria-level': row.depth + 1,
             'data-explorer-ref': row.ref,
             'data-explorer-kind': row.node.kind,
-            className: 'pwr-explorer-row',
+            className: 'pwr-explorer-row ys-row',
             style: {
               height: rowHeight,
               minHeight: rowHeight,
@@ -139,8 +142,10 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
               ? null
               : createElement('span', { className: 'pwr-explorer-deco', 'data-git-decoration': row.node.gitDecoration }, row.node.gitDecoration),
             row.loading ? createElement('span', { className: 'pwr-explorer-loading' }, t('state.loading')) : null,
-            row.error === undefined ? null : createElement('button', {
+            row.error === undefined ? null : createElement(Button, {
               type: 'button',
+              size: 'sm',
+              variant: 'toolbar',
               className: 'pwr-explorer-retry',
               onClick: (event: { stopPropagation(): void }) => {
                 event.stopPropagation()
@@ -152,7 +157,7 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
       ),
     ),
     props.gitMutationDisabled === true
-      ? createElement('p', { className: 'pwr-explorer-git-offline', role: 'status' }, props.gitMutationReason ?? t('state.offline'))
+      ? createElement(SurfaceState, { className: 'pwr-explorer-git-offline', phase: 'disabled', title: props.gitMutationReason ?? t('state.offline') })
       : null,
   )
 }

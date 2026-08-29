@@ -3,7 +3,6 @@ import type { ReactNode } from 'react'
 
 export type WorkspaceRegion = 'right' | 'bottom'
 export type WorkspaceRegionMode = 'hidden' | 'rail' | 'dock' | 'sheet' | 'maximized'
-export type WorkspaceAuxiliarySurface = 'workspace' | 'details'
 export const WORKSPACE_CORE_PANE_VERSION = 'workspace.core-pane.v1' as const
 export type WorkspaceCorePaneId = 'dsh.tool-details'
 
@@ -32,9 +31,6 @@ export interface WorkspaceLayoutSnapshot {
   readonly bottomRatio: number
   readonly activeRegion: WorkspaceRegion
   readonly maximizedRegion: WorkspaceRegion | undefined
-  readonly corePaneHostAttached: boolean
-  /** Deprecated after the one-RC legacy Details geometry window. */
-  readonly auxiliaryPriority: WorkspaceAuxiliarySurface
 }
 
 export interface WorkspaceLayoutHandle {
@@ -66,7 +62,7 @@ export interface WorkspaceBottomOwnerProps {
 
 export interface IWorkspaceLayout {
   readonly corePaneVersion: typeof WORKSPACE_CORE_PANE_VERSION
-  attach(ownerId: string, initialPreference?: WorkspaceLayoutPreference, corePaneHost?: WorkspaceCorePaneHost): WorkspaceLayoutHandle
+  attach(ownerId: string, initialPreference: WorkspaceLayoutPreference, corePaneHost: WorkspaceCorePaneHost): WorkspaceLayoutHandle
 }
 
 export const WORKSPACE_RIGHT_DEFAULT = 480
@@ -80,8 +76,6 @@ const DETACHED_SNAPSHOT: WorkspaceLayoutSnapshot = Object.freeze({
   bottomRatio: WORKSPACE_BOTTOM_DEFAULT_RATIO,
   activeRegion: 'right',
   maximizedRegion: undefined,
-  corePaneHostAttached: false,
-  auxiliaryPriority: 'workspace',
 })
 
 function finite(value: unknown): value is number {
@@ -104,8 +98,6 @@ function normalize(
     maximizedRegion: Object.prototype.hasOwnProperty.call(input, 'maximizedRegion')
       ? input.maximizedRegion
       : previous.maximizedRegion,
-    corePaneHostAttached: previous.corePaneHostAttached,
-    auxiliaryPriority: previous.auxiliaryPriority,
   })
 }
 
@@ -130,8 +122,8 @@ export class WorkspaceLayoutController implements IWorkspaceLayout {
 
   attach(
     ownerId: string,
-    initialPreference: WorkspaceLayoutPreference = {},
-    corePaneHost?: WorkspaceCorePaneHost,
+    initialPreference: WorkspaceLayoutPreference,
+    corePaneHost: WorkspaceCorePaneHost,
   ): WorkspaceLayoutHandle {
     if (ownerId.trim().length === 0) throw new Error('workspaceLayout: ownerId must be non-empty')
     if (this.#snapshot.attached) {
@@ -139,17 +131,14 @@ export class WorkspaceLayoutController implements IWorkspaceLayout {
     }
     const generation = ++this.#generation
     this.#corePaneHost = corePaneHost
-    this.#snapshot = Object.freeze({
-      ...normalize(ownerId, initialPreference),
-      corePaneHostAttached: corePaneHost !== undefined,
-    })
+    this.#snapshot = normalize(ownerId, initialPreference)
     this.#emit()
     let disposed = false
     const requireLive = (): boolean => !disposed && generation === this.#generation && this.#snapshot.ownerId === ownerId
     return {
       update: (next) => {
         if (!requireLive()) return
-        this.#update(next, true)
+        this.#update(next)
       },
       getSnapshot: () => this.#snapshot,
       subscribe: listener => this.subscribe(listener),
@@ -166,30 +155,17 @@ export class WorkspaceLayoutController implements IWorkspaceLayout {
   /** Internal AppFrame resize path; size commits are not an explicit open. */
   updateGeometry(next: Pick<WorkspaceLayoutPreference, 'rightWidth' | 'bottomRatio'>): void {
     if (!this.#snapshot.attached) return
-    this.#update(next, false)
+    this.#update(next)
   }
 
   /** Routes an allowlisted DSH-owned surface into the attached Core Pane host. */
-  openCorePane(id: WorkspaceCorePaneId): boolean {
-    const host = this.#corePaneHost
-    if (!this.#snapshot.attached || host === undefined) return false
-    host.open(id)
-    return true
+  openCorePane(id: WorkspaceCorePaneId): void {
+    this.#requireCorePaneHost().open(id)
   }
 
   /** Closes an allowlisted DSH-owned surface in the attached Core Pane host. */
-  closeCorePane(id: WorkspaceCorePaneId): boolean {
-    const host = this.#corePaneHost
-    if (!this.#snapshot.attached || host === undefined) return false
-    host.close(id)
-    return true
-  }
-
-  /** `ctx.layout.openDetails()` calls this to resolve a constrained frame. */
-  noteDetailsOpened(): void {
-    if (this.#snapshot.auxiliaryPriority === 'details') return
-    this.#snapshot = Object.freeze({ ...this.#snapshot, auxiliaryPriority: 'details' })
-    this.#emit()
+  closeCorePane(id: WorkspaceCorePaneId): void {
+    this.#requireCorePaneHost().close(id)
   }
 
   restoreMaximized(): void {
@@ -198,20 +174,18 @@ export class WorkspaceLayoutController implements IWorkspaceLayout {
     this.#emit()
   }
 
-  #update(next: WorkspaceLayoutPreference, explicit: boolean): void {
+  #update(next: WorkspaceLayoutPreference): void {
     const ownerId = this.#snapshot.ownerId
     if (ownerId === undefined) return
-    const normalized = normalize(ownerId, next, this.#snapshot)
-    const marksWorkspace = explicit && (
-      next.rightVisible === true
-      || next.bottomVisible === true
-      || next.maximizedRegion !== undefined
-      || next.activeRegion !== undefined
-    )
-    this.#snapshot = marksWorkspace
-      ? Object.freeze({ ...normalized, auxiliaryPriority: 'workspace' })
-      : normalized
+    this.#snapshot = normalize(ownerId, next, this.#snapshot)
     this.#emit()
+  }
+
+  #requireCorePaneHost(): WorkspaceCorePaneHost {
+    if (!this.#snapshot.attached || this.#corePaneHost === undefined) {
+      throw new Error('workspaceLayout: Core Pane owner is required before opening Tool Details')
+    }
+    return this.#corePaneHost
   }
 
   #emit(): void {

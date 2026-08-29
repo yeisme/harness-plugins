@@ -33,7 +33,7 @@ interface AuthStoreFile {
 }
 
 const STORE_VERSION = 1 as const
-const TOKEN_PREFIX = 'dsh_'
+const TOKEN_PREFIX = 'dshw_'
 const AUTH_FILE_NAME = 'auth.json'
 
 /** Resolve the auth store path from the DSH home environment. */
@@ -44,7 +44,7 @@ export function authStorePath(env: Record<string, string | undefined> = process.
   return join(home, AUTH_FILE_NAME)
 }
 
-function hashToken(token: string): string {
+export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex')
 }
 
@@ -84,12 +84,13 @@ export async function createAuthToken(options: {
 }): Promise<{ token: string; record: DshTokenSummary }> {
   const path = authStorePath(options.env)
   const store = await readStore(path)
-  const token = `${TOKEN_PREFIX}${randomBytes(32).toString('base64url')}`
+  const id = randomUUID().replaceAll('-', '')
+  const token = `${TOKEN_PREFIX}${id}_${randomBytes(32).toString('base64url')}`
   const scopes = options.scopes === undefined || options.scopes.length === 0
     ? ['admin' as const]
     : options.scopes
   const record: StoredDshToken = {
-    id: randomUUID(),
+    id,
     name: options.name ?? 'default',
     tokenHash: hashToken(token),
     scopes,

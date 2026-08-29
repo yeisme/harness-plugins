@@ -27,6 +27,7 @@ import {
 import { WorkspaceDesignerInteraction } from '../src/workspace-designer-ui.js'
 import { createPaneWorkspaceDraft } from '../src/workspace-draft.js'
 import { createPaneWorkspacePresetService, type PaneWorkspaceSettingsOwnerV1 } from '../src/workspace-preset.js'
+import { PaneViewRegistry } from '../src/view-registry.js'
 import { createPaneWorkspace, reducePaneWorkspace } from '../src/workspace.js'
 
 afterEach(cleanup)
@@ -65,12 +66,32 @@ function openProtected(state = createPaneWorkspace()) {
   }).state
 }
 
+function createApplyRegistry(): PaneViewRegistry {
+  const registry = new PaneViewRegistry({ capabilities: new Set() })
+  registry.registerView({
+    descriptor: {
+      kind: 'dsh.explorer',
+      label: 'Explorer',
+      componentKey: 'dsh-explorer',
+      role: 'navigator',
+      preferredRegion: 'right',
+      retention: 'keep-alive',
+      singleton: true,
+    },
+    component: () => createElement('div', { 'data-live-view': 'dsh.explorer' }),
+    showInPicker: true,
+  })
+  return registry
+}
+
 function Harness() {
   const [workspace, setWorkspace] = useState(() => createPaneWorkspace())
   const [session, setSession] = useState(() => createDesignerSession(workspace))
+  const [registry] = useState(createApplyRegistry)
   return createElement(WorkspaceDesignerInteraction, {
     session,
     workspace,
+    registry,
     onChange: setSession,
     onWorkspaceChange: setWorkspace,
   })

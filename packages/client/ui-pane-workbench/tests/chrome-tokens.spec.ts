@@ -30,8 +30,16 @@ describe('pane workbench chrome token adoption', () => {
     expect(REGION_STYLES.match(/var\(--vk-[a-z0-9-]+\)/g)?.length ?? 0).toBeGreaterThanOrEqual(30)
   })
 
-  it('CSS 括号配平（无 vk 残留双右括号）', () => {
-    expect(REGION_STYLES.match(/var\(--vk-[a-z0-9-]+\)\)/g)?.length ?? 0).toBe(0)
+  it('CSS 括号配平（含 color-mix/calc 合法嵌套）', () => {
+    // 旧启发式按 `var(--vk-x))` 字面计数，把 color-mix() 内合法的嵌套 var() 误报为残留。
+    // 残留双右括号的真实特征是不成对的 ')'，改用括号深度扫描配平。
+    let depth = 0
+    for (const char of REGION_STYLES) {
+      if (char === '(') depth += 1
+      if (char === ')') depth -= 1
+      expect(depth, 'REGION_STYLES 出现不成对的 )').toBeGreaterThanOrEqual(0)
+    }
+    expect(depth).toBe(0)
     const open = (REGION_STYLES.match(/\{/g) ?? []).length
     const close = (REGION_STYLES.match(/\}/g) ?? []).length
     expect(open).toBe(close)

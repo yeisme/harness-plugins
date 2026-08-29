@@ -95,9 +95,36 @@ function safeReceiptRef(input: ArtifactIntentV1): string {
   return `receipt:pane:${suffix}`
 }
 
+const ADMISSION_LEDGER_LIMIT = 256
+
 /** Deterministic owner-neutral dispatch. It never retries or infers success from a timeout. */
 export class PaneIntentDispatcher {
   private readonly handlers = new Map<string, PaneIntentHandlerRegistrationV1>()
+  private readonly admissions = new Map<string, Promise<PaneActionReceiptV1>>()
+
+  /** Bounded idempotency ledger size, exposed for diagnostics. */
+  get admissionLedgerSize(): number {
+    return this.admissions.size
+  }
+
+  /** Whether one gesture already reached a handler under this idempotency key (in-flight or settled). */
+  hasAdmission(idempotencyKey: string): boolean {
+    return this.admissions.has(idempotencyKey)
+  }
+
+  /** Session-scoped reset; the ledger is never persisted. */
+  clearAdmissions(): void {
+    this.admissions.clear()
+  }
+
+  private rememberAdmission(idempotencyKey: string, admission: Promise<PaneActionReceiptV1>): void {
+    this.admissions.set(idempotencyKey, admission)
+    while (this.admissions.size > ADMISSION_LEDGER_LIMIT) {
+      const oldest = this.admissions.keys().next()
+      if (oldest.done === true) break
+      this.admissions.delete(oldest.value)
+    }
+  }
 
   register(input: PaneIntentHandlerRegistrationV1): () => void {
     if (!HANDLER_ID.test(input.id) || typeof input.handle !== 'function') throw new TypeError('Pane intent handler requires a safe id and local handle function.')
@@ -136,6 +163,20 @@ export class PaneIntentDispatcher {
         reconcileReason: 'intent_handler_unavailable',
       })
     }
+    // Duplicate deliveries of one gesture (double drop, double click, retry)
+    // share the first admission; only the first delivery reaches the handler.
+    const admitted = this.admissions.get(intent.idempotencyKey)
+    if (admitted !== undefined) return admitted
+    const pending = this.settle(handler, intent, targetOwner)
+    this.rememberAdmission(intent.idempotencyKey, pending)
+    return pending
+  }
+
+  private async settle(
+    handler: PaneIntentHandlerRegistrationV1,
+    intent: ArtifactIntentV1,
+    targetOwner: string,
+  ): Promise<PaneActionReceiptV1> {
     try {
       return PaneActionReceiptSchema.parse(await handler.handle(intent))
     } catch {

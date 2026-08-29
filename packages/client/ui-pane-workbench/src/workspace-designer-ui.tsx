@@ -1,14 +1,19 @@
-import { createElement, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { createElement, useEffect, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Surface, SurfaceActionBar, SurfaceContextBar, SurfaceSection } from '@yeisme/dsh-client-ui-surface'
 import { t } from './i18n/locale.js'
-import type { PaneLocalViewProps } from './view-registry.js'
+import type { PaneLocalViewProps, PaneViewRegistryReader } from './view-registry.js'
 import { createPaneWorkspace, type PaneWorkspaceV1 } from './workspace.js'
 import {
   applyDesignerWorkspace,
   createDesignerSession,
   discardDesigner,
   inspectDesignerApplyUx,
+  listDesignerPaletteEntries,
+  placementFromDesignerPaletteEntry,
   rollbackDesignerWorkspace,
   saveDesignerWorkspace,
+  type DesignerPaletteEntryV1,
   type DesignerSessionV1,
   placeDesignerProvider,
   redoDesigner,
@@ -18,30 +23,29 @@ import {
   undoDesigner,
 } from './workspace-designer.js'
 import type { WorkspaceApplyUxOptionsV1 } from './workspace-apply-ux.js'
-import type { PaneWorkspaceProviderPlacementV1 } from './workspace-draft.js'
-
-const DEFAULT_PROVIDERS: readonly PaneWorkspaceProviderPlacementV1[] = [
-  { kind: 'dsh.explorer', region: 'right', role: 'navigator', singleton: true },
-  { kind: 'dsh.source-control', region: 'right', role: 'navigator', singleton: true },
-  { kind: 'terminal.session', region: 'bottom', role: 'utility' },
-]
-
-function mutate(session: DesignerSessionV1, placement: PaneWorkspaceProviderPlacementV1): DesignerSessionV1 {
-  return placeDesignerProvider(session, placement)
-}
 
 export function WorkspaceDesignerInteraction(props: {
   readonly session: DesignerSessionV1
   readonly compact?: boolean
   readonly workspace?: PaneWorkspaceV1
   readonly applyOptions?: WorkspaceApplyUxOptionsV1
+  readonly registry?: PaneViewRegistryReader
   readonly onChange: (session: DesignerSessionV1) => void
   readonly onWorkspaceChange?: (workspace: PaneWorkspaceV1) => void
 }): ReactNode {
-  const onPaletteKey = (event: KeyboardEvent<HTMLElement>, placement: PaneWorkspaceProviderPlacementV1): void => {
+  const [, setRevision] = useState(0)
+  useEffect(() => {
+    if (props.registry === undefined) return
+    return props.registry.subscribe(() => setRevision(value => value + 1))
+  }, [props.registry])
+  const palette = listDesignerPaletteEntries(props.registry?.snapshot() ?? [])
+  const place = (entry: DesignerPaletteEntryV1): void => {
+    props.onChange(placeDesignerProvider(props.session, placementFromDesignerPaletteEntry(entry)))
+  }
+  const onPaletteKey = (event: KeyboardEvent<HTMLElement>, entry: DesignerPaletteEntryV1): void => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
-      props.onChange(mutate(props.session, placement))
+      place(entry)
     }
   }
   const applyUx = props.workspace === undefined
@@ -63,18 +67,29 @@ export function WorkspaceDesignerInteraction(props: {
   }
   return createElement('div', { className: 'pwr-designer-interaction', 'data-designer-compact': props.compact === true },
     createElement('div', { className: 'pwr-designer-palette', 'data-pane-designer-slot': 'palette', role: 'listbox', 'aria-label': t('designer.palette') },
-      ...DEFAULT_PROVIDERS.map(provider => createElement('button', {
-        key: provider.kind,
+      ...palette.map(entry => createElement(Button, {
+        key: entry.kind,
         type: 'button',
+        size: 'sm',
+        variant: 'toolbar',
         role: 'option',
-        onClick: () => props.onChange(mutate(props.session, provider)),
-        onKeyDown: event => onPaletteKey(event, provider),
-      }, provider.kind)),
+        onClick: () => place(entry),
+        onKeyDown: event => onPaletteKey(event, entry),
+      }, createElement('span', {
+        'data-designer-palette-kind': entry.kind,
+        'data-designer-palette-region': entry.region,
+        'data-designer-palette-role': entry.role,
+      }, entry.kind))),
     ),
     createElement('div', { className: 'pwr-designer-canvas', 'data-pane-designer-slot': 'canvas', role: 'group', 'aria-label': t('designer.canvas') },
       createElement('p', null, props.session.draft.schema),
       createElement('ol', null, ...props.session.draft.providerPlacements.map((placement, index) =>
-        createElement('li', { key: `${placement.kind}-${index}`, 'data-designer-placement': placement.kind }, placement.kind))),
+        createElement('li', {
+          key: `${placement.kind}-${index}`,
+          'data-designer-placement': placement.kind,
+          'data-designer-placement-region': placement.region,
+          'data-designer-placement-role': placement.role,
+        }, placement.kind))),
       createElement('input', {
         type: 'range',
         min: 15,
@@ -84,16 +99,20 @@ export function WorkspaceDesignerInteraction(props: {
         onChange: event => props.onChange(setDesignerSplitRatio(props.session, 'right', Number(event.currentTarget.value) / 100)),
       }),
     ),
-    createElement('div', { className: 'pwr-designer-inspector', 'data-pane-designer-slot': 'inspector' },
+    createElement(SurfaceSection, { className: 'pwr-designer-inspector', 'data-pane-designer-slot': 'inspector' },
       createElement('p', null, props.session.draft.scope),
-      createElement('button', { type: 'button', onClick: () => props.onChange(undoDesigner(props.session)) }, t('designer.undo')),
-      createElement('button', { type: 'button', onClick: () => props.onChange(redoDesigner(props.session)) }, t('designer.redo')),
-      createElement('button', { type: 'button', onClick: () => props.onChange(discardDesigner(createPaneWorkspace())) }, t('designer.discard')),
-      createElement('button', { type: 'button', onClick: () => props.onChange(setDesignerRailOrder(props.session, ['source-control', 'explorer', 'customize'])) }, t('designer.rail')),
-      createElement('button', { type: 'button', onClick: () => props.onChange(setDesignerMotion(props.session, 'reduced')) }, t('designer.motion')),
-      createElement('button', { type: 'button', 'data-designer-apply': 'true', disabled: applyUx !== undefined && !applyUx.risks.canApply, onClick: onApply }, t('designer.apply')),
-      createElement('button', { type: 'button', 'data-designer-save': 'true', onClick: onSave }, t('designer.saveAs')),
-      createElement('button', { type: 'button', 'data-designer-rollback': 'true', disabled: props.session.rollback === undefined, onClick: onRollback }, 'Rollback'),
+      createElement(SurfaceActionBar, null,
+        createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: () => props.onChange(undoDesigner(props.session)) }, t('designer.undo')),
+        createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: () => props.onChange(redoDesigner(props.session)) }, t('designer.redo')),
+        createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: () => props.onChange(discardDesigner(createPaneWorkspace())) }, t('designer.discard')),
+        createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: () => props.onChange(setDesignerRailOrder(props.session, ['source-control', 'explorer', 'customize'])) }, t('designer.rail')),
+        createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: () => props.onChange(setDesignerMotion(props.session, 'reduced')) }, t('designer.motion')),
+      ),
+      createElement(SurfaceActionBar, null,
+        createElement('span', { 'data-designer-apply': 'true' }, createElement(Button, { type: 'button', size: 'sm', variant: 'primary', disabled: applyUx !== undefined && !applyUx.risks.canApply, title: applyUx !== undefined && !applyUx.risks.canApply ? applyUx.risks.keepInPlace[0]?.message : undefined, onClick: onApply }, t('designer.apply'))),
+        createElement('span', { 'data-designer-save': 'true' }, createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: onSave }, t('designer.saveAs'))),
+        createElement('span', { 'data-designer-rollback': 'true' }, createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', disabled: props.session.rollback === undefined, title: props.session.rollback === undefined ? 'No rollback receipt is available.' : undefined, onClick: onRollback }, 'Rollback')),
+      ),
       applyUx === undefined ? null : createElement('div', { 'data-designer-apply-ux': applyUx.lastReceipt?.status ?? 'idle' },
         createElement('ul', { 'data-designer-diff': String(applyUx.diff.changes.length) },
           ...applyUx.diff.changes.map(change => createElement('li', { key: change.path, 'data-designer-change': change.kind }, change.path))),
@@ -107,20 +126,24 @@ export function WorkspaceDesignerInteraction(props: {
   )
 }
 
-export function WorkspaceDesignerCoreView({ view }: PaneLocalViewProps): ReactNode {
+export function WorkspaceDesignerCoreView({ view, registry }: PaneLocalViewProps): ReactNode {
   const [workspace, setWorkspace] = useState(() => createPaneWorkspace())
   const [session, setSession] = useState(() => createDesignerSession(workspace))
-  return createElement('section', {
+  return createElement(Surface, {
+    kind: 'workspace',
     className: 'pwr-designer',
     'data-pane-designer': view.id,
-    'data-pane-designer-providers': 'placeholder',
+    'data-pane-designer-providers': registry === undefined ? 'empty' : 'registry',
   },
-    createElement('header', { className: 'pwr-designer-header' }, t('designer.title')),
-    createElement(WorkspaceDesignerInteraction, {
-      session,
-      workspace,
-      onChange: setSession,
-      onWorkspaceChange: setWorkspace,
-    }),
+    createElement(SurfaceContextBar, { className: 'pwr-designer-header', title: t('designer.title') }),
+    createElement('div', { className: 'ys-body' },
+      createElement(WorkspaceDesignerInteraction, {
+        session,
+        workspace,
+        registry,
+        onChange: setSession,
+        onWorkspaceChange: setWorkspace,
+      }),
+    ),
   )
 }
