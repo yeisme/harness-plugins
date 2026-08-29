@@ -10,6 +10,12 @@ export type WorkbenchIconName =
   | 'unpin'
   | 'split'
   | 'move'
+  | 'move-right'
+  | 'move-down'
+  | 'split-left'
+  | 'split-right'
+  | 'split-up'
+  | 'split-down'
   | 'workspace'
   | 'document'
   | 'file'
@@ -21,8 +27,25 @@ export type WorkbenchIconName =
   | 'folder'
   | 'window'
   | 'agents'
+  | 'list'
+  | 'collapse'
   | 'font-decrease'
   | 'font-increase'
+
+/** Frozen semantic icon set (V3 1.1). Registrations reference names, never glyph markup. */
+export const WORKBENCH_ICON_NAMES = [
+  'add', 'close', 'maximize', 'restore', 'more', 'pin', 'unpin', 'split', 'move',
+  'move-right', 'move-down', 'split-left', 'split-right', 'split-up', 'split-down',
+  'workspace', 'document', 'file', 'media', 'terminal', 'search', 'git',
+  'git-branch', 'folder', 'window', 'agents', 'list', 'collapse',
+  'font-decrease', 'font-increase',
+] as const satisfies readonly WorkbenchIconName[]
+
+const WORKBENCH_ICON_NAME_SET: ReadonlySet<string> = new Set(WORKBENCH_ICON_NAMES)
+
+export function isWorkbenchIconName(value: unknown): value is WorkbenchIconName {
+  return typeof value === 'string' && WORKBENCH_ICON_NAME_SET.has(value)
+}
 
 const PATHS: Record<WorkbenchIconName, string> = {
   add: 'M12 5v14M5 12h14',
@@ -34,6 +57,12 @@ const PATHS: Record<WorkbenchIconName, string> = {
   unpin: 'm5 5 14 14M9 4l7 7m-8-4-3 3 5 5 3-3m-8 8 5-5',
   split: 'M12 4v16M4 8h16M4 8a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4M4 16a4 4 0 0 0 4 4h8a4 4 0 0 0 4-4',
   move: 'M5 9h14M12 4l5 5-5 5M19 15H5m7 5-5-5 5-5',
+  'move-right': 'M5 12h14m-5-5 5 5-5 5',
+  'move-down': 'M12 5v14m-5-5 5 5 5-5',
+  'split-left': 'M4 5h16v14H4zM10 5v14M8 9l-3 3 3 3',
+  'split-right': 'M4 5h16v14H4zM14 5v14m2-5 3 3-3 3',
+  'split-up': 'M4 5h16v14H4zM4 11h16M9 9l3-3 3 3',
+  'split-down': 'M4 5h16v14H4zM4 13h16m-7 2 3 3 3-3',
   workspace: 'M4 5h16v14H4zM8 5v14M8 9h12',
   document: 'M7 3h7l4 4v14H7zM14 3v5h4M10 12h5M10 16h5',
   file: 'M6 3h8l4 4v14H6zM14 3v5h4',
@@ -45,6 +74,8 @@ const PATHS: Record<WorkbenchIconName, string> = {
   folder: 'M4 5h6l2 2h8v12H4z',
   window: 'M4 5h16v14H4zM4 9h16',
   agents: 'M8 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM4 20a4 4 0 0 1 8 0M12 20a4 4 0 0 1 8 0',
+  list: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
+  collapse: 'M4 5h16v14H4zM15 5v14M11 9l-4 3 4 3',
   'font-decrease': 'M5 18h6M8 6v12M14 10h7M14 14h5',
   'font-increase': 'M4 18h8M8 6v12M15 12h6M18 9v6',
 }
@@ -66,6 +97,7 @@ export function WorkbenchIcon({ name, size = 16, strokeWidth = 1.8, ...props }: 
     strokeWidth,
     strokeLinecap: 'round',
     strokeLinejoin: 'round',
+    'data-workbench-icon': name,
     'aria-hidden': props['aria-label'] === undefined ? true : undefined,
     focusable: false,
   }, createElement('path', { d: PATHS[name] }))

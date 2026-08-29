@@ -2,6 +2,7 @@
 > 依据合同 change `dsh-workspace-productivity-ui-v3` §0 差异化策略：商品区（Pane chrome、文件/文档/数据 renderer、xterm 终端）park，由 better-sidebar 生态或未来官方 slot 承接；差异区（Resource Preview 平台 media/data 路径、Media Library 与媒体 views）继续实施。§7/§8 任务仅在保留 lane 实施所需范围内执行，终端/文件 renderer 相关条目随 commodity-parked 一并 park。
 - `differentiation`：1.5/1.6（Preview 合同与依赖边界，monaco/pdfjs 仅保留 lazy boundary）、§3（Resource Preview 平台核心）、§5（Media Library 与媒体 Resource Views）。
 - `commodity-parked`：1.1-1.4（chrome/codicons/TerminalHostV2/xterm 依赖）、§2（Pane Chrome）、§4（文件/文档/数据 Resource Views）、§6（xterm Terminal View）。
+- **2026-08-29 复工记录**：按根盘执行计划解冻商品区基座——1.1 已交付（presentation/icon 合同冻结）；1.2 的 `TerminalHostV2` 合同与 attachment 生命周期已在 `packages/host/dsh-terminal-host` 就位（profile/reconnect 状态机与 fake adapter 导出随 6.x 切片）；1.3/1.4 依赖锁定与 §2/§4/§6 UI 实施按 Wave 2/3 泳道推进；7.1/7.2 仍等官方 PTY/Preview seam，不因解冻改变外部停车边界。
 
 ### 依赖状态澄清（2026-08-29 规范化）
 
@@ -12,7 +13,7 @@
 
 ## 1. 前置合同与依赖
 
-- [ ] 1.1 [Owner: Harness Plugins；Dependencies: Root V3 design] 冻结 `PaneViewPresentationV1`、`WorkbenchIconName` 与 provider launcher contract，保持既有 `registerView()` 对无 presentation 调用兼容。Acceptance: parser/types/tests 定义 fallback、bounds 与 forbidden fields；Validation: `pnpm --filter @yeisme/dsh-client-ui-pane-workbench run test`。 **[lane: commodity-parked]**
+- [x] 1.1 [Owner: Harness Plugins；Dependencies: Root V3 design] 冻结 `PaneViewPresentationV1`、`WorkbenchIconName` 与 provider launcher contract，保持既有 `registerView()` 对无 presentation 调用兼容。Acceptance: parser/types/tests 定义 fallback、bounds 与 forbidden fields；Validation: `pnpm --filter @yeisme/dsh-client-ui-pane-workbench run test`。 **[lane: commodity-parked]** （done 2026-08-29: `view-registry.ts` 新增 `PaneViewPresentationV1`（icon 语义名/accentColor 6位 hex/defaultEdge left|right|bottom/defaultSize+minWidth+minHeight 180-4096px 有界）——未知字段、可执行值、CSS/var()/rgb()/url 注入一律 contract_mismatch fail-closed，尺寸取整；`icon.ts` 冻结 `WORKBENCH_ICON_NAMES` 30 语义名 + `isWorkbenchIconName` guard；无 presentation 的 registerView() 保持兼容（旧 provider 不变）。Evidence: `tests/view-presentation.spec.ts` 7/7 + 包全量 290/290。）
 - [ ] 1.2 [Owner: Harness Plugins；Dependencies: DSH Agent Note] 定义并实现 `TerminalHostV2`、session/profile/attachment/snapshot/receipt 类型与 fake adapter；保留 `TerminalHostV1` deprecated export 一个 RC。Acceptance: observe/control/reconnect/exited/error state 可纯测试；Validation: `pnpm --filter @yeisme/dsh-terminal-host run test && pnpm --filter @yeisme/dsh-terminal-host run typecheck`。 **[lane: commodity-parked]**
 - [ ] 1.3 [Owner: Harness Plugins；Dependencies: 1.1] 添加并锁定 `@vscode/codicons`、DSH UI primitives 与所需 peer floor，补充第三方许可 notice。Acceptance: 依赖无重复 icon runtime、无 node-pty；Validation: `pnpm install --lockfile-only` 后 package graph 与 build 通过。 **[lane: commodity-parked]**
 - [ ] 1.4 [Owner: Harness Plugins；Dependencies: 1.2] 添加并锁定 `@xterm/xterm`、fit/search/web-links/serialize/unicode11；WebGL 作为 optional lazy import。Acceptance: terminal bundle 不依赖 `@xterm/addon-attach` 或 node-pty；Validation: `pnpm --filter @yeisme/dsh-terminal run typecheck`。 **[lane: commodity-parked]**
