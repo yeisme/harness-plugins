@@ -12,7 +12,9 @@
 - ../openspec/changes/dsh-devtools-observability-v1/：DevTools V1 合同、架构、验收和实施任务。
 - ../openspec/changes/ordo-dsh-plugin-visualization-v1/：插件合同、状态机、DSH/Workbench 可视化设计。
 - design/dsh-web-pane-experience-completion.md：dsh web Pane 体验完成度设计（Experience Tier、做剧 × Workbench 旅程、交互缺口 owner 矩阵），实施见 ../openspec/changes/dsh-web-pane-experience-completion-v1/。
-- design/dsh-workbench-ai-drama-bridge-v2.md：从 CEO、产品与架构角度定义 DSH 创作前台、Workbench 制作现场、Ordo 唯一账本的做剧闭环，以及 Bridge V2 合同、90 天路线、指标、迁移和止损条件；实施见 ../openspec/changes/dsh-workbench-ai-drama-bridge-v2/。
+- design/dsh-workbench-ai-drama-bridge-v2.md：从 CEO、产品与架构角度定义 DSH 创作前台、Workbench 制作现场、Ordo 唯一账本的做剧闭环，以及 Bridge V2 合同、90 天路线、指标、迁移和止损条件；实施记录已归档到 ../openspec/changes/archive/2026-08-29-dsh-workbench-ai-drama-bridge-v2/。
+- design/ai-drama-director-pack.md：Director 与 Show Control Room 的产品边界、命令、preset、owner 投影和 Workbench 可选 handoff。
+- design/dsh-ai-drama-capability-gap-ledger.md：G14–G17 能力缺口重基线，按 deliver-now、external-owner、human-gate、superseded、closeout 分类。
 - integrations/dsh-workbench-ai-drama-bridge-v2-packet.md：Workbench consumer 侧交付 packet——合同、intent→lens 矩阵、ingress 状态机、reason codes、fixtures 版本与匹配的 Workbench change 记录。
 - cookbook/dsh-workbench-bridge-v2.md：做剧桥 V2 的用户视角、target registry 配置、证据诊断与回滚操作。
 - cookbook/dsh-web-pane-tiers.md：面向用户的 Tier 分级说明、Tier 0 做剧 quickstart 与排障。

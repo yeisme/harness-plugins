@@ -18,6 +18,23 @@ Yeisme 自研 DeepSeek Harness（DSH）插件聚合仓库，打包为可通过 `
 preview patch row。完整运行仍取决于 DSH core 发布 composition preview 所需的
 公开只读 seam；在此之前，不把未经验证的 Git 子目录 URL 当作可运行安装合同。
 
+## 全插件热开发
+
+在仓库根运行一条命令，即可构建并 link 安装所有本地 bundle、生成 HMR overlay、启动 DSH Web，并在源码变化后增量重建受影响依赖链：
+
+    pnpm dsh:dev
+
+开发仓库外自己的 bundle：
+
+    pnpm dsh:dev -- --plugin ../my-dsh-plugin --no-open --port 8080
+
+只检查发现结果，或仅完成构建/安装而不启动：
+
+    pnpm dsh:dev -- --check
+    pnpm dsh:dev -- --prepare-only
+
+普通源码变化走 Cordis HMR；`package.json`、`cordis.patch.yml` 或 bundle 集合变化会自动重新同步 profile 并重启 DSH。完整说明见 [DSH 插件热开发](docs/cookbook/dsh-plugin-hot-development.md)。
+
 ## 布局
 
     packages/host/       Host 插件（服务、transport、事件、命令）
@@ -38,15 +55,34 @@ preview patch row。完整运行仍取决于 DSH core 发布 composition preview
     # 安装 Pane 与桌面工具工作台
     dsh plugin --profile web add ./packages/bundle/pane-workbench
     dsh plugin --profile web add ./packages/bundle/dsh-desktop-workbench
+    dsh plugin --profile web add ./packages/bundle/dsh-semantic-file-editor
 
-    # 安装 Creator Studio：文字、图像、音频、视频/短剧、资料、分析与审阅
+    # 安装 Creator Studio：创作、完整做剧、项目资产、生成观察与审批
     dsh plugin --profile web add ./packages/bundle/dsh-creator-studio
 
 Creator Studio 复用 Pane Workbench 的 right/bottom region 与 Desktop Workbench
 的工具生态，不创建第二侧栏或调度器。Eikona、Scaena、Sonora、Auctra、Pinax、
-Anatomia 仍分别拥有其 canonical state、动作、审批和 receipt；未连接 owner adapter
+Anatomia 仍分别拥有其 canonical state 与领域动作；Ordo 拥有 run、审批和 receipt。未连接 owner adapter
 时面板会显示安全的离线/合同状态。详见
 `packages/bundle/dsh-creator-studio/README.md`。
+
+Semantic File Editor 在现有 `desktop.file` 内提供 Host-side LSP/AST、Monaco、Markdown/结构化预览、Outline/Problems 与 workspace edit 确认；未安装或能力缺失时自动回退原 renderer。详见 `packages/bundle/dsh-semantic-file-editor/README.md`。
+
+### DevTools 开发观测
+
+    # 本地 checkout
+    pnpm --filter @yeisme/dsh-devtools build
+    dsh plugin --profile web add ./packages/bundle/dsh-devtools
+    dsh --profile web
+
+    # 发布后
+    dsh plugin --profile web add @yeisme/dsh-devtools
+    dsh --profile web
+
+DevTools 将脱敏日志、慢操作和性能摘要写入 stderr，不改变现有 stdout URL 合同；
+Web 面提供 Host/浏览器时间线、性能 finding、显式 CPU Profile 与安全 JSON 导出。
+默认只使用有界内存，不写盘、不上传遥测。详见
+`packages/bundle/dsh-devtools/README.md`。
 
 ### Anchored Standard 预设
 

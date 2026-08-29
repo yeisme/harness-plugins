@@ -2,7 +2,7 @@
 
 ## 定位
 
-Director Pack 是 DSH 中的 Agent 侧做剧工作入口。它让用户在对话上下文中选择 Show/Episode，按需推进故事、视觉、音频、生成、审查和 owner 导出动作；复杂生产工作通过 Bridge V2 进入 Workbench `/agent` Spatial Creative Runtime 的 Creative Production、Review 或 Evidence lens。
+Director Pack 是 DSH 中的 Agent 侧做剧工作入口。它让用户在对话上下文中选择 Show/Episode，按需推进故事、视觉、音频、生成、审查和 owner 导出动作；`show-control` preset 进一步提供单部剧的 Episode Board、Review Inbox、Asset Wall 与 Delivery 安全投影。更高密度、空间化和外部专业工具工作仍可通过 Bridge V2 进入 Workbench `/agent` Spatial Creative Runtime。
 
 它不是第二个 Creator Studio、第二个 Workbench 或第二个 scheduler。它复用现有 Pane Workbench、Creator Studio safe projection、Rich Media renderer、artifact intents 和 Ordo Agent Ops。
 
@@ -28,19 +28,23 @@ bundle 不隐式安装 provider、owner runtime 或 Workbench，也不修改用�
 | /drama review | 定位下一项异常或人工决定 | mutation 由 owner descriptor 驱动 |
 | /drama repair | 创建 repair proposal | 不直接覆写 artifact |
 | /drama evidence | 打开 run/receipt/verification | 只读 |
+| /drama show | 打开 Episode Board | 只读投影；context switch 由 owner descriptor 驱动 |
+| /drama inbox | 打开跨集 Review Inbox | 只选择已加载目标，批量动作先 preview |
+| /drama assets | 按需打开 Asset Wall | 只读 compare/open intent |
+| /drama delivery | 打开 Delivery readiness | prepare/submit/remediate 由 owner 发布 |
 | /drama handoff | 打开 Workbench 或 approved external handoff | 仅 typed refs |
 
 命令 parser 不接受任意 argv、shell fragment、绝对路径或 provider payload。命令只解析选择器和用户可见字段，再交给 Host typed handler。
 
 ## Pane preset
 
-默认 Director preset 最多显示三个 Pane，避免在会话侧复制完整 Workbench：
+默认 `director` preset 保持三个 Pane，兼容现有会话工作流：
 
 1. Context：Show/Episode/Scene/Shot、readiness、primary blocker。
 2. Review：下一项 compare/decision/repair。
 3. Run：当前 Ordo/Aigora attempt、cost/ETA、receipt/reconcile。
 
-Story、Visual 和 Audio 为按需打开的 secondary panes。当前项目的完整阶段流程可以留在 Pane；用户需要完整 Episode Board、专业 Asset Wall、跨集比较或大量候选批量处理时，使用可选 Open in Workbench。
+Story、Visual 和 Audio 为按需打开的 secondary panes。新增的 `show-control` preset 默认展示 Show Board、Review Inbox、Run 与 Delivery；Asset Wall 按需打开。两个 preset 共享 owner 投影，不共享导航状态，也不创建第二个领域 store。
 
 ## Context contract
 
@@ -69,12 +73,12 @@ context 变化时，插件必须 teardown 旧 subscription、清空 presentation
 
 ## 与 Workbench 的边界
 
-DSH 优先解决“我现在和 Agent 一起做什么”；Workbench 解决“整部剧全局发生了什么”。因此：
+DSH 现在同时覆盖“当前集怎么继续”和“单部剧有哪些待处理项”，但只承载 owner-safe 操作投影：
 
-- DSH 不实现 Workbench 级 Show/Episode 批量管理、跨集比较、专业 Asset Wall 或 Delivery dashboard。
-- Workbench 不复制 DSH conversation、subagent 或 slash-command state。
-- Open in Workbench 只传安全 context refs、resource version 和封闭 presentation intent；浏览器不拼接任意 URL。
-- Continue in DSH 只生成已批准 profile/command/deep-link payload。
+- Show Control Room 一次绑定一个 tenant/workspace/show；浏览器不能切换租户，也不能拥有 Episode、Review、Approval、Run 或 Delivery ledger。
+- 批量操作只针对最多 100 个已加载目标，必须先取得 owner-issued batch descriptor，再一次提交；unknown 不自动重试。
+- Workbench 保留为可选的高密度、空间化和高级分析宿主，适合大规模跨集布局、复杂比较和外部专业工具，不是 DSH 控制台的必经路径。
+- Workbench 不复制 DSH conversation、subagent 或 slash-command state；Bridge V2 只传安全 refs、resource version 和封闭 presentation intent。
 
 ## Bridge V2 迁移
 
@@ -100,8 +104,16 @@ Director Pack 不要求 Scaena 新增 adapter、projection 或 action。若已�
 - bundle init/validate/pack、profile patch 幂等与卸载恢复测试。
 - integration evidence 写入 temp/integration-test-runs/<run-id>/，不依赖官方 DSH 尚未合入的 seam。
 
+能力状态与仍需外部 owner/人工解锁的事项见 [AI Drama 能力缺口 ledger](dsh-ai-drama-capability-gap-ledger.md)。
+
 ## Owning OpenSpec
 
-[dsh-ai-drama-director-pack-v1](../../openspec/changes/dsh-ai-drama-director-pack-v1/)
+[dsh-ai-drama-director-pack-v1（已归档）](../../openspec/changes/archive/2026-08-29-dsh-ai-drama-director-pack-v1/)
 
-[dsh-workbench-ai-drama-bridge-v2](../../openspec/changes/dsh-workbench-ai-drama-bridge-v2/)
+[dsh-ai-drama-operational-panes-v1](../../openspec/changes/dsh-ai-drama-operational-panes-v1/)
+
+[dsh-ai-drama-show-control-room-v1](../../openspec/changes/dsh-ai-drama-show-control-room-v1/)
+
+[dsh-ai-drama-review-delivery-depth-v1](../../openspec/changes/dsh-ai-drama-review-delivery-depth-v1/)
+
+[dsh-workbench-ai-drama-bridge-v2（已归档）](../../openspec/changes/archive/2026-08-29-dsh-workbench-ai-drama-bridge-v2/)

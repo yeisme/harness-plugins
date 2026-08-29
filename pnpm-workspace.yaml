@@ -79,3 +79,10 @@ minimumReleaseAgeExclude:
   - '@oh-my-pi/pi-utils@17.3.5'
   - '@deepseek-ai/dsh-client-ui-layout@0.1.0-rc.8'
   - '@deepseek-ai/dsh-client-ui-theme@0.1.0-rc.8'
+  - vscode-jsonrpc@9.0.2
+  - vscode-languageserver-protocol@3.18.3
+  - vscode-languageserver-types@3.18.3
+
+patchedDependencies:
+  jszip: patches/jszip.patch
+  mammoth: patches/mammoth.patch

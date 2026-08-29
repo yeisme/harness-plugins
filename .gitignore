@@ -17,3 +17,7 @@ temp/
 
 # Test crash core dumps (multi-GB, never commit)
 core.*
+
+# local tooling artifacts
+.codegraph/
+.understand-anything/
