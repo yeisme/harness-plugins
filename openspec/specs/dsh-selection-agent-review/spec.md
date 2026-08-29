@@ -1,7 +1,7 @@
 # dsh-selection-agent-review Specification
 
 ## Purpose
-TBD - created by archiving change dsh-selection-agent-review-v1. Update Purpose after archive.
+Define split-owner selection, screenshot and media annotation contracts, bounded review batches, preview-first proposals, per-location approval, and version-fenced apply.
 ## Requirements
 ### Requirement: Selection Agent Review 必须保持 split-owner 边界
 系统 MUST 由 `agent/harness-plugins` 拥有选区/截图标注 UI 与批注面板，由 DSH Conversation Composer/Runtime 拥有输入、模型与执行状态，由 File Host 拥有文件读取、版本校验与补丁应用；浏览器 MUST 只保存临时选择状态，MUST NOT 成为评论、审批或文件修改的最终真相源。
@@ -164,3 +164,16 @@ Agent 修改提案 MUST 按位置拆分为 Proposal Hunk，每个位置 MUST 独
 - **WHEN** 用户从浮动操作条"更多"中选择"加入批注组"
 - **THEN** 当前锚点加入 Review Batch，可与同一截图的其他标记一起联合提交给 Agent
 
+### Requirement: Drama Review Inbox SHALL be a bounded selection-agent-review consumer
+Drama Review Inbox SHALL 复用既有 selection anchor、annotation batch、agent proposal 与 receipt 合同；它 MUST NOT 扩展 selection owner 状态机或直接执行 agent edit。
+
+#### Scenario: Submit a multi-artifact review batch
+- **WHEN** 用户从 Review Inbox 选择多个有效 anchors 并提交
+- **THEN** selection owner SHALL 创建 bounded batch，Drama SHALL 只展示 returned marker/proposal/receipt projection
+
+### Requirement: Selection anchor protocol SHALL add bounded media anchors
+Selection owner SHALL additive 支持 `media-frame`、`media-time-point` 与 `media-time-region`，并继续要求 artifact ref/version、quote digest、freshness 与 bounded media coordinate；既有五类 anchor 语义 MUST 不变。
+
+#### Scenario: Media region exceeds owner bounds
+- **WHEN** time region 反向、超过 24 小时上限或 frame 超过协议上限
+- **THEN** selection owner SHALL fail-closed，且该 anchor MUST NOT 进入 annotation batch

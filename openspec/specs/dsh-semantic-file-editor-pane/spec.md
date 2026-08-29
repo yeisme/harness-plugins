@@ -2,6 +2,12 @@
 
 (merged from archived change 2026-08-29-dsh-semantic-file-editor-pane-v1)
 
+## Purpose
+
+定义 `desktop.file` 的格式感知语义编辑体验、版本化 mutation、可审查 workspace edit、lazy renderer 与安全降级边界。
+
+## Requirements
+
 ### Requirement: desktop.file SHALL render files by format and capability
 `desktop.file` SHALL 保持现有 Pane identity，并按文件类型提供格式感知 renderer。代码默认 Editor；Markdown 提供 Rendered/Editor/Split；JSON/YAML/TOML 提供 Editor/Structure。缺 semantic bundle、V2 ref、Worker 或 Language Server 时 SHALL 使用现有安全 fallback。
 

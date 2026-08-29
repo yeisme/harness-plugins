@@ -2,6 +2,12 @@
 
 (merged from archived change 2026-08-29-dsh-all-plugins-hot-dev-v1)
 
+## Purpose
+
+定义 Harness Plugins 工作区全部本地 bundle 的发现、增量构建、profile 同步、HMR/restart 分流、安全进程生命周期与脱敏开发证据合同。
+
+## Requirements
+
 ### Requirement: Dev command SHALL discover and synchronize all local bundles
 开发命令 SHALL 发现 workspace 中所有声明 `dsh.bundle.patch` 的 package，并通过官方 `dsh plugin` 将其作为 link dependency 同步到目标 profile。已有非目标 dependency MUST 保留。
 

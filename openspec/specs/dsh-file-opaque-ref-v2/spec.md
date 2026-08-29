@@ -2,6 +2,12 @@
 
 (merged from archived change 2026-08-29-dsh-semantic-file-editor-pane-v1)
 
+## Purpose
+
+定义浏览器不可见真实路径的 workspace-scoped 文件引用、版本 fence 与 legacy 兼容边界，使语义编辑能力只能通过 owner-issued opaque ref 安全读写。
+
+## Requirements
+
 ### Requirement: File Host SHALL issue workspace-scoped opaque refs
 File Host SHALL expose a V2 listing/read/write contract whose browser-visible file identifiers are owner-issued opaque refs. V2 payloads MUST NOT contain absolute paths、`file://` URI or client-authored workspace paths.
 

@@ -2,6 +2,12 @@
 
 (merged from archived change 2026-08-29-dsh-semantic-file-editor-pane-v1)
 
+## Purpose
+
+定义 Host 侧有界、版本化、allowlisted 的语言智能投影与文档生命周期，禁止浏览器接收原始 LSP、路径、命令、环境或凭据。
+
+## Requirements
+
 ### Requirement: Language Host SHALL expose normalized typed intelligence
 Language Host SHALL expose probe、document lifecycle、semantic query 与 structure query 的 typed contract。浏览器 MUST NOT receive raw LSP messages、server paths、argv、environment、provider credentials or arbitrary command payloads.
 

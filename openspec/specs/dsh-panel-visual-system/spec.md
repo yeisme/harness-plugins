@@ -2,6 +2,12 @@
 
 (merged from archived change 2026-08-29-dsh-unified-panel-visual-system-v1)
 
+## Purpose
+
+定义插件面板共享视觉 token、状态语义、作用域隔离、交互底线与官方主题优先规则，避免各 Pane 产生互相冲突的样式系统。
+
+## Requirements
+
 ### Requirement: Token registry 是面板样式的唯一事实源
 插件侧面板使用的每一个 `--dsw-alias-*` 语义 token SHALL 在 visual kit 的 token registry 中登记唯一的 canonical fallback；采纳面板的样式 SHALL 引用 registry（直接常量或 `buildPanelStyles()` 输出），SHALL NOT 手写与 registry 分歧的 fallback 字面量，也 SHALL NOT 在样式串中为同一 token 名产生第二个 fallback 值。
 

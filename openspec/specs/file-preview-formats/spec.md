@@ -2,6 +2,12 @@
 
 (merged from archived change 2026-08-29-dsh-file-preview-formats-v1)
 
+## Purpose
+
+定义 CSV/TSV、文本、DOCX、XLSX/XLSM 等文件的有界、安全、可取消预览，以及未知或不支持格式的诚实降级行为。
+
+## Requirements
+
 ### Requirement: CSV/TSV SHALL 有界解析进网格
 `@yeisme/dsh-rich-media` SHALL 提供零依赖 RFC4180 解析器，支持引号字段、转义引号、内嵌换行与 CRLF；解析 SHALL 受字节（4MB）、行（20000）、列（256）预算约束，超限 SHALL 截断并置 truncated 标志，SHALL NOT 抛未捕获异常。解析结果 SHALL 经 `createPreviewAccessHandle` 的 `table` 输入进入 `PreviewTableRenderer`。
 

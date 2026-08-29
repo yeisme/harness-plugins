@@ -2,6 +2,12 @@
 
 (merged from archived change 2026-08-29-dsh-agent-interaction-space-v1)
 
+## Purpose
+
+定义 DSH 中以 Pane 承载的 Agent 交互空间、锚点、typed directive、审批与 owner receipt 边界，确保交互不会创建第二套布局、会话或领域状态权威。
+
+## Requirements
+
 ### Requirement: 交互空间 SHALL 是 pane view 而非新侧栏
 `interaction.space` view SHALL 注册进 pane-workbench（resourceKey `space:<owner>:<ref>@<version>`，retention snapshot），SHALL NOT 创建第二侧栏、第二布局 owner 或复制桌面工作台结构。同一工件 SHALL 支持从预览 view 升级为空间 view，预览 view 保留。
 
