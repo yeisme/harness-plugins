@@ -13,10 +13,19 @@
     "doc-sync": "node scripts/doc-sync.mjs",
     "typecheck": "pnpm -r run build && pnpm -r run typecheck",
     "test": "pnpm --filter @yeisme/dsh-pane-protocol --filter @yeisme/dsh-client-ui-pane-workbench --filter @yeisme/dsh-creator-studio-host --filter @yeisme/dsh-client-ui-creator-studio --filter @yeisme/dsh-ordo-agent-ops run build && pnpm -r run test",
-    "check:bundles": "node scripts/check-bundle-contracts.mjs"
+    "test:integration": "pnpm --filter @yeisme/dsh-client-ui-devtools integration:evidence",
+    "test:visual": "pnpm --filter @yeisme/dsh-client-ui-surface run build && node scripts/run-ui-visual-tests.mjs",
+    "test:visual:update": "pnpm --filter @yeisme/dsh-client-ui-surface run build && node scripts/run-ui-visual-tests.mjs --update-snapshots",
+    "check:bundles": "node scripts/check-bundle-contracts.mjs",
+    "check:surfaces": "node scripts/check-ui-surface-contracts.mjs",
+    "ui:acceptance": "pnpm --filter @yeisme/dsh-client-ui-mcp-inspector run ui:acceptance",
+    "dsh:dev": "node scripts/dsh-dev.mjs",
+    "test:dsh-dev": "node --test scripts/dsh-dev.spec.mjs",
+    "test:dsh-dev:integration": "node scripts/run-dsh-dev-integration-tests.mjs"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
+    "@playwright/test": "1.60.0",
     "@types/node": "^22.0.0",
     "tsdown": "^0.22.2",
     "tsx": "^4.23.12",
