@@ -1,4 +1,6 @@
 export * from './controller.ts'
+export * from './locales.ts'
+export * from './runtime.ts'
 export * from './styles.ts'
 export * from './toolview.tsx'
 export * from './views.tsx'

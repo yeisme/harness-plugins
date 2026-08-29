@@ -32,6 +32,28 @@ async function setup() {
 }
 
 describe('annotation batches', () => {
+  it('publishes version-fenced frame, time-point, and time-region anchors for media review', async () => {
+    const { store } = createInMemoryVersionedFileStore({ 'video:episode-1': '' })
+    const service = createSelectionAnnotationService({ fileStore: store })
+    const digest = await computeQuoteDigest('表演节奏需要调整')
+    const common = { artifactRef: 'video:episode-1', artifactVersion: 'cut-v3', quotePreview: '表演节奏需要调整', quoteDigest: digest }
+    const frame = service.publishAnchor({ ...common, kind: 'media-frame', frame: 144, timeMs: 6_000 })
+    const point = service.publishAnchor({ ...common, kind: 'media-time-point', timeMs: 8_250 })
+    const region = service.publishAnchor({ ...common, kind: 'media-time-region', startMs: 10_000, endMs: 12_500 })
+    expect([frame.kind, point.kind, region.kind]).toEqual(['media-frame', 'media-time-point', 'media-time-region'])
+    const batch = service.submitBatch(service.createBatch({ title: '跨媒体审片批注', anchorIds: [frame.anchorId, point.anchorId, region.anchorId] }).batchId)
+    expect(batch.anchors.map(anchor => anchor.artifactVersion)).toEqual(['cut-v3', 'cut-v3', 'cut-v3'])
+    expect(service.buildAgentRequest(batch.batchId).markers.map(marker => marker.kind)).toEqual(['media-frame', 'media-time-point', 'media-time-region'])
+  })
+
+  it('rejects unbounded or reversed media anchors', async () => {
+    const { store } = createInMemoryVersionedFileStore({ 'audio:episode-1': '' })
+    const service = createSelectionAnnotationService({ fileStore: store })
+    const digest = await computeQuoteDigest('音频批注')
+    expect(() => service.publishAnchor({ kind: 'media-time-region', artifactRef: 'audio:episode-1', artifactVersion: 'mix-v1', quotePreview: '音频批注', quoteDigest: digest, startMs: 5_000, endMs: 4_000 })).toThrow(/endMs/)
+    expect(() => service.publishAnchor({ kind: 'media-time-point', artifactRef: 'audio:episode-1', artifactVersion: 'mix-v1', quotePreview: '音频批注', quoteDigest: digest, timeMs: 86_400_001 })).toThrow()
+  })
+
   it('walks draft -> submitted -> resolved and assigns stable markers', async () => {
     const { service, anchors } = await setup()
     const batch = service.createBatch({ title: '截图批注', anchorIds: anchors.map(a => a.anchorId) })

@@ -27,7 +27,30 @@ function fakePane() {
 }
 
 const fakeProjection = { snapshot: async () => ({}) }
+const fakeRuntime = {
+  schemaVersion: 'creator.studio.runtime.v1alpha1',
+  mode: 'shared',
+  canMutate: true,
+  getSnapshot: () => ({}),
+  subscribe: () => () => {},
+  refresh: async () => {},
+  loadAssets: async () => {},
+  resolveArtifact: async () => undefined,
+  dispatchAction: async () => ({}),
+  decideApproval: async () => ({}),
+}
 const fakeDramaHost = { snapshot: async () => ({}), dispatch: async () => ({}) }
+const fakeShowControl = {
+  snapshot: async () => ({}), episodes: async () => ({}), reviews: async () => ({}), assets: async () => ({}), delivery: async () => ({}), previewAction: async () => ({}), dispatch: async () => ({}),
+}
+const fakeSelectionAnnotation = {
+  version: '0.1.0-rc.1',
+  capability: 'selection-annotation',
+  publishAnchor: () => ({}),
+  createBatch: () => ({}),
+  submitBatch: () => ({}),
+  buildAgentRequest: () => ({}),
+}
 const fakeSlashDirectory = { snapshot: () => ({}), subscribe: () => () => {} }
 
 describe('probeDramaCapability', () => {
@@ -67,6 +90,47 @@ describe('probeDramaCapability', () => {
     expect(creatorStudio).toBe(fakeProjection)
     expect(dramaHost).toBe(fakeDramaHost)
     expect(slashDirectory).toBe(fakeSlashDirectory)
+  })
+
+  it('probes show-control independently without changing the legacy Director readiness gate', async () => {
+    const ctx = fakeCtx({
+      paneWorkbench: fakePane(),
+      remote: { creatorStudio: fakeProjection, dramaDirector: fakeDramaHost, dramaShowControl: fakeShowControl },
+    })
+    const { probe, showControl } = await probeDramaCapability(ctx as never)
+    expect(probe.available).toBe(true)
+    expect(probe.showControl.available).toBe(true)
+    expect(showControl).toBe(fakeShowControl)
+    expect(dramaCommandAvailability(probe, 'drama.show').disabled).toBe(false)
+  })
+
+  it('probes the optional selection-annotation owner without widening legacy readiness', async () => {
+    const ctx = fakeCtx({
+      paneWorkbench: fakePane(),
+      selectionAnnotationService: fakeSelectionAnnotation,
+      remote: { creatorStudio: fakeProjection, dramaDirector: fakeDramaHost, dramaShowControl: fakeShowControl },
+    })
+    const { probe, selectionAnnotation } = await probeDramaCapability(ctx as never)
+    expect(probe.available).toBe(true)
+    expect(probe.showControl.available).toBe(true)
+    expect(probe.selectionAnnotation).toEqual({
+      available: true,
+      reason: 'selection-annotation owner projection is available',
+    })
+    expect(selectionAnnotation).toBe(fakeSelectionAnnotation)
+  })
+
+  it('prefers the shared runtime and does not require the legacy remote', async () => {
+    const ctx = fakeCtx({
+      paneWorkbench: fakePane(),
+      creatorStudioRuntime: fakeRuntime,
+      remote: { dramaDirector: fakeDramaHost },
+    })
+    const { probe, creatorRuntime, creatorStudio } = await probeDramaCapability(ctx as never)
+    expect(probe.available).toBe(true)
+    expect(probe.creatorStudio.reason).toBe('creator-studio shared runtime is available')
+    expect(creatorRuntime).toBe(fakeRuntime)
+    expect(creatorStudio).toBeUndefined()
   })
 
   it('treats the router seam as enhancement-only', async () => {
@@ -120,6 +184,13 @@ describe('probe → view/command availability mapping', () => {
     expect(dramaCommandAvailability(probe, 'drama.open').disabled).toBe(false)
     expect(dramaCommandAvailability(probe, 'drama.handoff').reason).toBe('missing drama owner projection')
     expect(dramaCommandAvailability(probe, 'drama.evidence').disabled).toBe(true)
+  })
+
+  it('keeps show-control commands disabled with a stable reason when its optional adapter is absent', async () => {
+    const ctx = fakeCtx({ paneWorkbench: fakePane(), remote: { creatorStudio: fakeProjection, dramaDirector: fakeDramaHost } })
+    const { probe } = await probeDramaCapability(ctx as never)
+    expect(probe.available).toBe(true)
+    expect(dramaCommandAvailability(probe, 'drama.show')).toEqual({ disabled: true, reason: 'missing show-control owner projection' })
   })
 
   it('disables everything with the pane reason when pane workbench is absent', async () => {

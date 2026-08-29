@@ -1,5 +1,5 @@
 // Smoke test the built bundle client.js with jsdom DOM:
-// stub ModuleLoader → apply() → check registration/disposal.
+// ModuleLoader → install → duplicate install → uninstall → reinstall.
 import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { JSDOM } from 'jsdom'
@@ -40,16 +40,63 @@ console.log('bundle entry id =', entry.id)
 const exports_ = entry.factory(moduleRequire)
 console.log('bundle exports keys =', Object.keys(exports_).join(','))
 
-const disposers = []
-const ctx = { effect: (reg) => { disposers.push(reg()); return () => {} } }
-await exports_.apply(ctx)
+const { Context } = require_('@deepseek-ai/cordis')
+const ctx = new Context()
+const views = new Map()
+const commands = new Map()
+const pane = {
+  registerView(registration) {
+    const id = registration.descriptor.kind
+    if (views.has(id)) throw new Error(`duplicate view ${id}`)
+    views.set(id, registration)
+    return () => views.delete(id)
+  },
+  registerCommand(registration) {
+    const id = registration.descriptor.id
+    if (commands.has(id)) throw new Error(`duplicate command ${id}`)
+    commands.set(id, registration)
+    return () => commands.delete(id)
+  },
+  openView() {},
+}
+ctx.provide('paneWorkbench', pane)
+ctx.provide('remote', {
+  creatorStudio: { snapshot: async () => ({}) },
+  dramaDirector: {
+    snapshot: async () => ({
+      schema: 'drama.context.v1',
+      workspaceRef: 'ws:smoke',
+      projectRef: 'project:smoke',
+      showRef: 'show:smoke',
+      ownerVersions: { drama: 'v1' },
+      contextRevision: 'revision:smoke',
+      freshness: 'fresh',
+    }),
+  },
+})
+
+const firstDispose = await exports_.apply(ctx)
+assert(views.size === 10, 'install must register six Director and four additive show-control views')
+assert(commands.size === 14, 'install must register ten legacy and four additive show-control commands')
+const duplicateDispose = await exports_.apply(ctx)
+assert(views.size === 10 && commands.size === 14, 'duplicate install must be a no-op')
+duplicateDispose()
+assert(views.size === 10 && commands.size === 14, 'duplicate disposer must not remove the active install')
+firstDispose()
+assert(views.size === 0 && commands.size === 0, 'uninstall must remove all registrations')
+assert(ctx.get('dramaDirector') === undefined, 'uninstall must remove the provided client face')
+
+const reinstallDispose = await exports_.apply(ctx)
+assert(views.size === 10 && commands.size === 14, 'reinstall must restore exactly one registration set')
+reinstallDispose()
+assert(views.size === 0 && commands.size === 0, 'reinstall disposer must clean the second install')
 
 console.log('drama director applied =', exports_.name === 'client-ui-ai-drama-director')
-console.log('disposables registered =', disposers.length)
-
-// Simulate disposal
-disposers.forEach(d => d())
-console.log('disposal called')
+console.log('profile lifecycle = install:1 duplicate:1 uninstall:0 reinstall:1 final:0')
 
 console.log('BUNDLE SMOKE: PASS')
 process.exit(0)
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message)
+}

@@ -16,6 +16,7 @@
 import {
   DRAMA_FIRST_SUPPORT_PANES,
   DRAMA_SECONDARY_PANES,
+  type DramaShowControlPaneId,
   type DramaPaneId,
 } from '@yeisme/dsh-ai-drama-director'
 import type { DramaPaneWorkbenchFace } from './probe.js'
@@ -28,6 +29,13 @@ export const DRAMA_VIEW_KINDS: Readonly<Record<DramaPaneId, string>> = {
   Audio: 'drama.audio',
   Run: 'drama.run',
   Review: 'drama.review',
+}
+
+export const DRAMA_SHOW_CONTROL_VIEW_KINDS: Readonly<Record<DramaShowControlPaneId, string>> = {
+  ShowBoard: 'drama.show-board',
+  ReviewInbox: 'drama.review-inbox',
+  AssetWall: 'drama.asset-wall',
+  Delivery: 'drama.delivery',
 }
 
 /** Default visible tab budget for the Director preset (V2 visible cap). */
@@ -64,6 +72,21 @@ export function buildDramaViewOpenRequest(id: DramaPaneId): DramaViewOpenRequest
   }
 }
 
+export function buildShowControlViewOpenRequest(id: DramaShowControlPaneId): DramaViewOpenRequestV1 {
+  const kind = DRAMA_SHOW_CONTROL_VIEW_KINDS[id]
+  return {
+    kind,
+    resourceKey: `drama:show-control:${id.toLowerCase()}`,
+    viewId: `drama:show-control:${id.toLowerCase()}`,
+    role: 'content',
+    preferredRegion: 'right',
+    retention: 'keep-alive',
+    singleton: true,
+    pinned: true,
+    title: id === 'ShowBoard' ? 'Show Board' : id === 'ReviewInbox' ? 'Review Inbox' : id === 'AssetWall' ? 'Asset Wall' : 'Delivery',
+  }
+}
+
 export interface DramaPresetApplyResultV1 {
   readonly applied: readonly DramaPaneId[]
   readonly active: DramaPaneId
@@ -87,6 +110,21 @@ export function applyDirectorPreset(pane: DramaPaneWorkbenchFace): DramaPresetAp
     active: 'Context',
     collapsed: 'single-region-tabs',
   }
+}
+
+export interface DramaShowControlPresetApplyResultV1 {
+  readonly applied: readonly ['ShowBoard', 'ReviewInbox', 'Run', 'Delivery']
+  readonly active: 'ShowBoard'
+  readonly collapsed: 'single-region-tabs'
+}
+
+export function applyShowControlPreset(pane: DramaPaneWorkbenchFace): DramaShowControlPresetApplyResultV1 {
+  pane.openView(buildShowControlViewOpenRequest('ShowBoard'))
+  pane.openView(buildShowControlViewOpenRequest('ReviewInbox'))
+  pane.openView(buildDramaViewOpenRequest('Run'))
+  pane.openView(buildShowControlViewOpenRequest('Delivery'))
+  pane.openView(buildShowControlViewOpenRequest('ShowBoard'))
+  return { applied: ['ShowBoard', 'ReviewInbox', 'Run', 'Delivery'], active: 'ShowBoard', collapsed: 'single-region-tabs' }
 }
 
 /** Secondary views open on demand only; the default preset never opens them. */

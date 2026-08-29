@@ -10,9 +10,14 @@ import {
   type PaneActionValueV1,
 } from '@yeisme/dsh-pane-protocol'
 import {
+  validateCreatorAssetPage,
+  validateCreatorAssetQuery,
   validateCreatorMediaAccess,
   validateCreatorStudioSnapshot,
+  type CreatorAssetQueryV1,
+  type CreatorAssetV1,
   type CreatorMediaAccessV1,
+  type CreatorStudioOwner,
   type CreatorStudioSnapshotV1,
 } from '@yeisme/dsh-creator-studio-host/contracts'
 
@@ -20,6 +25,8 @@ export interface CreatorStudioRemote {
   snapshot(): Promise<RemoteResult<CreatorStudioSnapshotV1>>
   dispatch(request: unknown): Promise<RemoteResult<PaneActionReceiptV1>>
   resolveArtifact(artifact: ArtifactRefV1): Promise<RemoteResult<CreatorMediaAccessV1 | null>>
+  assets?(query: CreatorAssetQueryV1): Promise<RemoteResult<unknown>>
+  decideApproval?(input: { readonly decisionRef: string }): Promise<RemoteResult<PaneActionReceiptV1>>
 }
 
 export type CreatorStudioReadPhase = 'cold' | 'loading' | 'ready' | 'error'
@@ -29,7 +36,16 @@ export interface CreatorStudioViewState {
   readonly snapshot: CreatorStudioSnapshotV1 | null
   readonly errorCode: string | null
   readonly pendingDescriptorRef: string | null
+  readonly pendingApprovalRef: string | null
   readonly lastReceipt: PaneActionReceiptV1 | null
+  readonly assetPhase: CreatorStudioReadPhase
+  readonly assetQuery: CreatorAssetQueryV1
+  readonly assetItems: readonly CreatorAssetV1[]
+  readonly assetNextCursor: string | null
+  readonly assetStatus: string | null
+  readonly assetMessage: string | null
+  readonly assetUnavailableOwners: readonly CreatorStudioOwner[]
+  readonly assetErrorCode: string | null
 }
 
 const INITIAL: CreatorStudioViewState = {
@@ -37,19 +53,29 @@ const INITIAL: CreatorStudioViewState = {
   snapshot: null,
   errorCode: null,
   pendingDescriptorRef: null,
+  pendingApprovalRef: null,
   lastReceipt: null,
+  assetPhase: 'cold',
+  assetQuery: { scope: 'current_project' },
+  assetItems: [],
+  assetNextCursor: null,
+  assetStatus: null,
+  assetMessage: null,
+  assetUnavailableOwners: [],
+  assetErrorCode: null,
 }
 
 function contextIdentity(snapshot: CreatorStudioSnapshotV1): string | undefined {
   const context = snapshot.context
   if (context === undefined) return undefined
-  return [context.tenantRef, context.workspaceRef, context.sessionRef ?? '', context.principalRef, context.revision, context.membershipRevision, context.installationRef, context.pluginDigest, context.policyRevision, context.runtimeGeneration].join('\u0000')
+  return [context.tenantRef, context.workspaceRef, context.projectRef ?? '', context.sessionRef ?? '', context.principalRef, context.revision, context.membershipRevision, context.installationRef, context.pluginDigest, context.policyRevision, context.runtimeGeneration].join('\u0000')
 }
 
 export class CreatorStudioController {
   readonly store: SnapshotStore<CreatorStudioViewState> = createSnapshotStore(INITIAL)
 
   private generation = 0
+  private assetReadVersion = 0
   private activeRead: Promise<void> | undefined
   private disposed = false
   private snapshotRef: string | undefined
@@ -108,6 +134,76 @@ export class CreatorStudioController {
     return receipt
   }
 
+  async loadAssets(input: CreatorAssetQueryV1, append = false): Promise<void> {
+    if (this.disposed) return
+    const query = validateCreatorAssetQuery(input)
+    const current = this.store.getSnapshot()
+    if (query === undefined) {
+      this.store.set({ ...current, assetPhase: 'error', assetErrorCode: 'asset_query_contract_mismatch' })
+      return
+    }
+    if (this.remote.assets === undefined) {
+      this.store.set({ ...current, assetPhase: 'error', assetErrorCode: 'asset_contract_unavailable', assetMessage: 'Creator Studio asset Remote is unavailable.' })
+      return
+    }
+    const generation = this.generation
+    const readVersion = ++this.assetReadVersion
+    const { cursor: _cursor, ...baseQuery } = query
+    this.store.set({ ...current, assetPhase: 'loading', assetQuery: baseQuery, assetErrorCode: null })
+    let result: RemoteResult<unknown>
+    try { result = await this.remote.assets(query) } catch {
+      if (this.current(generation) && this.assetReadVersion === readVersion) this.store.set({ ...this.store.getSnapshot(), assetPhase: 'error', assetErrorCode: 'asset_remote_failed' })
+      return
+    }
+    if (!this.current(generation) || this.assetReadVersion !== readVersion) return
+    if (!result.ok) {
+      this.store.set({ ...this.store.getSnapshot(), assetPhase: 'error', assetErrorCode: result.error.code })
+      return
+    }
+    const page = validateCreatorAssetPage(result.value)
+    if (page === undefined) {
+      this.store.set({ ...this.store.getSnapshot(), assetPhase: 'error', assetErrorCode: 'asset_page_contract_mismatch' })
+      return
+    }
+    const before = this.store.getSnapshot()
+    this.store.set({
+      ...before,
+      assetPhase: 'ready',
+      assetQuery: baseQuery,
+      assetItems: append ? [...before.assetItems, ...page.items] : page.items,
+      assetNextCursor: page.nextCursor ?? null,
+      assetStatus: page.status,
+      assetMessage: page.safeMessage,
+      assetUnavailableOwners: page.unavailableOwners,
+      assetErrorCode: null,
+    })
+  }
+
+  async decideApproval(decisionRef: string): Promise<PaneActionReceiptV1> {
+    const current = this.store.getSnapshot()
+    if (this.disposed || this.remote.decideApproval === undefined) {
+      return this.localApprovalReceipt(decisionRef, 'reconcile_required', 'The Ordo approval Remote is unavailable.', 'owner_unavailable')
+    }
+    const generation = this.generation
+    this.store.set({ ...current, pendingApprovalRef: decisionRef, errorCode: null })
+    let receipt: PaneActionReceiptV1
+    try {
+      const result = await this.remote.decideApproval({ decisionRef })
+      if (!this.current(generation)) return this.localApprovalReceipt(decisionRef, 'unknown', 'The previous Creator Studio generation was replaced.', 'generation_replaced')
+      receipt = result.ok && PaneActionReceiptSchema.safeParse(result.value).success
+        ? PaneActionReceiptSchema.parse(result.value)
+        : this.localApprovalReceipt(decisionRef, 'unknown', 'The Ordo approval settlement is uncertain.', result.ok ? 'receipt_contract_mismatch' : result.error.code)
+    } catch {
+      receipt = this.localApprovalReceipt(decisionRef, 'unknown', 'The Ordo approval transport is uncertain.', 'settlement_unknown')
+    }
+    if (this.current(generation)) {
+      const next = this.store.getSnapshot()
+      this.store.set({ ...next, pendingApprovalRef: null, lastReceipt: receipt })
+      if (receipt.status === 'accepted' || receipt.status === 'completed') void this.refresh()
+    }
+    return receipt
+  }
+
   async resolveArtifact(artifact: ArtifactRefV1): Promise<string | undefined> {
     if (this.disposed) return undefined
     try {
@@ -124,6 +220,7 @@ export class CreatorStudioController {
   reset(): void {
     this.generation += 1
     this.activeRead = undefined
+    this.assetReadVersion += 1
     this.snapshotRef = undefined
     this.snapshotVersion = -1
     this.contextKey = undefined
@@ -169,7 +266,8 @@ export class CreatorStudioController {
     }
     this.snapshotRef = snapshot.snapshotRef
     this.snapshotVersion = snapshot.snapshotVersion
-    this.store.set({ phase: 'ready', snapshot, errorCode: null, pendingDescriptorRef: null, lastReceipt: this.store.getSnapshot().lastReceipt })
+    const current = this.store.getSnapshot()
+    this.store.set({ ...current, phase: 'ready', snapshot, errorCode: null, pendingDescriptorRef: null })
   }
 
   private publishError(generation: number, errorCode: string): void {
@@ -188,6 +286,17 @@ export class CreatorStudioController {
       receiptRef: `receipt:creator:${descriptor.descriptorRef.replace(/[^a-z0-9._:-]/giu, '-').slice(0, 96)}`,
       owner: descriptor.owner,
       actionId: descriptor.actionId,
+      summary,
+      reconcileReason,
+    })
+  }
+
+  private localApprovalReceipt(decisionRef: string, status: PaneActionReceiptV1['status'], summary: string, reconcileReason: string): PaneActionReceiptV1 {
+    return PaneActionReceiptSchema.parse({
+      status,
+      receiptRef: `receipt:creator:approval:${decisionRef.replace(/[^a-z0-9._:-]/giu, '-').slice(0, 80)}`,
+      owner: 'ordo',
+      actionId: 'ordo.approval.decide',
       summary,
       reconcileReason,
     })

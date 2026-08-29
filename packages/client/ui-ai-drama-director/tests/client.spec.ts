@@ -8,7 +8,7 @@ describe('AI Drama Director client', () => {
       const snapshot = registry.getSnapshot()
 
       expect(snapshot.commandGroup).toBe('drama')
-      expect(snapshot.commands).toHaveLength(6)
+      expect(snapshot.commands).toHaveLength(10)
       expect(snapshot.commands.some(cmd => cmd.disabled)).toBe(true)
       expect(snapshot.disposed).toBe(false)
     })

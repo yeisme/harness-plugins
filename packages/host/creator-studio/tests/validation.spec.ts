@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { PANE_ACTION_DESCRIPTOR_SCHEMA } from '@yeisme/dsh-pane-protocol'
-import { validateCreatorOwnerSnapshot, validateCreatorStudioContext } from '../src/validation.ts'
+import { validateCreatorAssetPage, validateCreatorAssetQuery, validateCreatorOwnerAssetList, validateCreatorOwnerSnapshot, validateCreatorStudioContext } from '../src/validation.ts'
 
 const context = {
-  tenantRef: 'tenant:one', workspaceRef: 'workspace:one', sessionRef: 'session:one', principalRef: 'principal:one', revision: '1', membershipRevision: '1', installationRef: 'install:web', pluginDigest: 'digest:creator', policyRevision: '1', runtimeGeneration: 'runtime:1',
+  tenantRef: 'tenant:one', workspaceRef: 'workspace:one', projectRef: 'project:one', sessionRef: 'session:one', principalRef: 'principal:one', revision: '1', membershipRevision: '1', installationRef: 'install:web', pluginDigest: 'digest:creator', policyRevision: '1', runtimeGeneration: 'runtime:1',
 }
 
 describe('Creator Studio Host validation', () => {
@@ -28,5 +28,15 @@ describe('Creator Studio Host validation', () => {
       ...snapshot,
       actions: [{ ...action, context: { ...context, runtimeGeneration: 'runtime:2' } }],
     })).toBeUndefined()
+  })
+
+  it('validates bounded asset queries and pages', () => {
+    expect(validateCreatorAssetQuery({ scope: 'current_project', limit: 100 })).toEqual({ scope: 'current_project', limit: 100 })
+    expect(validateCreatorAssetQuery({ scope: 'all_projects', limit: 201 })).toBeUndefined()
+    expect(validateCreatorAssetPage({
+      schemaVersion: 'creator.asset.page.v1alpha1', scope: 'all_projects', status: 'ready', freshness: 'fresh', reasonCode: 'asset_page', safeMessage: 'Assets ready.', items: [], unavailableOwners: [],
+    })?.status).toBe('ready')
+    expect(validateCreatorOwnerAssetList({ status: 'permission_denied', safeMessage: 'Denied.', items: [] })?.status).toBe('permission_denied')
+    expect(validateCreatorOwnerAssetList({ status: 'permission_denied', safeMessage: 'Denied.', items: [{ owner: 'eikona' }] })).toBeUndefined()
   })
 })

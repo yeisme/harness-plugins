@@ -46,17 +46,23 @@ export {
   DRAMA_COMMAND_GROUP,
   DRAMA_FIRST_SUPPORT_PANES,
   DRAMA_SECONDARY_PANES,
+  DRAMA_SHOW_CONTROL_PANES,
   createDirectorPreset,
+  createShowControlPreset,
   createDramaCommandGroup,
   createDramaPaneViews,
   shouldExpandToShowControlRoom,
   DramaClientRegistry,
 } from './panes.js'
+
+export * from './show-control.js'
 export type {
   DramaPaneId,
+  DramaShowControlPaneId,
   DramaCommandEntryV1,
   DramaPaneViewV1,
   DramaPresetV1,
+  DramaShowControlPresetV1,
   DramaClientRegistrationV1,
 } from './panes.js'
 

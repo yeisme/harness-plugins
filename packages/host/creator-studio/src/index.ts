@@ -6,10 +6,18 @@ export {
 } from './gateway.ts'
 export {
   creatorOwnerSnapshotSchema,
+  creatorApprovalDecisionSchema,
+  creatorAssetPageSchema,
+  creatorAssetQuerySchema,
   creatorStudioContextSchema,
   creatorStudioSnapshotSchema,
   validateCreatorActionDescriptor,
   validateCreatorActionReceipt,
+  validateCreatorApprovalDecision,
+  validateCreatorAsset,
+  validateCreatorAssetPage,
+  validateCreatorAssetQuery,
+  validateCreatorOwnerAssetList,
   validateCreatorMediaAccess,
   validateCreatorOwnerSnapshot,
   validateCreatorStudioContext,

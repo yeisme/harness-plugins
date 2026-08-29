@@ -36,6 +36,8 @@ export const SELECTION_PROTOCOL_LIMITS = Object.freeze({
   safeSummaryChars: 280,
   markerDigits: 3,
   dependenciesPerHunk: 16,
+  mediaTimeMaxMs: 86_400_000,
+  mediaFrameMax: 10_000_000,
 })
 
 const SHA256_HEX = /^[0-9a-f]{64}$/
@@ -61,7 +63,7 @@ export const UNSAFE_FIELD_KEYS: ReadonlySet<string> = new Set([
 // Shared vocabulary
 // ---------------------------------------------------------------------------
 
-export type AnchorKind = 'file-range' | 'markdown-range' | 'dom-region' | 'image-point' | 'image-region'
+export type AnchorKind = 'file-range' | 'markdown-range' | 'dom-region' | 'image-point' | 'image-region' | 'media-frame' | 'media-time-point' | 'media-time-region' | 'table-range'
 export type AnchorFreshness = 'fresh' | 'stale' | 'unmapped' | 'revoked'
 export type ComposerIntent = 'ask' | 'comment' | 'edit'
 export type ApprovalPolicy = 'preview-first' | 'auto-apply'
@@ -134,12 +136,48 @@ export interface ImageRegionAnchorV1 extends AnchorBaseV1 {
   readonly domMapped?: boolean
 }
 
+export interface MediaFrameAnchorV1 extends AnchorBaseV1 {
+  readonly kind: 'media-frame'
+  readonly frame: number
+  readonly timeMs: number
+}
+
+export interface MediaTimePointAnchorV1 extends AnchorBaseV1 {
+  readonly kind: 'media-time-point'
+  readonly timeMs: number
+}
+
+export interface MediaTimeRegionAnchorV1 extends AnchorBaseV1 {
+  readonly kind: 'media-time-region'
+  readonly startMs: number
+  readonly endMs: number
+}
+
+/**
+ * Tabular data anchor (interaction space P0). Coordinates are owner data
+ * coordinates — absolute 1-based row/column positions inside one sheet —
+ * never viewport positions, so anchors survive paging, sorting and remount.
+ */
+export interface TableRangeAnchorV1 extends AnchorBaseV1 {
+  readonly kind: 'table-range'
+  /** Opaque sheet identifier from the owning table projection. */
+  readonly sheetId: string
+  readonly rowFrom: number
+  readonly rowTo: number
+  readonly colFrom: number
+  readonly colTo: number
+}
+
 export type SelectionAnchorV1 =
   | FileRangeAnchorV1
   | MarkdownRangeAnchorV1
   | DomRegionAnchorV1
   | ImagePointAnchorV1
   | ImageRegionAnchorV1
+  | MediaFrameAnchorV1
+  | MediaTimePointAnchorV1
+  | MediaTimeRegionAnchorV1
+  | TableRangeAnchorV1
 
 // ---------------------------------------------------------------------------
 // Annotation batch
@@ -385,7 +423,7 @@ const AnchorBaseSchema = z.strictObject({
   anchorId: z.string().min(1),
   artifactRef: OpaqueRefSchema,
   artifactVersion: z.string().min(1),
-  kind: z.enum(['file-range', 'markdown-range', 'dom-region', 'image-point', 'image-region']),
+  kind: z.enum(['file-range', 'markdown-range', 'dom-region', 'image-point', 'image-region', 'media-frame', 'media-time-point', 'media-time-region', 'table-range']),
   quotePreview: z.string().max(SELECTION_PROTOCOL_LIMITS.quotePreviewChars),
   quoteDigest: DigestSchema,
   createdAt: IsoSchema,
@@ -443,12 +481,45 @@ export const ImageRegionAnchorSchema = AnchorBaseSchema.extend({
 }).refine(anchor => anchor.x + anchor.width <= 1 + Number.EPSILON, { message: 'region exceeds image width' })
   .refine(anchor => anchor.y + anchor.height <= 1 + Number.EPSILON, { message: 'region exceeds image height' })
 
+const MediaTimeSchema = z.number().int().nonnegative().max(SELECTION_PROTOCOL_LIMITS.mediaTimeMaxMs)
+
+export const MediaFrameAnchorSchema = AnchorBaseSchema.extend({
+  kind: z.literal('media-frame'),
+  frame: z.number().int().nonnegative().max(SELECTION_PROTOCOL_LIMITS.mediaFrameMax),
+  timeMs: MediaTimeSchema,
+})
+
+export const MediaTimePointAnchorSchema = AnchorBaseSchema.extend({
+  kind: z.literal('media-time-point'),
+  timeMs: MediaTimeSchema,
+})
+
+export const MediaTimeRegionAnchorSchema = AnchorBaseSchema.extend({
+  kind: z.literal('media-time-region'),
+  startMs: MediaTimeSchema,
+  endMs: MediaTimeSchema,
+}).refine(anchor => anchor.endMs > anchor.startMs, { message: 'endMs must be greater than startMs' })
+
+export const TableRangeAnchorSchema = AnchorBaseSchema.extend({
+  kind: z.literal('table-range'),
+  sheetId: z.string().min(1).max(128),
+  rowFrom: PositiveLineSchema,
+  rowTo: PositiveLineSchema,
+  colFrom: PositiveLineSchema,
+  colTo: PositiveLineSchema,
+}).refine(anchor => anchor.rowTo >= anchor.rowFrom, { message: 'rowTo must be >= rowFrom' })
+  .refine(anchor => anchor.colTo >= anchor.colFrom, { message: 'colTo must be >= colFrom' })
+
 export const SelectionAnchorSchema = z.discriminatedUnion('kind', [
   FileRangeAnchorSchema,
   MarkdownRangeAnchorSchema,
   DomRegionAnchorSchema,
   ImagePointAnchorSchema,
   ImageRegionAnchorSchema,
+  MediaFrameAnchorSchema,
+  MediaTimePointAnchorSchema,
+  MediaTimeRegionAnchorSchema,
+  TableRangeAnchorSchema,
 ])
 
 export const AnnotationBatchSchema = z.strictObject({
@@ -738,12 +809,32 @@ export type ImageRegionDraftV1 = AnchorDraftV1 & {
   readonly domMapped?: boolean
 }
 
+export type MediaFrameDraftV1 = AnchorDraftV1 & {
+  readonly kind: 'media-frame'
+  readonly frame: number
+  readonly timeMs: number
+}
+
+export type MediaTimePointDraftV1 = AnchorDraftV1 & {
+  readonly kind: 'media-time-point'
+  readonly timeMs: number
+}
+
+export type MediaTimeRegionDraftV1 = AnchorDraftV1 & {
+  readonly kind: 'media-time-region'
+  readonly startMs: number
+  readonly endMs: number
+}
+
 export type AnchorDraft =
   | FileRangeDraftV1
   | MarkdownRangeDraftV1
   | DomRegionDraftV1
   | ImagePointDraftV1
   | ImageRegionDraftV1
+  | MediaFrameDraftV1
+  | MediaTimePointDraftV1
+  | MediaTimeRegionDraftV1
 
 /** Host-side patch registration; only owner/agent adapters may call this. */
 export interface PatchRangeV1 {

@@ -11,8 +11,13 @@ import {
 } from '@yeisme/dsh-pane-protocol'
 import {
   CREATOR_STUDIO_OWNERS,
+  type CreatorApprovalDecisionV1,
+  type CreatorAssetPageV1,
+  type CreatorAssetQueryV1,
+  type CreatorAssetV1,
   type CreatorMediaAccessV1,
   type CreatorOwnerSnapshotV1,
+  type CreatorOwnerAssetListV1,
   type CreatorStudioContextV1,
   type CreatorStudioSnapshotV1,
 } from './types.ts'
@@ -26,6 +31,7 @@ const isoTimestamp = z.string().min(1).max(80).refine(value => Number.isFinite(D
 function sameCreatorStudioContext(left: PaneContextV1, right: PaneContextV1): boolean {
   return left.tenantRef === right.tenantRef
     && left.workspaceRef === right.workspaceRef
+    && left.projectRef === right.projectRef
     && left.sessionRef === right.sessionRef
     && left.principalRef === right.principalRef
     && left.revision === right.revision
@@ -69,6 +75,46 @@ const resourceSchema = z.object({
   textPreview: textPreviewSchema.optional(),
   evidenceRefs: z.array(safeRef).max(64),
 }).strict()
+
+const assetSchema = resourceSchema.extend({
+  owner: z.enum(CREATOR_STUDIO_OWNERS),
+  projectRef: safeRef,
+  rightsSummary: safeText.optional(),
+  lineageRefs: z.array(safeRef).max(64).optional(),
+}).strict()
+
+export const creatorAssetQuerySchema = z.object({
+  scope: z.enum(['current_project', 'all_projects']),
+  cursor: safeRef.optional(),
+  limit: z.number().int().min(1).max(200).optional(),
+  owner: z.enum(CREATOR_STUDIO_OWNERS).optional(),
+  kind: safeKey.optional(),
+  status: safeKey.optional(),
+  text: z.string().min(1).max(160).refine(value => !/[\u0000-\u001f\u007f]/u.test(value), 'control characters are not allowed').optional(),
+}).strict()
+
+export const creatorAssetPageSchema = z.object({
+  schemaVersion: z.literal('creator.asset.page.v1alpha1'),
+  scope: z.enum(['current_project', 'all_projects']),
+  status: z.enum(['ready', 'partial', 'needs_contract', 'permission_denied', 'contract_mismatch']),
+  freshness: z.enum(['fresh', 'stale', 'unknown']),
+  reasonCode: z.enum(['asset_page', 'project_context_unavailable', 'asset_contract_unavailable', 'partial_owner_projection', 'permission_denied', 'contract_mismatch']),
+  safeMessage: safeText,
+  items: z.array(assetSchema).max(200),
+  nextCursor: safeRef.optional(),
+  unavailableOwners: z.array(z.enum(CREATOR_STUDIO_OWNERS)).max(CREATOR_STUDIO_OWNERS.length),
+  permissionDeniedOwners: z.array(z.enum(CREATOR_STUDIO_OWNERS)).max(CREATOR_STUDIO_OWNERS.length).optional(),
+}).strict()
+
+const creatorOwnerAssetListSchema = z.object({
+  status: z.enum(['ready', 'permission_denied', 'needs_contract']),
+  safeMessage: safeText,
+  items: z.array(assetSchema).max(1_000),
+}).strict().superRefine((value, ctx) => {
+  if (value.status !== 'ready' && value.items.length > 0) ctx.addIssue({ code: 'custom', path: ['items'], message: 'non-ready asset lists must not contain asset facts' })
+})
+
+export const creatorApprovalDecisionSchema = z.object({ decisionRef: safeRef }).strict()
 
 const stageIdSchema = z.enum(['prepare', 'text', 'visual', 'shots', 'review', 'export'])
 const stageSchema = z.object({
@@ -118,6 +164,90 @@ const jobSchema = z.object({
   receiptRef: safeRef.optional(),
   evidenceRefs: z.array(safeRef).max(64),
 }).strict()
+
+const generationRunSchema = z.object({
+  ref: safeRef,
+  source: z.literal('ordo'),
+  title: safeText,
+  state: safeKey,
+  taskCount: z.number().int().nonnegative().max(1_000_000),
+  completedTaskCount: z.number().int().nonnegative().max(1_000_000),
+  attentionCount: z.number().int().nonnegative().max(1_000_000),
+  freshness: z.enum(['fresh', 'stale']),
+}).strict().superRefine((run, ctx) => {
+  if (run.completedTaskCount > run.taskCount) ctx.addIssue({ code: 'custom', path: ['completedTaskCount'], message: 'completedTaskCount exceeds taskCount' })
+})
+
+const approvalSchema = z.object({
+  ref: safeRef,
+  source: z.literal('ordo'),
+  targetRef: safeRef,
+  targetVersion: z.string().min(1).max(160),
+  ownerRef: safeRef,
+  title: safeText,
+  status: z.enum(['pending', 'stale']),
+  expiresAt: isoTimestamp,
+  previewDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+}).strict()
+
+const operationsProjectionSchema = z.object({
+  status: z.enum(['ready', 'stale', 'offline', 'permission_denied', 'contract_mismatch', 'needs_contract']),
+  freshness: z.enum(['fresh', 'stale', 'offline']),
+  reasonCode: safeKey,
+  safeMessage: safeText,
+}).strict()
+
+const operationsSourceContextSchema = z.object({
+  tenantRef: safeRef,
+  workspaceRef: safeRef,
+  principalRef: safeRef,
+  contextRevision: z.number().int().nonnegative(),
+  installationRef: safeRef,
+}).strict()
+
+const operationsSourceSchema = z.object({
+  schemaVersion: z.literal('ordo.agent_ops.snapshot.v1alpha1'),
+  snapshotRef: safeRef,
+  snapshotVersion: z.number().int().nonnegative(),
+  generatedAt: isoTimestamp,
+  state: z.enum(['ready', 'stale', 'offline', 'permission_denied', 'contract_mismatch', 'needs_contract']),
+  freshness: z.enum(['fresh', 'stale', 'offline']),
+  reasonCode: safeKey,
+  source: z.enum(['owner', 'owner-gated']),
+  safeMessage: safeText,
+  context: operationsSourceContextSchema.optional(),
+  run: z.object({
+    runRef: safeRef,
+    state: safeKey,
+    safeTitle: safeText,
+    taskCount: z.number().int().nonnegative().max(1_000_000),
+    completedTaskCount: z.number().int().nonnegative().max(1_000_000),
+    attentionCount: z.number().int().nonnegative().max(1_000_000),
+  }).strict().optional(),
+  capacity: z.object({
+    policyCap: z.number().int().nonnegative().max(1_000_000),
+    observedOrRetained: z.number().int().nonnegative().max(1_000_000),
+    qualifiedRoutes: z.number().int().nonnegative().max(1_000_000),
+    reservationState: z.enum(['not_supported', 'not_reserved', 'reserved', 'stale', 'revoked', 'unknown']),
+  }).strict().optional(),
+  actions: z.array(z.object({
+    actionType: z.enum(['ordo.reconcile.request', 'ordo.approval.decide']),
+    decisionRef: safeRef,
+    targetRef: safeRef,
+    targetVersion: z.number().int().nonnegative(),
+    ownerRef: safeRef,
+    safeEffect: safeText,
+    expiresAt: isoTimestamp,
+    previewDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+    contractDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  }).strict()).max(32).optional(),
+}).strict()
+
+const operationsDecisionOutcomeSchema = z.union([
+  z.object({ kind: z.literal('receipt'), receipt: z.object({ receiptRef: safeRef, state: z.enum(['accepted', 'reconcile_required', 'still_unknown']), safeSummary: safeText }).strict() }).strict(),
+  z.object({ kind: z.literal('rejected'), rejection: z.object({ kind: z.literal('rejected'), reason: z.enum(['stale', 'permission_denied', 'not_available', 'expired']), safeMessage: safeText }).strict() }).strict(),
+  z.object({ kind: z.literal('unknown'), state: z.enum(['still_unknown', 'reconcile_required']), safeSummary: safeText }).strict(),
+])
 
 const creatorOwnerSnapshotBaseSchema = z.object({
   schemaVersion: z.literal('creator.owner.snapshot.v1alpha1'),
@@ -183,6 +313,9 @@ export const creatorStudioSnapshotSchema = z.object({
   production: productionSchema.optional(),
   reviews: z.array(reviewSchema).max(500),
   jobs: z.array(jobSchema).max(500),
+  operations: operationsProjectionSchema.optional(),
+  generationRuns: z.array(generationRunSchema).max(500).optional(),
+  approvals: z.array(approvalSchema).max(500).optional(),
 }).strict().superRefine((value, ctx) => {
   const owners = value.owners.map(owner => owner.owner)
   if (new Set(owners).size !== CREATOR_STUDIO_OWNERS.length) ctx.addIssue({ code: 'custom', path: ['owners'], message: 'creator owner projections must be unique' })
@@ -225,5 +358,40 @@ export function validateCreatorActionReceipt(input: unknown): PaneActionReceiptV
 
 export function validateCreatorMediaAccess(input: unknown): CreatorMediaAccessV1 | undefined {
   const parsed = mediaAccessSchema.safeParse(input)
+  return parsed.success ? parsed.data : undefined
+}
+
+export function validateCreatorAssetQuery(input: unknown): CreatorAssetQueryV1 | undefined {
+  const parsed = creatorAssetQuerySchema.safeParse(input)
+  return parsed.success ? parsed.data as CreatorAssetQueryV1 : undefined
+}
+
+export function validateCreatorAsset(input: unknown): CreatorAssetV1 | undefined {
+  const parsed = assetSchema.safeParse(input)
+  return parsed.success ? parsed.data as CreatorAssetV1 : undefined
+}
+
+export function validateCreatorAssetPage(input: unknown): CreatorAssetPageV1 | undefined {
+  const parsed = creatorAssetPageSchema.safeParse(input)
+  return parsed.success ? parsed.data as CreatorAssetPageV1 : undefined
+}
+
+export function validateCreatorOwnerAssetList(input: unknown): CreatorOwnerAssetListV1 | undefined {
+  const parsed = creatorOwnerAssetListSchema.safeParse(input)
+  return parsed.success ? parsed.data as CreatorOwnerAssetListV1 : undefined
+}
+
+export function validateCreatorApprovalDecision(input: unknown): CreatorApprovalDecisionV1 | undefined {
+  const parsed = creatorApprovalDecisionSchema.safeParse(input)
+  return parsed.success ? parsed.data as CreatorApprovalDecisionV1 : undefined
+}
+
+export function validateCreatorOperationsSourceSnapshot(input: unknown) {
+  const parsed = operationsSourceSchema.safeParse(input)
+  return parsed.success ? parsed.data : undefined
+}
+
+export function validateCreatorOperationsDecisionOutcome(input: unknown) {
+  const parsed = operationsDecisionOutcomeSchema.safeParse(input)
   return parsed.success ? parsed.data : undefined
 }

@@ -2,6 +2,13 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
+  test: {
+    server: {
+      deps: {
+        inline: ['@deepseek-ai/dsh-client-ui-primitives'],
+      },
+    },
+  },
   resolve: {
     alias: [
       { find: /^@deepseek-ai\/dsh-client-runtime\/client$/u, replacement: fileURLToPath(new URL('./tests/client-runtime.mock.ts', import.meta.url)) },

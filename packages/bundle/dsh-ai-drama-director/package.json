@@ -4,10 +4,14 @@
   "description": "DSH AI Drama Director bundle: /drama commands, Director preset, and the Workbench V2 bridge (legacy-compatible)",
   "main": "lib/index.mjs",
   "scripts": {
+    "generate:metadata": "node scripts/generate-bundle-metadata.mjs",
+    "check:metadata": "node scripts/generate-bundle-metadata.mjs --check",
     "test": "pnpm run build && pnpm run smoke:bundle",
     "test:declaration": "vitest run",
+    "test:profile": "node scripts/run-profile-conformance.mjs",
+    "test:production": "node scripts/run-production-conformance.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "tsc -p tsconfig.json && tsdown",
+    "build": "pnpm run check:metadata && tsc -p tsconfig.json && tsdown",
     "bundle": "tsdown",
     "smoke:bundle": "node scripts/smoke-bundle.mjs"
   },
@@ -36,6 +40,7 @@
     "lib/types/**/*.js",
     "lib/types/**/*.d.ts",
     "cordis.patch.yml",
+    "dsh.compatibility.json",
     "README.md"
   ],
   "exports": {
@@ -48,6 +53,7 @@
       "default": "./lib/client.js"
     },
     "./cordis.patch.yml": "./cordis.patch.yml",
+    "./dsh.compatibility.json": "./dsh.compatibility.json",
     "./package.json": "./package.json"
   },
   "dsh": {

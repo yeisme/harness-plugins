@@ -4,6 +4,7 @@ import type { CreatorStudioContextV1, CreatorStudioOwner, CreatorStudioSnapshotV
 export const creatorContext: CreatorStudioContextV1 = {
   tenantRef: 'tenant:one',
   workspaceRef: 'workspace:one',
+  projectRef: 'project:one',
   sessionRef: 'session:one',
   principalRef: 'principal:one',
   revision: '1',
@@ -86,5 +87,8 @@ export function creatorSnapshot(): CreatorStudioSnapshotV1 {
     production: owners.find(owner => owner.owner === 'scaena')?.production,
     reviews: owners.find(owner => owner.owner === 'scaena')?.reviews ?? [],
     jobs: owners.find(owner => owner.owner === 'scaena')?.jobs ?? [],
+    operations: { status: 'ready', freshness: 'fresh', reasonCode: 'owner_snapshot', safeMessage: 'Ordo creator operations are ready.' },
+    generationRuns: [{ ref: 'run:one', source: 'ordo', title: '生成当前镜头', state: 'active', taskCount: 5, completedTaskCount: 3, attentionCount: 1, freshness: 'fresh' }],
+    approvals: [{ ref: 'decision:one', source: 'ordo', targetRef: 'shot:one', targetVersion: '1', ownerRef: 'owner:scaena', title: '批准镜头 04 候选', status: 'pending', expiresAt: '2999-01-01T00:00:00Z', previewDigest: 'a'.repeat(64) }],
   }
 }

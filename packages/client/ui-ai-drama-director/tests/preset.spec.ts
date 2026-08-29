@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyDirectorPreset,
+  applyShowControlPreset,
   buildDramaViewOpenRequest,
+  buildShowControlViewOpenRequest,
   openDramaSecondaryView,
   persistDirectorPresetVariant,
   resolveDramaPresetService,
   DRAMA_DEFAULT_VISIBLE_TAB_LIMIT,
   DRAMA_PRESET_SERVICE_UNAVAILABLE,
   DRAMA_VIEW_KINDS,
+  DRAMA_SHOW_CONTROL_VIEW_KINDS,
   type DramaPresetReceiptV1,
 } from '../src/client/preset.js'
 import type { DramaPaneWorkbenchFace } from '../src/client/probe.js'
@@ -78,6 +81,27 @@ describe('applyDirectorPreset', () => {
     applyDirectorPreset(pane)
     openDramaSecondaryView(pane, 'Story')
     expect(opens.map(call => call.kind)).toEqual(['drama.context', 'drama.review', 'drama.run', 'drama.context', 'drama.story'])
+  })
+})
+
+describe('show-control preset', () => {
+  it('builds stable requests for four additive show-control panes', () => {
+    for (const [id, kind] of Object.entries(DRAMA_SHOW_CONTROL_VIEW_KINDS)) {
+      const request = buildShowControlViewOpenRequest(id as keyof typeof DRAMA_SHOW_CONTROL_VIEW_KINDS)
+      expect(request).toMatchObject({ kind, resourceKey: `drama:show-control:${id.toLowerCase()}`, singleton: true, pinned: true })
+    }
+  })
+
+  it('opens Tier 0 Show Board, Review Inbox, existing Run, and Delivery while preserving Director preset behavior', () => {
+    const { pane, opens } = recordingPane()
+    const result = applyShowControlPreset(pane)
+    expect(opens.map(call => call.kind)).toEqual(['drama.show-board', 'drama.review-inbox', 'drama.run', 'drama.delivery', 'drama.show-board'])
+    expect(result.applied).toEqual(['ShowBoard', 'ReviewInbox', 'Run', 'Delivery'])
+    expect(result.active).toBe('ShowBoard')
+
+    opens.length = 0
+    applyDirectorPreset(pane)
+    expect(opens.map(call => call.kind)).toEqual(['drama.context', 'drama.review', 'drama.run', 'drama.context'])
   })
 })
 

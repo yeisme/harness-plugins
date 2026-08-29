@@ -16,12 +16,21 @@
       "types": "./lib/client.d.mts",
       "default": "./lib/client.mjs"
     },
+    "./runtime": {
+      "types": "./lib/runtime.d.mts",
+      "default": "./lib/runtime.mjs"
+    },
+    "./projection-components": {
+      "types": "./lib/projection-components.d.mts",
+      "default": "./lib/projection-components.mjs"
+    },
     "./package.json": "./package.json"
   },
   "dsh": {
     "client": {
       "inject": [
         "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-slots"
       ],
@@ -35,10 +44,11 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "build": "tsc -p tsconfig.json && tsdown src/index.ts src/client.ts --out-dir lib --format esm --dts --clean"
+    "build": "tsc -p tsconfig.json && tsdown src/index.ts src/client.ts src/runtime.ts src/projection-components.tsx --out-dir lib --format esm --dts --clean"
   },
   "dependencies": {
     "@yeisme/dsh-client-ui-pane-workbench": "workspace:^",
+    "@yeisme/dsh-client-ui-surface": "workspace:^",
     "@yeisme/dsh-client-ui-visual-kit": "workspace:^",
     "@yeisme/dsh-creator-studio-host": "workspace:^",
     "@yeisme/dsh-pane-protocol": "workspace:^",
@@ -47,7 +57,9 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-api-remotes": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-locale": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-primitives": ">=0.1.0-rc.6 <0.2.0",
     "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
     "react": "^18.2.0"
@@ -55,7 +67,9 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-api-remotes": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-locale": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.6",
     "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
     "@testing-library/react": "^16.1.0",

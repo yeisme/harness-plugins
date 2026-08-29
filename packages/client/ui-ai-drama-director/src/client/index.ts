@@ -14,6 +14,8 @@
  */
 
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ArtifactIntentV1, ArtifactRefV1, PaneActionReceiptV1 } from '@yeisme/dsh-pane-protocol'
+import type { CreatorStudioRuntimeV1 } from '@yeisme/dsh-client-ui-creator-studio/runtime'
 import {
   BRIDGE_V2_CONTRACT,
   applyDramaKey,
@@ -28,6 +30,7 @@ import {
   type DramaCommandResultV1,
   type DramaInteractionState,
   type DramaPaneId,
+  type DramaShowControlPaneId,
   type DramaPaneViewV1,
   type DramaCommandRequestV1,
 } from '@yeisme/dsh-ai-drama-director'
@@ -36,6 +39,12 @@ import {
   type DramaContextSnapshotV1,
   type DramaContextStore,
 } from './context.js'
+import {
+  createLegacyCreatorStudioRuntime,
+  creatorProjectionIdentity,
+  type DramaCreatorRuntimeV1,
+  type LegacyCreatorStudioRuntimeV1,
+} from './creator-runtime.js'
 import {
   createDramaEvidenceEmitter,
   REVIEW_COMPLETED_EVIDENCE,
@@ -62,11 +71,14 @@ import {
 } from './keymap.js'
 import {
   applyDirectorPreset,
+  applyShowControlPreset,
   buildDramaViewOpenRequest,
+  buildShowControlViewOpenRequest,
   persistDirectorPresetVariant,
   resolveDramaPresetService,
   type DramaPresetPersistResultV1,
   type DramaPresetApplyResultV1,
+  type DramaShowControlPresetApplyResultV1,
 } from './preset.js'
 import {
   dramaCommandAvailability,
@@ -78,6 +90,11 @@ import {
   type DramaHostTransport,
   type DramaPaneWorkbenchFace,
 } from './probe.js'
+import { DramaShowControlController } from './show-control-controller.js'
+import {
+  createDramaShowControlViewFactories,
+  DRAMA_SHOW_CONTROL_VIEW_REGISTRATIONS,
+} from './show-control-views.js'
 import {
   createDramaViewFactories,
   DRAMA_VIEW_REGISTRATIONS,
@@ -101,6 +118,16 @@ export {
   DRAMA_COMMAND_DEPENDENCIES,
 } from './probe.js'
 export { createDramaContextStore } from './context.js'
+export * from './show-control-controller.js'
+export * from './show-control-views.js'
+export {
+  createLegacyCreatorStudioRuntime,
+  creatorProjectionIdentity,
+} from './creator-runtime.js'
+export type {
+  DramaCreatorRuntimeV1,
+  LegacyCreatorStudioRuntimeV1,
+} from './creator-runtime.js'
 export { createDramaEvidenceEmitter } from './evidence.js'
 export { createDramaHandoffGate, resolveDramaHandoffTarget, DRAMA_HANDOFF_TARGET_VIEWS } from './handoff-gate.js'
 export {
@@ -121,7 +148,9 @@ export { createDramaKeymap, DRAMA_KEYMAP_OVERRIDES, detectDramaKeymapConflicts }
 export { createBoundedDedupStore, createDramaNonceStore } from './nonce-store.js'
 export {
   applyDirectorPreset,
+  applyShowControlPreset,
   buildDramaViewOpenRequest,
+  buildShowControlViewOpenRequest,
   persistDirectorPresetVariant,
   DRAMA_VIEW_KINDS,
   DRAMA_DEFAULT_VISIBLE_TAB_LIMIT,
@@ -154,7 +183,7 @@ const DRAMA_COMMAND_SPECS: readonly DramaCommandSpecV1[] = [
     slash: {
       name: DRAMA_SLASH_CONTRIBUTIONS.name,
       aliases: [...DRAMA_SLASH_CONTRIBUTIONS.aliases],
-      hint: '[new|open|plan|generate|review|repair|evidence|handoff]',
+      hint: '[new|open|plan|generate|review|repair|handoff|show|inbox|assets|delivery]',
       category: 'work',
     },
   },
@@ -167,6 +196,10 @@ const DRAMA_COMMAND_SPECS: readonly DramaCommandSpecV1[] = [
   { id: 'drama.repair', command: 'repair', label: 'Drama Repair', order: 60 },
   { id: 'drama.evidence', command: 'evidence', label: 'Drama Evidence', order: 70 },
   { id: 'drama.handoff', command: 'handoff', label: 'Open in Workbench', order: 80 },
+  { id: 'drama.show', label: 'Show Control', order: 90 },
+  { id: 'drama.inbox', label: 'Review Inbox', order: 100 },
+  { id: 'drama.assets', label: 'Asset Wall', order: 110 },
+  { id: 'drama.delivery', label: 'Delivery', order: 120 },
 ]
 
 /** Client face published on the context for the capability matrix and tests. */
@@ -177,7 +210,9 @@ export interface DramaDirectorClientFace {
   contextSnapshot(): DramaContextSnapshotV1
   commandEntries(): readonly DramaCommandEntryV1[]
   openDramaView(view: DramaPaneId): void
+  openShowControlView(view: DramaShowControlPaneId): void
   applyPreset(): DramaPresetApplyResultV1 | undefined
+  applyShowControlPreset(): DramaShowControlPresetApplyResultV1 | undefined
   savePresetVariant(input: { readonly name: string; readonly scope: string; readonly draft: unknown }): Promise<DramaPresetPersistResultV1>
   consumeHandoff(input: unknown): Promise<DramaHandoffGateResult>
   /**
@@ -243,6 +278,8 @@ function createRuntime(input: {
   readonly emitter: DramaEvidenceEmitter
   readonly contextStore: DramaContextStore
   readonly dramaHost?: DramaHostTransport
+  readonly creatorRuntime?: DramaCreatorRuntimeV1
+  readonly showControlController?: DramaShowControlController
 }): DramaClientRuntime {
   const { ctx, pane, probe, emitter, contextStore } = input
   const keymap = createDramaKeymap()
@@ -254,11 +291,29 @@ function createRuntime(input: {
   let lastMessage: string | undefined
   let lastLaunch: WorkbenchLaunchActivationV1 | undefined
   let firstOpenEmitted = false
-  let uiSnapshot: DramaClientUiSnapshotV1 = { context: contextStore.getSnapshot() }
+  let uiSnapshot: DramaClientUiSnapshotV1 = {
+    context: contextStore.getSnapshot(),
+    ...(input.creatorRuntime === undefined ? {} : {
+      creator: input.creatorRuntime.getSnapshot(),
+      creatorMode: input.creatorRuntime.mode,
+    }),
+    projectionIdentity: creatorProjectionIdentity(
+      contextStore.getSnapshot().context?.contextRevision,
+      input.creatorRuntime?.getSnapshot(),
+    ),
+  }
 
   const emitChange = (): void => {
     uiSnapshot = {
       context: contextStore.getSnapshot(),
+      ...(input.creatorRuntime === undefined ? {} : {
+        creator: input.creatorRuntime.getSnapshot(),
+        creatorMode: input.creatorRuntime.mode,
+      }),
+      projectionIdentity: creatorProjectionIdentity(
+        contextStore.getSnapshot().context?.contextRevision,
+        input.creatorRuntime?.getSnapshot(),
+      ),
       ...(lastMessage === undefined ? {} : { lastMessage }),
       ...(lastLaunch === undefined ? {} : { lastLaunch }),
     }
@@ -295,7 +350,14 @@ function createRuntime(input: {
     return activation
   }
 
-  disposers.push(contextStore.subscribe(() => emitChange()))
+  disposers.push(contextStore.subscribe(() => {
+    const context = contextStore.getSnapshot().context
+    input.showControlController?.bind(context?.showRef, context?.contextRevision)
+    emitChange()
+  }))
+  if (input.creatorRuntime !== undefined) {
+    disposers.push(input.creatorRuntime.subscribe(() => emitChange()))
+  }
 
   const commands = toCommandEntries(probe)
 
@@ -323,9 +385,31 @@ function createRuntime(input: {
     noteFirstOpen()
   }
 
+  const openShowControlView = (view: DramaShowControlPaneId): void => {
+    const availability = dramaCommandAvailability(probe, view === 'ShowBoard' ? 'drama.show' : view === 'ReviewInbox' ? 'drama.inbox' : view === 'AssetWall' ? 'drama.assets' : 'drama.delivery')
+    if (availability.disabled) {
+      setMessage(availability.reason)
+      return
+    }
+    pane.openView(buildShowControlViewOpenRequest(view))
+    noteFirstOpen()
+  }
+
   const applyPreset = (): DramaPresetApplyResultV1 => {
     const result = applyDirectorPreset(pane)
     emitter.emit('command_opened', { reasonCategory: 'preset' })
+    noteFirstOpen()
+    return result
+  }
+
+  const applyShowPreset = (): DramaShowControlPresetApplyResultV1 | undefined => {
+    const availability = dramaCommandAvailability(probe, 'drama.show')
+    if (availability.disabled) {
+      setMessage(availability.reason)
+      return undefined
+    }
+    const result = applyShowControlPreset(pane)
+    emitter.emit('command_opened', { reasonCategory: 'show_control_preset' })
     noteFirstOpen()
     return result
   }
@@ -436,6 +520,14 @@ function createRuntime(input: {
       emitter.emit('command_opened', { reasonCategory: 'help' })
       return
     }
+    if (commandId === 'drama.show') {
+      applyShowPreset()
+      return
+    }
+    if (commandId === 'drama.inbox' || commandId === 'drama.assets' || commandId === 'drama.delivery') {
+      openShowControlView(commandId === 'drama.inbox' ? 'ReviewInbox' : commandId === 'drama.assets' ? 'AssetWall' : 'Delivery')
+      return
+    }
     void dispatchDramaCommand(spec)
   }
 
@@ -460,11 +552,61 @@ function createRuntime(input: {
     emitChange()
   }
 
+  const dispatchArtifactIntent = (intent: ArtifactIntentV1): void => {
+    if (pane.dispatchIntent !== undefined) {
+      void pane.dispatchIntent(intent).then((receipt: PaneActionReceiptV1) => {
+        setMessage(receipt.summary ?? receipt.reconcileReason ?? receipt.receiptRef)
+      }).catch(() => setMessage('artifact intent settlement is unknown; no automatic retry'))
+      return
+    }
+    if (intent.intent === 'open' || intent.intent === 'compare') {
+      pane.openView({
+        kind: 'creator.media',
+        resourceKey: `creator:media:${intent.source.owner}:${intent.source.ref}:${intent.source.version}`,
+        role: 'content',
+        preferredRegion: 'right',
+        retention: 'snapshot',
+        singleton: false,
+        preview: intent.intent === 'open',
+        pinned: intent.intent === 'compare',
+        title: intent.source.title,
+        metadata: { artifact: intent.source },
+      })
+      return
+    }
+    setMessage('artifact handoff requires the shared pane intent runtime')
+  }
+
+  const openArtifact = (artifact: ArtifactRefV1, compare = false): void => {
+    pane.openView({
+      kind: 'creator.media',
+      resourceKey: `creator:media:${artifact.owner}:${artifact.ref}:${artifact.version}`,
+      role: 'content',
+      preferredRegion: 'right',
+      retention: 'snapshot',
+      singleton: false,
+      preview: !compare,
+      pinned: compare,
+      title: artifact.title,
+      metadata: { artifact },
+    })
+  }
+
   const model = {
     getSnapshot: () => uiSnapshot,
     getAvailability: (view: DramaPaneId): DramaAvailabilityV1 => dramaViewAvailability(probe, view),
     getCommands: () => commands,
     getKeymap: () => keymap,
+    getCreatorRuntime: () => input.creatorRuntime,
+    refreshCreator: () => input.creatorRuntime?.refresh() ?? Promise.resolve(),
+    reconcile: async () => {
+      const context = await contextStore.reconcile()
+      input.showControlController?.bind(context.context?.showRef, context.context?.contextRevision)
+      await input.creatorRuntime?.refresh()
+      await input.showControlController?.refresh()
+    },
+    dispatchArtifactIntent,
+    openArtifact,
     handleViewKey,
     runCommand,
     subscribe: (listener: () => void): (() => void) => {
@@ -479,6 +621,15 @@ function createRuntime(input: {
       descriptor,
       component: factories[descriptor.componentKey],
     }))
+  }
+
+  const showControlFactories = createDramaShowControlViewFactories({
+    ...(input.showControlController === undefined ? { disabledReason: probe.showControl.reason } : { controller: input.showControlController }),
+    refresh: () => input.showControlController?.refresh() ?? Promise.resolve(),
+    openArtifact,
+  })
+  for (const { descriptor } of DRAMA_SHOW_CONTROL_VIEW_REGISTRATIONS) {
+    disposers.push(pane.registerView({ descriptor, component: showControlFactories[descriptor.componentKey] }))
   }
 
   if (typeof pane.registerCommand === 'function') {
@@ -503,7 +654,9 @@ function createRuntime(input: {
     contextSnapshot: () => contextStore.getSnapshot(),
     commandEntries: () => commands,
     openDramaView: openView,
+    openShowControlView,
     applyPreset,
+    applyShowControlPreset: applyShowPreset,
     savePresetVariant: saveInput => persistDirectorPresetVariant(presetService, saveInput),
     activateWorkbenchLaunch: (intent: BridgeV2Intent = 'open_show') => activateWorkbenchLaunch(intent),
     consumeHandoff: async (handoffInput: unknown): Promise<DramaHandoffGateResult> => {
@@ -549,7 +702,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   const existing = readContextService<DramaDirectorClientFace>(ctx, 'dramaDirector')
   if (existing !== undefined) return () => {}
 
-  const { probe, pane, dramaHost } = await probeDramaCapability(ctx)
+  const { probe, pane, dramaHost, creatorRuntime, creatorStudio, showControl, selectionAnnotation } = await probeDramaCapability(ctx)
   const sink = readContextService<DramaEvidenceSink>(ctx, 'dramaEvidenceSink')
   const emitter = createDramaEvidenceEmitter(sink)
 
@@ -569,12 +722,30 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
     ...(dramaHost === undefined ? {} : { transport: dramaHost }),
     emitter,
   })
-  const runtime = createRuntime({ ctx, pane, probe, emitter, contextStore, ...(dramaHost === undefined ? {} : { dramaHost }) })
+  const legacyCreatorRuntime: LegacyCreatorStudioRuntimeV1 | undefined = creatorRuntime === undefined && creatorStudio !== undefined
+    ? createLegacyCreatorStudioRuntime(creatorStudio)
+    : undefined
+  const resolvedCreatorRuntime: CreatorStudioRuntimeV1 | LegacyCreatorStudioRuntimeV1 | undefined = creatorRuntime ?? legacyCreatorRuntime
+  const showControlController = showControl === undefined ? undefined : new DramaShowControlController(showControl, selectionAnnotation)
+  const runtime = createRuntime({
+    ctx,
+    pane,
+    probe,
+    emitter,
+    contextStore,
+    ...(dramaHost === undefined ? {} : { dramaHost }),
+    ...(resolvedCreatorRuntime === undefined ? {} : { creatorRuntime: resolvedCreatorRuntime }),
+    ...(showControlController === undefined ? {} : { showControlController }),
+  })
   const unprovide = provide(ctx, 'dramaDirector', runtime.face)
 
   // Initial context resolution is best-effort; failures degrade to a
   // disabled, reasoned state instead of throwing out of apply().
-  void contextStore.refresh()
+  void contextStore.refresh().then(context => {
+    showControlController?.bind(context.context?.showRef, context.context?.contextRevision)
+    if (context.context?.showRef !== undefined) void showControlController?.refresh()
+  })
+  if (legacyCreatorRuntime !== undefined) void legacyCreatorRuntime.refresh()
 
   if (probe.available) emitter.emit('pack_installed', { reasonCategory: 'capability_ready' })
 
@@ -584,6 +755,8 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
     disposed = true
     unprovide()
     runtime.dispose()
+    legacyCreatorRuntime?.dispose()
+    showControlController?.dispose()
   }
 }
 

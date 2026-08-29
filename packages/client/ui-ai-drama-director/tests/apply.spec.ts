@@ -100,6 +100,18 @@ function fakeRemote(options: { freshness?: DramaContextV1['freshness']; dispatch
   }
 }
 
+function fakeShowControlRemote() {
+  return {
+    snapshot: async (showRef: string) => ({ schemaVersion: 'drama.show-control.snapshot.v1alpha1', snapshotRef: 'show:snapshot:one', snapshotVersion: 1, generatedAt: '2026-08-29T00:00:00Z', showRef, showVersion: 'v1', title: 'Show one', status: 'ready', freshness: 'fresh', safeMessage: 'Ready.', summary: { episodeCount: 0, activeEpisodeCount: 0, reviewCount: 0, attentionCount: 0, assetCount: 0, deliveryReadyCount: 0 }, blockerRefs: [], evidenceRefs: [] }),
+    episodes: async (query: { showRef: string }) => ({ schemaVersion: 'drama.show-control.episode-page.v1alpha1', snapshotRef: 'show:snapshot:one', snapshotVersion: 1, showRef: query.showRef, status: 'ready', freshness: 'fresh', safeMessage: 'Ready.', items: [] }),
+    reviews: async (query: { showRef: string }) => ({ schemaVersion: 'drama.show-control.review-page.v1alpha1', snapshotRef: 'show:snapshot:one', snapshotVersion: 1, showRef: query.showRef, status: 'ready', freshness: 'fresh', safeMessage: 'Ready.', items: [] }),
+    assets: async (query: { showRef: string }) => ({ schemaVersion: 'drama.show-control.asset-page.v1alpha1', snapshotRef: 'show:snapshot:one', snapshotVersion: 1, showRef: query.showRef, status: 'ready', freshness: 'fresh', safeMessage: 'Ready.', items: [] }),
+    delivery: async (showRef: string) => ({ schemaVersion: 'drama.show-control.delivery.v1alpha1', snapshotRef: 'show:snapshot:one', snapshotVersion: 1, generatedAt: '2026-08-29T00:00:00Z', showRef, status: 'ready', freshness: 'fresh', safeMessage: 'Ready.', readyCount: 0, totalCount: 0, items: [], blockerRefs: [], evidenceRefs: [] }),
+    previewAction: async () => { throw new Error('no targets') },
+    dispatch: async () => ({ status: 'reconcile_required', receiptRef: 'receipt:unused', owner: 'ordo', reconcileReason: 'unused' }),
+  }
+}
+
 function setup(options: Parameters<typeof fakeRemote>[0] = {}, extras: Record<string, unknown> = {}) {
   const ctx = new Context()
   const pane = fakePane()
@@ -257,20 +269,24 @@ describe('drama client apply', () => {
     expect(typeof window).toBe('undefined')
     const { ctx, pane } = setup()
     const dispose = await apply(ctx as never)
-    expect(pane.views.size).toBe(6)
+    expect(pane.views.size).toBe(10)
     dispose()
     expect(pane.views.size).toBe(0)
   })
 
-  it('registers all six views with schema-valid descriptors', async () => {
+  it('registers the six Director and four show-control views with schema-valid descriptors', async () => {
     const { ctx, pane } = setup()
     const dispose = await apply(ctx as never)
 
     expect([...pane.views.keys()].sort()).toEqual([
+      'drama.asset-wall',
       'drama.audio',
       'drama.context',
+      'drama.delivery',
       'drama.review',
+      'drama.review-inbox',
       'drama.run',
+      'drama.show-board',
       'drama.story',
       'drama.visual',
     ])
@@ -285,7 +301,7 @@ describe('drama client apply', () => {
     const { ctx, pane } = setup()
     const dispose = await apply(ctx as never)
 
-    expect(pane.commands.size).toBe(10)
+    expect(pane.commands.size).toBe(14)
     for (const registration of pane.commands.values()) {
       expect(() => PaneCommandDescriptorSchema.parse(registration.descriptor)).not.toThrow()
     }
@@ -301,19 +317,19 @@ describe('drama client apply', () => {
     const { ctx, pane } = setup()
 
     const first = await apply(ctx as never)
-    expect(pane.views.size).toBe(6)
-    expect(pane.commands.size).toBe(10)
+    expect(pane.views.size).toBe(10)
+    expect(pane.commands.size).toBe(14)
     first()
     expect(pane.views.size).toBe(0)
     expect(pane.commands.size).toBe(0)
     expect(ctx.get('dramaDirector')).toBeUndefined()
 
     const second = await apply(ctx as never)
-    expect(pane.views.size).toBe(6)
+    expect(pane.views.size).toBe(10)
     second()
     const third = await apply(ctx as never)
-    expect(pane.views.size).toBe(6)
-    expect(pane.commands.size).toBe(10)
+    expect(pane.views.size).toBe(10)
+    expect(pane.commands.size).toBe(14)
     third()
     expect(pane.views.size).toBe(0)
   })
@@ -322,9 +338,9 @@ describe('drama client apply', () => {
     const { ctx, pane } = setup()
     const first = await apply(ctx as never)
     const second = await apply(ctx as never)
-    expect(pane.views.size).toBe(6)
+    expect(pane.views.size).toBe(10)
     second()
-    expect(pane.views.size).toBe(6)
+    expect(pane.views.size).toBe(10)
     first()
     expect(pane.views.size).toBe(0)
   })
@@ -345,8 +361,8 @@ describe('drama client apply', () => {
     expect(face().probe.commandExperience.available).toBe(false)
     expect(face().probe.commandExperience.reason).toContain('slash directory')
     // Pane views and pane-internal commands are unaffected.
-    expect(pane.views.size).toBe(6)
-    expect(pane.commands.size).toBe(10)
+    expect(pane.views.size).toBe(10)
+    expect(pane.commands.size).toBe(14)
     dispose()
   })
 
@@ -382,6 +398,25 @@ describe('drama client apply', () => {
     expect(result?.applied).toEqual(['Context', 'Review', 'Run'])
     expect(pane.opens.map(call => call.kind)).toEqual(['drama.context', 'drama.review', 'drama.run', 'drama.context'])
     expect(records.some(record => record.kind === 'command_opened' && record.reasonCategory === 'first_open')).toBe(true)
+    dispose()
+  })
+
+  it('opens the additive show-control preset and individual panes only when the owner remote probes', async () => {
+    const { ctx, pane, face } = setup()
+    ctx.provide('remote.dramaShowControl' as never, fakeShowControlRemote())
+    const dispose = await apply(ctx as never)
+    await flush()
+    expect(face().probe.showControl.available).toBe(true)
+
+    pane.opens.length = 0
+    pane.commands.get('drama.show')?.execute()
+    expect(pane.opens.map(call => call.kind)).toEqual(['drama.show-board', 'drama.review-inbox', 'drama.run', 'drama.delivery', 'drama.show-board'])
+    pane.commands.get('drama.assets')?.execute()
+    expect(pane.opens.at(-1)?.kind).toBe('drama.asset-wall')
+
+    pane.opens.length = 0
+    pane.commands.get('drama.open')?.execute()
+    expect(pane.opens.map(call => call.kind)).toEqual(['drama.context', 'drama.review', 'drama.run', 'drama.context'])
     dispose()
   })
 

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "yeisme.dsh-bundle-compatibility.v1",
+  "package": {
+    "name": "@yeisme/dsh-ai-drama-director",
+    "version": "0.1.0-rc.1"
+  },
+  "dshHostCompatibility": {
+    "range": ">=0.1.0-rc.6 <0.2.0",
+    "strategy": "capability_probe",
+    "requiredClientRuntime": "0.1.0-rc.6"
+  },
+  "contributions": {
+    "hostPluginName": "dsh-ai-drama-director",
+    "clientModuleLoaderId": "@yeisme/dsh-ai-drama-director",
+    "clientExport": "./client"
+  },
+  "profile": {
+    "patch": "./cordis.patch.yml",
+    "rowId": "dsh-ai-drama-director",
+    "conformanceCommand": "pnpm --dir packages/bundle/dsh-ai-drama-director run test:profile"
+  },
+  "contracts": [
+    {
+      "id": "dsh.workbench_ai_drama_bridge.v2",
+      "status": "preferred",
+      "fixtureVersion": "2026-08-29.1"
+    },
+    {
+      "id": "drama.workbench-handoff.v1",
+      "status": "legacy",
+      "compatibilityWindowReleases": 2,
+      "removalRequiresSeparateChange": true
+    }
+  ],
+  "contractDigest": "1472f8888b7c7e4d12178a2c6173e127c0912785887de44f143f6a0f82a2aaa4",
+  "pluginReleaseDigest": "903da7da6749d465df2622003f2ad8465d7afeb5dafb9554a53b774fef5dd0d7"
+}

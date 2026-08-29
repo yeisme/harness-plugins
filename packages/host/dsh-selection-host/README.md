@@ -6,7 +6,8 @@ Owns the protocol layer only — never filesystem state, conversation runtime
 state or screenshot bytes:
 
 - **Selection anchors** — `file-range`, `markdown-range`, `dom-region`,
-  `image-point`, `image-region` sharing `artifactRef`/`artifactVersion`,
+  `image-point`, `image-region`, `media-frame`, `media-time-point`,
+  `media-time-region` sharing `artifactRef`/`artifactVersion`,
   `quotePreview`, `quoteDigest`, `freshness` and `reanchorEvidence`.
   Anchors are the single join key for comments, questions and proposals.
 - **Annotation batches** — multi-anchor review batches with stable `#N`
@@ -124,6 +125,7 @@ probeWebCapture(adapter) // adapter 缺失时 unavailable + missingCapability
 | 单截图标记数 | 20（最低验收）–200（上限） |
 | batch 标题 / safeSummary | 160 / 280 chars |
 | hunk 依赖数 | 16 |
+| media time / frame | 24h / 10,000,000 |
 
 ## Boundaries
 

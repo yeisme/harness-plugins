@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 // The bundle shares its package name with the host pack, so a bare
 // self-import resolves to the bundle entry; reference the host pack directly.
@@ -44,5 +45,30 @@ describe('dsh-ai-drama-director bundle contract', () => {
     // the bundle must not hard-require a V2 consumer.
     expect(JSON.stringify(pkg.peerDependencies)).not.toContain('yeisme-workbench')
     expect(existsSync(join(__dirname, '..', 'cordis.patch.yml'))).toBe(true)
+  })
+
+  it('keeps generated manifest, profile patch, and compatibility metadata in sync', () => {
+    const result = spawnSync(process.execPath, ['scripts/generate-bundle-metadata.mjs', '--check'], {
+      cwd: join(__dirname, '..'),
+      encoding: 'utf8',
+    })
+    expect(result.status, result.stderr).toBe(0)
+
+    const compatibility = JSON.parse(readFileSync(join(__dirname, '..', 'dsh.compatibility.json'), 'utf8'))
+    expect(compatibility).toMatchObject({
+      schemaVersion: 'yeisme.dsh-bundle-compatibility.v1',
+      package: { name: '@yeisme/dsh-ai-drama-director', version: '0.1.0-rc.1' },
+      profile: {
+        patch: './cordis.patch.yml',
+        rowId: 'dsh-ai-drama-director',
+        conformanceCommand: 'pnpm --dir packages/bundle/dsh-ai-drama-director run test:profile',
+      },
+    })
+    expect(compatibility.contracts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'dsh.workbench_ai_drama_bridge.v2', status: 'preferred' }),
+      expect.objectContaining({ id: 'drama.workbench-handoff.v1', status: 'legacy', compatibilityWindowReleases: 2 }),
+    ]))
+    expect(compatibility.contractDigest).toMatch(/^[0-9a-f]{64}$/u)
+    expect(compatibility.pluginReleaseDigest).toMatch(/^[0-9a-f]{64}$/u)
   })
 })

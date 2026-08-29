@@ -23,12 +23,29 @@ const BASE = {
 } as const
 
 describe('selection anchor contracts', () => {
-  it('accepts all five anchor kinds', () => {
+  it('accepts all five legacy anchor kinds', () => {
     expect(parseSelectionAnchor({ ...BASE, kind: 'file-range', startLine: 18, endLine: 24, startColumn: 0, endColumn: 12 }).kind).toBe('file-range')
     expect(parseSelectionAnchor({ ...BASE, kind: 'markdown-range', sourceArtifactRef: 'file:README.md', sourceStartLine: 3, sourceEndLine: 9 }).kind).toBe('markdown-range')
     expect(parseSelectionAnchor({ ...BASE, kind: 'dom-region', selectorDigest: 'b'.repeat(64), sourceMapped: false, unmappedReason: 'missing-source-line-hints' }).kind).toBe('dom-region')
     expect(parseSelectionAnchor({ ...BASE, kind: 'image-point', x: 0.5, y: 0.25 }).kind).toBe('image-point')
     expect(parseSelectionAnchor({ ...BASE, kind: 'image-region', x: 0.1, y: 0.1, width: 0.2, height: 0.2 }).kind).toBe('image-region')
+  })
+
+  it('accepts table-range anchors with monotonic data coordinates', () => {
+    const anchor = parseSelectionAnchor({ ...BASE, kind: 'table-range', sheetId: 'sheet-1', rowFrom: 3, rowTo: 7, colFrom: 2, colTo: 4 })
+    expect(anchor.kind).toBe('table-range')
+    if (anchor.kind === 'table-range') {
+      expect(anchor.sheetId).toBe('sheet-1')
+      expect(anchor.rowFrom).toBe(3)
+      expect(anchor.rowTo).toBe(7)
+    }
+  })
+
+  it('rejects inverted or non-integer table ranges', () => {
+    expect(safeParseSelectionAnchor({ ...BASE, kind: 'table-range', sheetId: 'sheet-1', rowFrom: 7, rowTo: 3, colFrom: 2, colTo: 4 }).success).toBe(false)
+    expect(safeParseSelectionAnchor({ ...BASE, kind: 'table-range', sheetId: 'sheet-1', rowFrom: 3, rowTo: 7, colFrom: 4, colTo: 2 }).success).toBe(false)
+    expect(safeParseSelectionAnchor({ ...BASE, kind: 'table-range', sheetId: 'sheet-1', rowFrom: 3.5, rowTo: 7, colFrom: 2, colTo: 4 }).success).toBe(false)
+    expect(safeParseSelectionAnchor({ ...BASE, kind: 'table-range', sheetId: '', rowFrom: 3, rowTo: 7, colFrom: 2, colTo: 4 }).success).toBe(false)
   })
 
   it('rejects anchors without a quote digest (fail-closed)', () => {
