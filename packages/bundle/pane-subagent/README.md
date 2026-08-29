@@ -8,4 +8,4 @@ dsh plugin --profile web add @yeisme/dsh-pane-subagent
 dsh plugin --profile web add ./packages/bundle/pane-subagent
 ```
 
-The bundle depends on `@yeisme/dsh-pane-workbench` and registers the `subagent.monitor` Pane view plus a session-header "Agents" entry.
+The bundle depends on `@yeisme/dsh-pane-workbench` and registers the `subagent.monitor` Pane view plus a session-header Agents icon. The icon stays disabled with a reason when Pane Workbench is not provided.

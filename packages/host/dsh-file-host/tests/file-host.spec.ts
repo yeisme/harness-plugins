@@ -4,11 +4,13 @@ import {
   createFileHostFromWorkspaces,
   createFileHostFromWorkspaceTree,
   createFileHostPlaceholder,
+  FILE_OPAQUE_REF_CAPABILITY,
   FILE_TREE_PROJECTION_CAPABILITY,
   FILE_WATCH_CAPABILITY,
   isFileHostV1,
   isSafeFileWatchEvent,
   probeFileTreeProjection,
+  probeFileOpaqueRefs,
   probeFileWatch,
   validateFileTreeBreadcrumb,
   validateFileTreeNode,
@@ -111,7 +113,44 @@ describe('@yeisme/dsh-file-host', () => {
     expect(roots.find(entry => entry.name === 'README.md')).toMatchObject({ kind: 'text', mediaType: 'text/markdown' })
     expect(JSON.stringify(roots)).not.toContain('/workspace')
     const text = await host.readText?.(roots.find(entry => entry.name === 'README.md')!)
-    expect(text).toEqual({ content: '# hello', truncated: false, binary: false })
+    expect(text).toMatchObject({ content: '# hello', truncated: false, binary: false })
+  })
+
+  it('adds edit only when a version-fenced writer is present', async () => {
+    const writes: string[] = []
+    const host = createFileHostFromWorkspaceTree(async () => ({
+      path: '/workspace',
+      entries: [{ name: 'README.md', path: '/workspace/README.md', isDir: false }],
+    }), {
+      readText: async () => ({ content: 'old', truncated: false, binary: false, version: 'v1' }),
+      writeText: async (_path, content, expectedVersion) => {
+        writes.push(`${expectedVersion}:${content}`)
+        return { status: 'ok', version: 'v2' }
+      },
+    })
+    const [editable] = await host.listEntries()
+    expect(editable?.capabilities).toContain('edit')
+    await expect(host.writeText?.(editable!, 'new', 'v1')).resolves.toEqual({ status: 'ok', version: 'v2' })
+    expect(writes).toEqual(['v1:new'])
+  })
+
+  it('projects DOCX and media files with bounded binary preview capability', async () => {
+    const host = createFileHostFromWorkspaceTree(async () => ({
+      path: '/workspace',
+      entries: [
+        { name: 'draft.docx', path: '/workspace/draft.docx', isDir: false },
+        { name: 'take.mp3', path: '/workspace/take.mp3', isDir: false },
+      ],
+    }), {
+      readBinary: async path => ({ bytes: new Uint8Array(path.endsWith('.docx') ? [80, 75] : [1, 2, 3]), size: 3, truncated: false }),
+    })
+    const entries = await host.listEntries()
+    const docx = entries.find(entry => entry.name === 'draft.docx')!
+    const audio = entries.find(entry => entry.name === 'take.mp3')!
+    expect(docx).toMatchObject({ kind: 'document', mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', capabilities: ['preview', 'open'] })
+    expect(audio).toMatchObject({ kind: 'file', mediaType: 'audio/mpeg', capabilities: ['preview', 'open'] })
+    await expect(host.readBinary?.(docx)).resolves.toMatchObject({ bytes: new Uint8Array([80, 75]), mediaType: docx.mediaType })
+    expect(JSON.stringify(entries)).not.toContain('/workspace')
   })
 
   it('calls the explorer API for tree listings', async () => {
@@ -125,6 +164,43 @@ describe('@yeisme/dsh-file-host', () => {
     const entries = await host.listEntries()
     expect(entries).toHaveLength(1)
     expect(entries[0]).toMatchObject({ name: 'app.ts', kind: 'text' })
+  })
+
+  it('prefers opaque V2 entries and keeps raw paths out of client requests', async () => {
+    const requests: Array<{ input: string; body: Record<string, unknown> }> = []
+    const fetchImpl = async (input: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>
+      requests.push({ input, body })
+      if (input.endsWith('/fs.treeV2')) {
+        return { json: async () => ({ ok: true, value: [{ id: 'file-safe123', name: 'app.ts', kind: 'text', mediaType: 'text/typescript', capabilities: ['preview', 'open', 'edit'] }] }) } as unknown as Response
+      }
+      if (input.endsWith('/fs.readV2')) {
+        return { json: async () => ({ ok: true, value: { content: 'export {}', truncated: false, binary: false, version: 'v1' } }) } as unknown as Response
+      }
+      throw new Error(`unexpected request: ${input}`)
+    }
+    const host = createExplorerFileHost({ fetchImpl, sessionId: () => 'session-1', cwd: () => '/must-not-leak' })
+    const [entry] = await host.listEntries()
+    expect(entry?.id).toBe('file-safe123')
+    expect(host.capabilities).toContain(FILE_OPAQUE_REF_CAPABILITY)
+    expect(probeFileOpaqueRefs(host).available).toBe(true)
+    await expect(host.readText?.(entry!)).resolves.toMatchObject({ content: 'export {}', version: 'v1' })
+    expect(requests.every(request => !('cwd' in request.body) && !('path' in request.body))).toBe(true)
+    expect(requests.at(-1)?.body).toMatchObject({ sessionId: 'session-1', ref: 'file-safe123' })
+  })
+
+  it('decodes owner-provided binary responses without exposing the path on entries', async () => {
+    const fetchImpl = async (input: string) => ({
+      json: async () => input.endsWith('/fs.tree')
+        ? { ok: true, value: { path: '/workspace', entries: [{ name: 'draft.docx', path: '/workspace/draft.docx', isDir: false }] } }
+        : { ok: true, value: { base64: 'UEs=', size: 2, truncated: false, version: 'v1' } },
+    }) as unknown as typeof fetch
+    const host = createExplorerFileHost({ fetchImpl, cwd: () => '/workspace' })
+    const [entry] = await host.listEntries()
+    const binary = await host.readBinary?.(entry!)
+    expect([...binary!.bytes]).toEqual([80, 75])
+    expect(binary).toMatchObject({ size: 2, truncated: false, version: 'v1' })
+    expect(JSON.stringify(entry)).not.toContain('/workspace')
   })
 
   it('probes FileTreeProjectionCapabilityV1 independently of watch and rejects absolute paths', () => {

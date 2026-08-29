@@ -57,11 +57,11 @@ describe('apply lifecycle', () => {
     disposeEffects()
   })
 
-  it('is a no-op with the kill switch set', async () => {
+  it('disables mermaid only while keeping the independent table enhancer active', async () => {
     window.localStorage.setItem('dsh-mermaid', 'off')
     const { ctx } = fakeCtx()
     await apply(ctx)
-    expect(document.head.querySelector('style')).toBeNull()
+    expect(document.head.querySelector('[data-dsh-structured-table-styles]')).not.toBeNull()
     const pre = document.createElement('pre')
     const code = document.createElement('code')
     code.className = 'language-mermaid'

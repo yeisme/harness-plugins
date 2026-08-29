@@ -7,6 +7,8 @@
  */
 
 import { useState } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Surface, SurfaceContextBar, SurfaceState } from '@yeisme/dsh-client-ui-surface'
 import { statusTone } from '@yeisme/dsh-client-ui-visual-kit'
 import { FORBIDDEN_PROFILE_KEYS, type ProfileMetaV1 } from './profile-types.ts'
 import { cookieManagerStyles } from './styles.ts'
@@ -151,11 +153,12 @@ export function CookieManagerPanel({
   const [name, setName] = useState('')
   const [renameDrafts, setRenameDrafts] = useState<Record<string, string>>({})
   return (
-    <section aria-label={text.title} data-dsh-cookie-manager style={{ display: 'grid', gap: 12 }}>
-      <style>{cookieManagerStyles}</style>
-      <h3 className="cm-title">{text.title}</h3>
+    <Surface kind="inspector" aria-label={text.title} data-dsh-cookie-manager>
+      <style data-cookie-manager-styles>{cookieManagerStyles}</style>
+      <SurfaceContextBar title={text.title} />
+      <div className="ys-body">
       {error !== undefined && error.length > 0 && (
-        <p role="alert" data-dsh-cookie-error className="cm-alert">{error}</p>
+        <SurfaceState phase="error" title={error} data-dsh-cookie-error className="cm-alert" />
       )}
 
       <form
@@ -169,19 +172,19 @@ export function CookieManagerPanel({
         aria-label={text.create}
         className="cm-card cm-form"
       >
-        <label>{text.site}<input value={site} onChange={e => { setSite(e.target.value) }} aria-label={text.site} /></label>
-        <label>{text.displayName}<input value={name} onChange={e => { setName(e.target.value) }} aria-label={text.displayName} /></label>
-        <button type="submit" className="cm-btn">{text.create}</button>
+        <label className="ys-field">{text.site}<input value={site} onChange={e => { setSite(e.target.value) }} aria-label={text.site} /></label>
+        <label className="ys-field">{text.displayName}<input value={name} onChange={e => { setName(e.target.value) }} aria-label={text.displayName} /></label>
+        <Button type="submit" size="sm" variant="primary" className="cm-btn">{text.create}</Button>
       </form>
 
-      {profiles.length === 0 && <p className="cm-empty">{text.empty}</p>}
+      {profiles.length === 0 && <SurfaceState phase="empty" title={text.empty} />}
       <ul data-profile-count={profiles.length} className="cm-list">
         {profiles.map(profile => (
           <li key={profile.profileId} data-profile-id={profile.profileId} className="cm-row">
             <span className="cm-name">{profile.displayName}</span>
             <span aria-label="site" className="cm-site">{profile.siteScope}</span>
             {profile.accountSummary !== undefined && <span aria-label="account" className="cm-site">{profile.accountSummary}</span>}
-            <label className="cm-rename">
+            <label className="cm-rename ys-field">
               <span className="sr-only">{text.rename}</span>
               <input
                 value={renameDrafts[profile.profileId] ?? profile.displayName}
@@ -248,6 +251,7 @@ export function CookieManagerPanel({
             </dl>
           )}
       </section>
-    </section>
+      </div>
+    </Surface>
   )
 }

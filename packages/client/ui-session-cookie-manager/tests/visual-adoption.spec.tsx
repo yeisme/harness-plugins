@@ -50,7 +50,7 @@ describe('cookie manager visual adoption', () => {
   it('既有 data 合同与禁用语义保持', () => {
     const { container, root } = render(baseProps)
     expect(container.querySelector('[data-dsh-cookie-manager]')).not.toBeNull()
-    expect(container.querySelector('style')?.textContent).toBe(cookieManagerStyles)
+    expect(container.querySelector('style[data-cookie-manager-styles]')?.textContent).toBe(cookieManagerStyles)
     expect(container.querySelector('[data-profile-id="p1"]')?.className).toContain('cm-row')
     expect((container.querySelector('button[disabled]') as HTMLButtonElement).disabled).toBe(true)
     act(() => { root.unmount() }); container.remove()

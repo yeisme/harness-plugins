@@ -36,7 +36,7 @@ try {
   const patch = await readFile(resolve(bundleRoot, 'cordis.patch.yml'), 'utf8')
   assert(manifest.dsh?.bundle?.patch === './cordis.patch.yml', 'bundle manifest does not declare its patch')
   assert(manifest.dsh?.client?.platform === 'web', 'bundle manifest does not declare the Web client face')
-  assert(manifest.dependencies?.['@yeisme/dsh-client-ui-pane-workbench'] === '0.1.0-rc.1', 'client dependency is not direct and versioned')
+  assert(manifest.dependencies?.['@yeisme/dsh-client-ui-pane-workbench'] === '0.1.0-rc.2', 'client dependency is not direct and versioned')
   assert(countLines(patch, 'id: pane-workbench') === 1, 'patch must contain one pane-workbench row')
   assert(countLines(patch, "name: '@yeisme/dsh-pane-workbench'") === 1, 'patch must mount the bundle node face')
   const patchNames = [...patch.matchAll(/^\s*name:\s*['"]([^'"]+)['"]\s*$/gmu)].map(match => match[1])
@@ -64,7 +64,7 @@ try {
   const faceProbe = run('node', [
     '--input-type=module',
     '-e',
-    "const fs = await import('node:fs'); const code = fs.readFileSync('./lib/client.js', 'utf8'); if (!code.startsWith('window.__ModuleLoader__.load({')) throw new Error('client bundle is not a __ModuleLoader__.load registration'); if (!code.includes('id: \"@yeisme/dsh-pane-workbench\"')) throw new Error('client bundle registers the wrong id'); if (!code.includes('factory: (require)')) throw new Error('client bundle is missing the factory face'); if (!code.includes('shell.workspace.right') || !code.includes('shell.workspace.bottom') || !code.includes('workspaceLayout')) throw new Error('client bundle is missing the V2 workspace seams'); if (/\\.inject\\(\\s*[\"']shell\\.overlay/u.test(code)) throw new Error('client bundle still registers shell.overlay'); console.log('client-bundle-v2-ok')",
+    "const fs = await import('node:fs'); const code = fs.readFileSync('./lib/client.js', 'utf8'); if (!code.startsWith('window.__ModuleLoader__.load({')) throw new Error('client bundle is not a __ModuleLoader__.load registration'); if (!code.includes('id: \"@yeisme/dsh-pane-workbench\"')) throw new Error('client bundle registers the wrong id'); if (!code.includes('factory: (require)')) throw new Error('client bundle is missing the factory face'); if (!code.includes('shell.workspace.right') || !code.includes('shell.workspace.bottom') || !code.includes('workspaceLayout')) throw new Error('client bundle is missing the V2 workspace seams'); if (!/\\.inject\\(\\s*[\"']shell\\.overlay/u.test(code) || !code.includes('OfficialOverlayPaneHost')) throw new Error('client bundle lost the official overlay compatibility host for published rc.9 layouts'); console.log('client-bundle-v2-ok')",
   ], bundleRoot)
   assert(faceProbe.stdout.includes('client-bundle-v2-ok'), 'client bundle is not a DSH V2 workspace face')
   structuralLog.push({
@@ -72,7 +72,7 @@ try {
     loader_registration: true,
     id: '@yeisme/dsh-pane-workbench',
     workspace_slots: 2,
-    overlay_registration: false,
+    overlay_registration: true,
     host_cli: 'not_required',
   })
 } catch (error) {

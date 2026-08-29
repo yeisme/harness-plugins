@@ -9,9 +9,19 @@
  */
 
 import type { FileEntryV1 } from '@yeisme/dsh-file-document'
+import type {
+  GitCompareSessionCapabilityV1,
+  GitDiffWindowCapabilityV2,
+  GitHistoryWindowCapabilityV1,
+  GitMutationActionsCapabilityV2,
+  GitStatusWindowCapabilityV1,
+} from '@yeisme/dsh-git-host'
 
 export const FILE_WATCH_CAPABILITY = 'FileWatchCapabilityV1'
 export const FILE_TREE_PROJECTION_CAPABILITY = 'FileTreeProjectionCapabilityV1'
+export const FILE_TEXT_WRITE_CAPABILITY = 'FileTextWriteCapabilityV1'
+export const FILE_OPAQUE_REF_CAPABILITY = 'FileOpaqueRefCapabilityV1'
+export const FILE_WORKSPACE_EDIT_CAPABILITY = 'FileWorkspaceEditCapabilityV1'
 
 export type FileWatchFreshness = 'unknown' | 'stale' | 'offline' | 'contract_mismatch' | 'fresh'
 export type FileWatchOp = 'created' | 'changed' | 'deleted' | 'renamed'
@@ -35,6 +45,75 @@ export interface FileTextReadV1 {
   readonly content: string
   readonly truncated: boolean
   readonly binary: boolean
+  /** Owner-issued version fence required before editing. */
+  readonly version?: string
+}
+
+/** Bounded binary payload resolved by the file owner. Raw paths never cross this contract. */
+export interface FileBinaryReadV1 {
+  readonly bytes: Uint8Array
+  /** Full encoded file size, even when the payload is omitted because it exceeds the limit. */
+  readonly size: number
+  readonly truncated: boolean
+  readonly mediaType?: string
+  readonly version?: string
+}
+
+export interface FileTextWriteReceiptV1 {
+  readonly status: 'ok' | 'conflict' | 'rejected'
+  readonly version?: string
+  readonly reason?: string
+}
+
+export interface FileWorkspaceTextEditV1 {
+  readonly start: number
+  readonly end: number
+  readonly newText: string
+}
+
+export interface FileWorkspaceEditTargetV1 {
+  readonly ref: string
+  readonly expectedVersion: string
+  readonly edits: readonly FileWorkspaceTextEditV1[]
+}
+
+export interface FileWorkspaceEditDraftV1 {
+  readonly targets: readonly FileWorkspaceEditTargetV1[]
+}
+
+export interface FileWorkspaceEditPreviewFileV1 {
+  readonly ref: string
+  readonly editCount: number
+  readonly beforeBytes: number
+  readonly afterBytes: number
+  /** Bounded owner-generated preview; never contains a filesystem path. */
+  readonly diff?: string
+}
+
+export interface FileWorkspaceEditPreviewV1 {
+  readonly previewId: string
+  readonly expiresAt: string
+  readonly files: readonly FileWorkspaceEditPreviewFileV1[]
+}
+
+export interface FileWorkspaceEditReceiptV1 {
+  readonly status: 'ok' | 'conflict' | 'rejected' | 'rolled-back' | 'partial'
+  readonly previewId: string
+  readonly files: readonly {
+    readonly ref: string
+    readonly status: 'ok' | 'conflict' | 'rejected' | 'rolled-back' | 'failed'
+    readonly version?: string
+    readonly reason?: string
+  }[]
+  readonly reason?: string
+}
+
+/** Additive multi-file text mutation surface. It never accepts paths or resource operations. */
+export interface FileWorkspaceEditHostV1 {
+  readonly version: '0.1.0-rc.1'
+  readonly capability: typeof FILE_WORKSPACE_EDIT_CAPABILITY
+  preview(draft: FileWorkspaceEditDraftV1): Promise<FileWorkspaceEditPreviewV1>
+  apply(previewId: string): Promise<FileWorkspaceEditReceiptV1>
 }
 
 export interface FileHostV1 {
@@ -46,12 +125,31 @@ export interface FileHostV1 {
   resolvePreviewUrl?(entry: FileEntryV1): string | undefined
   /** Optional on-demand text read for one opaque entry. Absent for directory-only browse. */
   readText?(entry: FileEntryV1): Promise<FileTextReadV1 | undefined>
+  /** Optional bounded binary read for document/media preview. */
+  readBinary?(entry: FileEntryV1): Promise<FileBinaryReadV1 | undefined>
+  /** Optional version-fenced text write. Browser callers never submit a path. */
+  writeText?(entry: FileEntryV1, content: string, expectedVersion: string): Promise<FileTextWriteReceiptV1>
   /** Optional capability names advertised by the file owner. */
   readonly capabilities?: readonly string[]
   /** Optional live watch handle. Absent unless FileWatchCapabilityV1 is present. */
   watch?(parentRef?: string): FileWatchHandle
   /** Optional owner-issued tree projection. Absent unless FileTreeProjectionCapabilityV1 is present. */
   tree?: FileTreeProjectionCapabilityV1
+}
+
+export interface FileOpaqueRefProbeV1 {
+  readonly available: boolean
+  readonly capability: typeof FILE_OPAQUE_REF_CAPABILITY
+  readonly reason: string
+}
+
+export function probeFileOpaqueRefs(host: FileHostV1 | undefined): FileOpaqueRefProbeV1 {
+  const available = host?.capabilities?.includes(FILE_OPAQUE_REF_CAPABILITY) === true
+  return {
+    available,
+    capability: FILE_OPAQUE_REF_CAPABILITY,
+    reason: available ? 'opaque file refs available' : `missing ${FILE_OPAQUE_REF_CAPABILITY}`,
+  }
 }
 
 export type FileTreeNodeKindV1 = 'file' | 'directory' | 'symlink'
@@ -110,6 +208,8 @@ export function isFileHostV1(value: unknown): value is FileHostV1 {
     && typeof candidate.listEntries === 'function'
     && (candidate.resolvePreviewUrl === undefined || typeof candidate.resolvePreviewUrl === 'function')
     && (candidate.readText === undefined || typeof candidate.readText === 'function')
+    && (candidate.readBinary === undefined || typeof candidate.readBinary === 'function')
+    && (candidate.writeText === undefined || typeof candidate.writeText === 'function')
     && (candidate.watch === undefined || typeof candidate.watch === 'function')
 }
 
@@ -272,6 +372,18 @@ export type ReadWorkspaceText = (
   signal?: AbortSignal,
 ) => Promise<FileTextReadV1>
 
+export type WriteWorkspaceText = (
+  path: string,
+  content: string,
+  expectedVersion: string,
+  signal?: AbortSignal,
+) => Promise<FileTextWriteReceiptV1>
+
+export type ReadWorkspaceBinary = (
+  path: string,
+  signal?: AbortSignal,
+) => Promise<FileBinaryReadV1>
+
 const ID_PREFIX = 'dir-'
 const ID_RE = /^[A-Za-z0-9._~-]{1,128}$/
 
@@ -344,6 +456,7 @@ const TEXT_EXT = new Set([
   '.yml', '.yaml', '.toml', '.xml', '.sh', '.go', '.rs', '.py', '.svg',
 ])
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.avif', '.ico'])
+const DOCUMENT_EXT = new Set(['.docx'])
 const ARCHIVE_EXT = new Set(['.zip', '.tar', '.gz', '.tgz', '.bz2', '.7z'])
 
 function extensionOf(name: string): string {
@@ -356,6 +469,7 @@ function kindFromEntry(name: string, isDir: boolean): FileEntryV1['kind'] {
   const ext = extensionOf(name)
   if (TEXT_EXT.has(ext)) return 'text'
   if (IMAGE_EXT.has(ext)) return 'image'
+  if (DOCUMENT_EXT.has(ext)) return 'document'
   if (ext === '.pdf') return 'pdf'
   if (ARCHIVE_EXT.has(ext)) return 'archive'
   return 'file'
@@ -370,6 +484,7 @@ function mediaTypeOf(kind: FileEntryV1['kind'], name: string): string | undefine
     return 'text/plain'
   }
   if (kind === 'pdf') return 'application/pdf'
+  if (kind === 'document' && ext === '.docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   if (kind === 'image') {
     if (ext === '.png') return 'image/png'
     if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg'
@@ -378,12 +493,24 @@ function mediaTypeOf(kind: FileEntryV1['kind'], name: string): string | undefine
     if (ext === '.svg') return 'image/svg+xml'
     return 'image/*'
   }
+  if (ext === '.mp3') return 'audio/mpeg'
+  if (ext === '.wav') return 'audio/wav'
+  if (ext === '.ogg') return 'audio/ogg'
+  if (ext === '.m4a') return 'audio/mp4'
+  if (ext === '.flac') return 'audio/flac'
+  if (ext === '.aac') return 'audio/aac'
+  if (ext === '.mp4' || ext === '.m4v') return 'video/mp4'
+  if (ext === '.webm') return 'video/webm'
+  if (ext === '.ogv') return 'video/ogg'
+  if (ext === '.mov') return 'video/quicktime'
   return undefined
 }
 
-function capabilitiesOf(kind: FileEntryV1['kind']): FileEntryV1['capabilities'] {
+function capabilitiesOf(kind: FileEntryV1['kind'], mediaType: string | undefined, editable = false): FileEntryV1['capabilities'] {
   if (kind === 'directory') return ['open']
-  if (kind === 'text' || kind === 'pdf' || kind === 'image' || kind === 'document') return ['preview', 'open']
+  if (kind === 'text') return editable ? ['preview', 'open', 'edit'] : ['preview', 'open']
+  if (kind === 'pdf' || kind === 'image' || kind === 'document') return ['preview', 'open']
+  if (mediaType?.startsWith('audio/') || mediaType?.startsWith('video/')) return ['preview', 'open']
   return ['open']
 }
 
@@ -399,6 +526,8 @@ export function createFileHostFromWorkspaceTree(
   options?: {
     resolveRootPath?: () => string | undefined
     readText?: ReadWorkspaceText
+    readBinary?: ReadWorkspaceBinary
+    writeText?: WriteWorkspaceText
   },
 ): FileHostV1 {
   const paths = new Map<string, string>()
@@ -428,7 +557,7 @@ export function createFileHostFromWorkspaceTree(
         name: entry.name,
         kind,
         ...(mediaType === undefined ? {} : { mediaType }),
-        capabilities: capabilitiesOf(kind),
+        capabilities: capabilitiesOf(kind, mediaType, options?.writeText !== undefined),
       }
       return [projected]
     })
@@ -447,15 +576,29 @@ export function createFileHostFromWorkspaceTree(
       return mapListing(listing, parentRef)
     },
   }
-  if (options?.readText === undefined) return host
+  if (options?.readText === undefined && options?.readBinary === undefined && options?.writeText === undefined) return host
   return {
     ...host,
-    async readText(entry) {
+    ...(options?.readText === undefined ? {} : { async readText(entry: FileEntryV1) {
       if (entry.kind === 'directory') return undefined
       const path = paths.get(entry.id)
       if (path === undefined) return undefined
       return options.readText!(path)
-    },
+    } }),
+    ...(options?.readBinary === undefined ? {} : { async readBinary(entry: FileEntryV1) {
+      if (entry.kind === 'directory' || !entry.capabilities.includes('preview')) return undefined
+      const path = paths.get(entry.id)
+      if (path === undefined) return undefined
+      const result = await options.readBinary!(path)
+      return entry.mediaType === undefined ? result : { ...result, mediaType: entry.mediaType }
+    } }),
+    ...(options?.writeText === undefined ? {} : { async writeText(entry: FileEntryV1, content: string, expectedVersion: string) {
+      if (entry.kind !== 'text' || !entry.capabilities.includes('edit')) return { status: 'rejected' as const, reason: 'file is read-only' }
+      const path = paths.get(entry.id)
+      if (path === undefined) return { status: 'rejected' as const, reason: 'file is unavailable' }
+      return options.writeText!(path, content, expectedVersion)
+    } }),
+    capabilities: options?.writeText === undefined ? host.capabilities : [FILE_TEXT_WRITE_CAPABILITY],
   }
 }
 
@@ -495,6 +638,11 @@ export interface GitExplorerHostV1 {
   stage(path: string): Promise<GitMutationReceiptV1>
   unstage(path: string): Promise<GitMutationReceiptV1>
   commit(message: string): Promise<GitMutationReceiptV1>
+  readonly statusWindow?: GitStatusWindowCapabilityV1
+  readonly diffWindowV2?: GitDiffWindowCapabilityV2
+  readonly mutationActionsV2?: GitMutationActionsCapabilityV2
+  readonly historyWindow?: GitHistoryWindowCapabilityV1
+  readonly compareSession?: GitCompareSessionCapabilityV1
 }
 
 /**
@@ -506,7 +654,7 @@ export function createExplorerFileHost(options: ExplorerFileHostOptions = {}): F
   if (fetchFn === undefined) {
     return createFileHostPlaceholder()
   }
-  const call = async (method: string, extra: Record<string, unknown>): Promise<unknown> => {
+  const request = async (method: string, extra: Record<string, unknown>, includeClientCwd: boolean): Promise<unknown> => {
     const sessionId = options.sessionId?.()
     const cwd = options.cwd?.()
     const response = await fetchFn(`/yeisme-files/api/${method}`, {
@@ -514,7 +662,7 @@ export function createExplorerFileHost(options: ExplorerFileHostOptions = {}): F
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         ...(sessionId === undefined || sessionId === '' ? {} : { sessionId }),
-        ...(cwd === undefined || cwd === '' ? {} : { cwd }),
+        ...(!includeClientCwd || cwd === undefined || cwd === '' ? {} : { cwd }),
         ...extra,
       }),
     })
@@ -524,12 +672,118 @@ export function createExplorerFileHost(options: ExplorerFileHostOptions = {}): F
     }
     return parsed.value
   }
-  return createFileHostFromWorkspaceTree(
+  const call = (method: string, extra: Record<string, unknown>): Promise<unknown> => request(method, extra, true)
+  const callOpaque = (method: string, extra: Record<string, unknown>): Promise<unknown> => request(method, extra, false)
+  const readBinary = async (path: string): Promise<FileBinaryReadV1> => {
+    const value = await call('fs.binary', { path }) as {
+      base64?: unknown
+      size?: unknown
+      truncated?: unknown
+      version?: unknown
+    }
+    if (typeof value.base64 !== 'string' || typeof value.size !== 'number' || typeof value.truncated !== 'boolean') {
+      throw new Error('invalid binary file response')
+    }
+    const decoded = atob(value.base64)
+    const bytes = new Uint8Array(decoded.length)
+    for (let index = 0; index < decoded.length; index += 1) bytes[index] = decoded.charCodeAt(index)
+    return {
+      bytes,
+      size: value.size,
+      truncated: value.truncated,
+      ...(typeof value.version === 'string' ? { version: value.version } : {}),
+    }
+  }
+  const legacyHost = createFileHostFromWorkspaceTree(
     async path => call('fs.tree', path === undefined ? {} : { path }) as Promise<WorkspaceTreeListingLike>,
     {
       readText: async path => call('fs.read', { path }) as Promise<FileTextReadV1>,
+      readBinary,
+      writeText: async (path, content, expectedVersion) => call('fs.write', { path, content, expectedVersion }) as Promise<FileTextWriteReceiptV1>,
     },
   )
+  let opaqueRefsAvailable = false
+
+  const isOpaqueEntry = (entry: unknown): entry is FileEntryV1 => {
+    if (typeof entry !== 'object' || entry === null) return false
+    const candidate = entry as Partial<FileEntryV1>
+    return typeof candidate.id === 'string'
+      && ID_RE.test(candidate.id)
+      && typeof candidate.name === 'string'
+      && candidate.name.length > 0
+      && candidate.name.length <= 200
+      && !/[\\/\r\n]/.test(candidate.name)
+      && typeof candidate.kind === 'string'
+      && ['file', 'directory', 'document', 'pdf', 'text', 'image', 'archive', 'binary'].includes(candidate.kind)
+      && Array.isArray(candidate.capabilities)
+      && candidate.capabilities.every(capability => ['preview', 'open', 'download', 'edit'].includes(capability))
+  }
+  const parseEntries = (value: unknown): readonly FileEntryV1[] | undefined => {
+    if (!Array.isArray(value) || value.some(entry => !isOpaqueEntry(entry))) return undefined
+    return value as readonly FileEntryV1[]
+  }
+
+  const opaqueHost: FileHostV1 = {
+    version: '0.1.0-rc.1',
+    capability: 'file-host',
+    get capabilities() {
+      const legacy = legacyHost.capabilities ?? []
+      return opaqueRefsAvailable
+        ? [...new Set([...legacy, FILE_OPAQUE_REF_CAPABILITY])]
+        : legacy
+    },
+    async listEntries(parentRef) {
+      try {
+        const entries = parseEntries(await callOpaque('fs.treeV2', parentRef === undefined ? {} : { parentRef }))
+        if (entries !== undefined) {
+          opaqueRefsAvailable = true
+          return entries
+        }
+      } catch {
+        // Additive compatibility: old hosts keep the existing path-backed adapter.
+      }
+      opaqueRefsAvailable = false
+      return legacyHost.listEntries(parentRef)
+    },
+    async readText(entry) {
+      if (opaqueRefsAvailable) {
+        return callOpaque('fs.readV2', { ref: entry.id }) as Promise<FileTextReadV1 | undefined>
+      }
+      return legacyHost.readText?.(entry)
+    },
+    async readBinary(entry) {
+      if (opaqueRefsAvailable) {
+        const value = await callOpaque('fs.binaryV2', { ref: entry.id }) as {
+          base64?: unknown
+          size?: unknown
+          truncated?: unknown
+          version?: unknown
+          mediaType?: unknown
+        }
+        if (typeof value.base64 !== 'string' || typeof value.size !== 'number' || typeof value.truncated !== 'boolean') {
+          throw new Error('invalid opaque binary file response')
+        }
+        const decoded = atob(value.base64)
+        const bytes = new Uint8Array(decoded.length)
+        for (let index = 0; index < decoded.length; index += 1) bytes[index] = decoded.charCodeAt(index)
+        return {
+          bytes,
+          size: value.size,
+          truncated: value.truncated,
+          ...(typeof value.version === 'string' ? { version: value.version } : {}),
+          ...(typeof value.mediaType === 'string' ? { mediaType: value.mediaType } : {}),
+        }
+      }
+      return legacyHost.readBinary?.(entry)
+    },
+    async writeText(entry, content, expectedVersion) {
+      if (opaqueRefsAvailable) {
+        return callOpaque('fs.writeV2', { ref: entry.id, content, expectedVersion }) as Promise<FileTextWriteReceiptV1>
+      }
+      return legacyHost.writeText?.(entry, content, expectedVersion) ?? { status: 'rejected', reason: 'file is read-only' }
+    },
+  }
+  return opaqueHost
 }
 
 /** Browser Git host over `/yeisme-files/api/git.*` typed methods. */
@@ -555,11 +809,42 @@ export function createExplorerGitHost(options: ExplorerFileHostOptions = {}): Gi
     return parsed.value
   }
   return {
-    capabilities: ['GitTypedActionsCapabilityV1'],
+    capabilities: [
+      'GitTypedActionsCapabilityV1',
+      'GitStatusWindowCapabilityV1',
+      'GitDiffWindowCapabilityV2',
+      'GitMutationActionsCapabilityV2',
+      'GitHistoryWindowCapabilityV1',
+      'GitCompareSessionCapabilityV1',
+    ],
     status: async () => call('git.status') as Promise<GitStatusV1>,
     diff: async path => call('git.diff', { path }) as Promise<GitDiffV1>,
     stage: async path => call('git.stage', { path }) as Promise<GitMutationReceiptV1>,
     unstage: async path => call('git.unstage', { path }) as Promise<GitMutationReceiptV1>,
     commit: async message => call('git.commit', { message }) as Promise<GitMutationReceiptV1>,
+    statusWindow: {
+      capability: 'GitStatusWindowCapabilityV1',
+      repositories: async () => call('git.repositories') as ReturnType<NonNullable<GitStatusWindowCapabilityV1['repositories']>>,
+      snapshot: async request => call('git.statusWindow', { ...request }) as ReturnType<GitStatusWindowCapabilityV1['snapshot']>,
+    },
+    diffWindowV2: {
+      capability: 'GitDiffWindowCapabilityV2',
+      window: async request => call('git.diffWindowV2', { ...request }) as ReturnType<GitDiffWindowCapabilityV2['window']>,
+    },
+    mutationActionsV2: {
+      capability: 'GitMutationActionsCapabilityV2',
+      actions: ['stage.all', 'unstage.all', 'discard.preflight', 'discard.execute', 'discard.undo', 'commit.preflight', 'commit.execute'],
+      preflight: async intent => call('git.mutation.preflight', { intent }) as ReturnType<GitMutationActionsCapabilityV2['preflight']>,
+      execute: async intent => call('git.mutation.execute', { intent }) as ReturnType<GitMutationActionsCapabilityV2['execute']>,
+      reconcile: async idempotencyKey => call('git.mutation.reconcile', { idempotencyKey }) as ReturnType<GitMutationActionsCapabilityV2['reconcile']>,
+    },
+    historyWindow: {
+      capability: 'GitHistoryWindowCapabilityV1',
+      window: async request => call('git.historyWindow', { ...request }) as ReturnType<GitHistoryWindowCapabilityV1['window']>,
+    },
+    compareSession: {
+      capability: 'GitCompareSessionCapabilityV1',
+      create: async input => call('git.compareSession', { input }) as ReturnType<GitCompareSessionCapabilityV1['create']>,
+    },
   }
 }

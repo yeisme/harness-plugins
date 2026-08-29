@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'tsdown'
 
 const clientExternals = [
@@ -26,7 +27,10 @@ const node = {
 export default defineConfig([
   { ...node, entry: ['lib/types/index.js'] },
   {
-    noExternal: ['mermaid'],
+    alias: {
+      '@yeisme/dsh-client-ui-structured-content': fileURLToPath(new URL('../ui-structured-content/src/index.ts', import.meta.url)),
+      '@yeisme/dsh-client-ui-visual-kit': fileURLToPath(new URL('../ui-visual-kit/src/index.ts', import.meta.url)),
+    },
     entry: { client: 'lib/types/client/index.js' },
     outDir: 'lib',
     format: 'cjs',
@@ -40,7 +44,7 @@ export default defineConfig([
       // mermaid 必须内联：DSH Web 的 ModuleLoader 只提供宿主模块，
       // profile node_modules 里的 mermaid 运行时取不到。动态 import 在
       // CJS 输出中保持懒工厂，首图才求值。
-      noExternal: ['mermaid'],
+      alwaysBundle: [/^@yeisme\//u, /^mermaid(?:\/|$)/u],
     },
     outputOptions: {
       codeSplitting: false,

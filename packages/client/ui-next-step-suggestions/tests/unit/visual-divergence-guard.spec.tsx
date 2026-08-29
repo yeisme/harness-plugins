@@ -33,12 +33,12 @@ function renderChip(props: Partial<Parameters<typeof SuggestionChip>[0]> = {}): 
 }
 
 describe('suggestion visual divergence guard', () => {
-  it('chip 源码零硬编码颜色且以 currentColor 继承宿主主题', async () => {
+  it('chip 源码零硬编码颜色，样式走 visual-kit class', async () => {
     const source = await readFile(join(import.meta.dirname, '../../src/client/SuggestionChip.tsx'), 'utf8')
-    // jsdom/React 会把 currentColor 从序列化输出里吞掉，currentColor 合同在源码层钉住
-    expect(source).toContain('currentColor')
+    expect(source).toContain('className="ns-chip"')
     expect(source.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).toEqual([])
     expect(source.match(/rgba?\(/g) ?? []).toEqual([])
+    expect(source).not.toContain('currentColor')
   })
 
   it('渲染输出零硬编码颜色', () => {
@@ -48,7 +48,7 @@ describe('suggestion visual divergence guard', () => {
       expect(el.style.cssText).not.toMatch(/rgba?\(/)
     }
     const button = container.querySelector('button') as HTMLButtonElement
-    expect(button.style.borderWidth).toBe('1px')
+    expect(button.className).toBe('ns-chip')
     act(() => { root.unmount() }); container.remove()
   })
 

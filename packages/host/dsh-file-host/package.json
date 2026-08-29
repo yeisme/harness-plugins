@@ -25,10 +25,12 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "build": "tsc -p tsconfig.json && tsdown src/index.ts src/node.ts --out-dir lib --format esm --dts --clean"
+    "build": "tsc -p tsconfig.json && tsdown src/index.ts src/node.ts --out-dir lib --format esm --dts --clean",
+    "test:integration": "node scripts/run-integration-tests.mjs"
   },
   "dependencies": {
-    "@yeisme/dsh-file-document": "workspace:*"
+    "@yeisme/dsh-file-document": "workspace:*",
+    "@yeisme/dsh-git-host": "workspace:*"
   },
   "devDependencies": {
     "tsdown": "^0.22.14",

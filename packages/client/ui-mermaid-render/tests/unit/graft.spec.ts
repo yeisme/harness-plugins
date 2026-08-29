@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { MermaidGraftController } from '../../src/client/observer.ts'
+import { hydrateMermaidFences, MermaidGraftController } from '../../src/client/observer.ts'
 import { labelsFor } from '../../src/client/locales.ts'
 import type { MermaidRenderer } from '../../src/client/render.ts'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -69,9 +69,11 @@ describe('MermaidGraftController', () => {
     const btn = figure?.querySelector<HTMLButtonElement>('button')
     expect(btn?.textContent).toContain('查看源码')
     btn?.click()
+    await sleep(0)
     expect(pre.style.display).toBe('')
     expect(btn?.textContent).toContain('收起源码')
     btn?.click()
+    await sleep(0)
     expect(pre.style.display).toBe('none')
     controller.stop()
   })
@@ -158,6 +160,27 @@ describe('MermaidGraftController', () => {
     expect(figure?.querySelector('.dsh-mermaid-stage svg')).not.toBeNull()
     controller.stop()
     expect(card.style.display).toBe('')
+  })
+
+  it('hydrateMermaidFences grafts a settled root without a document observer', async () => {
+    const renderer = stubRenderer()
+    const root = document.createElement('div')
+    document.body.append(root)
+    const { pre } = (() => {
+      const preEl = document.createElement('pre')
+      const code = document.createElement('code')
+      code.className = 'language-mermaid'
+      code.textContent = 'graph TD\nA-->B'
+      preEl.append(code)
+      root.append(preEl)
+      return { pre: preEl }
+    })()
+    const stop = hydrateMermaidFences(root, { labels: labelsFor('zh'), renderer, stableMs: 0 })
+    await sleep(20)
+    expect(root.querySelector('figure[data-dsh-mermaid-figure]')).not.toBeNull()
+    expect(pre.style.display).toBe('none')
+    stop()
+    expect(root.querySelector('figure[data-dsh-mermaid-figure]')).toBeNull()
   })
 
   it('ignores oversized sources and non-mermaid fences', async () => {

@@ -10,7 +10,9 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import { Surface } from '@yeisme/dsh-client-ui-surface'
 import type { NextStepSuggestionV1, PlanOptionsProjectionValue, SuggestionSource } from './types.ts'
 import { planOptionsToSuggestions } from './plan-options-source.ts'
 import {
@@ -21,6 +23,7 @@ import {
   type SuggestionApplyPreference,
 } from './suggestion-composer.ts'
 import { SuggestionChip } from './SuggestionChip.tsx'
+import { nextStepSuggestionStyles } from './styles.ts'
 import { NS } from './locales.ts'
 
 /** Injected face for the dock: a snapshot function of client-local sources. */
@@ -136,8 +139,9 @@ export function SuggestionDock({ useProjection, useInput, inputActions, getSourc
   if (suggestions.length === 0) return null
 
   return (
-    <div role="group" aria-label={t('suggestions.aria')} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '4px 0' }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+    <Surface kind="micro" data-next-step-suggestions="" role="group" aria-label={t('suggestions.aria')}>
+      <style>{nextStepSuggestionStyles}</style>
+      <div className="ns-chips">
         {suggestions.map(suggestion => (
           <SuggestionChip
             key={suggestion.id}
@@ -150,7 +154,7 @@ export function SuggestionDock({ useProjection, useInput, inputActions, getSourc
           />
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: '0.85em' }}>
+      <div className="ns-controls">
         <label>
           <input
             type="checkbox"
@@ -186,22 +190,22 @@ export function SuggestionDock({ useProjection, useInput, inputActions, getSourc
           </label>
         )}
         {multiSelect && selectedSuggestions.length > 0 && (
-          <span style={{ display: 'inline-flex', gap: 8 }}>
-            <button type="button" onClick={handleApply}>
+          <span className="ns-actions">
+            <Button type="button" className="vk-btn" onClick={handleApply}>
               {t('suggestions.apply')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              className="vk-btn"
               onClick={handleParallel}
               disabled={parallel && selectedSuggestions.some(suggestion => suggestion.parallelSafe === false)}
             >
               {t('suggestions.parallel')}
-            </button>
+            </Button>
           </span>
         )}
-        <span role="note" style={{ opacity: 0.7 }}>{t('suggestions.hint')}</span>
+        <span className="ns-hint" role="note">{t('suggestions.hint')}</span>
       </div>
-    </div>
+    </Surface>
   )
 }
-

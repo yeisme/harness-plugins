@@ -12,21 +12,24 @@
  * stop() 完全还原 DOM。
  */
 
+import { createElement } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import type { DiagramFocusV1, StructuredContentSurface } from '@yeisme/dsh-client-ui-structured-content'
 import type { MermaidRenderer, MermaidTheme } from './render.ts'
 import type { MermaidLabels } from './locales.ts'
+import { MermaidCanvas } from './canvas.tsx'
 
 const FIGURE_FLAG = 'data-dsh-mermaid-figure'
 const ON_CLASS = 'dsh-mermaid-on'
 
 const STYLE_TEXT = `
-figure[${FIGURE_FLAG}]{margin:8px 0;border:1px solid rgba(127,127,127,.35);border-radius:8px;overflow:hidden}
-figure[${FIGURE_FLAG}] .dsh-mermaid-stage{padding:12px;display:flex;justify-content:center;background:transparent}
-figure[${FIGURE_FLAG}] .dsh-mermaid-stage svg{max-width:100%;height:auto}
-figure[${FIGURE_FLAG}] .dsh-mermaid-bar{display:flex;gap:8px;align-items:center;padding:4px 10px;border-top:1px solid rgba(127,127,127,.25);font:12px/1.6 system-ui,sans-serif;color:inherit}
-figure[${FIGURE_FLAG}] .dsh-mermaid-bar button{cursor:pointer;font:inherit;background:transparent;border:1px solid rgba(127,127,127,.4);border-radius:6px;padding:1px 8px;color:inherit}
-figure[${FIGURE_FLAG}] .dsh-mermaid-status{color:rgba(220,38,38,.9)}
-figure[${FIGURE_FLAG}].is-failed .dsh-mermaid-stage{display:none}
-figure[${FIGURE_FLAG}].is-failed{border-color:rgba(220,38,38,.5)}
+figure[${FIGURE_FLAG}]{margin:8px 0;min-width:0;overflow:hidden}
+figure[${FIGURE_FLAG}] .dsh-mermaid-stage{display:grid;place-items:center;min-height:180px;overflow:hidden;touch-action:none;cursor:grab;background:var(--vk-bg-base)}
+figure[${FIGURE_FLAG}] .dsh-mermaid-stage:active{cursor:grabbing}
+figure[${FIGURE_FLAG}] .dsh-mermaid-transform{transform-origin:center;transition:transform 120ms ease-out;will-change:transform}
+figure[${FIGURE_FLAG}] .dsh-mermaid-transform svg{display:block;max-width:none;height:auto}
+figure[${FIGURE_FLAG}].is-failed{border-left:2px solid var(--vk-tone-critical)}
+@media(prefers-reduced-motion:reduce){figure[${FIGURE_FLAG}] .dsh-mermaid-transform{transition:none}}
 `
 
 export interface GraftOptions {
@@ -34,13 +37,19 @@ export interface GraftOptions {
   readonly renderer: MermaidRenderer
   readonly stableMs?: number | undefined
   readonly maxSourceBytes?: number | undefined
+  readonly surface?: StructuredContentSurface | undefined
+  readonly initialFocus?: DiagramFocusV1 | undefined
+  readonly onFocusChange?: ((focus: DiagramFocusV1) => void) | undefined
+  readonly onOpenInPane?: ((source: string, focus: DiagramFocusV1) => void) | undefined
 }
 
 interface GraftRecord {
   readonly host: HTMLElement
   readonly figure: HTMLElement
-  readonly stage: HTMLElement
+  readonly reactRoot: Root
   readonly source: string
+  svg?: string
+  error?: string
   failed: boolean
 }
 
@@ -67,6 +76,10 @@ export class MermaidGraftController {
   private readonly renderer: MermaidRenderer
   private readonly stableMs: number
   private readonly maxSourceBytes: number
+  private readonly surface: StructuredContentSurface
+  private readonly initialFocus: DiagramFocusV1 | undefined
+  private readonly onFocusChange: ((focus: DiagramFocusV1) => void) | undefined
+  private readonly onOpenInPane: ((source: string, focus: DiagramFocusV1) => void) | undefined
   private root: ParentNode | undefined
   private observer: MutationObserver | undefined
   private styleEl: HTMLStyleElement | undefined
@@ -81,6 +94,10 @@ export class MermaidGraftController {
     this.renderer = options.renderer
     this.stableMs = options.stableMs ?? 400
     this.maxSourceBytes = options.maxSourceBytes ?? 64 * 1024
+    this.surface = options.surface ?? 'inline'
+    this.initialFocus = options.initialFocus
+    this.onFocusChange = options.onFocusChange
+    this.onOpenInPane = options.onOpenInPane
   }
 
   /** 注入样式、起观察器并做首扫。 */
@@ -113,6 +130,7 @@ export class MermaidGraftController {
     this.themeQuery?.removeEventListener('change', this.onThemeChange)
     this.themeQuery = undefined
     for (const [codeEl, record] of this.records) {
+      record.reactRoot.unmount()
       record.figure.remove()
       codeEl.classList.remove(ON_CLASS)
       record.host.style.display = ''
@@ -143,6 +161,7 @@ export class MermaidGraftController {
     if (this.root === undefined) return
     for (const [codeEl, record] of this.records) {
       if (!codeEl.isConnected || !record.host.isConnected) {
+        record.reactRoot.unmount()
         record.figure.remove()
         this.records.delete(codeEl)
       }
@@ -175,86 +194,62 @@ export class MermaidGraftController {
     for (const stale of Array.from(host.parentElement?.querySelectorAll(`figure[${FIGURE_FLAG}]`) ?? [])) {
       if (stale.previousElementSibling === host || stale.nextElementSibling === host) stale.remove()
     }
-    const { figure, stage, statusEl } = this.buildFigure()
+    const { figure, reactRoot } = this.buildFigure()
     host.insertAdjacentElement('afterend', figure)
-    codeEl.classList.add(ON_CLASS)
-    host.style.display = 'none'
-    const record: GraftRecord = { host, figure, stage, source, failed: false }
+    const record: GraftRecord = { host, figure, reactRoot, source, failed: false }
     this.records.set(codeEl, record)
+    this.renderRecord(record)
     try {
       const svg = await this.renderer.render(source)
       if (!codeEl.isConnected) {
+        reactRoot.unmount()
         figure.remove()
         this.records.delete(codeEl)
         return
       }
-      stage.innerHTML = svg
+      record.svg = svg
+      codeEl.classList.add(ON_CLASS)
+      host.style.display = 'none'
+      this.renderRecord(record)
     } catch (error) {
       record.failed = true
       figure.classList.add('is-failed')
-      statusEl.textContent = `${this.labels.failed}: ${error instanceof Error ? error.message : String(error)}`
+      record.error = `${this.labels.failed}: ${error instanceof Error ? error.message : String(error)}`
       host.style.display = ''
       codeEl.classList.remove(ON_CLASS)
+      this.renderRecord(record)
     }
   }
 
-  private buildFigure(): { figure: HTMLElement; stage: HTMLElement; statusEl: HTMLElement } {
+  private buildFigure(): { figure: HTMLElement; reactRoot: Root } {
     const doc = this.root?.ownerDocument ?? document
     const figure = doc.createElement('figure')
     figure.setAttribute(FIGURE_FLAG, '')
-    const stage = doc.createElement('div')
-    stage.className = 'dsh-mermaid-stage'
-    const bar = doc.createElement('div')
-    bar.className = 'dsh-mermaid-bar'
-    const statusEl = doc.createElement('span')
-    statusEl.className = 'dsh-mermaid-status'
-    statusEl.hidden = true
-    const sourceBtn = doc.createElement('button')
-    sourceBtn.type = 'button'
-    sourceBtn.textContent = this.labels.showSource
-    const copyBtn = doc.createElement('button')
-    copyBtn.type = 'button'
-    copyBtn.textContent = this.labels.copy
-    const openBtn = doc.createElement('button')
-    openBtn.type = 'button'
-    openBtn.textContent = this.labels.open
-    sourceBtn.addEventListener('click', () => {
-      const codeEl = this.codeElOf(figure)
-      const record = codeEl === undefined ? undefined : this.records.get(codeEl)
-      if (record === undefined) return
-      const showing = figure.classList.toggle('show-source')
-      record.host.style.display = showing ? '' : 'none'
-      sourceBtn.textContent = showing ? this.labels.hideSource : this.labels.showSource
-    })
-    copyBtn.addEventListener('click', async () => {
-      const codeEl = this.codeElOf(figure)
-      const record = codeEl === undefined ? undefined : this.records.get(codeEl)
-      if (record === undefined) return
-      const view = this.root?.ownerDocument?.defaultView
-      try {
-        await view?.navigator.clipboard?.writeText(record.source)
-        copyBtn.textContent = this.labels.copied
-        view?.setTimeout(() => { copyBtn.textContent = this.labels.copy }, 1500)
-      } catch { /* 无剪贴板权限时保持静默 */ }
-    })
-    openBtn.addEventListener('click', () => {
-      const codeEl = this.codeElOf(figure)
-      const record = codeEl === undefined ? undefined : this.records.get(codeEl)
-      if (record === undefined || record.failed) return
-      const view = this.root?.ownerDocument?.defaultView
-      if (view == null) return
-      if (this.blobUrl !== undefined) view.URL.revokeObjectURL(this.blobUrl)
-      this.blobUrl = view.URL.createObjectURL(new view.Blob([stage.innerHTML], { type: 'image/svg+xml' }))
-      view.open(this.blobUrl, '_blank')
-    })
-    bar.append(sourceBtn, copyBtn, openBtn, statusEl)
-    figure.append(stage, bar)
-    return { figure, stage, statusEl }
+    return { figure, reactRoot: createRoot(figure) }
   }
 
-  private codeElOf(figure: HTMLElement): Element | undefined {
-    const host = figure.previousElementSibling
-    return host?.querySelector('code') ?? undefined
+  private renderRecord(record: GraftRecord): void {
+    record.reactRoot.render(createElement(MermaidCanvas, {
+      labels: this.labels,
+      source: record.source,
+      svg: record.svg,
+      error: record.error,
+      surface: this.surface,
+      initialFocus: this.initialFocus,
+      onFocusChange: this.onFocusChange,
+      onSourceVisibleChange: (visible: boolean) => { record.host.style.display = visible || record.failed ? '' : 'none' },
+      onOpenSvg: () => { this.openSvg(record.svg) },
+      onOpenInPane: this.onOpenInPane === undefined ? undefined : (focus: DiagramFocusV1) => { this.onOpenInPane?.(record.source, focus) },
+    }))
+  }
+
+  private openSvg(svg: string | undefined): void {
+    if (svg === undefined) return
+    const view = this.root?.ownerDocument?.defaultView
+    if (view == null) return
+    if (this.blobUrl !== undefined) view.URL.revokeObjectURL(this.blobUrl)
+    this.blobUrl = view.URL.createObjectURL(new view.Blob([svg], { type: 'image/svg+xml' }))
+    view.open(this.blobUrl, '_blank')
   }
 
   private async rerenderAll(): Promise<void> {
@@ -262,8 +257,22 @@ export class MermaidGraftController {
       if (record.failed) continue
       try {
         const svg = await this.renderer.render(record.source)
-        if (codeEl.isConnected) record.stage.innerHTML = svg
+        if (codeEl.isConnected) {
+          record.svg = svg
+          this.renderRecord(record)
+        }
       } catch { /* 主题重渲染失败保留现图 */ }
     }
   }
+}
+
+/**
+ * Hydrate mermaid fences under an arbitrary root. Used by file Markdown
+ * preview tests and any surface that already has settled HTML. The chat
+ * plugin still owns a document-wide observer via `apply()`.
+ */
+export function hydrateMermaidFences(root: ParentNode, options: GraftOptions): () => void {
+  const controller = new MermaidGraftController(options)
+  controller.start(root)
+  return () => { controller.stop() }
 }

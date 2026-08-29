@@ -9,6 +9,17 @@
  */
 export const FILE_WATCH_CAPABILITY = 'FileWatchCapabilityV1';
 export const FILE_TREE_PROJECTION_CAPABILITY = 'FileTreeProjectionCapabilityV1';
+export const FILE_TEXT_WRITE_CAPABILITY = 'FileTextWriteCapabilityV1';
+export const FILE_OPAQUE_REF_CAPABILITY = 'FileOpaqueRefCapabilityV1';
+export const FILE_WORKSPACE_EDIT_CAPABILITY = 'FileWorkspaceEditCapabilityV1';
+export function probeFileOpaqueRefs(host) {
+    const available = host?.capabilities?.includes(FILE_OPAQUE_REF_CAPABILITY) === true;
+    return {
+        available,
+        capability: FILE_OPAQUE_REF_CAPABILITY,
+        reason: available ? 'opaque file refs available' : `missing ${FILE_OPAQUE_REF_CAPABILITY}`,
+    };
+}
 /** Optional Cordis context key used by Desktop Workbench when a real file owner is mounted. */
 export const FILE_HOST_CONTEXT_KEY = 'dsh.fileHost';
 /** Runtime guard for an owner-provided safe file projection service. */
@@ -21,6 +32,8 @@ export function isFileHostV1(value) {
         && typeof candidate.listEntries === 'function'
         && (candidate.resolvePreviewUrl === undefined || typeof candidate.resolvePreviewUrl === 'function')
         && (candidate.readText === undefined || typeof candidate.readText === 'function')
+        && (candidate.readBinary === undefined || typeof candidate.readBinary === 'function')
+        && (candidate.writeText === undefined || typeof candidate.writeText === 'function')
         && (candidate.watch === undefined || typeof candidate.watch === 'function');
 }
 const UNSAFE_WATCH = /(?:^|[:/\\])(?:etc|home|usr|var|tmp)|file:\/\/|authorization|cookie|token/i;
@@ -200,6 +213,7 @@ const TEXT_EXT = new Set([
     '.yml', '.yaml', '.toml', '.xml', '.sh', '.go', '.rs', '.py', '.svg',
 ]);
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.avif', '.ico']);
+const DOCUMENT_EXT = new Set(['.docx']);
 const ARCHIVE_EXT = new Set(['.zip', '.tar', '.gz', '.tgz', '.bz2', '.7z']);
 function extensionOf(name) {
     const at = name.lastIndexOf('.');
@@ -213,6 +227,8 @@ function kindFromEntry(name, isDir) {
         return 'text';
     if (IMAGE_EXT.has(ext))
         return 'image';
+    if (DOCUMENT_EXT.has(ext))
+        return 'document';
     if (ext === '.pdf')
         return 'pdf';
     if (ARCHIVE_EXT.has(ext))
@@ -232,6 +248,8 @@ function mediaTypeOf(kind, name) {
     }
     if (kind === 'pdf')
         return 'application/pdf';
+    if (kind === 'document' && ext === '.docx')
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
     if (kind === 'image') {
         if (ext === '.png')
             return 'image/png';
@@ -245,12 +263,36 @@ function mediaTypeOf(kind, name) {
             return 'image/svg+xml';
         return 'image/*';
     }
+    if (ext === '.mp3')
+        return 'audio/mpeg';
+    if (ext === '.wav')
+        return 'audio/wav';
+    if (ext === '.ogg')
+        return 'audio/ogg';
+    if (ext === '.m4a')
+        return 'audio/mp4';
+    if (ext === '.flac')
+        return 'audio/flac';
+    if (ext === '.aac')
+        return 'audio/aac';
+    if (ext === '.mp4' || ext === '.m4v')
+        return 'video/mp4';
+    if (ext === '.webm')
+        return 'video/webm';
+    if (ext === '.ogv')
+        return 'video/ogg';
+    if (ext === '.mov')
+        return 'video/quicktime';
     return undefined;
 }
-function capabilitiesOf(kind) {
+function capabilitiesOf(kind, mediaType, editable = false) {
     if (kind === 'directory')
         return ['open'];
-    if (kind === 'text' || kind === 'pdf' || kind === 'image' || kind === 'document')
+    if (kind === 'text')
+        return editable ? ['preview', 'open', 'edit'] : ['preview', 'open'];
+    if (kind === 'pdf' || kind === 'image' || kind === 'document')
+        return ['preview', 'open'];
+    if (mediaType?.startsWith('audio/') || mediaType?.startsWith('video/'))
         return ['preview', 'open'];
     return ['open'];
 }
@@ -285,7 +327,7 @@ export function createFileHostFromWorkspaceTree(listTree, options) {
             name: entry.name,
             kind,
             ...(mediaType === undefined ? {} : { mediaType }),
-            capabilities: capabilitiesOf(kind),
+            capabilities: capabilitiesOf(kind, mediaType, options?.writeText !== undefined),
         };
         return [projected];
     });
@@ -304,18 +346,36 @@ export function createFileHostFromWorkspaceTree(listTree, options) {
             return mapListing(listing, parentRef);
         },
     };
-    if (options?.readText === undefined)
+    if (options?.readText === undefined && options?.readBinary === undefined && options?.writeText === undefined)
         return host;
     return {
         ...host,
-        async readText(entry) {
-            if (entry.kind === 'directory')
-                return undefined;
-            const path = paths.get(entry.id);
-            if (path === undefined)
-                return undefined;
-            return options.readText(path);
-        },
+        ...(options?.readText === undefined ? {} : { async readText(entry) {
+                if (entry.kind === 'directory')
+                    return undefined;
+                const path = paths.get(entry.id);
+                if (path === undefined)
+                    return undefined;
+                return options.readText(path);
+            } }),
+        ...(options?.readBinary === undefined ? {} : { async readBinary(entry) {
+                if (entry.kind === 'directory' || !entry.capabilities.includes('preview'))
+                    return undefined;
+                const path = paths.get(entry.id);
+                if (path === undefined)
+                    return undefined;
+                const result = await options.readBinary(path);
+                return entry.mediaType === undefined ? result : { ...result, mediaType: entry.mediaType };
+            } }),
+        ...(options?.writeText === undefined ? {} : { async writeText(entry, content, expectedVersion) {
+                if (entry.kind !== 'text' || !entry.capabilities.includes('edit'))
+                    return { status: 'rejected', reason: 'file is read-only' };
+                const path = paths.get(entry.id);
+                if (path === undefined)
+                    return { status: 'rejected', reason: 'file is unavailable' };
+                return options.writeText(path, content, expectedVersion);
+            } }),
+        capabilities: options?.writeText === undefined ? host.capabilities : [FILE_TEXT_WRITE_CAPABILITY],
     };
 }
 /**
@@ -327,7 +387,7 @@ export function createExplorerFileHost(options = {}) {
     if (fetchFn === undefined) {
         return createFileHostPlaceholder();
     }
-    const call = async (method, extra) => {
+    const request = async (method, extra, includeClientCwd) => {
         const sessionId = options.sessionId?.();
         const cwd = options.cwd?.();
         const response = await fetchFn(`/yeisme-files/api/${method}`, {
@@ -335,7 +395,7 @@ export function createExplorerFileHost(options = {}) {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
                 ...(sessionId === undefined || sessionId === '' ? {} : { sessionId }),
-                ...(cwd === undefined || cwd === '' ? {} : { cwd }),
+                ...(!includeClientCwd || cwd === undefined || cwd === '' ? {} : { cwd }),
                 ...extra,
             }),
         });
@@ -345,9 +405,107 @@ export function createExplorerFileHost(options = {}) {
         }
         return parsed.value;
     };
-    return createFileHostFromWorkspaceTree(async (path) => call('fs.tree', path === undefined ? {} : { path }), {
+    const call = (method, extra) => request(method, extra, true);
+    const callOpaque = (method, extra) => request(method, extra, false);
+    const readBinary = async (path) => {
+        const value = await call('fs.binary', { path });
+        if (typeof value.base64 !== 'string' || typeof value.size !== 'number' || typeof value.truncated !== 'boolean') {
+            throw new Error('invalid binary file response');
+        }
+        const decoded = atob(value.base64);
+        const bytes = new Uint8Array(decoded.length);
+        for (let index = 0; index < decoded.length; index += 1)
+            bytes[index] = decoded.charCodeAt(index);
+        return {
+            bytes,
+            size: value.size,
+            truncated: value.truncated,
+            ...(typeof value.version === 'string' ? { version: value.version } : {}),
+        };
+    };
+    const legacyHost = createFileHostFromWorkspaceTree(async (path) => call('fs.tree', path === undefined ? {} : { path }), {
         readText: async (path) => call('fs.read', { path }),
+        readBinary,
+        writeText: async (path, content, expectedVersion) => call('fs.write', { path, content, expectedVersion }),
     });
+    let opaqueRefsAvailable = false;
+    const isOpaqueEntry = (entry) => {
+        if (typeof entry !== 'object' || entry === null)
+            return false;
+        const candidate = entry;
+        return typeof candidate.id === 'string'
+            && ID_RE.test(candidate.id)
+            && typeof candidate.name === 'string'
+            && candidate.name.length > 0
+            && candidate.name.length <= 200
+            && !/[\\/\r\n]/.test(candidate.name)
+            && typeof candidate.kind === 'string'
+            && ['file', 'directory', 'document', 'pdf', 'text', 'image', 'archive', 'binary'].includes(candidate.kind)
+            && Array.isArray(candidate.capabilities)
+            && candidate.capabilities.every(capability => ['preview', 'open', 'download', 'edit'].includes(capability));
+    };
+    const parseEntries = (value) => {
+        if (!Array.isArray(value) || value.some(entry => !isOpaqueEntry(entry)))
+            return undefined;
+        return value;
+    };
+    const opaqueHost = {
+        version: '0.1.0-rc.1',
+        capability: 'file-host',
+        get capabilities() {
+            const legacy = legacyHost.capabilities ?? [];
+            return opaqueRefsAvailable
+                ? [...new Set([...legacy, FILE_OPAQUE_REF_CAPABILITY])]
+                : legacy;
+        },
+        async listEntries(parentRef) {
+            try {
+                const entries = parseEntries(await callOpaque('fs.treeV2', parentRef === undefined ? {} : { parentRef }));
+                if (entries !== undefined) {
+                    opaqueRefsAvailable = true;
+                    return entries;
+                }
+            }
+            catch {
+                // Additive compatibility: old hosts keep the existing path-backed adapter.
+            }
+            opaqueRefsAvailable = false;
+            return legacyHost.listEntries(parentRef);
+        },
+        async readText(entry) {
+            if (opaqueRefsAvailable) {
+                return callOpaque('fs.readV2', { ref: entry.id });
+            }
+            return legacyHost.readText?.(entry);
+        },
+        async readBinary(entry) {
+            if (opaqueRefsAvailable) {
+                const value = await callOpaque('fs.binaryV2', { ref: entry.id });
+                if (typeof value.base64 !== 'string' || typeof value.size !== 'number' || typeof value.truncated !== 'boolean') {
+                    throw new Error('invalid opaque binary file response');
+                }
+                const decoded = atob(value.base64);
+                const bytes = new Uint8Array(decoded.length);
+                for (let index = 0; index < decoded.length; index += 1)
+                    bytes[index] = decoded.charCodeAt(index);
+                return {
+                    bytes,
+                    size: value.size,
+                    truncated: value.truncated,
+                    ...(typeof value.version === 'string' ? { version: value.version } : {}),
+                    ...(typeof value.mediaType === 'string' ? { mediaType: value.mediaType } : {}),
+                };
+            }
+            return legacyHost.readBinary?.(entry);
+        },
+        async writeText(entry, content, expectedVersion) {
+            if (opaqueRefsAvailable) {
+                return callOpaque('fs.writeV2', { ref: entry.id, content, expectedVersion });
+            }
+            return legacyHost.writeText?.(entry, content, expectedVersion) ?? { status: 'rejected', reason: 'file is read-only' };
+        },
+    };
+    return opaqueHost;
 }
 /** Browser Git host over `/yeisme-files/api/git.*` typed methods. */
 export function createExplorerGitHost(options = {}) {
@@ -373,11 +531,42 @@ export function createExplorerGitHost(options = {}) {
         return parsed.value;
     };
     return {
-        capabilities: ['GitTypedActionsCapabilityV1'],
+        capabilities: [
+            'GitTypedActionsCapabilityV1',
+            'GitStatusWindowCapabilityV1',
+            'GitDiffWindowCapabilityV2',
+            'GitMutationActionsCapabilityV2',
+            'GitHistoryWindowCapabilityV1',
+            'GitCompareSessionCapabilityV1',
+        ],
         status: async () => call('git.status'),
         diff: async (path) => call('git.diff', { path }),
         stage: async (path) => call('git.stage', { path }),
         unstage: async (path) => call('git.unstage', { path }),
         commit: async (message) => call('git.commit', { message }),
+        statusWindow: {
+            capability: 'GitStatusWindowCapabilityV1',
+            repositories: async () => call('git.repositories'),
+            snapshot: async (request) => call('git.statusWindow', { ...request }),
+        },
+        diffWindowV2: {
+            capability: 'GitDiffWindowCapabilityV2',
+            window: async (request) => call('git.diffWindowV2', { ...request }),
+        },
+        mutationActionsV2: {
+            capability: 'GitMutationActionsCapabilityV2',
+            actions: ['stage.all', 'unstage.all', 'discard.preflight', 'discard.execute', 'discard.undo', 'commit.preflight', 'commit.execute'],
+            preflight: async (intent) => call('git.mutation.preflight', { intent }),
+            execute: async (intent) => call('git.mutation.execute', { intent }),
+            reconcile: async (idempotencyKey) => call('git.mutation.reconcile', { idempotencyKey }),
+        },
+        historyWindow: {
+            capability: 'GitHistoryWindowCapabilityV1',
+            window: async (request) => call('git.historyWindow', { ...request }),
+        },
+        compareSession: {
+            capability: 'GitCompareSessionCapabilityV1',
+            create: async (input) => call('git.compareSession', { input }),
+        },
     };
 }

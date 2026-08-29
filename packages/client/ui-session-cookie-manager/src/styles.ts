@@ -45,7 +45,7 @@ ${S} ul{display:grid;gap:6px;margin:0;padding:0;list-style:none}
 ${S} .cm-quota dt{color:var(--vk-text-tertiary);font-size:var(--vk-font-small)}
 ${S} .cm-quota dd{margin:0;color:var(--vk-text-secondary);font-size:var(--vk-font-small)}
 ${S} .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-@media(max-width:600px){${S} .cm-row{padding:8px}${S} .cm-card{padding:10px}}
+@container yeisme-surface (max-width:600px){${S} .cm-row{padding:8px}${S} .cm-card{padding:10px}}
 `
 
 /** 面板样式串：token fallback 单点来自 visual kit registry。 */

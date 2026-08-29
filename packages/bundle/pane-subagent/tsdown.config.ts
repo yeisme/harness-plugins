@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'tsdown'
 
 const clientExternals = [
@@ -7,6 +8,7 @@ const clientExternals = [
   'react-dom/client',
   '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-client-runtime/client',
+  '@deepseek-ai/dsh-client-ui-primitives',
   '@deepseek-ai/dsh-client-ui-slots',
 ] as const
 
@@ -20,6 +22,10 @@ export default defineConfig([
     dts: false,
     sourcemap: true,
     clean: false,
+    alias: {
+      '@yeisme/dsh-client-ui-pane-subagent/client': fileURLToPath(new URL('../../client/ui-pane-subagent/src/client.ts', import.meta.url)),
+      '@yeisme/dsh-client-ui-pane-subagent': fileURLToPath(new URL('../../client/ui-pane-subagent/src/index.ts', import.meta.url)),
+    },
     deps: {
       alwaysBundle: [/^@yeisme\//u],
       neverBundle: [...clientExternals],

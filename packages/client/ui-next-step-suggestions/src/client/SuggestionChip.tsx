@@ -8,6 +8,7 @@
  */
 
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { NextStepSuggestionV1 } from './types.ts'
 import { NS, type NextStepSuggestionsKey } from './locales.ts'
 
@@ -30,33 +31,23 @@ export function SuggestionChip({
 }: SuggestionChipProps) {
   const title = suggestion.source === 'plan' ? t('suggestions.source.plan') : suggestion.source
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-      <button
-        type="button"
-        aria-pressed={multiSelect ? selected : undefined}
-        aria-label={`${suggestion.label}${suggestion.recommended === true ? ` (${t('suggestions.recommended')})` : ''}`}
-        title={title}
-        disabled={disabled}
-        style={{
-          border: '1px solid currentColor',
-          borderRadius: 999,
-          padding: '2px 10px',
-          background: selected ? 'color-mix(in srgb, currentColor 15%, transparent)' : 'transparent',
-          cursor: disabled ? 'not-allowed' : 'pointer',
-        }}
-        onClick={(event) => {
-          event.preventDefault()
-          onActivate()
-        }}
-      >
-        <span>{suggestion.label}</span>
-        {suggestion.recommended === true && (
-          <span style={{ marginLeft: 6, fontSize: '0.8em', opacity: 0.75 }}>
-            {t('suggestions.recommended')}
-          </span>
-        )}
-      </button>
-    </span>
+    <Button
+      type="button"
+      className="ns-chip"
+      aria-pressed={multiSelect ? selected : undefined}
+      aria-label={`${suggestion.label}${suggestion.recommended === true ? ` (${t('suggestions.recommended')})` : ''}`}
+      title={title}
+      disabled={disabled}
+      onClick={(event) => {
+        event.preventDefault()
+        onActivate()
+      }}
+    >
+      <span>{suggestion.label}</span>
+      {suggestion.recommended === true && (
+        <span className="ns-chip-rec">{t('suggestions.recommended')}</span>
+      )}
+    </Button>
   )
 }
 
