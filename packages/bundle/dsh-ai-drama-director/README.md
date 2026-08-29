@@ -18,14 +18,92 @@ dsh plugin --profile web add ./packages/bundle/dsh-ai-drama-director
 
 - **Typed Commands**: `/drama`, `/drama open`, `/drama plan`, `/drama review`, `/drama evidence`, `/drama handoff`
 - **Director Preset**: Context, Review, Run panes by default; Story, Visual, Audio on-demand
-- **Safe Handoff**: Open in Workbench with refs-only payload
+- **Creator Integration**: Creator Home can open the complete current-project drama workflow
+- **Safe Handoff**: Optional Open in Workbench with refs-only payload for professional bulk management
 - **Fail-Closed**: Commands disabled without creator-studio projection; panes hidden without capability
+
+## Experience Tiers and Client Wiring
+
+Real client wiring — view registration into the Pane Workbench runtime, `/drama`
+command contribution, Director preset application, and the handoff consumption
+gate — lands with the `dsh-web-pane-experience-completion-v1` change. Entries
+whose seam has not shipped stay fail-closed: visible, disabled, with a standard
+reason. No fake host, no polling fallback.
+
+Pane Workbench detects a runtime Experience Tier (user-facing version:
+`docs/cookbook/dsh-web-pane-tiers.md`):
+
+- **Tier 0** (any published DSH, overlay host): full single-region workbench.
+  The Director preset collapses into the single region as an ordered tab set —
+  Context / Review / Run as the first three tabs with Context active, and
+  Story / Visual / Audio opened on demand from Quick Pick. Visible tabs stay
+  ≤4 by default, and no second region is ever faked.
+- **Tier 1** (`workspace.core-pane.v1` + `shell.workspace.right/bottom`): the
+  preset distributes Context / Review / Run into their declared regions/groups;
+  split and cross-region move unlock.
+- **Tier 2** (Tier 1 + TerminalHostV2 + PreviewResourceV1 + official Artifact
+  seam): real terminal and production preview data in the Run tab.
+
+Applying the preset is a local atomic layout commit. Only saving a custom
+Director variant goes through `PaneWorkspacePresetServiceV1`; a `rejected` or
+`permission_denied` receipt disables the save action with the owner reason and
+never rolls back the already-applied layout.
+
+## Command Surface
+
+The `/drama` command group (new/open/plan/generate/review/repair/evidence/
+handoff) is contributed to the command-experience live `/` directory as
+`PaneCommandDescriptor` entries (`presentation.launcher: true`,
+`slash.name: 'drama'`, category `work`). No command-experience catalog edit is
+needed, and uninstalling the bundle removes the entries immediately. A short
+name colliding with a reserved P0 name stays disabled per the pane-protocol
+contract. The upstream `command-experience-router` seam is probed only as an
+enhancement projection, never as a registration prerequisite.
+
+When the command-experience surface is absent entirely (minimal profile), the
+`/drama` group stays disabled with a standard reason, and in-pane actions keep
+working — panes do not depend on the command surface. Drama keybindings are
+declared through the shared keymap surface (`CommandKeymapConfig` /
+`resolveKeymap`); conflicts degrade visibly per keymap rules instead of
+double-firing.
+
+## Open in Workbench
+
+"Open in Workbench" hands off through a signed `WorkbenchHandoffV1` deep link:
+the host signer covers opaque refs plus a presentation intent
+(`open_show` / `open_episode` / `open_review` / `open_artifact` /
+`open_evidence`) with a digest, an expiry, and a nonce. The consuming side
+validates contract, expiry, digest integrity, and nonce replay in order;
+expired, tampered, replayed, or unknown-intent links are rejected fail-closed
+and recorded as redacted evidence. The payload carries refs only — the target
+re-fetches all data from the owner projection/transport and never renders
+content fields from the handoff.
+
+## Evidence Redaction
+
+Client evidence events (command discovery, first open, review completion,
+handoff outcome, context restore duration) carry only categories and
+durations — never URLs, tokens, file paths, raw prompts, provider payloads, or
+private tool arguments.
+
+## Troubleshooting
+
+- A disabled entry is never silent: open **Workspace Capabilities** from Pane
+  Workbench, find the row, and read the reason plus the unlock anchor.
+- `/drama` disabled without command-experience: install the command-experience
+  bundle, or keep working from the panes — review flows do not need the
+  command surface.
+- Review/Run disabled: the creator-studio projection capability is missing on
+  the host; Context and command help stay available.
+- `contract_mismatch` means a seam exists but is incomplete (for example a
+  partial `workspaceLayout`); upgrading DSH is the unlock path.
 
 ## Capabilities
 
 - `dsh-ai-drama-command-surface`: Typed /drama command surface
 - `dsh-ai-drama-pane-preset`: Director preset with first-support and secondary panes
-- `dsh-ai-drama-context-handoff`: Workbench handoff with safe refs
+- `dsh-ai-drama-context-handoff`: Workbench handoff with safe refs (legacy V1 lane, frozen during the compatibility window)
+- `dsh-ai-drama-workbench-bridge-v2`: `dsh.workbench_ai_drama_bridge.v2` host-approved launcher — opaque `launchRef`, `/agent` Creative Production / Review / Evidence lenses, canonical SHA-256 digest, published conformance fixtures
 - `dsh-ai-drama-product-evidence`: Redacted product evidence
 
 ## Behavior
@@ -36,6 +114,27 @@ The bundle follows the Director Pack design:
 - No polling: snapshot + event push only
 - Unknown results never auto-retry
 - Handoff carries only refs, not session tokens or private data
+
+## Workbench bridge behavior
+
+`/drama handoff` prefers the V2 host-approved launcher: the client receives
+only an opaque short-lived `launchRef` projection (never a URL, origin, or
+credential) and shows the target lens, intent, contract version, and expiry.
+Degradation is honest and labeled:
+
+- legacy-only consumer → `legacy_bridge` label; legacy success is never
+  reported as V2 consumption
+- stale capability probe / no approved target / incompatible consumer → the
+  launch action disables with a stable reason (`stale`, `target_unavailable`,
+  `contract_mismatch`)
+- unknown or timed-out launch → no automatic retry; the user requests a fresh
+  handoff or a status check
+
+Rollback: the host provider's V2 flag can be disabled at any time; existing
+launch refs expire naturally within the TTL and no owner state is rewritten.
+Cross-repository rollout readiness additionally requires the Workbench
+consumer to pass the same fixture version (see
+`docs/integrations/dsh-workbench-ai-drama-bridge-v2-packet.md`).
 
 ## License
 

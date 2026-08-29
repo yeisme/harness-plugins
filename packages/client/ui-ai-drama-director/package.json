@@ -29,7 +29,8 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6"
+    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6",
+    "react": "^18.2.0"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
@@ -37,16 +38,25 @@
     },
     "@deepseek-ai/dsh-client-runtime": {
       "optional": true
+    },
+    "react": {
+      "optional": true
     }
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6",
+    "@types/react": "~18.3.1",
+    "@yeisme/dsh-pane-protocol": "workspace:*",
+    "react": "^18.2.0",
     "tsdown": "^0.22.14",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
   },
   "dependencies": {
-    "@yeisme/dsh-ai-drama-director": "workspace:*"
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.6",
+    "@yeisme/dsh-ai-drama-director": "workspace:*",
+    "@yeisme/dsh-client-ui-command-experience-core": "workspace:*",
+    "@yeisme/dsh-client-ui-surface": "workspace:^"
   }
 }

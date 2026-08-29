@@ -1,0 +1,15 @@
+{
+  "id": "capability-incompatible-consumer",
+  "kind": "issue",
+  "actor": "provider",
+  "category": "capability",
+  "describe": "a consumer advertising no compatible contract is a contract mismatch",
+  "given": {
+    "target": "incompatible",
+    "enabled": true
+  },
+  "expect": {
+    "ok": false,
+    "reason": "contract_mismatch"
+  }
+}

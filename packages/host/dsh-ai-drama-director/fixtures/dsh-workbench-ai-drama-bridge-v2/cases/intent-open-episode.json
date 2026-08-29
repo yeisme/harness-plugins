@@ -1,0 +1,38 @@
+{
+  "id": "intent-open-episode",
+  "kind": "ingress",
+  "actor": "both",
+  "category": "intent_mapping",
+  "describe": "intent open_episode opens the creative_production lens focused on episode_timeline",
+  "given": {
+    "envelope": {
+      "contractVersion": "dsh.workbench_ai_drama_bridge.v2",
+      "direction": "dsh_to_workbench",
+      "sourceSurfaceId": "dsh.drama.director",
+      "targetSurfaceId": "workbench.agent.spatial",
+      "workspaceRef": "ws:alpha",
+      "projectRef": "proj:drama-1",
+      "showRef": "show:101",
+      "episodeRef": "ep:5",
+      "resourceRef": "artifact:shot-boards-12",
+      "resourceVersion": "r42",
+      "contextRevision": 7,
+      "presentationIntent": "open_episode",
+      "expiresAtUnixMs": 1800000300000,
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "contractDigest": "03c7675d66a4e4c3db9e0f4d8e211371a8cd5b8317ffaf1aaa8c79ee7415c469"
+    },
+    "owner": {
+      "resourceExists": true,
+      "principalAuthorized": true,
+      "ownerResourceVersion": "r42",
+      "ownerContextRevision": 7
+    }
+  },
+  "expect": {
+    "ok": true,
+    "state": "opened",
+    "lens": "creative_production",
+    "focus": "episode_timeline"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "id": "intent-open-evidence",
+  "kind": "ingress",
+  "actor": "both",
+  "category": "intent_mapping",
+  "describe": "intent open_evidence opens the evidence lens focused on evidence_context",
+  "given": {
+    "envelope": {
+      "contractVersion": "dsh.workbench_ai_drama_bridge.v2",
+      "direction": "dsh_to_workbench",
+      "sourceSurfaceId": "dsh.drama.director",
+      "targetSurfaceId": "workbench.agent.spatial",
+      "workspaceRef": "ws:alpha",
+      "projectRef": "proj:drama-1",
+      "showRef": "show:101",
+      "episodeRef": "ep:5",
+      "resourceRef": "artifact:shot-boards-12",
+      "resourceVersion": "r42",
+      "contextRevision": 7,
+      "presentationIntent": "open_evidence",
+      "expiresAtUnixMs": 1800000300000,
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "contractDigest": "8246fc3642d8e25962f81882c408073014c1eb4d29615ab560baf145aa519ec4"
+    },
+    "owner": {
+      "resourceExists": true,
+      "principalAuthorized": true,
+      "ownerResourceVersion": "r42",
+      "ownerContextRevision": 7
+    }
+  },
+  "expect": {
+    "ok": true,
+    "state": "opened",
+    "lens": "evidence",
+    "focus": "evidence_context"
+  }
+}

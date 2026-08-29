@@ -1,0 +1,12 @@
+{
+  "id": "consume-launched",
+  "kind": "consume",
+  "actor": "provider",
+  "category": "lifecycle",
+  "describe": "a fresh launchRef consumes to launched",
+  "given": {},
+  "expect": {
+    "ok": true,
+    "state": "launched"
+  }
+}

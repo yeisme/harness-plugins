@@ -1,0 +1,211 @@
+{
+  "fixtureVersion": "2026-08-29.1",
+  "contract": "dsh.workbench_ai_drama_bridge.v2",
+  "description": "Canonical DSH → Workbench AI drama bridge V2 conformance fixtures. DSH executes provider and both cases; the Workbench consumer implements the same outcomes for consumer and both cases against this exact fixture version.",
+  "cases": [
+    {
+      "id": "intent-open-show",
+      "file": "cases/intent-open-show.json",
+      "kind": "ingress",
+      "actor": "both"
+    },
+    {
+      "id": "intent-open-episode",
+      "file": "cases/intent-open-episode.json",
+      "kind": "ingress",
+      "actor": "both"
+    },
+    {
+      "id": "intent-open-artifact",
+      "file": "cases/intent-open-artifact.json",
+      "kind": "ingress",
+      "actor": "both"
+    },
+    {
+      "id": "intent-open-review",
+      "file": "cases/intent-open-review.json",
+      "kind": "ingress",
+      "actor": "both"
+    },
+    {
+      "id": "intent-open-evidence",
+      "file": "cases/intent-open-evidence.json",
+      "kind": "ingress",
+      "actor": "both"
+    },
+    {
+      "id": "reject-unknown-key",
+      "file": "cases/reject-unknown-key.json",
+      "kind": "validate",
+      "actor": "both"
+    },
+    {
+      "id": "reject-oversized-ref",
+      "file": "cases/reject-oversized-ref.json",
+      "kind": "validate",
+      "actor": "both"
+    },
+    {
+      "id": "reject-missing-required-key",
+      "file": "cases/reject-missing-required-key.json",
+      "kind": "validate",
+      "actor": "both"
+    },
+    {
+      "id": "reject-nonce-uppercase",
+      "file": "cases/reject-nonce-uppercase.json",
+      "kind": "validate",
+      "actor": "both"
+    },
+    {
+      "id": "reject-nonce-short",
+      "file": "cases/reject-nonce-short.json",
+      "kind": "validate",
+      "actor": "both"
+    },
+    {
+      "id": "reject-expired-envelope",
+      "file": "cases/reject-expired-envelope.json",
+      "kind": "validate",
+      "actor": "both"
+    },
+    {
+      "id": "reject-wrong-direction",
+      "file": "cases/reject-wrong-direction.json",
+      "kind": "validate",
+      "actor": "both"
+    },
+    {
+      "id": "reject-wrong-target-surface",
+      "file": "cases/reject-wrong-target-surface.json",
+      "kind": "validate",
+      "actor": "both"
+    },
+    {
+      "id": "reject-unknown-intent",
+      "file": "cases/reject-unknown-intent.json",
+      "kind": "ingress",
+      "actor": "both"
+    },
+    {
+      "id": "reject-digest-tamper",
+      "file": "cases/reject-digest-tamper.json",
+      "kind": "validate",
+      "actor": "both"
+    },
+    {
+      "id": "reject-raw-route-input",
+      "file": "cases/reject-raw-route-input.json",
+      "kind": "ingress",
+      "actor": "consumer"
+    },
+    {
+      "id": "version-match-opens",
+      "file": "cases/version-match-opens.json",
+      "kind": "ingress",
+      "actor": "consumer"
+    },
+    {
+      "id": "version-behind-reconciles",
+      "file": "cases/version-behind-reconciles.json",
+      "kind": "ingress",
+      "actor": "consumer"
+    },
+    {
+      "id": "version-ahead-reconciles",
+      "file": "cases/version-ahead-reconciles.json",
+      "kind": "ingress",
+      "actor": "consumer"
+    },
+    {
+      "id": "resource-missing-reconciles",
+      "file": "cases/resource-missing-reconciles.json",
+      "kind": "ingress",
+      "actor": "consumer"
+    },
+    {
+      "id": "replay-identical-idempotent",
+      "file": "cases/replay-identical-idempotent.json",
+      "kind": "ingress",
+      "actor": "consumer"
+    },
+    {
+      "id": "replay-conflict",
+      "file": "cases/replay-conflict.json",
+      "kind": "ingress",
+      "actor": "consumer"
+    },
+    {
+      "id": "principal-denied",
+      "file": "cases/principal-denied.json",
+      "kind": "ingress",
+      "actor": "consumer"
+    },
+    {
+      "id": "capability-v2-preferred",
+      "file": "cases/capability-v2-preferred.json",
+      "kind": "issue",
+      "actor": "provider"
+    },
+    {
+      "id": "capability-legacy-only-fallback",
+      "file": "cases/capability-legacy-only-fallback.json",
+      "kind": "issue",
+      "actor": "provider"
+    },
+    {
+      "id": "capability-stale-disabled",
+      "file": "cases/capability-stale-disabled.json",
+      "kind": "issue",
+      "actor": "provider"
+    },
+    {
+      "id": "capability-no-consumer",
+      "file": "cases/capability-no-consumer.json",
+      "kind": "issue",
+      "actor": "provider"
+    },
+    {
+      "id": "capability-incompatible-consumer",
+      "file": "cases/capability-incompatible-consumer.json",
+      "kind": "issue",
+      "actor": "provider"
+    },
+    {
+      "id": "consume-launched",
+      "file": "cases/consume-launched.json",
+      "kind": "consume",
+      "actor": "provider"
+    },
+    {
+      "id": "consume-expired",
+      "file": "cases/consume-expired.json",
+      "kind": "consume",
+      "actor": "provider"
+    },
+    {
+      "id": "consume-unknown-ref",
+      "file": "cases/consume-unknown-ref.json",
+      "kind": "consume",
+      "actor": "provider"
+    },
+    {
+      "id": "rollback-v2-disabled-legacy",
+      "file": "cases/rollback-v2-disabled-legacy.json",
+      "kind": "issue",
+      "actor": "provider"
+    },
+    {
+      "id": "issue-duplicate-canonical-idempotent",
+      "file": "cases/issue-duplicate-canonical-idempotent.json",
+      "kind": "issue",
+      "actor": "provider"
+    },
+    {
+      "id": "issue-conflicting-replay-rejected",
+      "file": "cases/issue-conflicting-replay-rejected.json",
+      "kind": "issue",
+      "actor": "provider"
+    }
+  ]
+}

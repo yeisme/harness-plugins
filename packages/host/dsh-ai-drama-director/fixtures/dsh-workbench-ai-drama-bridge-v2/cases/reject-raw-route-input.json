@@ -1,0 +1,21 @@
+{
+  "id": "reject-raw-route-input",
+  "kind": "ingress",
+  "actor": "consumer",
+  "category": "ingress_input",
+  "describe": "a browser-composed route string is never parsed as an envelope",
+  "given": {
+    "envelope": "/agent?lens=creative-production&ref=show:101",
+    "owner": {
+      "resourceExists": true,
+      "principalAuthorized": true,
+      "ownerResourceVersion": "r42",
+      "ownerContextRevision": 7
+    }
+  },
+  "expect": {
+    "ok": false,
+    "state": "contract_mismatch",
+    "reason": "contract_mismatch"
+  }
+}

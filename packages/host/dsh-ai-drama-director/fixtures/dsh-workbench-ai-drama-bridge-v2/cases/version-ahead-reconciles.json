@@ -1,0 +1,37 @@
+{
+  "id": "version-ahead-reconciles",
+  "kind": "ingress",
+  "actor": "consumer",
+  "category": "version",
+  "describe": "a handoff version ahead of owner state requires reconcile without overwrite",
+  "given": {
+    "envelope": {
+      "contractVersion": "dsh.workbench_ai_drama_bridge.v2",
+      "direction": "dsh_to_workbench",
+      "sourceSurfaceId": "dsh.drama.director",
+      "targetSurfaceId": "workbench.agent.spatial",
+      "workspaceRef": "ws:alpha",
+      "projectRef": "proj:drama-1",
+      "showRef": "show:101",
+      "episodeRef": "ep:5",
+      "resourceRef": "artifact:shot-boards-12",
+      "resourceVersion": "r43",
+      "contextRevision": 7,
+      "presentationIntent": "open_artifact",
+      "expiresAtUnixMs": 1800000300000,
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "contractDigest": "1a0a8e0a313fa32f3667c6e3db06bda8cb3e8f6db11851c17bdbea5a1c3040e7"
+    },
+    "owner": {
+      "resourceExists": true,
+      "principalAuthorized": true,
+      "ownerResourceVersion": "r42",
+      "ownerContextRevision": 7
+    }
+  },
+  "expect": {
+    "ok": false,
+    "state": "reconcile_required",
+    "reason": "reconcile_required"
+  }
+}

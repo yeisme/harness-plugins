@@ -1,0 +1,30 @@
+{
+  "id": "reject-nonce-short",
+  "kind": "validate",
+  "actor": "both",
+  "category": "nonce",
+  "describe": "a nonce shorter than 32 hex chars is a contract mismatch",
+  "given": {
+    "envelope": {
+      "contractVersion": "dsh.workbench_ai_drama_bridge.v2",
+      "direction": "dsh_to_workbench",
+      "sourceSurfaceId": "dsh.drama.director",
+      "targetSurfaceId": "workbench.agent.spatial",
+      "workspaceRef": "ws:alpha",
+      "projectRef": "proj:drama-1",
+      "showRef": "show:101",
+      "episodeRef": "ep:5",
+      "resourceRef": "artifact:shot-boards-12",
+      "resourceVersion": "r42",
+      "contextRevision": 7,
+      "presentationIntent": "open_artifact",
+      "expiresAtUnixMs": 1800000300000,
+      "nonce": "0123456789abcdef",
+      "contractDigest": "d005c522d3fa262607631bdf32465705b277959b8e68d79d81c65cef8ff83365"
+    }
+  },
+  "expect": {
+    "ok": false,
+    "reason": "contract_mismatch"
+  }
+}

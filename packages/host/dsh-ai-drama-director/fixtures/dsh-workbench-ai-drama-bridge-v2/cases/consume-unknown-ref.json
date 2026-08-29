@@ -1,0 +1,15 @@
+{
+  "id": "consume-unknown-ref",
+  "kind": "consume",
+  "actor": "provider",
+  "category": "lifecycle",
+  "describe": "an unknown launchRef consumes to unknown with no auto-retry",
+  "given": {
+    "launchRef": "lref-000000000000000000000000"
+  },
+  "expect": {
+    "ok": false,
+    "state": "unknown",
+    "reason": "unknown"
+  }
+}

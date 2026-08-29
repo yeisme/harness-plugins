@@ -2,7 +2,7 @@
 
 ## 定位
 
-Director Pack 是 DSH 中的 Agent 侧做剧工作入口。它让用户在对话上下文中快速选择 Show/Episode、查看下一项审查、发起允许的生成或修复动作，并在需要管理整部剧时打开 Workbench Show Control Room。
+Director Pack 是 DSH 中的 Agent 侧做剧工作入口。它让用户在对话上下文中选择 Show/Episode，按需推进故事、视觉、音频、生成、审查和 owner 导出动作；复杂生产工作通过 Bridge V2 进入 Workbench `/agent` Spatial Creative Runtime 的 Creative Production、Review 或 Evidence lens。
 
 它不是第二个 Creator Studio、第二个 Workbench 或第二个 scheduler。它复用现有 Pane Workbench、Creator Studio safe projection、Rich Media renderer、artifact intents 和 Ordo Agent Ops。
 
@@ -40,7 +40,7 @@ bundle 不隐式安装 provider、owner runtime 或 Workbench，也不修改用�
 2. Review：下一项 compare/decision/repair。
 3. Run：当前 Ordo/Aigora attempt、cost/ETA、receipt/reconcile。
 
-Story、Visual 和 Audio 为按需打开的 secondary panes。用户需要浏览整个 Episode Board、Asset Wall 或大量候选时，使用 Open in Workbench。
+Story、Visual 和 Audio 为按需打开的 secondary panes。当前项目的完整阶段流程可以留在 Pane；用户需要完整 Episode Board、专业 Asset Wall、跨集比较或大量候选批量处理时，使用可选 Open in Workbench。
 
 ## Context contract
 
@@ -71,10 +71,22 @@ context 变化时，插件必须 teardown 旧 subscription、清空 presentation
 
 DSH 优先解决“我现在和 Agent 一起做什么”；Workbench 解决“整部剧全局发生了什么”。因此：
 
-- DSH 不实现完整 Show/Episode tree、Asset Library、批量 Review Inbox 或 Delivery dashboard。
+- DSH 不实现 Workbench 级 Show/Episode 批量管理、跨集比较、专业 Asset Wall 或 Delivery dashboard。
 - Workbench 不复制 DSH conversation、subagent 或 slash-command state。
-- Open in Workbench 只传 context refs 和 presentation intent。
+- Open in Workbench 只传安全 context refs、resource version 和封闭 presentation intent；浏览器不拼接任意 URL。
 - Continue in DSH 只生成已批准 profile/command/deep-link payload。
+
+## Bridge V2 迁移
+
+当前实现中的 `drama.workbench-handoff.v1` 是兼容期 legacy provider 合同；它能够签发和本地校验，但不等于 Workbench 已消费。后续统一路径由 `dsh.workbench_ai_drama_bridge.v2` 提供：
+
+- DSH Host 探测 Workbench consumer capability，签发短期 opaque `launchRef` 并返回 host-approved launch descriptor。
+- Workbench 在 `/agent` server ingress 重新鉴权、refetch owner 数据并检查 resource version/context revision。
+- `open_show`、`open_episode`、`open_artifact` 进入 Creative Production；`open_review` 进入 Review；`open_evidence` 进入 Evidence。
+- V1 至少保留两个连续 DSH 插件发布窗口；V2 不可用时显式 legacy fallback 或 disabled，不生成死按钮。
+- 删除旧合同必须使用独立变更，并以跨仓 conformance、采用率和回滚证据为前提。
+
+完整产品与架构方案见 [DSH × Workbench AI 做剧 Bridge V2](dsh-workbench-ai-drama-bridge-v2.md)。
 
 ## Scaena 边界
 
@@ -91,3 +103,5 @@ Director Pack 不要求 Scaena 新增 adapter、projection 或 action。若已�
 ## Owning OpenSpec
 
 [dsh-ai-drama-director-pack-v1](../../openspec/changes/dsh-ai-drama-director-pack-v1/)
+
+[dsh-workbench-ai-drama-bridge-v2](../../openspec/changes/dsh-workbench-ai-drama-bridge-v2/)

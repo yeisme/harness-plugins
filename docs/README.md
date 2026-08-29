@@ -8,8 +8,22 @@
 - cookbook/adding-ordo-agent-ops-plugin.md §8：Ordo、Workbench、pack 与 Control Plane handoff 字段账本。
 - ../packages/bundle/pane-workbench/README.md：Pane Workbench overlay 的安装、快捷操作、排障与 canary handoff。
 - ../packages/bundle/anchored-standard/README.md：Anchored Standard 预设族的安装与行为。
+- ../packages/bundle/dsh-devtools/README.md：DevTools 终端日志、Host/Web 性能、CPU Profile、导出与卸载说明。
+- ../openspec/changes/dsh-devtools-observability-v1/：DevTools V1 合同、架构、验收和实施任务。
 - ../openspec/changes/ordo-dsh-plugin-visualization-v1/：插件合同、状态机、DSH/Workbench 可视化设计。
+- design/dsh-web-pane-experience-completion.md：dsh web Pane 体验完成度设计（Experience Tier、做剧 × Workbench 旅程、交互缺口 owner 矩阵），实施见 ../openspec/changes/dsh-web-pane-experience-completion-v1/。
+- design/dsh-workbench-ai-drama-bridge-v2.md：从 CEO、产品与架构角度定义 DSH 创作前台、Workbench 制作现场、Ordo 唯一账本的做剧闭环，以及 Bridge V2 合同、90 天路线、指标、迁移和止损条件；实施见 ../openspec/changes/dsh-workbench-ai-drama-bridge-v2/。
+- integrations/dsh-workbench-ai-drama-bridge-v2-packet.md：Workbench consumer 侧交付 packet——合同、intent→lens 矩阵、ingress 状态机、reason codes、fixtures 版本与匹配的 Workbench change 记录。
+- cookbook/dsh-workbench-bridge-v2.md：做剧桥 V2 的用户视角、target registry 配置、证据诊断与回滚操作。
+- cookbook/dsh-web-pane-tiers.md：面向用户的 Tier 分级说明、Tier 0 做剧 quickstart 与排障。
+- cookbook/slash-commands.md：dsh web `/` 实时目录、面板热插拔贡献、自定义 host 命令注册契约与排障（双语）。
+- cookbook/dsh-plugin-hot-development.md：一条命令加载全部本地 bundle、开发仓库外插件、增量 build、Cordis HMR 与 profile restart 的开发工作流。
+- ../openspec/changes/dsh-slash-directory-hotplug-v1/：live `/` 目录、pane 热贡献、inspect 命令投影的合同与实现任务（design §D5 记录真实 runtime 集成加固）。
+- design/dsh-web-pane-terminal-sidechat.md：dsh web pane 终端（官方 ctx.terminals 行式投影）与侧边对话（附着/新建/fork，主选择不变量）设计，实施见 ../openspec/changes/dsh-web-pane-terminal-sidechat-v1/。
+- cookbook/dsh-web-pane-terminal-sidechat.md：面向用户的终端 console 与侧边对话安装/使用/排障（含 DSH ≥ 0.1.1-rc.2 锚点与降级原因对照）。
 - design/dsh-selection-agent-review-v1.md：选区/截图批注与逐位置审批的产品与设计摘要（split-owner、能力账本、桥接事件），实施见 ../openspec/changes/dsh-selection-agent-review-v1/。
+- design/dsh-semantic-file-editor.md：基于 opaque ref、Host-side LSP/AST、Monaco 与 workspace edit receipt 的语义文件 Pane 设计，实施见 ../openspec/changes/dsh-semantic-file-editor-pane-v1/。
+- ../packages/bundle/dsh-semantic-file-editor/README.md：语义编辑 bundle 的安装顺序、降级、回滚与证据命令。
 - ../packages/bundle/dsh-selection-annotation/README.md：选区批注 bundle 的安装、kill-switch 与宿主桥接契约。
 - ../packages/**/README.md：各包配置与运行时语义。
 

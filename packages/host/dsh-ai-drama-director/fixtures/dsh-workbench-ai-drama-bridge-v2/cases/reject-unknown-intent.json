@@ -1,0 +1,37 @@
+{
+  "id": "reject-unknown-intent",
+  "kind": "ingress",
+  "actor": "both",
+  "category": "intent_enum",
+  "describe": "an intent outside the closed enum is never approximated with a nearby lens",
+  "given": {
+    "envelope": {
+      "contractVersion": "dsh.workbench_ai_drama_bridge.v2",
+      "direction": "dsh_to_workbench",
+      "sourceSurfaceId": "dsh.drama.director",
+      "targetSurfaceId": "workbench.agent.spatial",
+      "workspaceRef": "ws:alpha",
+      "projectRef": "proj:drama-1",
+      "showRef": "show:101",
+      "episodeRef": "ep:5",
+      "resourceRef": "artifact:shot-boards-12",
+      "resourceVersion": "r42",
+      "contextRevision": 7,
+      "presentationIntent": "open_bts",
+      "expiresAtUnixMs": 1800000300000,
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "contractDigest": "30c93fafac8d9269fc7cb4111d951204f83187cbe38894230c57a95c907edf28"
+    },
+    "owner": {
+      "resourceExists": true,
+      "principalAuthorized": true,
+      "ownerResourceVersion": "r42",
+      "ownerContextRevision": 7
+    }
+  },
+  "expect": {
+    "ok": false,
+    "state": "contract_mismatch",
+    "reason": "contract_mismatch"
+  }
+}

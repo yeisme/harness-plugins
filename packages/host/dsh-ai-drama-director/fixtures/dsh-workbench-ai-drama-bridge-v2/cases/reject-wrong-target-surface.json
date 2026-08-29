@@ -1,0 +1,30 @@
+{
+  "id": "reject-wrong-target-surface",
+  "kind": "validate",
+  "actor": "both",
+  "category": "target_surface",
+  "describe": "a target surface other than workbench.agent.spatial is a contract mismatch",
+  "given": {
+    "envelope": {
+      "contractVersion": "dsh.workbench_ai_drama_bridge.v2",
+      "direction": "dsh_to_workbench",
+      "sourceSurfaceId": "dsh.drama.director",
+      "targetSurfaceId": "workbench.show-control-room",
+      "workspaceRef": "ws:alpha",
+      "projectRef": "proj:drama-1",
+      "showRef": "show:101",
+      "episodeRef": "ep:5",
+      "resourceRef": "artifact:shot-boards-12",
+      "resourceVersion": "r42",
+      "contextRevision": 7,
+      "presentationIntent": "open_artifact",
+      "expiresAtUnixMs": 1800000300000,
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "contractDigest": "44dd42270770e3851b5f464c7cb7e755f506205ac89f10ee67b055f9d795bf3d"
+    }
+  },
+  "expect": {
+    "ok": false,
+    "reason": "contract_mismatch"
+  }
+}

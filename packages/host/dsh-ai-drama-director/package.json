@@ -1,7 +1,7 @@
 {
   "name": "@yeisme/dsh-ai-drama-director",
   "version": "0.1.0-rc.1",
-  "description": "AI Drama Director Pack host and client units: context, typed /drama, events, Workbench handoff, and Director preset",
+  "description": "AI Drama Director Pack host and client units: context, typed /drama, events, Workbench handoff (V1 + V2 bridge), and Director preset",
   "license": "MIT",
   "type": "module",
   "publishConfig": {
@@ -16,6 +16,8 @@
   },
   "files": [
     "lib/**",
+    "fixtures/**",
+    "scripts/generate-bridge-fixtures.mjs",
     "README.md"
   ],
   "scripts": {

@@ -1,0 +1,22 @@
+{
+  "id": "issue-conflicting-replay-rejected",
+  "kind": "issue",
+  "actor": "provider",
+  "category": "replay",
+  "describe": "the same nonce with a different payload is rejected as a replay conflict",
+  "given": {
+    "target": "default",
+    "enabled": true,
+    "request": {
+      "nonce": "0123456789abcdef0123456789abcdef"
+    },
+    "conflictRequest": {
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "resourceRef": "artifact:other"
+    }
+  },
+  "expect": {
+    "ok": false,
+    "reason": "replay_conflict"
+  }
+}

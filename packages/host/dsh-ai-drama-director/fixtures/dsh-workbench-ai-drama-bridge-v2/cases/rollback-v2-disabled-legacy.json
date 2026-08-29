@@ -1,0 +1,15 @@
+{
+  "id": "rollback-v2-disabled-legacy",
+  "kind": "issue",
+  "actor": "provider",
+  "category": "rollback",
+  "describe": "disabling the V2 flag stops V2 issuance and uses the labeled legacy bridge",
+  "given": {
+    "target": "default",
+    "enabled": false
+  },
+  "expect": {
+    "ok": true,
+    "mode": "legacy_bridge"
+  }
+}

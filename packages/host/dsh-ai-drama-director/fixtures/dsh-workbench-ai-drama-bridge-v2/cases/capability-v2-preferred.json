@@ -1,0 +1,15 @@
+{
+  "id": "capability-v2-preferred",
+  "kind": "issue",
+  "actor": "provider",
+  "category": "capability",
+  "describe": "a fresh V2-capable consumer gets a V2 launch descriptor",
+  "given": {
+    "target": "default",
+    "enabled": true
+  },
+  "expect": {
+    "ok": true,
+    "mode": "v2"
+  }
+}

@@ -18,6 +18,8 @@
 | G9 | dsh fork 退役 | `client/deepseek-harness` submodule 删除；seam 开发固化为 `upstream-prs/` patch 系列；上游跟进自动化 | root 仓无 dsh submodule；`upstream-prs/` 四系列可干净 apply（pr-rebase 绿）；upstream-canary 对最新发布 dsh 绿 |
 | G10 | 产物合同与 CI 落地 | 全部 bundle client 产物满足 ModuleLoader 单文件契约；CI 首跑绿 | `dsh-bundle-artifact-contract-v1` 全绿；`pnpm check:bundles` 14/14；ci.yml 首次 run 绿 |
 | G11 | upstream seam 推进 program | Wave A（4 个完整 patch 系列）推上游 PR；合入后插件侧解锁 | `dsh-upstream-seam-push-program-v1` tasks 按波次勾选；PR 链接登记进各系列 README |
+| G12 | Pane 体验完成度（做剧 × Workbench） | Experience Tier 模型落地：Tier 0 overlay 完整单 region 交互、drama client 真接线、场景 handoff 双轨、能力矩阵投影 | `dsh-web-pane-experience-completion-v1` OpenSpec 全绿；Tier 0 交互测试矩阵与 handoff 集成证据落盘 |
+| G13 | DSH → Workbench AI 做剧 Bridge V2 | 收敛两套不兼容 handoff，接入 `/agent` Spatial lenses，建立 approved launcher、双栈迁移和跨仓 conformance | `dsh-workbench-ai-drama-bridge-v2` planning 全绿；provider/consumer 使用同版本 fixture，canary 与回滚证据齐备 |
 
 ## Goal → Spec 任务映射
 
@@ -34,6 +36,8 @@
 | G9 | `agent/harness-plugins/upstream-prs/`（四系列 + backlog）、`.github/workflows/{upstream-canary,pr-rebase}.yml` |
 | G10 | `openspec/changes/dsh-bundle-artifact-contract-v1/`、`scripts/check-bundle-contracts.mjs`、`.github/workflows/ci.yml` |
 | G11 | `openspec/changes/dsh-upstream-seam-push-program-v1/`、`upstream-prs/*/README.md` |
+| G12 | `openspec/changes/dsh-web-pane-experience-completion-v1/tasks.md` 1.x–6.x |
+| G13 | `openspec/changes/dsh-workbench-ai-drama-bridge-v2/tasks.md` 1.x–7.x、`docs/design/dsh-workbench-ai-drama-bridge-v2.md` |
 
 ## 推进节奏建议
 
@@ -42,3 +46,4 @@
 3. 官方宿主 slot 出现前，G4 保持“gate 已就绪，等待外部”。
 4. 真实 DSH seam 接入前，先用 `createStaticHostProjection` / `createDshHostProjection` 保证组合层可独立测试。
 5. fork 退役后：需要 core 改动的 seam 一律登记 `upstream-prs/`（含 patch 与测试），插件侧 probe+降级；不做本地源码 fork，日常上游跟进交给 canary/pr-rebase 自动化，人只在红灯 issue 时介入。
+6. G13 先完成合同冻结和跨仓 fixture，再分别推进 DSH provider 与 Workbench consumer；不得用单仓测试替代 rollout-ready 结论。

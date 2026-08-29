@@ -1,0 +1,58 @@
+{
+  "id": "replay-conflict",
+  "kind": "ingress",
+  "actor": "consumer",
+  "category": "replay",
+  "describe": "the same nonce with a different canonical payload is a replay conflict",
+  "given": {
+    "envelope": {
+      "contractVersion": "dsh.workbench_ai_drama_bridge.v2",
+      "direction": "dsh_to_workbench",
+      "sourceSurfaceId": "dsh.drama.director",
+      "targetSurfaceId": "workbench.agent.spatial",
+      "workspaceRef": "ws:alpha",
+      "projectRef": "proj:drama-1",
+      "showRef": "show:101",
+      "episodeRef": "ep:5",
+      "resourceRef": "artifact:shot-boards-12",
+      "resourceVersion": "r42",
+      "contextRevision": 7,
+      "presentationIntent": "open_artifact",
+      "expiresAtUnixMs": 1800000300000,
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "contractDigest": "5dd1402f298788e35e9089f8c88f48fd0b5a921678ca7f2c7613bb45b6484fc8"
+    },
+    "owner": {
+      "resourceExists": true,
+      "principalAuthorized": true,
+      "ownerResourceVersion": "r42",
+      "ownerContextRevision": 7
+    },
+    "replayBefore": [
+      {
+        "envelope": {
+          "contractVersion": "dsh.workbench_ai_drama_bridge.v2",
+          "direction": "dsh_to_workbench",
+          "sourceSurfaceId": "dsh.drama.director",
+          "targetSurfaceId": "workbench.agent.spatial",
+          "workspaceRef": "ws:alpha",
+          "projectRef": "proj:drama-1",
+          "showRef": "show:101",
+          "episodeRef": "ep:5",
+          "resourceRef": "artifact:shot-boards-13",
+          "resourceVersion": "r42",
+          "contextRevision": 7,
+          "presentationIntent": "open_artifact",
+          "expiresAtUnixMs": 1800000300000,
+          "nonce": "0123456789abcdef0123456789abcdef",
+          "contractDigest": "aa6e0dc6cf2cdeef9e738921a191af2e7deca30ad4d91e525bc35d7024cdded6"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "ok": false,
+    "state": "replay_conflict",
+    "reason": "replay_conflict"
+  }
+}

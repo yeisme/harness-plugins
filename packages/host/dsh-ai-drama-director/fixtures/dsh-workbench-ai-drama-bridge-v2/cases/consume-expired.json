@@ -1,0 +1,15 @@
+{
+  "id": "consume-expired",
+  "kind": "consume",
+  "actor": "provider",
+  "category": "lifecycle",
+  "describe": "an expired launchRef consumes to expired without owner mutation",
+  "given": {
+    "advanceMs": 300001
+  },
+  "expect": {
+    "ok": false,
+    "state": "expired",
+    "reason": "expired"
+  }
+}

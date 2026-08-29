@@ -8,6 +8,14 @@
 # Context/Story/Visual/Audio/Run/Review panes, and the default Director preset.
 # Commands stay disabled without creator-studio projection; panes stay hidden
 # without pane workbench capability.
+#
+# Workbench bridge: /drama handoff prefers the dsh.workbench_ai_drama_bridge.v2
+# host-approved launcher (opaque launchRef, /agent Creative Production / Review /
+# Evidence lenses). Installation stays honest when the launcher channel or a V2
+# Workbench consumer is absent: the launch action degrades to the explicitly
+# labeled legacy_bridge path or disables with a stable reason — no dead buttons,
+# no composed URLs. Legacy V1 stays supported for at least two consecutive DSH
+# plugin release windows; removal requires its own change.
 - insert:
     - id: dsh-ai-drama-director
       name: '@yeisme/dsh-ai-drama-director'

@@ -1,0 +1,15 @@
+{
+  "id": "capability-stale-disabled",
+  "kind": "issue",
+  "actor": "provider",
+  "category": "capability",
+  "describe": "a stale capability probe disables launch with a stable reason",
+  "given": {
+    "target": "stale",
+    "enabled": true
+  },
+  "expect": {
+    "ok": false,
+    "reason": "stale"
+  }
+}

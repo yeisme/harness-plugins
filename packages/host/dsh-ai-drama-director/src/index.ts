@@ -85,3 +85,102 @@ export {
   isRedactedDramaEvidence,
 } from './evidence.js'
 export type { DramaEvidenceKindV1, DramaEvidenceRecordV1 } from './evidence.js'
+
+// Workbench AI drama bridge V2 — additive surface; V1 stays frozen above.
+export {
+  BRIDGE_V2_CONTRACT,
+  BRIDGE_V2_DIRECTION,
+  WORKBENCH_AGENT_SPATIAL_SURFACE,
+  WORKBENCH_TARGET_APPLICATION,
+  BRIDGE_V2_INTENTS,
+  BRIDGE_V2_LENS_MAP,
+  BRIDGE_V2_REASON_CODES,
+  BRIDGE_V2_CANONICAL_FIELD_ORDER,
+  BRIDGE_V2_NONCE_PATTERN,
+  BRIDGE_V2_DIGEST_PATTERN,
+  BRIDGE_V2_MIN_TTL_MS,
+  BRIDGE_V2_MAX_TTL_MS,
+  BRIDGE_V2_DEFAULT_TTL_MS,
+  canonicalizeBridgeV2,
+  digestBridgeV2,
+  generateBridgeV2Nonce,
+  validateWorkbenchAiDramaBridgeV2,
+  createWorkbenchAiDramaBridgeV2,
+} from './bridge-v2.js'
+export type {
+  BridgeV2Intent,
+  BridgeV2ReasonCode,
+  WorkbenchAiDramaBridgeV2,
+  BridgeV2Validation,
+  BridgeV2IssueInput,
+  BridgeV2IssueResult,
+} from './bridge-v2.js'
+
+export {
+  LEGACY_BRIDGE_COMPAT_WINDOW_RELEASES,
+  LEGACY_BRIDGE_MODE,
+  createLegacyBridgeAdapter,
+} from './legacy-bridge-adapter.js'
+export type {
+  LegacyBridgeIssueInput,
+  LegacyBridgeAdapterResultV1,
+  LegacyBridgeAdapter,
+} from './legacy-bridge-adapter.js'
+
+export {
+  DRAMA_BRIDGE_EVIDENCE_SCHEMA,
+  BRIDGE_EVIDENCE_KINDS,
+  recordDramaBridgeEvidence,
+  createBridgeEvidenceEmitter,
+  isRedactedDramaBridgeEvidence,
+} from './bridge-evidence.js'
+export type {
+  BridgeEvidenceKind,
+  BridgeEvidenceSink,
+  BridgeEvidenceEmitter,
+  DramaBridgeEvidenceRecordV1,
+} from './bridge-evidence.js'
+
+export {
+  BRIDGE_CAPABILITY_FRESHNESS_MS,
+  createWorkbenchBridgeTargetRegistry,
+  probeWorkbenchBridgeCapability,
+  createWorkbenchLaunchProvider,
+} from './bridge-launch.js'
+export type {
+  WorkbenchBridgeTargetEntryV1,
+  WorkbenchBridgeTargetRegistration,
+  WorkbenchBridgeTargetRegistry,
+  WorkbenchBridgeCapability,
+  WorkbenchLaunchDescriptorV2,
+  WorkbenchBridgeIssuance,
+  WorkbenchBridgeConsumption,
+  WorkbenchLaunchProvider,
+  WorkbenchLaunchProviderIssueInput,
+  WorkbenchLaunchProviderOptions,
+} from './bridge-launch.js'
+
+export {
+  BRIDGE_V2_FIXTURE_VERSION,
+  BRIDGE_FIXTURE_BASE_INPUT,
+  BRIDGE_FIXTURE_NOW_MS,
+  BRIDGE_FIXTURE_NONCE,
+  BRIDGE_FIXTURE_TARGET,
+  buildBridgeFixtureEnvelope,
+  evaluateBridgeV2Validate,
+  evaluateBridgeV2Issue,
+  evaluateBridgeV2Consume,
+  evaluateBridgeV2Ingress,
+  evaluateBridgeCapabilityFixture,
+  resolveBridgeFixtureTarget,
+  parseBridgeFixtureManifest,
+  parseBridgeFixtureCase,
+  runBridgeFixtureCase,
+} from './bridge-conformance.js'
+export type {
+  BridgeFixtureKind,
+  BridgeFixtureActor,
+  BridgeFixtureCase,
+  BridgeFixtureManifest,
+  BridgeIngressOwnerSnapshot,
+} from './bridge-conformance.js'

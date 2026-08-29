@@ -1,0 +1,15 @@
+{
+  "id": "capability-no-consumer",
+  "kind": "issue",
+  "actor": "provider",
+  "category": "capability",
+  "describe": "no registered target disables launch as target unavailable",
+  "given": {
+    "target": null,
+    "enabled": true
+  },
+  "expect": {
+    "ok": false,
+    "reason": "target_unavailable"
+  }
+}

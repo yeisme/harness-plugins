@@ -1,0 +1,31 @@
+{
+  "id": "reject-expired-envelope",
+  "kind": "validate",
+  "actor": "both",
+  "category": "expiry",
+  "describe": "an expiry in the past is terminal expired",
+  "given": {
+    "envelope": {
+      "contractVersion": "dsh.workbench_ai_drama_bridge.v2",
+      "direction": "dsh_to_workbench",
+      "sourceSurfaceId": "dsh.drama.director",
+      "targetSurfaceId": "workbench.agent.spatial",
+      "workspaceRef": "ws:alpha",
+      "projectRef": "proj:drama-1",
+      "showRef": "show:101",
+      "episodeRef": "ep:5",
+      "resourceRef": "artifact:shot-boards-12",
+      "resourceVersion": "r42",
+      "contextRevision": 7,
+      "presentationIntent": "open_artifact",
+      "expiresAtUnixMs": 1799999999000,
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "contractDigest": "389dd60d99efc8377a1c1b975335c7e8aa6b8d81dd3872dcf5d16b02e8101ee2"
+    },
+    "nowMs": 1800000000000
+  },
+  "expect": {
+    "ok": false,
+    "reason": "expired"
+  }
+}

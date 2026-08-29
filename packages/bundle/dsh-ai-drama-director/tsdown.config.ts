@@ -2,8 +2,13 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'tsdown'
 
 const clientExternals = [
+  'react',
+  'react/jsx-runtime',
+  'react-dom',
+  'react-dom/client',
   '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-client-runtime/client',
+  '@deepseek-ai/dsh-client-ui-primitives',
 ] as const
 
 const node = {

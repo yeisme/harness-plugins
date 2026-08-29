@@ -1,0 +1,15 @@
+{
+  "id": "capability-legacy-only-fallback",
+  "kind": "issue",
+  "actor": "provider",
+  "category": "capability",
+  "describe": "a legacy-only consumer gets the explicitly labeled legacy bridge",
+  "given": {
+    "target": "legacy-only",
+    "enabled": true
+  },
+  "expect": {
+    "ok": true,
+    "mode": "legacy_bridge"
+  }
+}

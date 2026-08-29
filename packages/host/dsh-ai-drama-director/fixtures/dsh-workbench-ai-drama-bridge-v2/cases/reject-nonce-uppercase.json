@@ -1,0 +1,30 @@
+{
+  "id": "reject-nonce-uppercase",
+  "kind": "validate",
+  "actor": "both",
+  "category": "nonce",
+  "describe": "a nonce that is not lowercase hex is a contract mismatch",
+  "given": {
+    "envelope": {
+      "contractVersion": "dsh.workbench_ai_drama_bridge.v2",
+      "direction": "dsh_to_workbench",
+      "sourceSurfaceId": "dsh.drama.director",
+      "targetSurfaceId": "workbench.agent.spatial",
+      "workspaceRef": "ws:alpha",
+      "projectRef": "proj:drama-1",
+      "showRef": "show:101",
+      "episodeRef": "ep:5",
+      "resourceRef": "artifact:shot-boards-12",
+      "resourceVersion": "r42",
+      "contextRevision": 7,
+      "presentationIntent": "open_artifact",
+      "expiresAtUnixMs": 1800000300000,
+      "nonce": "ABCDEF0123456789ABCDEF0123456789",
+      "contractDigest": "59d9f22394044b870bc9167c142d4bad46434b2c98ec383eb458a52872242231"
+    }
+  },
+  "expect": {
+    "ok": false,
+    "reason": "contract_mismatch"
+  }
+}

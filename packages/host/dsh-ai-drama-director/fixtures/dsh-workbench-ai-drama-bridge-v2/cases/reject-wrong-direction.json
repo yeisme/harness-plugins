@@ -1,0 +1,30 @@
+{
+  "id": "reject-wrong-direction",
+  "kind": "validate",
+  "actor": "both",
+  "category": "direction",
+  "describe": "any direction other than dsh_to_workbench is a contract mismatch",
+  "given": {
+    "envelope": {
+      "contractVersion": "dsh.workbench_ai_drama_bridge.v2",
+      "direction": "workbench_to_dsh",
+      "sourceSurfaceId": "dsh.drama.director",
+      "targetSurfaceId": "workbench.agent.spatial",
+      "workspaceRef": "ws:alpha",
+      "projectRef": "proj:drama-1",
+      "showRef": "show:101",
+      "episodeRef": "ep:5",
+      "resourceRef": "artifact:shot-boards-12",
+      "resourceVersion": "r42",
+      "contextRevision": 7,
+      "presentationIntent": "open_artifact",
+      "expiresAtUnixMs": 1800000300000,
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "contractDigest": "89812a0e051b28c5b7504aabf3c30f354db2eede0c3677920d333ad71a026f9d"
+    }
+  },
+  "expect": {
+    "ok": false,
+    "reason": "contract_mismatch"
+  }
+}

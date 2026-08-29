@@ -1,0 +1,19 @@
+{
+  "id": "issue-duplicate-canonical-idempotent",
+  "kind": "issue",
+  "actor": "provider",
+  "category": "replay",
+  "describe": "issuing the same canonical request twice returns one launchRef",
+  "given": {
+    "target": "default",
+    "enabled": true,
+    "request": {
+      "nonce": "0123456789abcdef0123456789abcdef"
+    },
+    "repeat": 2
+  },
+  "expect": {
+    "ok": true,
+    "mode": "v2"
+  }
+}
