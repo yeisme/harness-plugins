@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { deriveMcpActivity, splitMcpToolName, type ActivityToolResultNode } from '../src/client/activity.ts'
+import { deriveMcpActivity, deriveToolActivity, splitMcpToolName, type ActivityToolResultNode } from '../src/client/activity.ts'
 
 function landed(name: string, callTime: number, time: number, isError = false, seq = 1): ActivityToolResultNode {
   return { kind: 'tool-result', seq, time, call: { name }, callTime, isError }
@@ -58,5 +58,28 @@ describe('deriveMcpActivity', () => {
     expect(activity).toHaveLength(1)
     expect(activity[0]).toMatchObject({ server: 'a' })
     expect(activity[0].records[0].tool).toBe('b__c')
+  })
+})
+
+describe('deriveToolActivity', () => {
+  test('correlates MCP/native calls and aggregates Skill without reading arguments', () => {
+    const activity = deriveToolActivity([
+      landed('mcp__github__create_issue', 1_000, 2_000, false, 1),
+      landed('read_file', 2_000, 2_100, true, 2),
+      landed('skill', 3_000, 3_500, false, 3),
+      landed('bad name', 4_000, 4_100, false, 4),
+    ], [{ name: 'mcp__github__list_prs', time: 5_000 }])
+    expect(activity).toMatchObject({ calls: 4, errors: 1, running: 1 })
+    expect(activity.records.find(record => record.tool === 'create_issue')).toMatchObject({ itemId: 'mcp:github', family: 'mcp' })
+    expect(activity.records.find(record => record.tool === 'read_file')).toMatchObject({ itemId: 'tool:read_file', family: 'native', isError: true })
+    expect(activity.records.find(record => record.family === 'skill')).toMatchObject({ itemId: null, tool: 'skill' })
+    expect(activity.records.some(record => record.tool === 'bad name')).toBe(false)
+  })
+
+  test('counts all valid records but bounds rendered history', () => {
+    const activity = deriveToolActivity(Array.from({ length: 240 }, (_, index) => landed('read_file', index, index + 1, false, index)))
+    expect(activity.calls).toBe(240)
+    expect(activity.records).toHaveLength(200)
+    expect(activity.records[0].time).toBe(240)
   })
 })

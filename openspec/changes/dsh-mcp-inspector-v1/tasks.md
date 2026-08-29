@@ -17,10 +17,10 @@
 
 - [x] 2.1 bundle `@yeisme/dsh-mcp-inspector`：cordis.patch.yml insert 行 + README + re-export client。
   - **Validation**：`pnpm run check:bundles`。
-- [ ] 2.2 全仓门禁：typecheck/test/build/check:bundles + `openspec validate dsh-mcp-inspector-v1 --strict`。（本包各门禁已单独绿：typecheck/test/build/check:bundles 18/18 + openspec --strict；全仓 typecheck 被 HEAD 上预存的 ui-session-cookie-manager provider-adapter.ts 缺失阻断，属 visual-kit 在途会话 lane，非本 change 引入。）
+- [x] 2.2 全仓门禁：typecheck/test/build/check:bundles + `openspec validate dsh-mcp-inspector-v1 --strict`。（done 2026-08-29: 全仓 `pnpm run typecheck`/`test`/`build` exit 0、`check:bundles` 24/24 PASS、strict validate 绿；此前阻断全仓 test 的 ui-ordo-agent-ops needs_contract 文本断言漂移已修正为当前诚实渲染断言（surface 重设计后显示本地化 copy 而非裸状态码）；`git diff --check` 仅剩 upstream-prs/pane-workspace-layout/changes.patch 既有尾随空格，属 parked lane patch 格式，不修复。）
   - **Validation**：`pnpm run typecheck && pnpm run test && pnpm run build && pnpm run check:bundles`。
 
 ## 3. 后续（明确不在本 change 完成）
 
 - [ ] 3.1 L2 seam `upstream-prs/mcp-inventory/`：patch + apply.sh + 推 fork pr 分支（用户已确认留待专门会话；设计见 design.md）。
-- [ ] 3.2 visual-kit token adoption（对齐 `dsh-unified-panel-visual-system-v1`）。
+- [x] 3.2 visual-kit token adoption（对齐 `dsh-unified-panel-visual-system-v1`）。（done 2026-08-29: `src/client/styles.ts` 经 `buildPanelStyles({scope})` 注入 + `--vk-*` canonical 直读（63 处）+ `--vk-font/ctrl` 局部刻度覆盖；`tests/visual-adoption.spec.ts` 钉住 kit 采纳；包内 10 文件 31/31 绿，含 controller/remote/wire/filter L2 面。）

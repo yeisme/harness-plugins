@@ -1,0 +1,55 @@
+{
+  "name": "@yeisme/dsh-tool-hub-host",
+  "version": "0.1.0-rc.1",
+  "description": "Harness Plugins tool hub host: safe skills/MCP/native catalog projection and user enablement preferences",
+  "license": "MIT",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.json && tsdown"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-storage-domain": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
+    "@deepseek-ai/cordis": "^4.0.1"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-storage-domain": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-typert-protocol": {
+      "optional": true
+    },
+    "@deepseek-ai/cordis": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-api-gateway": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-storage-domain": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-typert-registry": "^0.1.0-rc.6",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7",
+    "@deepseek-ai/cordis": "^4.0.1"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}

@@ -1,6 +1,6 @@
 # @yeisme/dsh-mcp-inspector
 
-DSH 官方 web ui 的 MCP 调用活动只读视图 bundle。
+DSH 官方 web ui 的 **Tools** 会话视图 bundle：管理 Skills / MCP / 内置工具，并显示本会话工具活动与可选 MCP health。
 
 ```bash
 dsh plugin --profile web add @yeisme/dsh-mcp-inspector
@@ -8,9 +8,9 @@ dsh plugin --profile web add @yeisme/dsh-mcp-inspector
 dsh plugin --profile web add ./packages/bundle/dsh-mcp-inspector
 ```
 
-- 在会话视图环（conversation.view）注册 "MCP" tab：按 `mcp__<server>__` 分组显示
-  每次调用的工具名、耗时、错误与运行中状态；数据纯来自会话快照，只读。
-- server 连接状态在 host 侧无公开合同：tab 头显示
-  `catalog: unavailable in this version`（诚实降级；seam 设计见
-  `openspec/changes/dsh-mcp-inspector-v1/design.md` 的 L2 节）。
-- Session log、prompt、plan selection 均归 DSH Host；本 bundle 不写任何 owner 状态。
+- 在会话视图环（`conversation.view`）注册 **Tools** tab（原 MCP tab）。
+- 目录：skills（`ctx.skills`）、MCP server（`mcp__*` 工具与可选 plugin inventory）、内置工具。支持搜索、按类型/availability 筛选、详情与启用/关闭。
+- 启停是用户偏好 overlay，经 `toolHub.setEnabled` 写入 `yeisme_tool_hub_v1`，并由 `ctx.tools.guard` 拒绝已关闭项。不开关 Cordis Loader 行。
+- 本会话 MCP/native/聚合 Skill 调用活动从 ConversationSnapshot 派生（只读，无调用按钮），支持列表与耗时时间线。
+- Host catalog 不可用时显示安全、本地化 recovery；活动区照常工作，raw transport error 不进入主界面。
+- 可选 `ctx.mcpServers.list()` 不存在时只显示“未提供连接健康”，不得把 enabled 解释为 connected。

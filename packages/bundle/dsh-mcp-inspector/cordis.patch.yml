@@ -4,8 +4,9 @@
 # or from this checkout:
 #   dsh plugin --profile web add ./packages/bundle/dsh-mcp-inspector
 #
-# This bundle adds one independently identifiable profile row. Session logs,
-# prompt admission, and plan selection remain with DSH Host.
+# This bundle adds one independently identifiable profile row. The Host
+# face projects skills/MCP/native catalogs and stores enablement prefs;
+# session logs, prompt admission, and plan selection remain with DSH Host.
 - insert:
     - id: dsh-mcp-inspector
       name: '@yeisme/dsh-mcp-inspector'

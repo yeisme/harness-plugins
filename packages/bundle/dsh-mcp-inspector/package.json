@@ -1,13 +1,13 @@
 {
   "name": "@yeisme/dsh-mcp-inspector",
   "version": "0.1.0-rc.1",
-  "description": "DSH Web MCP inspector bundle: read-only per-server MCP tool activity view",
+  "description": "DSH Web Tools inspector bundle: skills and MCP catalog management plus session activity",
   "main": "lib/index.js",
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "tsc -p tsconfig.json && tsdown",
-    "bundle": "tsdown"
+    "build": "pnpm --filter @yeisme/dsh-tool-hub-host build && tsc -p tsconfig.json && tsdown",
+    "bundle": "pnpm --filter @yeisme/dsh-tool-hub-host build && tsdown"
   },
   "keywords": [],
   "author": "",
@@ -57,7 +57,8 @@
     }
   },
   "dependencies": {
-    "@yeisme/dsh-client-ui-mcp-inspector": "workspace:*"
+    "@yeisme/dsh-client-ui-mcp-inspector": "workspace:*",
+    "@yeisme/dsh-tool-hub-host": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
@@ -65,6 +66,7 @@
     "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6",
     "@deepseek-ai/dsh-client-ui-conversation": "0.1.0-rc.7",
     "@deepseek-ai/dsh-client-ui-slots": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
     "react": "^18.3.1"
   },
   "devDependencies": {
@@ -73,6 +75,7 @@
     "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6",
     "@deepseek-ai/dsh-client-ui-conversation": "0.1.0-rc.7",
     "@deepseek-ai/dsh-client-ui-slots": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
     "@types/react": "~18.3.31",
     "jsdom": "^30.0.1",
     "react": "^18.3.1",
