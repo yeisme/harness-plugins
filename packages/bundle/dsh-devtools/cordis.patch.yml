@@ -1,0 +1,7 @@
+# Install from npm:
+#   dsh plugin --profile web add @yeisme/dsh-devtools
+# Or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/dsh-devtools
+- insert:
+    - id: dsh-devtools
+      name: '@yeisme/dsh-devtools'
