@@ -66,3 +66,11 @@ dsh plugin --profile web remove @yeisme/dsh-rich-media
 ```
 
 骨架不写入持久化数据、不修改 DSH core、不创建浏览器 domain store。
+
+## 审片时间轴增强
+
+`MediaCard` 可消费 owner 提供、按 `artifactRef` + `artifactVersion` 围栏的
+transcript/caption/region cues。安全 peaks 存在时按需挂载 WaveSurfer
+Timeline/Regions；长音频、reduced-motion 或增强器不可用时保留单一 native
+audio engine。切换版本、卸载或 HMR 会 pause/destroy 旧增强器并释放 owner
+短时 URL，不保留跨版本 cue 或隐藏媒体实例。

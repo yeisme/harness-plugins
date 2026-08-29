@@ -2,14 +2,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import {
+  NATIVE_LONG_AUDIO_THRESHOLD_MS,
   RichMediaCard,
+  selectSafeReviewCues,
   selectSafeTranscriptCues,
   type WaveformEnhancerHandleV1,
   type WaveformEnhancerModuleV1,
 } from '../src/client/media-card.tsx'
 import type { MediaRefV1 } from '../src/host/types.ts'
 
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 const longAudio: MediaRefV1 = {
   owner: 'dsh',
@@ -44,13 +46,26 @@ describe('selectSafeTranscriptCues (V3 5.5 transcript navigation)', () => {
   })
 })
 
+describe('version-fenced owner review cues (G17)', () => {
+  it('keeps only bounded cues for the current artifact version and preserves regions', () => {
+    expect(selectSafeReviewCues([
+      { id: 'caption-1', label: 'Caption one', startMs: 1_000, endMs: 2_500, kind: 'caption', artifactRef: 'audio-1', artifactVersion: 'v1' },
+      { id: 'stale', label: 'Old version', startMs: 2_000, artifactRef: 'audio-1', artifactVersion: 'v0' },
+      { id: 'bad-region', label: 'Bad', startMs: 4_000, endMs: 3_000, artifactRef: 'audio-1', artifactVersion: 'v1' },
+    ], { artifactRef: 'audio-1', artifactVersion: 'v1' })).toEqual([
+      { id: 'caption-1', label: 'Caption one', startMs: 1_000, endMs: 2_500, kind: 'caption' },
+    ])
+  })
+})
+
 describe('long-audio honesty (V3 5.5 acceptance)', () => {
   it('renders the native player only when no owner peaks exist — no browser-side decode', () => {
-    const { container } = render(<RichMediaCard media={longAudio} src="https://cdn.example/audio.mp3" />)
+    const { container } = render(<RichMediaCard media={{ ...longAudio, duration: NATIVE_LONG_AUDIO_THRESHOLD_MS }} src="https://cdn.example/audio.mp3" />)
     expect(container.querySelector('audio[controls]')).not.toBeNull()
     expect(container.querySelector('[data-dsh-rich-media-waveform]')).toBeNull()
     expect(container.querySelector('[data-dsh-rich-media-waveform-enhanced]')).toBeNull()
     expect(container.querySelector('canvas')).toBeNull()
+    expect(container.querySelector('[data-dsh-rich-media-native-fallback="true"]')).not.toBeNull()
   })
 
   it('falls back to dependency-free bars when the injected enhancer fails to load', async () => {
@@ -89,12 +104,37 @@ describe('injected waveform enhancer lifecycle (V3 5.5 lazy boundary)', () => {
     const mountArg = mount.mock.calls[0]![0]
     expect(mountArg.peaks).toEqual(PEAKS)
     expect(mountArg.cues).toEqual([{ id: 'c1', label: '第一句', startMs: 1_500 }])
+    expect(mountArg.timeline).toBe(true)
     expect(mountArg.media).toBeInstanceOf(HTMLAudioElement)
     // native equivalent time controls stay reachable
     expect(container.querySelector('audio[controls]')).not.toBeNull()
     expect(container.querySelector('[data-dsh-rich-media-waveform]')).toBeNull()
     unmount()
     expect(destroy).toHaveBeenCalledOnce()
+  })
+
+  it('destroys the old Timeline/Regions instance before mounting a new artifact version', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+    const pause = vi.fn()
+    const destroy = vi.fn()
+    const create = vi.fn(() => ({ pause, destroy }))
+    const loader = vi.fn(async () => ({ create }))
+    const view = render(<RichMediaCard media={longAudio} src="https://cdn.example/v1.mp3" waveformPeaks={PEAKS} loadWaveform={loader} />)
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    view.rerender(<RichMediaCard media={{ ...longAudio, version: 'v2' }} src="https://cdn.example/v2.mp3" waveformPeaks={PEAKS} loadWaveform={loader} />)
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(2))
+    expect(pause).toHaveBeenCalledOnce()
+    expect(destroy).toHaveBeenCalledOnce()
+  })
+
+  it('keeps reduced-motion playback native and never mounts the enhancer', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    const create = vi.fn(() => ({ destroy: vi.fn() }))
+    const loader = vi.fn(async () => ({ create }))
+    const { container } = render(<RichMediaCard media={longAudio} src="https://cdn.example/audio.mp3" waveformPeaks={PEAKS} loadWaveform={loader} />)
+    expect(container.querySelector('audio[controls]')).not.toBeNull()
+    expect(container.querySelector('[data-dsh-rich-media-waveform]')).not.toBeNull()
+    expect(loader).not.toHaveBeenCalled()
   })
 
   it('never mounts an enhancer for video or without peaks', () => {
@@ -136,5 +176,17 @@ describe('transcript cue navigation (V3 5.5/5.8)', () => {
     audio.currentTime = 0
     fireEvent.click(first)
     expect(audio.currentTime).toBe(1.5)
+    expect(first.getAttribute('aria-current')).toBe('true')
+    first.focus()
+    fireEvent.keyDown(first, { key: 'ArrowDown' })
+    expect(document.activeElement?.getAttribute('data-cue-id')).toBe('c2')
+  })
+
+  it('releases an owner access handle exactly once on close', () => {
+    const releaseUrl = vi.fn()
+    const view = render(<RichMediaCard media={longAudio} src="blob:https://app.invalid/access-1" releaseUrl={releaseUrl} />)
+    view.unmount()
+    expect(releaseUrl).toHaveBeenCalledOnce()
+    expect(releaseUrl).toHaveBeenCalledWith('blob:https://app.invalid/access-1', longAudio)
   })
 })

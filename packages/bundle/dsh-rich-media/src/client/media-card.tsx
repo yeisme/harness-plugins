@@ -36,6 +36,7 @@ export interface MediaSubtitleTrack {
  * WaveformBars + native controls whenever it is absent or fails.
  */
 export interface WaveformEnhancerHandleV1 {
+  pause?(): void
   destroy(): void
 }
 
@@ -45,7 +46,9 @@ export interface WaveformEnhancerMountV1 {
   /** Owner-precomputed normalized peaks (0..1); never decoded in-browser. */
   peaks?: readonly number[] | undefined
   /** Owner-authored marker/region cues projected as data attributes. */
-  cues?: readonly { id: string; label: string; startMs: number }[] | undefined
+  cues?: readonly { id: string; label: string; startMs: number; endMs?: number; kind?: 'transcript' | 'caption' | 'region' }[] | undefined
+  /** The injected module mounts WaveSurfer Timeline and Regions lazily. */
+  timeline: true
 }
 
 export interface WaveformEnhancerModuleV1 {
@@ -59,6 +62,23 @@ export interface MediaTranscriptCueV1 {
   readonly id?: string | undefined
   readonly label?: string | undefined
   readonly startMs?: number | undefined
+  readonly endMs?: number | undefined
+  readonly kind?: 'transcript' | 'caption' | 'region' | undefined
+  readonly artifactRef?: string | undefined
+  readonly artifactVersion?: string | undefined
+}
+
+export interface MediaReviewCueV1 extends MediaTranscriptCueV1 {
+  readonly id: string
+  readonly label: string
+  readonly startMs: number
+  readonly artifactRef: string
+  readonly artifactVersion: string
+}
+
+export interface MediaCueTargetV1 {
+  readonly artifactRef: string
+  readonly artifactVersion: string
 }
 
 const TRANSCRIPT_LABEL = /^[^<>]{1,120}$/u
@@ -79,6 +99,26 @@ export function selectSafeTranscriptCues(cues: readonly MediaTranscriptCueV1[] =
   }
   return selected.sort((left, right) => left.startMs - right.startMs)
 }
+
+/** Strict G17 review cues: bounded, version-fenced, and owner-authored. */
+export function selectSafeReviewCues(
+  cues: readonly MediaReviewCueV1[] = [],
+  target: MediaCueTargetV1,
+): readonly { id: string; label: string; startMs: number; endMs?: number; kind: 'transcript' | 'caption' | 'region' }[] {
+  const selected: Array<{ id: string; label: string; startMs: number; endMs?: number; kind: 'transcript' | 'caption' | 'region' }> = []
+  for (const cue of cues.slice(0, 500)) {
+    if (cue.artifactRef !== target.artifactRef || cue.artifactVersion !== target.artifactVersion) continue
+    if (!TRANSCRIPT_ID.test(cue.id) || !TRANSCRIPT_LABEL.test(cue.label.trim())) continue
+    if (!Number.isFinite(cue.startMs) || cue.startMs < 0) continue
+    const startMs = Math.round(cue.startMs)
+    const kind = cue.kind ?? (cue.endMs === undefined ? 'transcript' : 'region')
+    if (cue.endMs !== undefined && (!Number.isFinite(cue.endMs) || cue.endMs <= cue.startMs)) continue
+    selected.push({ id: cue.id, label: cue.label.trim(), startMs, ...(cue.endMs === undefined ? {} : { endMs: Math.round(cue.endMs) }), kind })
+  }
+  return selected.sort((left, right) => left.startMs - right.startMs)
+}
+
+export const NATIVE_LONG_AUDIO_THRESHOLD_MS = 30 * 60 * 1000
 
 export interface RichMediaCardLabels {
   loading?: string
@@ -109,6 +149,8 @@ export interface RichMediaCardProps {
   loadWaveform?: WaveformEnhancerLoaderV1 | undefined
   /** Owner-authored transcript/caption cues rendered as seek navigation. */
   transcriptCues?: readonly MediaTranscriptCueV1[] | undefined
+  /** Strict owner-authored G17 cues fenced to the current media ref/version. */
+  reviewCues?: readonly MediaReviewCueV1[] | undefined
   /** Playback rates offered by the speed control. */
   playbackRates?: readonly number[] | undefined
   /** Offer picture in picture for video when the runtime supports it. */
@@ -117,6 +159,8 @@ export interface RichMediaCardProps {
   onOpenInPane?: ((media: MediaRefV1) => void) | undefined
   /** Localized label for the overlay action. */
   openInPaneLabel?: string | undefined
+  /** Optional owner access-handle cleanup; the core never guesses URL ownership. */
+  releaseUrl?: ((url: string, media: MediaRefV1) => void) | undefined
 }
 
 const DEFAULT_LABELS: Required<RichMediaCardLabels> = {
@@ -221,7 +265,7 @@ function EnhancedMediaPlayer(props: {
   subtitleTracks: readonly MediaSubtitleTrack[]
   waveformPeaks: readonly number[] | undefined
   loadWaveform: WaveformEnhancerLoaderV1 | undefined
-  transcriptCues: readonly { id: string; label: string; startMs: number }[] | undefined
+  transcriptCues: readonly { id: string; label: string; startMs: number; endMs?: number; kind?: 'transcript' | 'caption' | 'region' }[] | undefined
   playbackRates: readonly number[]
   allowPictureInPicture: boolean | undefined
   labels: Required<RichMediaCardLabels>
@@ -233,11 +277,13 @@ function EnhancedMediaPlayer(props: {
   const [rate, setRate] = useState(1)
   const [progress, setProgress] = useState(0)
   const [enhanced, setEnhanced] = useState(false)
+  const [activeCueId, setActiveCueId] = useState<string | undefined>()
+  const reducedMotion = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
   // Lazy enhancer bridge: mount only when a loader was injected AND the owner
   // pre-decoded peaks exist; any load/creation failure falls back to bars.
   useEffect(() => {
-    if (media.kind !== 'audio' || loadWaveform === undefined || waveformPeaks === undefined || waveformPeaks.length === 0) {
+    if (media.kind !== 'audio' || reducedMotion || loadWaveform === undefined || waveformPeaks === undefined || waveformPeaks.length === 0) {
       setEnhanced(false)
       return
     }
@@ -248,7 +294,7 @@ function EnhancedMediaPlayer(props: {
       const container = enhancerHostRef.current
       const element = audioRef.current
       if (container === null || element === null) return
-      void Promise.resolve(module.create({ container, media: element, peaks: waveformPeaks, cues: transcriptCues })).then((resolved) => {
+      void Promise.resolve(module.create({ container, media: element, peaks: waveformPeaks, cues: transcriptCues, timeline: true })).then((resolved) => {
         if (!live) { resolved.destroy(); return }
         handle = resolved
         setEnhanced(true)
@@ -256,9 +302,12 @@ function EnhancedMediaPlayer(props: {
     }, () => { if (live) setEnhanced(false) })
     return () => {
       live = false
+      handle?.pause?.()
       handle?.destroy()
+      const element = media.kind === 'video' ? videoRef.current : audioRef.current
+      element?.pause()
     }
-  }, [media.kind, loadWaveform, waveformPeaks, transcriptCues])
+  }, [media.kind, media.owner, media.ref, media.version, url, reducedMotion, loadWaveform, waveformPeaks, transcriptCues])
 
   const applyRate = (next: number): void => {
     setRate(next)
@@ -279,10 +328,17 @@ function EnhancedMediaPlayer(props: {
     const element = event.currentTarget
     const duration = element.duration
     setProgress(Number.isFinite(duration) && duration > 0 ? element.currentTime / duration : 0)
+    if (transcriptCues !== undefined) {
+      const currentMs = element.currentTime * 1000
+      const active = [...transcriptCues].reverse().find(cue => currentMs >= cue.startMs && (cue.endMs === undefined || currentMs < cue.endMs))
+      setActiveCueId(active?.id)
+    }
   }
 
+  const longAudioFallback = media.kind === 'audio' && (media.duration ?? 0) >= NATIVE_LONG_AUDIO_THRESHOLD_MS && !enhanced
+
   return (
-    <div data-dsh-rich-media-player={media.kind} style={{ display: 'grid', gap: 4 }}>
+    <div data-dsh-rich-media-player={media.kind} data-dsh-rich-media-native-fallback={longAudioFallback || undefined} style={{ display: 'grid', gap: 4 }}>
       {media.kind === 'audio' && loadWaveform !== undefined && waveformPeaks !== undefined && waveformPeaks.length > 0 && (
         <div
           ref={enhancerHostRef}
@@ -318,7 +374,14 @@ function EnhancedMediaPlayer(props: {
         )}
       </div>
       {transcriptCues !== undefined && transcriptCues.length > 0 && (
-        <nav aria-label={labels.transcript} data-dsh-rich-media-transcript>
+        <nav aria-label={labels.transcript} data-dsh-rich-media-transcript onKeyDown={event => {
+          if (event.key !== 'ArrowDown' && event.key !== 'ArrowRight' && event.key !== 'ArrowUp' && event.key !== 'ArrowLeft') return
+          const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button[data-cue-id]')]
+          const current = buttons.indexOf(document.activeElement as HTMLButtonElement)
+          const delta = event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : -1
+          const next = buttons[(current + delta + buttons.length) % buttons.length]
+          if (next !== undefined) { event.preventDefault(); next.focus() }
+        }}>
           <ol>
             {transcriptCues.map(cue => (
               <li key={cue.id}>
@@ -326,9 +389,12 @@ function EnhancedMediaPlayer(props: {
                   type="button"
                   data-cue-id={cue.id}
                   data-cue-start={String(cue.startMs / 1000)}
+                  data-cue-end={cue.endMs === undefined ? undefined : String(cue.endMs / 1000)}
+                  data-cue-kind={cue.kind}
+                  aria-current={activeCueId === cue.id ? 'true' : undefined}
                   onClick={() => {
                     const element = media.kind === 'video' ? videoRef.current : audioRef.current
-                    if (element !== null) element.currentTime = Math.max(0, cue.startMs) / 1000
+                    if (element !== null) { element.currentTime = Math.max(0, cue.startMs) / 1000; setActiveCueId(cue.id) }
                   }}
                 >
                   {cue.label}
@@ -361,7 +427,7 @@ function MediaElement({ media, url }: { media: MediaRefV1; url: string }) {
 }
 
 /** Compact safe media card used by chat, ToolView, and Pane renderers. */
-export function RichMediaCard({ media, src, resolveUrl, labels, subtitleTracks, waveformPeaks, loadWaveform, transcriptCues, playbackRates, allowPictureInPicture, onOpenInPane, openInPaneLabel }: RichMediaCardProps) {
+export function RichMediaCard({ media, src, resolveUrl, labels, subtitleTracks, waveformPeaks, loadWaveform, transcriptCues, reviewCues, playbackRates, allowPictureInPicture, onOpenInPane, openInPaneLabel, releaseUrl }: RichMediaCardProps) {
   const text = { ...DEFAULT_LABELS, ...labels }
   const { url, failed, retry } = useResolvedSrc(media, src, resolveUrl)
   const size = formatBytes(media.size)
@@ -391,6 +457,14 @@ export function RichMediaCard({ media, src, resolveUrl, labels, subtitleTracks, 
   }
 
   const isPlayback = media.kind === 'audio' || media.kind === 'video'
+  const selectedCues = reviewCues === undefined
+    ? (transcriptCues === undefined ? undefined : selectSafeTranscriptCues(transcriptCues))
+    : selectSafeReviewCues(reviewCues, { artifactRef: media.ref, artifactVersion: media.version })
+
+  useEffect(() => {
+    if (url === undefined || releaseUrl === undefined) return
+    return () => releaseUrl(url, media)
+  }, [url, media.owner, media.ref, media.version, releaseUrl])
 
   return (
     <section
@@ -406,7 +480,7 @@ export function RichMediaCard({ media, src, resolveUrl, labels, subtitleTracks, 
           subtitleTracks={subtitleTracks ?? []}
           waveformPeaks={waveformPeaks}
           loadWaveform={loadWaveform}
-          transcriptCues={transcriptCues === undefined ? undefined : selectSafeTranscriptCues(transcriptCues)}
+          transcriptCues={selectedCues}
           playbackRates={playbackRates ?? DEFAULT_PLAYBACK_RATES}
           allowPictureInPicture={allowPictureInPicture}
           labels={text}

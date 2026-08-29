@@ -11,8 +11,8 @@
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 export { apply } from './apply.ts'
 
-export { RichMediaCard, selectSafeTranscriptCues } from './media-card.tsx'
-export type { MediaSubtitleTrack, RichMediaCardLabels, RichMediaCardProps, MediaTranscriptCueV1, WaveformEnhancerHandleV1, WaveformEnhancerLoaderV1, WaveformEnhancerModuleV1, WaveformEnhancerMountV1 } from './media-card.tsx'
+export { NATIVE_LONG_AUDIO_THRESHOLD_MS, RichMediaCard, selectSafeReviewCues, selectSafeTranscriptCues } from './media-card.tsx'
+export type { MediaCueTargetV1, MediaReviewCueV1, MediaSubtitleTrack, RichMediaCardLabels, RichMediaCardProps, MediaTranscriptCueV1, WaveformEnhancerHandleV1, WaveformEnhancerLoaderV1, WaveformEnhancerModuleV1, WaveformEnhancerMountV1 } from './media-card.tsx'
 export { MediaPreviewPane } from './media-preview-pane.tsx'
 export type { MediaPreviewPaneProps } from './media-preview-pane.tsx'
 export { richMediaWorkbenchModule } from '../module.ts'
