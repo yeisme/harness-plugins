@@ -1,0 +1,17 @@
+# Yeisme DSH Interaction Space bundle.
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-interaction-space
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/dsh-interaction-space
+#
+# One additive profile row composing the artifact interaction space pane. The
+# Host face is a no-op: the space reads and writes exclusively through
+# official client services (ISessions.binding()/fork(), optional runtime
+# create(), paneWorkbench view registration, conversationEvents `space/ref`)
+# and never calls sessions.open()/clear() — the main conversation selection
+# is untouched. Proposals apply only through a host-injected owner dispatch
+# adapter (preview-before-mutate); without one the card degrades to a
+# read-only diff with a copy affordance.
+- insert:
+    - id: dsh-interaction-space
+      name: '@yeisme/dsh-interaction-space'
