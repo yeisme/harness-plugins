@@ -1,7 +1,7 @@
 # @yeisme/dsh-session-tags
 
-DSH 会话标签 bundle：组合 Host sidecar、`sessionTags` Remote、原生会话分组
-provider 和可访问标签编辑器。它不替换侧栏，也不把标签写入 SessionEvent、
+DSH 会话组织 bundle：组合 tags v1 sidecar、additive `sessionOrganization` sidecar、
+两个 Remote、原生会话分组 provider 和可访问标签编辑器。它不替换侧栏，也不把标签写入 SessionEvent、
 模型上下文、Workspace registry 或浏览器存储。
 
 ## 安装与回滚
@@ -29,6 +29,12 @@ dsh plugin --profile web add @yeisme/dsh-session-tags
 | `sessionTags.list/set` Remote | 可用 | Host 返回权威快照；写入是完整目标集合 + `ifVersion` CAS |
 | `yeisme.session-tags` 分组 provider | probe-gated | 只拥有组、成员、标签搜索词和行级动作；过滤、排序、行渲染仍归 DSH Browser |
 | `shell.overlay` 标签编辑器 | probe-gated | 只通过 `sessionTags.set` mutation；取消不写入，冲突不自动覆盖 |
+| `sessionOrganization` Remote | 可用 | 功能目录、assignment CAS、自动分类、规则与批次 receipt；缺 classifier/lifecycle owner 时返回 not-available |
+| `yeisme.session-functions` 分组 provider | probe-gated | 使用可选 `parentId`/`color` 投影 Workspace→功能层级；旧 Browser 忽略新增字段 |
+
+默认功能类型 ID 为 `planning`、`research`、`implementation`、`debugging`、
+`review`、`writing`、`operations`、`other`。自动分类阈值为 `0.8`，最多创建
+3 个新标签；人工锁定值不会被自动分类或规则覆盖。
 
 当前官方 DSH `0.1.1-rc.2` 尚未发布分组 seam，因此 Host 能加载，但 Client
 不会出现“按标签”或“管理标签”：probe 缺失即零 provider、零 slot、零 DOM
@@ -55,7 +61,8 @@ fallback。上游 staging 位于 `upstream-prs/session-grouping-provider/`。
 
 ## Host 数据与错误处理
 
-唯一 canonical store 是 Host storage domain `yeisme_session_tags_v1`。此前设计稿中的
+标签 canonical store 是 Host storage domain `yeisme_session_tags_v1`；组织元数据位于
+additive `yeisme_session_organization_v1`，卸载时两者都保留。此前设计稿中的
 点号形式 `yeisme.session-tags.v1` 不符合 DSH storage unit 命名规则，无法加载，
 因此在候选发布前更正且不需要数据迁移。
 
@@ -125,4 +132,5 @@ pnpm --filter @yeisme/dsh-session-tags run test:integration
 刷新、分组、搜索、多组打开、卸载和重装恢复。每次运行的证据写入
 `temp/integration-test-runs/<run-id>/`，成功和失败均保留原退出码。
 
-完整规格与兼容性账本见 `openspec/changes/dsh-session-tags-grouping-v1/`。
+完整规格与兼容性账本见 `openspec/changes/dsh-session-tags-grouping-v1/` 和
+`openspec/changes/dsh-web-conversation-organization-v1/`。

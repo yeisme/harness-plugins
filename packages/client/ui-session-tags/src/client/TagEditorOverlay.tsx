@@ -11,7 +11,14 @@
  * @module @yeisme/dsh-client-ui-session-tags/client/TagEditorOverlay
  */
 
-import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { useSyncExternalStore } from 'react'
+import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  Surface,
+  SurfaceActionBar,
+  SurfaceContextBar,
+  SurfaceState,
+} from '@yeisme/dsh-client-ui-surface'
 import { sessionTagsOverlayStyles } from './styles.ts'
 
 export interface TagEditorOverlayLabels {
@@ -68,12 +75,6 @@ export const TAG_EDITOR_OVERLAY_LABELS_EN: TagEditorOverlayLabels = {
  */
 export function TagEditorOverlay(props: TagEditorOverlayProps): JSX.Element | null {
   const { state, suggestions, labels } = props
-  const inputRef = useRef<HTMLInputElement | null>(null)
-
-  useEffect(() => {
-    if (state.open) inputRef.current?.focus()
-  }, [state.open, state.sessionId])
-
   if (!state.open) return null
   const busy = state.phase === 'saving'
   const conflicts = state.phase === 'conflict'
@@ -81,22 +82,11 @@ export function TagEditorOverlay(props: TagEditorOverlayProps): JSX.Element | nu
   const unaddedSuggestions = suggestions.filter(tag => !state.draft.includes(tag))
 
   return (
-    <div
-      className="session-tags-overlay-backdrop"
-      data-session-tags="editor"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="session-tags-editor-title"
-      onKeyDown={event => {
-        if (event.key === 'Escape') {
-          event.stopPropagation()
-          props.onCancel()
-        }
-      }}
-    >
-      <style>{sessionTagsOverlayStyles}</style>
-      <section className="session-tags-editor">
-        <h2 id="session-tags-editor-title">{labels.title}</h2>
+    <Modal open onClose={props.onCancel} title={labels.title} headless>
+      <Surface kind="dialog" className="session-tags-editor" data-session-tags="editor">
+        <style>{sessionTagsOverlayStyles}</style>
+        <SurfaceContextBar title={labels.title} />
+        <div className="ys-body">
 
         {state.draft.length > 0
           ? (
@@ -104,23 +94,22 @@ export function TagEditorOverlay(props: TagEditorOverlayProps): JSX.Element | nu
               {state.draft.map(tag => (
                 <li key={tag} className="session-tags-chip">
                   <span>{tag}</span>
-                  <button
+                  <Button
                     type="button"
                     aria-label={labels.removeLabel(tag)}
                     disabled={busy}
                     onClick={() => props.onToggleTag(tag)}
                   >
                     ×
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>
           )
           : <p className="session-tags-empty">—</p>}
 
-        <div className="session-tags-entry">
-          <input
-            ref={inputRef}
+        <div className="session-tags-entry ys-field">
+          <Input
             type="text"
             aria-label={labels.inputLabel}
             value={state.input}
@@ -132,8 +121,9 @@ export function TagEditorOverlay(props: TagEditorOverlayProps): JSX.Element | nu
                 props.onAddInput()
               }
             }}
+            autoFocus
           />
-          <button type="button" disabled={busy} onClick={props.onAddInput}>{labels.add}</button>
+          <Button type="button" disabled={busy} onClick={props.onAddInput}>{labels.add}</Button>
         </div>
 
         {unaddedSuggestions.length > 0
@@ -143,9 +133,9 @@ export function TagEditorOverlay(props: TagEditorOverlayProps): JSX.Element | nu
               <ul>
                 {unaddedSuggestions.map(tag => (
                   <li key={tag}>
-                    <button type="button" disabled={busy} onClick={() => props.onToggleTag(tag)}>
+                    <Button type="button" disabled={busy} onClick={() => props.onToggleTag(tag)}>
                       {tag}
-                    </button>
+                    </Button>
                   </li>
                 ))}
               </ul>
@@ -154,7 +144,7 @@ export function TagEditorOverlay(props: TagEditorOverlayProps): JSX.Element | nu
           : null}
 
         <div role="status" aria-live="polite" className="session-tags-feedback">
-          {busy ? <p>{labels.busy}</p> : null}
+          {busy ? <SurfaceState phase="loading" title={labels.busy} /> : null}
           {conflicts
             ? (
               <p className="session-tags-conflict">
@@ -178,17 +168,17 @@ export function TagEditorOverlay(props: TagEditorOverlayProps): JSX.Element | nu
             )
             : null}
         </div>
-
-        <div className="session-tags-actions">
-          <button type="button" className="primary" disabled={busy} onClick={props.onSave}>
-            {labels.save}
-          </button>
-          <button type="button" disabled={busy} onClick={props.onCancel}>
-            {labels.cancel}
-          </button>
         </div>
-      </section>
-    </div>
+        <SurfaceActionBar className="session-tags-actions">
+          <Button type="button" variant="primary" className="primary" disabled={busy} onClick={props.onSave}>
+            {labels.save}
+          </Button>
+          <Button type="button" disabled={busy} onClick={props.onCancel}>
+            {labels.cancel}
+          </Button>
+        </SurfaceActionBar>
+      </Surface>
+    </Modal>
   )
 }
 

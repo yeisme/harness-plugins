@@ -16,12 +16,17 @@ describe('session tags overlay visual adoption', () => {
   })
 
   it('既有 session-tags-* 类全部获得样式且限定 scope', () => {
-    for (const cls of ['session-tags-overlay-backdrop', 'session-tags-editor', 'session-tags-draft', 'session-tags-chip', 'session-tags-entry', 'session-tags-suggestions', 'session-tags-feedback', 'session-tags-conflict', 'session-tags-error', 'session-tags-actions']) {
+    for (const cls of ['session-tags-overlay-backdrop', 'session-tags-draft', 'session-tags-chip', 'session-tags-entry', 'session-tags-suggestions', 'session-tags-feedback', 'session-tags-conflict', 'session-tags-error', 'session-tags-actions']) {
       expect(sessionTagsOverlayStyles).toContain(`[data-session-tags] .${cls}{`)
     }
+    expect(sessionTagsOverlayStyles).toContain('[data-session-tags].session-tags-editor{')
     for (const chunk of sessionTagsOverlayStyles.split('}')) {
       const trimmed = chunk.trim()
       if (!trimmed.includes('{') || trimmed.startsWith('@keyframes')) continue
+      if (trimmed.startsWith('@container')) {
+        expect(trimmed).toContain('[data-session-tags]')
+        continue
+      }
       expect(trimmed.slice(0, 60)).toContain('[data-session-tags]')
     }
   })

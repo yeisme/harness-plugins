@@ -17,21 +17,28 @@
  */
 
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import { createElement } from 'react'
 import { createSessionTagsController, SessionTagsController } from './controller.ts'
 import { createTagEditorController, TagEditorController } from './editor.ts'
 import { createSessionTagsProvider } from './provider.ts'
+import { createSessionFunctionsProvider, type OrganizationSessionRef } from './organization-provider.ts'
+import { createSessionOrganizationController, type SessionOrganizationController } from './organization-controller.ts'
+import { OrganizationEditorController } from './organization-editor.ts'
+import { OrganizationEditorOverlay } from './OrganizationEditorOverlay.tsx'
+import { sessionManagementRemoteContribution, sessionOrganizationRemoteContribution } from './organization-remote-contribution.ts'
 import { createTagEditorOverlayEntry, type TagEditorOverlayLabels } from './TagEditorOverlay.tsx'
-import { sessionTagsRemoteContribution } from './remote-contribution.ts'
 import type {
   SessionTagsListAnswerV1,
   SessionTagsRemoteFace,
   SessionTagsSetAnswerV1,
   SessionTagsSetInputV1,
 } from './wire.ts'
+import type { SessionOrganizationRemoteFace } from './organization-wire.ts'
 
 /** 分组 seam 的结构形状（`ctx.sessionGroupings`）。 */
 export interface SessionGroupingsRegistryLike {
   register(provider: Parameters<SessionGroupingsRegistryRegister>[0]): () => void
+  readonly capabilities?: { readonly hierarchy?: boolean; readonly semanticColor?: boolean } | undefined
 }
 type SessionGroupingsRegistryRegister = (provider: {
   readonly id: string
@@ -52,6 +59,8 @@ export interface SessionTagsRegistration {
   readonly reason?: 'session-groupings-unavailable' | 'session-tags-remote-unavailable'
   readonly controller?: SessionTagsController
   readonly editor?: TagEditorController
+  readonly organizationController?: SessionOrganizationController
+  readonly organizationEditor?: OrganizationEditorController
 }
 
 /** 宿主可注入的依赖（缺省从 ctx 的 Typert client 解析 sessionTags）。 */
@@ -62,6 +71,9 @@ export interface RegisterSessionTagsOptions {
   readonly overlayLabels?: TagEditorOverlayLabels
   /** 已知 SessionId 快照源（缺省经 ctx.sessions）。 */
   readonly allSessionIds?: () => readonly string[]
+  readonly organizationRemote?: SessionOrganizationRemoteFace
+  readonly organizationSessions?: () => readonly OrganizationSessionRef[]
+  readonly onManageOrganization?: (sessionId: string) => void
 }
 
 interface SessionTagsProviderLabelsShape {
@@ -125,7 +137,7 @@ async function resolveRemote(ctx: ClientContext, override?: SessionTagsRemoteFac
     try {
       await (remote as {
         $mount(contribution: unknown): Promise<() => Promise<void>>
-      }).$mount(sessionTagsRemoteContribution)
+      }).$mount(sessionManagementRemoteContribution)
     } catch {
       return undefined as unknown as SessionTagsRemoteFace
     }
@@ -155,6 +167,55 @@ function isRemoteFace(candidate: unknown): candidate is SessionTagsRemoteFace {
   return typeof candidate === 'object' && candidate !== null
     && typeof (candidate as SessionTagsRemoteFace).list === 'function'
     && typeof (candidate as SessionTagsRemoteFace).set === 'function'
+}
+
+function isOrganizationRemoteFace(candidate: unknown): candidate is SessionOrganizationRemoteFace {
+  if (typeof candidate !== 'object' || candidate === null) return false
+  return ['snapshot', 'setAssignment', 'putFunctionType', 'putTagCatalog', 'putRule', 'classify', 'planBatch', 'unlockAdmin', 'executeBatch', 'undoBatch']
+    .every(method => typeof (candidate as Record<string, unknown>)[method] === 'function')
+}
+
+/** Resolve or self-mount the additive organization namespace. */
+export async function resolveSessionOrganizationRemote(
+  ctx: ClientContext,
+  override?: SessionOrganizationRemoteFace,
+): Promise<SessionOrganizationRemoteFace | undefined> {
+  if (override !== undefined) return override
+  const remote = optionalLookup(ctx, 'remote')
+  if (isOrganizationRemoteFace(remote?.sessionOrganization)) return remote.sessionOrganization
+  const existingMounted = optionalLookup(ctx, 'remote.sessionOrganization')
+  if (existingMounted !== undefined && isOrganizationRemoteFace(existingMounted)) return unwrapOrganizationNamespace(existingMounted)
+  if (remote === undefined || typeof (remote as { $mount?: unknown }).$mount !== 'function') return undefined
+  try {
+    await (remote as { $mount(contribution: unknown): Promise<() => Promise<void>> }).$mount(sessionOrganizationRemoteContribution)
+  } catch {
+    return undefined
+  }
+  const mounted = optionalLookup(ctx, 'remote.sessionOrganization')
+  if (mounted === undefined) return undefined
+  return unwrapOrganizationNamespace(mounted)
+}
+
+function unwrapOrganizationNamespace(mounted: Record<string, unknown>): SessionOrganizationRemoteFace {
+  const invoke = async <T>(method: string, input?: unknown): Promise<T> => {
+    const fn = mounted[method]
+    if (typeof fn !== 'function') throw new Error(`sessionOrganization.${method} is unavailable`)
+    const answer = await (fn as (value?: unknown) => Promise<RemoteResultLike<T>>)(input)
+    if (!answer.ok) throw new Error(`sessionOrganization.${method} transport failure: ${JSON.stringify(answer.error)}`)
+    return answer.value as T
+  }
+  return {
+    snapshot: () => invoke('snapshot'),
+    setAssignment: input => invoke('setAssignment', input),
+    putFunctionType: input => invoke('putFunctionType', input),
+    putTagCatalog: input => invoke('putTagCatalog', input),
+    putRule: input => invoke('putRule', input),
+    classify: input => invoke('classify', input),
+    planBatch: input => invoke('planBatch', input),
+    unlockAdmin: () => invoke('unlockAdmin'),
+    executeBatch: input => invoke('executeBatch', input),
+    undoBatch: input => invoke('undoBatch', input),
+  }
 }
 
 /** 把 `$mount` 后的命名空间服务适配为 SessionTagsRemoteFace（解 RemoteResult 包装）。 */
@@ -228,7 +289,8 @@ export async function registerSessionTagsClient(
   }
   disposers.push(groupings.register(provider as never))
 
-  // shell.overlay 编辑器 seat：列表 slot，常驻注册、空闲零渲染。
+  // shell.overlay seats use the same official list slot; missing slots keeps
+  // both editors unavailable without affecting grouping projections.
   const slots = (ctx as unknown as {
     slots?: {
       inject(name: string, factory: () => unknown): () => void
@@ -238,6 +300,34 @@ export async function registerSessionTagsClient(
       ): () => void
     }
   }).slots
+
+  const organizationRemote = await resolveSessionOrganizationRemote(ctx, options.organizationRemote)
+  let organizationController: SessionOrganizationController | undefined
+  let organizationEditor: OrganizationEditorController | undefined
+  if (organizationRemote !== undefined && groupings.capabilities?.hierarchy === true) {
+    organizationController = createSessionOrganizationController(organizationRemote)
+    await organizationController.refresh()
+    organizationEditor = new OrganizationEditorController(organizationRemote, organizationController)
+    const organizationProvider = createSessionFunctionsProvider({
+      controller: organizationController,
+      sessions: options.organizationSessions ?? (() => {
+        const state = organizationController?.getSnapshot()
+        return state?.status === 'ready'
+          ? state.snapshot.assignments.map(item => ({ sessionId: item.sessionId, workspaceRef: item.workspaceRef }))
+          : []
+      }),
+      onManage: options.onManageOrganization ?? (sessionId => { organizationEditor?.open(sessionId) }),
+      labels: { menu: 'By function', unclassified: 'Unclassified', manage: 'Organize conversation' },
+    })
+    disposers.push(groupings.register(organizationProvider as never))
+    if (slots !== undefined && typeof slots.inject === 'function' && typeof slots.register === 'function') {
+      const organizationEditorRef = organizationEditor
+      disposers.push(slots.inject('shell.overlay', () => slots.register({
+        name: 'shell.overlay', id: 'yeisme.session-organization.editor', order: 101, label: 'Organize conversation',
+      }, () => createElement(OrganizationEditorOverlay, { controller: organizationEditorRef }))))
+    }
+  }
+  // shell.overlay 编辑器 seat：列表 slot，常驻注册、空闲零渲染。
   if (slots !== undefined && typeof slots.inject === 'function' && typeof slots.register === 'function') {
     const Entry = createTagEditorOverlayEntry(editor, options.overlayLabels)
     disposers.push(slots.inject('shell.overlay', () => slots.register({
@@ -257,10 +347,18 @@ export async function registerSessionTagsClient(
     if (typeof window !== 'undefined') window.removeEventListener('focus', onFocus)
     for (const dispose of disposers.splice(0)) dispose()
     controller.dispose()
+    organizationController?.dispose()
+    organizationEditor?.close()
     if (editor.getSnapshot().open) editor.close()
   }, 'client-ui-session-tags: dispose provider/editor')
 
-  return { registered: true, controller, editor }
+  return {
+    registered: true,
+    controller,
+    editor,
+    ...(organizationController === undefined ? {} : { organizationController }),
+    ...(organizationEditor === undefined ? {} : { organizationEditor }),
+  }
 }
 
 /**

@@ -27,6 +27,10 @@ export interface SessionGroupingGroupV1Alpha1 {
   readonly id: string
   readonly label: string
   readonly sessionIds: readonly string[]
+  /** Additive hierarchy hint; old Browsers ignore it. */
+  readonly parentId?: string | undefined
+  /** Semantic token name, never a raw color value. */
+  readonly color?: string | undefined
 }
 
 export interface SessionGroupingSnapshotV1Alpha1 {

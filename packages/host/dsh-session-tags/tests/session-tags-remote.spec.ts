@@ -5,10 +5,12 @@ import {
   SESSION_TAGS_REMOTE_SERVICE_KEY,
   SESSION_TAGS_SPEC_VERSION,
   SessionTagsRemoteService,
+  SessionOrganizationRemoteService,
   apply,
   createSessionTagsSidecar,
   inject,
   name,
+  sessionOrganizationDomainSpec,
   sessionTagsDomainSpec,
   sessionTagRowSchema,
   sessionTagsRemoteMarkers,
@@ -91,6 +93,13 @@ describe('domain spec and plugin face', () => {
     expect(SESSION_TAGS_DOMAIN).toBe('yeisme_session_tags_v1')
     expect(sessionTagsDomainSpec).toMatchObject({ name: SESSION_TAGS_DOMAIN, version: 1 })
     expect(Object.keys(sessionTagsDomainSpec.tables)).toEqual(['sessions'])
+    expect(Object.keys(sessionOrganizationDomainSpec.tables)).toEqual([
+      'function_types',
+      'assignments',
+      'tag_catalog',
+      'rules',
+      'batch_runs',
+    ])
   })
 
   it('row schema round-trips a valid row and rejects a malformed one', () => {
@@ -114,12 +123,20 @@ describe('domain spec and plugin face', () => {
   it('mounts through a real cordis context over fake services', async () => {
     const ctx = new Context()
     const table = new MemoryTable()
+    const organizationTables = new Map<string, MemoryTable>()
     const sessions = new Map([['s1', 10]])
     ctx.provide('storageDomain', {
-      async open() {
+      async open(spec: { name: string }) {
         return {
-          name: SESSION_TAGS_DOMAIN,
-          table: () => table,
+          name: spec.name,
+          table: (tableName: string) => {
+            if (spec.name === SESSION_TAGS_DOMAIN) return table
+            const existing = organizationTables.get(tableName)
+            if (existing !== undefined) return existing
+            const created = new MemoryTable()
+            organizationTables.set(tableName, created)
+            return created
+          },
           async close() {},
         }
       },
@@ -131,12 +148,16 @@ describe('domain spec and plugin face', () => {
     })
     const fiber = await ctx.plugin({ name, inject, apply })
     const remote = ctx.get('sessionTags') as SessionTagsRemoteService
+    const organization = ctx.get('sessionOrganization') as SessionOrganizationRemoteService
     expect(remote).toBeInstanceOf(SessionTagsRemoteService)
     const set = await remote.set({ sessionId: 's1', tags: ['wire'], ifVersion: null })
     expect(set.ok).toBe(true)
     const list = await remote.list()
     expect(list.ok && list.entries.map(e => e.row.tags)).toEqual([["wire"]])
     expect(table.rows.get('s1')?.tags).toEqual(['wire'])
+    expect(organization).toBeInstanceOf(SessionOrganizationRemoteService)
+    const organizationSnapshot = await organization.snapshot()
+    expect(organizationSnapshot.functionTypes).toHaveLength(8)
     await fiber.dispose()
     await ctx.fiber.dispose()
   })

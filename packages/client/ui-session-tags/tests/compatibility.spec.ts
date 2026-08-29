@@ -137,10 +137,15 @@ describe('capability probe (old-DSH compatibility)', () => {
         // 断言自挂 contribution 形状（package + 两个严格 descriptor）。
         const c = contribution as { package: string, descriptors: { method: string }[] }
         expect(c.package).toBe('@yeisme/dsh-session-tags-host')
-        expect(c.descriptors.map(d => d.method).sort()).toEqual(['list', 'set'])
+        expect(c.descriptors.map(d => d.method)).toEqual(expect.arrayContaining(['list', 'set', 'snapshot', 'planBatch', 'executeBatch']))
         mounted['remote.sessionTags'] = {
           list: vi.fn(async () => ({ ok: true, value: wireAnswer })),
           set: vi.fn(async () => ({ ok: true, value: { ok: true, row: null } })),
+        }
+        mounted['remote.sessionOrganization'] = {
+          snapshot: vi.fn(async () => ({ ok: true, value: { ok: true, specVersion: '1.0', functionTypes: [], assignments: [], tagCatalog: [], rules: [], recentBatches: [] } })),
+          setAssignment: vi.fn(), putFunctionType: vi.fn(), putTagCatalog: vi.fn(), putRule: vi.fn(), classify: vi.fn(),
+          planBatch: vi.fn(), unlockAdmin: vi.fn(), executeBatch: vi.fn(), undoBatch: vi.fn(),
         }
         return async () => {}
       }),

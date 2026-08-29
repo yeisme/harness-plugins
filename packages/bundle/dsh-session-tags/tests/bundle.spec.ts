@@ -53,6 +53,7 @@ describe('dsh-session-tags bundle contract', () => {
   it('keeps the host package independently loadable (no client-only imports)', async () => {
     const host = await import('@yeisme/dsh-session-tags-host')
     expect(host.SESSION_TAGS_DOMAIN).toBe('yeisme_session_tags_v1')
+    expect(host.SESSION_ORGANIZATION_DOMAIN).toBe('yeisme_session_organization_v1')
     expect(host.name).toBe('dsh-session-tags-host')
     expect(typeof host.apply).toBe('function')
     // Client 包 node face 可独立加载；client face 是 ModuleLoader 形态
@@ -98,6 +99,9 @@ async function loadClientFace(): Promise<Record<string, unknown>> {
         const stubRequire = (name: string): unknown => {
           if (name === 'react') return { useEffect: () => {}, useRef: () => ({ current: null }) }
           if (name === 'react/jsx-runtime') return { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' }
+          // The client face builds its overlay CSS from the visual kit at
+          // module scope; the stub only needs the call to resolve.
+          if (name === '@yeisme/dsh-client-ui-visual-kit') return { buildPanelStyles: () => '' }
           return {}
         }
         captured = definition.factory(stubRequire) as Record<string, unknown>
@@ -150,6 +154,8 @@ describe('host/client wire mirror sync', () => {
     const host = await import('@yeisme/dsh-session-tags-host')
     expect(host.SESSION_TAGS_SPEC_VERSION).toBe('1.0')
     expect(host.SESSION_TAGS_REMOTE_SERVICE_KEY).toBe('sessionTags')
+    expect(host.SESSION_ORGANIZATION_SPEC_VERSION).toBe('1.0')
+    expect(host.SESSION_ORGANIZATION_REMOTE_SERVICE_KEY).toBe('sessionOrganization')
   })
 })
 

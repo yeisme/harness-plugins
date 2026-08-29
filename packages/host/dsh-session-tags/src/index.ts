@@ -32,7 +32,75 @@ export {
   SESSION_TAGS_HOST_VERSION,
   SESSION_TAGS_REMOTE_SERVICE_KEY,
   SESSION_TAGS_SPEC_VERSION,
+  SESSION_ORGANIZATION_ADMIN_TTL_MS,
+  SESSION_ORGANIZATION_AUTO_CONFIDENCE,
+  SESSION_ORGANIZATION_BATCH_RETENTION_MS,
+  SESSION_ORGANIZATION_DOMAIN,
+  SESSION_ORGANIZATION_REMOTE_SERVICE_KEY,
+  SESSION_ORGANIZATION_SPEC_VERSION,
 } from './constants.ts'
+
+export type {
+  AssignmentSourceV1,
+  BatchActionV1,
+  BatchItemReceiptV1,
+  BatchItemStatusV1,
+  BatchPlanV1,
+  BatchReceiptV1,
+  BatchTargetV1,
+  ClassificationCandidateV1,
+  ClassificationStatusV1,
+  FunctionTypeV1,
+  OrganizationFailureV1,
+  OrganizationRuleActionV1,
+  OrganizationRuleConditionV1,
+  OrganizationRuleV1,
+  OrganizationScopeV1,
+  PutFunctionTypeInputV1,
+  PutRuleInputV1,
+  PutTagCatalogInputV1,
+  SessionOrganizationAssignmentV1,
+  SessionOrganizationSnapshotV1,
+  SetAssignmentInputV1,
+  TagCatalogEntryV1,
+} from './organization-wire.ts'
+
+export {
+  TemporaryAdminGate,
+  applyClassificationPolicy,
+  defaultFunctionTypes,
+  evaluateOrganizationRules,
+} from './organization.ts'
+export type {
+  ClassificationPolicyInput,
+  ClassificationPolicyResult,
+  RuleEvaluationV1,
+  RuleSubjectV1,
+} from './organization.ts'
+
+export {
+  assignmentSchema,
+  batchReceiptSchema,
+  functionTypeSchema,
+  organizationRuleSchema,
+  sessionOrganizationDomainSpec,
+  tagCatalogEntrySchema,
+} from './organization-domain.ts'
+export type { SessionOrganizationDomainSpec } from './organization-domain.ts'
+
+export { SessionOrganizationSidecar } from './organization-service.ts'
+export type {
+  OrganizationClassifierPort,
+  OrganizationTablePort,
+  SessionLifecyclePort,
+  SessionOrganizationSidecarDeps,
+  SessionOrganizationStorePort,
+} from './organization-service.ts'
+
+export {
+  SessionOrganizationRemoteService,
+  sessionOrganizationRemoteMarkers,
+} from './organization-remote.ts'
 
 export type {
   SessionTagRowV1,
@@ -89,6 +157,7 @@ export type {
 export {
   apply,
   createPersistenceIdentityPort,
+  createOrganizationStorePort,
   createStorageDomainTablePort,
   inject,
   mountSessionTags,
@@ -96,6 +165,7 @@ export {
 } from './plugin.ts'
 export type {
   MountedSessionTags,
+  SessionOrganizationDomainHandle,
   SessionPersistenceListFace,
   SessionTagsDomainHandle,
 } from './plugin.ts'

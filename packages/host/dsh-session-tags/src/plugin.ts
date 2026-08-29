@@ -21,6 +21,16 @@ import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 // Type-only：拉入 sessionPersistence 的 Context 声明合并（无运行时依赖）。
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import { sessionTagsDomainSpec, type SessionTagsDomainSpec } from './domain.ts'
+import {
+  sessionOrganizationDomainSpec,
+  type SessionOrganizationDomainSpec,
+} from './organization-domain.ts'
+import { SessionOrganizationRemoteService } from './organization-remote.ts'
+import {
+  SessionOrganizationSidecar,
+  type OrganizationTablePort,
+  type SessionOrganizationStorePort,
+} from './organization-service.ts'
 import { SessionTagsRemoteService } from './remote.ts'
 import { SessionTagsSidecar, type SessionTagsTablePort, type SessionIdentityPort } from './service.ts'
 import type { SessionTagSessionIdentityV1 } from './wire.ts'
@@ -33,6 +43,7 @@ export const inject = ['storageDomain', 'sessionPersistence'] as const
 
 /** 打开后 sessions 表的句柄形状（`Domain<SessionTagsDomainSpec>` 的投影）。 */
 export type SessionTagsDomainHandle = Domain<SessionTagsDomainSpec>
+export type SessionOrganizationDomainHandle = Domain<SessionOrganizationDomainSpec>
 
 /**
  * 把打开的 domain 的 sessions 表适配为 sidecar 表端口。
@@ -46,6 +57,26 @@ export function createStorageDomainTablePort(domain: SessionTagsDomainHandle): S
     entries: () => table.entries(),
     put: (key, row) => table.put(key, row),
     delete: key => table.delete(key),
+  }
+}
+
+/** Adapt the additive organization domain without sharing tables with tags v1. */
+export function createOrganizationStorePort(domain: SessionOrganizationDomainHandle): SessionOrganizationStorePort {
+  const adapt = <T>(name: keyof SessionOrganizationDomainSpec['tables']): OrganizationTablePort<T> => {
+    const table = domain.table(name) as unknown as OrganizationTablePort<T>
+    return {
+      get: key => table.get(key),
+      entries: () => table.entries(),
+      put: (key, value) => table.put(key, value),
+      delete: key => table.delete(key),
+    }
+  }
+  return {
+    functionTypes: adapt('function_types'),
+    assignments: adapt('assignments'),
+    tagCatalog: adapt('tag_catalog'),
+    rules: adapt('rules'),
+    batchRuns: adapt('batch_runs'),
   }
 }
 
@@ -84,21 +115,40 @@ export function createPersistenceIdentityPort(
 export interface MountedSessionTags {
   readonly remote: SessionTagsRemoteService
   readonly sidecar: SessionTagsSidecar
+  readonly organizationRemote: SessionOrganizationRemoteService
+  readonly organization: SessionOrganizationSidecar
   readonly dispose: () => Promise<void>
 }
 
 /** 打开 domain 并装配 sidecar + Remote（apply 的可测试内核）。 */
 export async function mountSessionTags(ctx: Context): Promise<MountedSessionTags> {
   const domain = await ctx.storageDomain.open(sessionTagsDomainSpec)
+  let organizationDomain: SessionOrganizationDomainHandle
+  try {
+    organizationDomain = await ctx.storageDomain.open(sessionOrganizationDomainSpec)
+  } catch (error) {
+    await domain.close()
+    throw error
+  }
   const sidecar = new SessionTagsSidecar({
     table: createStorageDomainTablePort(domain),
     identity: createPersistenceIdentityPort(ctx.sessionPersistence as SessionPersistenceListFace),
   })
   const remote = new SessionTagsRemoteService(ctx, sidecar)
+  const organization = new SessionOrganizationSidecar({
+    store: createOrganizationStorePort(organizationDomain),
+    tags: sidecar,
+  })
+  const organizationRemote = new SessionOrganizationRemoteService(ctx, organization)
   return {
     remote,
     sidecar,
-    dispose: () => domain.close(),
+    organizationRemote,
+    organization,
+    async dispose() {
+      await organizationDomain.close()
+      await domain.close()
+    },
   }
 }
 

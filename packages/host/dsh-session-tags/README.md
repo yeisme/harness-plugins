@@ -6,6 +6,10 @@ Harness Plugins 拥有的 Session 标签 sidecar Host。V1 使用公开 `ctx.sto
 暴露只读快照与全量目标值 + `ifVersion` 的 CAS 写入。不得写入
 会话事件日志、Workspace registry 或浏览器存储，不改变会话 recency。
 
+同一 Host 还 additive 打开 `yeisme_session_organization_v1`，并注册
+`sessionOrganization` v1。新 domain 保存功能类型、assignment、标签目录元数据、
+规则和批次 receipt；旧 tags domain、Remote 和错误码保持不变。
+
 ## 模块
 
 - `wire`：跨 Host/Client 合同类型（`specVersion: '1.0'`、四个固定失败码）。
@@ -16,6 +20,8 @@ Harness Plugins 拥有的 Session 标签 sidecar Host。V1 使用公开 `ctx.sto
 - `remote`：`SessionTagsRemoteService`（Typert `@Remote` list/set，namespace
   `sessionTags`），失败原样返回，绝不自动重试。
 - `plugin`：Cordis 装配（`inject: ['storageDomain','sessionPersistence']`）。
+- `organization-*`：八类默认功能目录、0.8 分类门、人工锁、规则顺序、
+  `plan → execute → undo`、30 天可逆 receipt 与 15 分钟管理员 purge grant。
 
 ## 失败码
 

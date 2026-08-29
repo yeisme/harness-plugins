@@ -11,7 +11,7 @@ const S = '[data-session-tags]'
 
 const sessionTagsExtra = `
 ${S} .session-tags-overlay-backdrop{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:16px;background:rgba(0,0,0,.52);backdrop-filter:blur(2px)}
-${S} .session-tags-editor{display:grid;gap:12px;width:min(440px,calc(100vw - 32px));max-height:calc(100vh - 48px);overflow:auto;padding:16px;background:var(--vk-bg-elevated);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-xl);box-shadow:0 18px 42px rgba(0,0,0,.42)}
+${S}.session-tags-editor{display:flex;width:min(440px,calc(100vw - 32px));max-height:calc(100vh - 48px);background:var(--vk-bg-elevated);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-xl);box-shadow:0 18px 42px rgba(0,0,0,.42)}
 ${S} .session-tags-editor h2{margin:0;font-size:var(--vk-font-heading);font-weight:650;color:var(--vk-text-primary)}
 ${S} .session-tags-draft{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
 ${S} .session-tags-chip{display:inline-flex;align-items:center;gap:4px;min-height:24px;padding:0 4px 0 10px;border:1px solid var(--vk-border-l2);border-radius:999px;background:var(--vk-bg-layer-2);color:var(--vk-text-secondary);font-size:var(--vk-font-small)}
@@ -20,7 +20,7 @@ ${S} .session-tags-chip button:hover:not(:disabled),${S} .session-tags-chip butt
 ${S} .session-tags-chip button:disabled{opacity:.46;cursor:not-allowed}
 ${S} .session-tags-empty{margin:0;color:var(--vk-text-tertiary)}
 ${S} .session-tags-entry{display:flex;gap:8px;min-width:0}
-${S} .session-tags-entry input{flex:1;min-width:0;min-height:var(--vk-ctrl-input);padding:7px 9px;color:inherit;background:var(--vk-bg-layer-2);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-md)}
+${S} .session-tags-entry input,${S} .session-tags-entry select{flex:1;min-width:0;min-height:var(--vk-ctrl-input);padding:7px 9px;color:inherit;background:var(--vk-bg-layer-2);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-md)}
 ${S} .session-tags-entry button{min-height:var(--vk-ctrl-button);padding:0 10px;color:var(--vk-text-secondary);background:transparent;border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-md);cursor:pointer}
 ${S} .session-tags-entry button:hover:not(:disabled){color:var(--vk-text-primary);background:var(--vk-fill-hover)}
 ${S} .session-tags-entry button:disabled{opacity:.46;cursor:not-allowed}
@@ -39,7 +39,7 @@ ${S} .session-tags-actions button{min-height:var(--vk-ctrl-button);padding:0 12p
 ${S} .session-tags-actions button:hover:not(:disabled){color:var(--vk-text-primary);background:var(--vk-fill-hover)}
 ${S} .session-tags-actions button.primary{color:#eef7ff;background:color-mix(in srgb,var(--vk-accent) 28%,transparent);border-color:color-mix(in srgb,var(--vk-accent) 62%,transparent)}
 ${S} .session-tags-actions button:disabled{opacity:.46;cursor:not-allowed}
-@media(max-width:600px){${S} .session-tags-overlay-backdrop{padding:8px;align-items:end}}
+@container yeisme-surface (max-width:420px){${S}.session-tags-editor{width:100%;max-height:calc(100vh - 16px)}}
 `
 
 /** overlay 样式串：token fallback 单点来自 visual kit registry。 */

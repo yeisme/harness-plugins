@@ -11,10 +11,12 @@
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import { registerSessionTagsClient } from './register.ts'
 
-export { hasSessionGroupingsSeam, registerSessionTagsClient } from './register.ts'
+export { hasSessionGroupingsSeam, registerSessionTagsClient, resolveSessionOrganizationRemote } from './register.ts'
 export {
   sessionTagsRemoteContribution,
 } from './remote-contribution.ts'
+export { sessionManagementRemoteContribution, sessionOrganizationRemoteContribution } from './organization-remote-contribution.ts'
+export type { SessionOrganizationInvocationDescriptor } from './organization-remote-contribution.ts'
 export type {
   SessionTagsInvocationDescriptor,
   SessionTagsRemoteContribution,
@@ -30,6 +32,33 @@ export type {
   SessionGroupingProviderV1Alpha1,
   SessionGroupingSnapshotV1Alpha1,
 } from './provider.ts'
+export {
+  MANAGE_ORGANIZATION_ACTION_ID,
+  SESSION_FUNCTIONS_PROVIDER_ID,
+  createSessionFunctionsProvider,
+} from './organization-provider.ts'
+export type { OrganizationSessionRef } from './organization-provider.ts'
+export {
+  SessionOrganizationController,
+  createSessionOrganizationController,
+} from './organization-controller.ts'
+export type { SessionOrganizationControllerState } from './organization-controller.ts'
+export { OrganizationEditorController } from './organization-editor.ts'
+export type { OrganizationEditorState } from './organization-editor.ts'
+export { OrganizationEditorOverlay } from './OrganizationEditorOverlay.tsx'
+export type {
+  BatchActionV1,
+  BatchPlanV1,
+  BatchReceiptV1,
+  FunctionTypeV1,
+  OrganizationFailureV1,
+  OrganizationRuleV1,
+  OrganizationScopeV1,
+  SessionOrganizationAssignmentV1,
+  SessionOrganizationRemoteFace,
+  SessionOrganizationSnapshotV1,
+  TagCatalogEntryV1,
+} from './organization-wire.ts'
 export {
   SESSION_TAGS_PROVIDER_ID,
   MANAGE_TAGS_ACTION_ID,
