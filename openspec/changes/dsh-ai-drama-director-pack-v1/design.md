@@ -1,6 +1,6 @@
 ## Context
 
-做剧工作有两个尺度：会话内的当前动作与整部剧的全局管理。DSH 擅长前者，Workbench 擅长后者。Director Pack 必须保持薄，避免复刻已归档 Creator Studio 的完整页面，也避免与 Workbench 竞争状态和导航所有权。
+做剧工作有两个尺度：会话内按阶段完成当前项目生产，以及整部剧的专业批量/全局管理。DSH Pane 支持前者的端到端流程，Workbench 擅长后者。Director Pack 必须保持薄，避免复刻 Workbench 的密集管理页面，也避免竞争状态和导航所有权。
 
 ## Dependencies
 
@@ -74,7 +74,7 @@ DramaCommandRequestV1 包含 command、selector、contextRevision、optional use
 - Review：下一项异常、compare 与 owner decision。
 - Run：Ordo/Aigora attempt、cost/ETA、receipt/reconcile。
 
-Story/Visual/Audio 通过 command 或 artifact intent 打开。若用户需要完整 Episode Board、Asset Wall 或批量 Review Inbox，显示 Open in Workbench，而不是继续扩张 DSH Pane。
+Story/Visual/Audio 通过 command、Creator Home 或 artifact intent 按需打开。当前项目的故事、视觉、音频、生成、审阅和 owner 导出动作可继续留在 Pane；若用户需要完整 Episode Board、专业 Asset Wall、跨集比较或批量 Review Inbox，则提供可选 Open in Workbench。
 
 ## Event Model
 

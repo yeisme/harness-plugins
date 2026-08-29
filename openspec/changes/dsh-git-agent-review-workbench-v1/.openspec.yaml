@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-08-28
+goal: 交付 capability-gated 的 Agent Git 审查工作台，保持 Git/Ordo canonical ownership 与 V1
+  fallback
