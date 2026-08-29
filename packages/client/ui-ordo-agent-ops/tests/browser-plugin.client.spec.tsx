@@ -52,7 +52,9 @@ function declare(slots: SlotRegistry): () => void {
 
 describe('ui-ordo-agent-ops browser plugin', () => {
   it('declares only the services used by the panel', () => {
-    expect(inject).toEqual(['slots', 'remote', 'remote.ordoAgentOps', 'locale'])
+    // remote.ordoAgentOps is probed at runtime since the consolidation: a
+    // missing Remote degrades the sidebar instead of blocking plugin start.
+    expect(inject).toEqual(['slots', 'remote', 'locale'])
   })
 
   it('renders a truthful needs_contract panel and refreshes through the Remote', async () => {
@@ -75,7 +77,9 @@ describe('ui-ordo-agent-ops browser plugin', () => {
     />)
     fireEvent.click(screen.getByRole('button', { name: zh['panel.aria'] }))
     await vi.waitFor(() => { expect(screen.getByText(zh['panel.needsContractDetail'])).toBeTruthy() })
-    expect(screen.getByText('needs_contract')).toBeTruthy()
+    // Surface redesign renders localized honest copy instead of the raw state code.
+    expect(document.querySelector('[data-ordo-agent-ops-needs-contract]')).toBeTruthy()
+    expect(screen.getAllByText(zh['panel.needsContract']).length).toBeGreaterThan(0)
     expect(b.snapshotRead).toHaveBeenCalled()
     await fiber.dispose()
     await b.ctx.fiber.dispose()
