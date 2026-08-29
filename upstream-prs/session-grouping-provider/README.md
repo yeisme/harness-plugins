@@ -7,10 +7,15 @@
 
 ## Base
 
-- Rebased onto upstream/master: `141eb6f`（`dsh-v0.1.0-rc.8`，merge PR #2783）
-- 目标分支：`yeisme/deepseek-harness` `pr/session-grouping-provider`（未推送）
-- 上游 compare：待分支推送后补
-- Status: fork-ready（staging 目录 + 干净 checkout 验证；不开官方 PR、不在 fork master 开审查 PR）
+- Rebased onto upstream/master: `cd5ef81`（`dsh-v0.1.2-alpha.1`，merge PR #3248）
+- 分支：`yeisme/deepseek-harness` `pr/session-grouping-provider`（已推送 `8d60e2a`）
+- 上游 compare：https://github.com/deepseek-ai/deepseek-harness/compare/master...yeisme:deepseek-harness:pr/session-grouping-provider
+- 一键开 PR：https://github.com/deepseek-ai/deepseek-harness/compare/master...yeisme:deepseek-harness:pr/session-grouping-provider?expand=1
+- Status: pr-ready（用户已授权提交；分支已推送并在干净 checkout 上 161/161 tests + typecheck 0 错验证。PR 创建被 fine-grained PAT 的跨仓权限挡住——需用户一键或 classic PAT）
+
+### 2026-08-29 rebase 记录
+
+上游 0.1.2-alpha.1 拆包/改名适配：`dsh-client-runtime/client` 类型迁移到 `dsh-api-session-controller`/`dsh-api-workspace-controller`/`dsh-client-ui-session`/`dsh-session/types`；`useHostDescription`→`useConnectionGeneration`；`sessionNode`/`deriveSearchResults`/`deriveFlat` 新增 `pendingInteractions` 参数（`deriveExternalGroups` 以可选尾参适配）；`WorkspaceBrowser.tsx` 移至 `rows/`；`WorkspaceListState`→`WorkspaceSnapshot`（去 `baselinesReady`/`recentWorkspaceId` 字段）。
 
 ## 文件清单
 

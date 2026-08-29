@@ -6,7 +6,8 @@
  */
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
-import type { SessionId, SessionListState, SessionSummary } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
   EXTERNAL_GROUPING_PREFIX,
   SessionGroupings,
@@ -202,12 +203,12 @@ describe('provider search terms', () => {
   it('match local search rows without changing the Host content search', () => {
     const sessions = list(summary('s1', 1), summary('s2', 2))
     const result = deriveSearchResults(
-      sessions, [], 'tagonly', [], { items: [], hasMore: false }, 20,
+      sessions, [], 'tagonly', [], new Map(), { items: [], hasMore: false }, 20,
       { s1: ['tagonly'] },
     )
     expect(result.items.map(item => item.id)).toEqual([sid('s1')])
     const withoutTerms = deriveSearchResults(
-      sessions, [], 'tagonly', [], { items: [], hasMore: false }, 20,
+      sessions, [], 'tagonly', [], new Map(), { items: [], hasMore: false }, 20,
     )
     expect(withoutTerms.items).toEqual([])
   })

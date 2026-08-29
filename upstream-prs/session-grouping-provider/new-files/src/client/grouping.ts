@@ -20,7 +20,7 @@
  *    不改远端内容搜索语义。
  */
 import { Context, Service } from '@deepseek-ai/cordis'
-import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 
 /** One provider group: unique id, display label, and member sessions. */
