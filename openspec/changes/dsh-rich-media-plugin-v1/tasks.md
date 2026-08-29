@@ -20,7 +20,7 @@
 
 - [x] 4.1 确认官方媒体附件 seam 是 `ctx.attachments` 扩展还是 `ctx.media` 新增；验收：有明确 owner 和 typed API。（progress 2026-08-22：选择扩展 `ctx.attachments` 为 `PreviewResourceV1`，fork PR https://github.com/yeisme/deepseek-harness/pull/7。不新增 `ctx.media`。）
 - [ ] 4.2 接入聊天/ToolView/Pane 官方 slot，注册 `RichMediaCard` 与媒体节点；验收：使用最窄官方 seam，无 DOM patch。（progress 2026-08-22：PreviewResourceV1 fork PR #7 已登记；本任务仍等官方 Workbench/Pane/ToolView 宿主 slot，不在本 program 解锁范围内。（blocked 2026-08-24: official Workbench/Pane/ToolView host slot. PreviewResourceV1 fork PR is not an official DSH seam.）
-- [ ] 4.3 实现文件卡片、PDF/Office/文本预览与图片增强；验收：沙箱、类型嗅探、有界文本。（progress 2026-08-28: 格式矩阵（CSV/XLSX/DOCX/PDF/文本）已在 `dsh-file-preview-formats-v1` 交付：格式渲染器 + registry descriptors + 预算与降级，重依赖内联懒求值。本任务保留为官方 slot 接线完成后的核对项。）
+- [x] 4.3 实现文件卡片、PDF/Office/文本预览与图片增强；验收：沙箱、类型嗅探、有界文本。（superseded 2026-08-29: 格式矩阵（CSV/XLSX/DOCX/PDF/文本）已由 `dsh-file-preview-formats-v1`（✓ Complete）交付——格式渲染器 + registry descriptors + 预算与降级，重依赖内联懒求值；图片工具/compare 由 `dsh-pane-workspace-experience-v3` 5.3/5.4 交付。证据核对通过，不重复实现；官方 slot 接线保留在 4.2。）
 - [x] 4.4 实现音视频播放器、waveform/字幕扩展点与媒体库；验收：懒加载、卸载释放、可访问性。Evidence (2026-08-24): shipped `RichMediaCard` + `MediaLifecycleController` + library register/dispose; `pnpm --filter @yeisme/dsh-rich-media run test` 57/57 covers waveform peaks, subtitle tracks, lazy enhancer boundary, and release. 4.2/4.3/4.5/4.6/6.1 stay blocked on official slots/deps/seams.
 - [ ] 4.5 将工作台文件/终端/Git/浏览器 Tab 接入各自官方 owner seam；验收：每个 Tab 只投影 owner 状态，不复制 canonical state。（blocked: 需要各自官方 owner seam）
 - [ ] 4.6 与 Eikona/Sonora/Anatomia 等领域 Pane 集成；验收：跨 Pane 只走 typed artifact intent。（blocked: 官方 ArtifactRef/领域 Pane seam 未就绪）
