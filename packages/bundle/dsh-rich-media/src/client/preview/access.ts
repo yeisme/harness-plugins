@@ -18,6 +18,7 @@ import type {
   PreviewResourceRefV1,
   PreviewResourceV1,
   PreviewTablePageRequestV1,
+  PreviewTableColumnV1,
   PreviewTablePageV1,
   PreviewTextWindowRequestV1,
   PreviewTextWindowV1,
@@ -127,6 +128,8 @@ export interface PreviewAccessHandleInput {
   capabilities?: readonly string[] | undefined
   text?: string | undefined
   table?: readonly (readonly string[])[] | undefined
+  /** Optional additive column schema emitted with every table page. */
+  columns?: readonly PreviewTableColumnV1[] | undefined
   bytes?: Uint8Array | undefined
   playback?: PreviewPlaybackSourceV1 | undefined
   onRelease?: ((reason: string) => void) | undefined
@@ -244,6 +247,7 @@ export function createPreviewAccessHandle(input: PreviewAccessHandleInput): Prev
       const rows = input.table.slice(start, start + pageSize)
       return {
         rows,
+        ...input.columns === undefined ? {} : { columns: input.columns },
         page: Math.floor(request.page),
         pageSize,
         loaded: rows.length,

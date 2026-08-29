@@ -145,8 +145,12 @@ export const mediaNodeDefinition: ConversationNodeDefinition<MediaNodeData> = {
   },
 }
 
+export interface MediaNodeViewProps extends ChatNodeViewProps<'media-ref'> {
+  readonly onOpenInPane?: ((media: MediaRefV1) => void) | undefined
+}
+
 /** Chat renderer for one media-ref node. */
-export function MediaNodeView({ node }: ChatNodeViewProps<'media-ref'>) {
+export function MediaNodeView({ node, onOpenInPane }: MediaNodeViewProps) {
   const data = node.data
   if (data.removed === true) {
     return (
@@ -156,7 +160,7 @@ export function MediaNodeView({ node }: ChatNodeViewProps<'media-ref'>) {
       </p>
     )
   }
-  return <RichMediaCard media={data.media} />
+  return <RichMediaCard media={data.media} onOpenInPane={onOpenInPane} />
 }
 
 export default MediaNodeView

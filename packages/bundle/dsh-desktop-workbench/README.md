@@ -1,23 +1,29 @@
 # @yeisme/dsh-desktop-workbench
 
-Self-maintained DSH Pane view-provider bundle. It contributes files, documents,
-media, history search, notifications, and terminal views to the shared right /
+Self-maintained DSH Pane view-provider bundle. It contributes conversation
+management, files, documents, media, history search, notifications, and terminal views to the shared right /
 bottom workspace.
 
-The DSH sidebar remains the only conversation browser. Production code does
-not register `shell.overlay`, `SessionSidebar`, or a second full-screen shell.
-The exported `DesktopWorkbenchOverlay` is retained for one RC as a deprecated
-story component only.
+The DSH sidebar remains the canonical conversation browser. This bundle does not
+register `SessionSidebar` or a second full-screen shell. Its “对话” footer action
+opens the additive `desktop.sessions` Pane view, which consumes `sessionOrganization`
+and the DSH sessions/history owners. Missing organization Host state renders a
+capability reason rather than fake rows. Files/Git footer
+actions open views on the shared Pane Workbench. On official DSH without Core
+Pane slots, Pane Workbench hosts those views in an additive right dock via
+`shell.overlay`; idle overlay seats render nothing. The exported
+`DesktopWorkbenchOverlay` is retained for one RC as a deprecated story
+component only.
 
-This bundle requires Pane Workbench V2 and a DSH layout exposing
-`shell.workspace.right`, `shell.workspace.bottom`, and `ctx.workspaceLayout`
-(peer range: `@deepseek-ai/dsh-client-ui-layout >=0.1.1-rc.3 <0.2.0`).
-Older DSH builds fail with an explicit compatibility error rather than falling
-back to an overlay that covers the sidebar. No released DSH ships the core-pane
-seam yet (latest is 0.1.1-rc.2; the seam lives in
-`upstream-prs/pane-workspace-layout/` awaiting upstream merge), so on release
-channel DSH both `@yeisme/dsh-pane-workbench` and this bundle refuse to load by
-design. Until a seam release lands, remove both rows:
+This bundle prefers Pane Workbench V2 with `shell.workspace.right`,
+`shell.workspace.bottom`, and `ctx.workspaceLayout`. The npm peer is the
+published layout (`@deepseek-ai/dsh-client-ui-layout >=0.1.0-rc.9 <0.2.0`).
+Official layout `0.1.0-rc.9` still lacks the full Core Pane seam
+(`upstream-prs/pane-workspace-layout/`). Until it lands, Pane Workbench
+provides `ctx.paneWorkbench` through sidebar footer + overlay dock so Files/Git
+and Agents remain usable. Residual `workspaceLayout` without declared Right/Bottom
+slots uses that official host; declared pre-Core slots stay fail-closed. To hide
+the rows entirely:
 
 ```bash
 dsh plugin --profile web remove @yeisme/dsh-pane-workbench
@@ -58,6 +64,18 @@ and can be closed or retried. This bundle does not import
 History search and notifications stay out of the production provider catalog
 until their real owner adapters are mounted; their placeholder hosts are test
 fixtures only.
+
+For organization management, install the sidecar bundle as well:
+
+```bash
+dsh plugin --profile web add ./packages/bundle/dsh-session-tags
+dsh plugin --profile web add ./packages/bundle/dsh-desktop-workbench
+```
+
+The manager supports Workspace/function/tag/status filters, all-visible
+selection, batch preview and receipts, rules, 30-day undo history, and a
+temporary administrator gate for permanent deletion. Session lifecycle success
+always comes from the DSH owner adapter.
 
 ## Development
 

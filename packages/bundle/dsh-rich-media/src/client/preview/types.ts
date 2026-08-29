@@ -11,7 +11,7 @@
  */
 
 /** Preview families resolved deterministically from mediaType/kind. */
-export const PREVIEW_FAMILIES = ['image', 'audio', 'video', 'pdf', 'text', 'table', 'binary'] as const
+export const PREVIEW_FAMILIES = ['image', 'audio', 'video', 'pdf', 'text', 'table', 'document', 'binary'] as const
 export type PreviewFamily = (typeof PREVIEW_FAMILIES)[number]
 
 /** Source projection kinds that may enter the preview platform. */
@@ -89,13 +89,38 @@ export interface PreviewTablePageRequestV1 {
   pageSize: number
 }
 
+export type PreviewTableColumnTypeV1 = 'text' | 'number' | 'date' | 'boolean' | 'unknown'
+
+/** Owner-authored table column schema. Labels are display text, never executable expressions. */
+export interface PreviewTableColumnV1 {
+  id: string
+  label: string
+  type?: PreviewTableColumnTypeV1
+  align?: 'start' | 'center' | 'end'
+  width?: number
+}
+
 export interface PreviewTablePageV1 {
   rows: readonly (readonly string[])[]
+  /** Additive schema; the rich grid stays unavailable when the owner omits it. */
+  columns?: readonly PreviewTableColumnV1[]
+  /** Optional stable row keys. Index-derived keys are page-local only. */
+  rowKeys?: readonly string[]
   page: number
   pageSize: number
   loaded: number
   total?: number
   truncated: boolean
+}
+
+export interface PreviewTableSortV1 {
+  columnId: string
+  direction: 'asc' | 'desc'
+}
+
+export interface PreviewTableQueryV1 extends PreviewTablePageRequestV1 {
+  sort?: PreviewTableSortV1
+  search?: string
 }
 
 export interface PreviewByteRangeRequestV1 {
@@ -136,6 +161,8 @@ export interface PreviewAccessHandleV1 {
   subscribe(listener: () => void): () => void
   readTextWindow?(request: PreviewTextWindowRequestV1, signal?: AbortSignal): Promise<PreviewTextWindowV1>
   readTablePage?(request: PreviewTablePageRequestV1, signal?: AbortSignal): Promise<PreviewTablePageV1>
+  /** Optional owner-side global query. Absence disables global sort/search UI. */
+  queryTable?(request: PreviewTableQueryV1, signal?: AbortSignal): Promise<PreviewTablePageV1>
   readByteRange?(request: PreviewByteRangeRequestV1, signal?: AbortSignal): Promise<Uint8Array>
   resolvePlaybackSource?(signal?: AbortSignal): Promise<PreviewPlaybackSourceV1>
 }

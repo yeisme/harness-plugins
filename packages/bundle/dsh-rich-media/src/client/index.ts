@@ -34,6 +34,33 @@ export { NS, en, zh } from './locales.ts'
 export type { RichMediaKey } from './locales.ts'
 export { MEDIA_HOST_CONTEXT_KEY, createMediaHostPlaceholder, isMediaHostV1 } from '../host/types.ts'
 export type { MediaHostV1, MediaRefV1 } from '../host/types.ts'
-
+export { seedMediaPreview, listSeededMedia, subscribeSeededMedia, clearSeededMedia } from './preview-seed.ts'
+export { CSV_PARSE_BUDGET, delimiterOfMediaType, parseDelimitedTable } from './preview/csv-parse.ts'
+export type { CsvParseBudget, CsvParseResult, CsvTruncateReason } from './preview/csv-parse.ts'
+export { MediaTextSourceRenderer, prettyJsonOrRaw, TEXT_FETCH_MAX, TEXT_LINE_RENDER_CAP, TEXT_WINDOW } from './preview/text-source.tsx'
+export type { MediaTextSourceLabels, MediaTextSourceProps } from './preview/text-source.tsx'
+export { MediaCsvRenderer } from './preview/csv-renderer.tsx'
+export type { MediaCsvLabels, MediaCsvRendererProps } from './preview/csv-renderer.tsx'
+export { MediaDocxRenderer, DOCX_BYTES_MAX, DOCX_HTML_MAX } from './preview/docx-renderer.tsx'
+export type { MediaDocxLabels, MediaDocxRendererProps } from './preview/docx-renderer.tsx'
+export { MediaSheetRenderer, SHEET_BYTES_MAX } from './preview/sheet-renderer.tsx'
+export type { MediaSheetLabels, MediaSheetRendererProps, ParsedSheet } from './preview/sheet-renderer.tsx'
+export { LocalTableGrid, clampRows, columnsFromHeaderRow, LOCAL_TABLE_BUDGET, tableResourceOf } from './preview/local-table.tsx'
+export type { LocalTableGridProps } from './preview/local-table.tsx'
+export { accessSource, isAbortError, urlSource } from './preview/sources.ts'
+export type { BoundedSource } from './preview/sources.ts'
+export { classifyFileEntry, documentPreviewKindOf, DOCX_MEDIA_TYPE, PPTX_MEDIA_TYPE, XLSSM_MEDIA_TYPE, XLSX_MEDIA_TYPE } from './preview/format-kinds.ts'
+export type { DocumentPreviewKind, FileEntryClassification } from './preview/format-kinds.ts'
+export {
+  FILE_PREVIEW_DESCRIPTORS,
+  mediaRefOfResource,
+  previewBinaryNoticeDescriptor,
+  previewCsvRendererDescriptor,
+  previewDocxRendererDescriptor,
+  previewPdfRendererDescriptor,
+  previewSheetRendererDescriptor,
+  previewTextRendererDescriptor,
+  registerFilePreviewRenderers,
+} from './preview/descriptors.tsx'
 export const name = 'dsh-rich-media'
-export const inject = ['conversationEvents'] as const
+export const inject = ['slots', 'conversationEvents'] as const

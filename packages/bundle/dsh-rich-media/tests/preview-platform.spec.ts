@@ -9,6 +9,8 @@ import { artifactRefToPreviewResource, attachmentRefToPreviewResource, fileEntry
 import { PreviewRendererRegistry } from '../src/client/preview/registry.ts'
 import type { MediaRefV1 } from '../src/host/types.ts'
 import type { PreviewRendererDescriptorV1 } from '../src/client/preview/types.ts'
+import type { PreviewTablePageV1 } from '../src/client/preview/types.ts'
+import { previewTableRendererDescriptor } from '../src/client/preview/table-renderer.tsx'
 
 const validResource = {
   sourceKind: 'media',
@@ -141,5 +143,23 @@ describe('PreviewRendererRegistry', () => {
     registry.register(descriptor('pkg:a-high', ['image'], undefined, 5))
     const list = registry.openWith({ mediaType: 'image/png', family: 'image' })
     expect(list.map(d => d.id)).toEqual(['pkg:a-high', 'pkg:b-low'])
+  })
+})
+
+describe('PreviewTablePageV1 additive schema', () => {
+  it('accepts owner columns and stable row keys without changing the page contract', () => {
+    const page: PreviewTablePageV1 = {
+      columns: [{ id: 'name', label: 'Name', type: 'text' }],
+      rows: [['alpha']], rowKeys: ['row-a'], page: 0, pageSize: 200, loaded: 1, total: 1, truncated: false,
+    }
+    expect(page.columns?.[0]?.id).toBe('name')
+    expect(page.rowKeys).toEqual(['row-a'])
+  })
+
+  it('registers the table renderer for CSV and TSV without a static registry singleton', () => {
+    const registry = new PreviewRendererRegistry()
+    registry.register(previewTableRendererDescriptor)
+    expect(registry.resolve({ mediaType: 'text/csv', family: 'table' })?.id).toBe('yeisme:table')
+    expect(registry.resolve({ mediaType: 'text/tab-separated-values', family: 'table' })?.id).toBe('yeisme:table')
   })
 })

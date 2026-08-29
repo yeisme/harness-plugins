@@ -21,7 +21,7 @@ import {
   type SessionSummaryV1,
 } from '@yeisme/dsh-session-manager'
 import { createFileHostPlaceholder, type FileHostV1 } from '@yeisme/dsh-file-host'
-import { handleYeismeFilesApi } from '@yeisme/dsh-file-host/node'
+import { createOpaqueFileRefRegistry, FILE_OPAQUE_REF_HOST_CONTEXT_KEY, handleYeismeFilesApi } from '@yeisme/dsh-file-host/node'
 import { createTerminalHostPlaceholder, type TerminalHostV1, type TerminalHostV2 } from '@yeisme/dsh-terminal-host'
 import { createNotificationHostPlaceholder, type NotificationHostV1 } from '@yeisme/dsh-notify-host'
 
@@ -94,17 +94,23 @@ function sessionCwdOf(ctx: { sessions?: SessionStoreFace; get?(name: string): un
  * Adapted from DSH-better-sidebar `fs.tree` / `fs.read`, served at
  * `/yeisme-files/api` so it does not collide with `/sidebar/api`.
  */
-export function apply(ctx: { webServer?: WebServerFace; sessions?: SessionStoreFace; get?(name: string): unknown; effect?(fn: () => () => void): void }): () => void {
+export function apply(ctx: { webServer?: WebServerFace; sessions?: SessionStoreFace; get?(name: string): unknown; provide?(name: string, service: unknown): (() => void) | void; effect?(fn: () => () => void): void }): () => void {
   const webServer = (ctx.webServer ?? ctx.get?.('webServer')) as WebServerFace | undefined
   if (webServer === undefined || typeof webServer.register !== 'function') return () => {}
+  const opaqueRefs = createOpaqueFileRefRegistry()
+  const unprovide = ctx.provide?.(FILE_OPAQUE_REF_HOST_CONTEXT_KEY, opaqueRefs)
   const dispose = webServer.register({
     kind: 'prefix',
     path: '/yeisme-files/api',
     handler: (req, res) => handleYeismeFilesApi(req as never, res as never, {
       sessionCwd: (sessionId, clientCwd) => sessionCwdOf(ctx, sessionId, clientCwd),
+      opaqueRefs,
     }),
   })
-  return dispose
+  return () => {
+    dispose()
+    if (typeof unprovide === 'function') unprovide()
+  }
 }
 
 const DesktopWorkbenchPlugin = { name, inject, apply }

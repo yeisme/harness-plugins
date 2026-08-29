@@ -56,6 +56,10 @@ export interface RichMediaCardProps {
   playbackRates?: readonly number[] | undefined
   /** Offer picture in picture for video when the runtime supports it. */
   allowPictureInPicture?: boolean | undefined
+  /** Opens the same media in the overlay pane. Absent when paneWorkbench is missing. */
+  onOpenInPane?: ((media: MediaRefV1) => void) | undefined
+  /** Localized label for the overlay action. */
+  openInPaneLabel?: string | undefined
 }
 
 const DEFAULT_LABELS: Required<RichMediaCardLabels> = {
@@ -239,7 +243,7 @@ function MediaElement({ media, url }: { media: MediaRefV1; url: string }) {
 }
 
 /** Compact safe media card used by chat, ToolView, and Pane renderers. */
-export function RichMediaCard({ media, src, resolveUrl, labels, subtitleTracks, waveformPeaks, playbackRates, allowPictureInPicture }: RichMediaCardProps) {
+export function RichMediaCard({ media, src, resolveUrl, labels, subtitleTracks, waveformPeaks, playbackRates, allowPictureInPicture, onOpenInPane, openInPaneLabel }: RichMediaCardProps) {
   const text = { ...DEFAULT_LABELS, ...labels }
   const { url, failed, retry } = useResolvedSrc(media, src, resolveUrl)
   const size = formatBytes(media.size)
@@ -258,6 +262,13 @@ export function RichMediaCard({ media, src, resolveUrl, labels, subtitleTracks, 
   if (url !== undefined && canDownload) {
     actions.push(
       <a key="download" href={url} download={media.title}>{text.download}</a>,
+    )
+  }
+  if (onOpenInPane !== undefined) {
+    actions.push(
+      <button key="pane" type="button" data-dsh-rich-media-open-pane onClick={() => { onOpenInPane(media) }}>
+        {openInPaneLabel ?? '在窗格打开'}
+      </button>,
     )
   }
 

@@ -45,6 +45,15 @@ describe('RichMediaCard', () => {
     expect(html).toContain('Example PDF')
     expect(html).not.toContain('<iframe')
   })
+
+  it('renders an open-in-pane action only when a handler is provided', () => {
+    const without = renderToStaticMarkup(<RichMediaCard media={imageRef} src="https://cdn.example/safe.png" />)
+    expect(without).not.toContain('在窗格打开')
+    const withPane = renderToStaticMarkup(
+      <RichMediaCard media={imageRef} src="https://cdn.example/safe.png" onOpenInPane={() => {}} />,
+    )
+    expect(withPane).toContain('在窗格打开')
+  })
 })
 
 

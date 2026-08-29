@@ -26,6 +26,7 @@ function fakeClientContext(options: {
   mediaHost?: MediaHostV1
   fileHost?: FileHostV1
   workspaces?: ReturnType<typeof workspacesBrowse>
+  workspaceLayout?: unknown
 } = {}): ClientContext {
   const register = vi.fn(() => vi.fn())
   const injectSlot = vi.fn((_name: string, setup: () => () => void) => setup())
@@ -45,6 +46,7 @@ function fakeClientContext(options: {
       : name === 'dsh.fileHost' ? options.fileHost
       : name === 'workspaces' ? options.workspaces
       : name === 'sessions' ? sessions
+      : name === 'workspaceLayout' ? options.workspaceLayout
       : undefined),
   } as unknown as ClientContext
 }
@@ -75,7 +77,7 @@ describe('desktop workbench client apply', () => {
     expect(inject).toEqual(['slots', 'workspaces'])
   })
 
-  it('does not register terminal or media placeholders when those owners are absent', () => {
+  it('does not register terminal placeholders when that owner is absent', () => {
     const ctx = fakeClientContext()
     const disposer = apply(ctx)
     const pane = ctx.get('paneWorkbench' as never) as unknown as {
@@ -86,11 +88,29 @@ describe('desktop workbench client apply', () => {
     expect(kinds).toContain('desktop.files')
     expect(kinds).toContain('desktop.file')
     expect(kinds).toContain('desktop.git')
+    expect(kinds).toContain('desktop.media')
+    expect(kinds).toContain('desktop.sessions')
     expect(kinds).not.toContain('desktop.terminal')
-    expect(kinds).not.toContain('desktop.media')
-    expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({ kind: 'desktop.files', preferredRegion: 'right' }))
+    expect(pane.openView).not.toHaveBeenCalled()
     expect(ctx.slots.inject).not.toHaveBeenCalledWith('shell.overlay', expect.any(Function))
     expect(typeof disposer).toBe('function')
+  })
+
+  it('registers a media overlay that shows an honest empty state without a media host', () => {
+    const ctx = fakeClientContext()
+    apply(ctx)
+    const pane = ctx.get('paneWorkbench' as never) as unknown as { registerView: ReturnType<typeof vi.fn> }
+    const media = pane.registerView.mock.calls.find(call => call[0].descriptor.kind === 'desktop.media')?.[0]
+    expect(media).toBeDefined()
+    render(media?.component?.())
+    expect(screen.getByRole('status').textContent).toContain('没有可预览媒体投影')
+  })
+
+  it('auto-opens the files navigator only when the Core Pane layout host is present', () => {
+    const ctx = fakeClientContext({ workspaceLayout: { attach: vi.fn() } })
+    apply(ctx)
+    const pane = ctx.get('paneWorkbench' as never) as unknown as { openView: ReturnType<typeof vi.fn> }
+    expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({ kind: 'desktop.files', preferredRegion: 'right' }))
   })
 
   it('registers the file pane from the explorer host when dsh.fileHost is absent', async () => {
@@ -120,7 +140,6 @@ describe('desktop workbench client apply', () => {
     expect(entries.map(entry => entry.name).sort()).toEqual(['README.md', 'src'])
     expect(entries.find(entry => entry.name === 'README.md')).toMatchObject({ kind: 'text' })
     expect(JSON.stringify(entries)).not.toContain('/workspace')
-    expect(ctx.slots.inject).toHaveBeenCalledWith('conversation.session.header.actions', expect.any(Function))
     expect(ctx.slots.inject).toHaveBeenCalledWith('sidebar.footer.action', expect.any(Function))
     vi.unstubAllGlobals()
   })
@@ -156,18 +175,31 @@ describe('desktop workbench client apply', () => {
     }))
   })
 
+  it('opens image files in the media overlay instead of the text file view', () => {
+    const ctx = fakeClientContext({ fileHost: fileHost() })
+    apply(ctx)
+    const pane = ctx.get('paneWorkbench' as never) as unknown as { registerView: ReturnType<typeof vi.fn>; openView: ReturnType<typeof vi.fn> }
+    const files = pane.registerView.mock.calls.find(call => call[0].descriptor.kind === 'desktop.files')?.[0]
+    files?.component?.().props.onOpenEntry({ id: 'file-hero', name: 'hero.png', kind: 'image', mediaType: 'image/png', capabilities: ['open', 'preview'] })
+    expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'desktop.media',
+      resourceKey: 'file-hero',
+      title: 'hero.png',
+    }))
+  })
+
   it('opens files on the right and terminal at the bottom from additive actions', () => {
     const ctx = fakeClientContext({ fileHost: fileHost(), terminalHost: terminalHost() })
     apply(ctx)
     const pane = ctx.get('paneWorkbench' as never) as unknown as { openView: ReturnType<typeof vi.fn> }
     const registrations = (ctx.slots.register as ReturnType<typeof vi.fn>).mock.calls
-    const files = registrations.find(call => call[0].id === 'desktop-workbench-open-files')?.[1] as () => ReactNode
-    const git = registrations.find(call => call[0].id === 'desktop-workbench-open-git')?.[1] as () => ReactNode
+    const files = registrations.find(call => call[0].id === 'desktop-workbench-sidebar-files')?.[1] as () => ReactNode
+    const git = registrations.find(call => call[0].id === 'desktop-workbench-sidebar-git')?.[1] as () => ReactNode
     const terminal = registrations.find(call => call[0].id === 'desktop-workbench-open-terminal')?.[1] as () => ReactNode
     render(createElement('div', null, files(), git(), terminal()))
     fireEvent.click(screen.getByRole('button', { name: '文件' }))
     fireEvent.click(screen.getByRole('button', { name: 'Git' }))
-    fireEvent.click(screen.getByRole('button', { name: '>_' }))
+    fireEvent.click(screen.getByRole('button', { name: '终端' }))
     expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({ kind: 'desktop.files', preferredRegion: 'right' }))
     expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({ kind: 'desktop.git', preferredRegion: 'right' }))
     expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({ kind: 'desktop.terminal', preferredRegion: 'bottom' }))
@@ -206,10 +238,13 @@ describe('desktop workbench client apply', () => {
     expect(media?.component?.().props.host).toBe(mediaHost)
   })
 
-  it('fails explicitly when Pane Workbench V2 is unavailable', () => {
+  it('fails closed when Pane Workbench V2 is unavailable', () => {
     const ctx = fakeClientContext()
     ;(ctx.get as ReturnType<typeof vi.fn>).mockImplementation((name: string) => name === 'slots' ? ctx.slots : undefined)
-    expect(() => apply(ctx)).toThrow(/Pane Workbench/u)
+    const disposer = apply(ctx)
+    expect(typeof disposer).toBe('function')
+    expect(ctx.slots.inject).not.toHaveBeenCalled()
+    disposer()
   })
 
   it('closes to a persistent launcher and reopens the desktop workbench', () => {

@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Surface, SurfaceContextBar, SurfaceState } from '@yeisme/dsh-client-ui-surface'
 import type { MediaRefV1 } from '../host/types.ts'
+import { documentPreviewKindOf } from './preview/format-kinds.ts'
+import { MediaCsvRenderer } from './preview/csv-renderer.tsx'
+import { MediaDocxRenderer } from './preview/docx-renderer.tsx'
+import { MediaSheetRenderer } from './preview/sheet-renderer.tsx'
+import { MediaTextSourceRenderer } from './preview/text-source.tsx'
+import { urlSource } from './preview/sources.ts'
 
 export interface MediaPreviewPaneProps {
   /** Owner-issued media projections. The pane never infers refs from URLs. */
@@ -10,16 +17,16 @@ export interface MediaPreviewPaneProps {
 }
 
 const styles = {
-  root: { display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', minHeight: '100%', color: 'var(--dsw-alias-label-primary, #f2f2f4)', background: 'var(--dsw-alias-bg-base, #151517)' },
+  root: { display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', minHeight: '100%', color: 'var(--dsw-alias-text-primary, #ececf1)', background: 'var(--dsw-alias-bg-base, #171719)' },
   toolbar: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, padding: '10px 12px', borderBottom: '1px solid var(--dsw-alias-border-l2, rgba(255,255,255,.12))', background: 'var(--dsw-alias-bg-layer-1, #1e1e20)' },
   title: { minWidth: 0, margin: 0, overflow: 'hidden', fontSize: 13, fontWeight: 700, textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   search: { width: 150, minHeight: 30, marginLeft: 'auto', padding: '0 9px', color: 'inherit', background: 'var(--dsw-alias-bg-layer-2, #29292c)', border: '1px solid var(--dsw-alias-border-l2, rgba(255,255,255,.12))', borderRadius: 7 },
   body: { display: 'grid', gridTemplateColumns: 'minmax(150px, 0.32fr) minmax(0, 1fr)', minHeight: 0 },
   list: { minWidth: 0, minHeight: 0, overflow: 'auto', padding: 8, borderRight: '1px solid var(--dsw-alias-border-l2, rgba(255,255,255,.12))' },
   item: { display: 'grid', gap: 3, width: '100%', minHeight: 52, padding: '8px 9px', color: 'inherit', textAlign: 'left' as const, background: 'transparent', border: '1px solid transparent', borderRadius: 7, cursor: 'pointer' },
-  itemActive: { background: 'var(--dsw-alias-button-ghost-active-fill, #343438)', border: '1px solid var(--dsw-alias-border-l2, rgba(255,255,255,.14))' },
+  itemActive: { background: 'var(--dsw-alias-fill-active, #343438)', border: '1px solid var(--dsw-alias-border-l2, rgba(255,255,255,.14))' },
   itemTitle: { overflow: 'hidden', fontSize: 12, fontWeight: 650, textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  itemMeta: { overflow: 'hidden', color: 'var(--dsw-alias-label-tertiary, #92929b)', fontSize: 10, textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  itemMeta: { overflow: 'hidden', color: 'var(--dsw-alias-text-tertiary, #92929b)', fontSize: 10, textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   viewer: { minWidth: 0, minHeight: 0, overflow: 'auto', padding: 18 },
   viewerToolbar: { display: 'flex', alignItems: 'center', gap: 8, minHeight: 30, marginBottom: 12 },
   viewerTitle: { minWidth: 0, overflow: 'hidden', fontSize: 14, fontWeight: 700, textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
@@ -29,8 +36,8 @@ const styles = {
   frame: { width: '100%', height: 'min(68vh, 720px)', border: 0, background: '#101012' },
   audio: { width: '100%', maxWidth: 560 },
   video: { display: 'block', width: '100%', maxHeight: 'min(68vh, 720px)', background: '#09090a' },
-  meta: { display: 'flex', flexWrap: 'wrap' as const, gap: 8, marginTop: 10, color: 'var(--dsw-alias-label-tertiary, #92929b)', fontSize: 11 },
-  empty: { display: 'grid', placeItems: 'center', gap: 8, minHeight: 260, padding: 24, color: 'var(--dsw-alias-label-tertiary, #92929b)', textAlign: 'center' as const },
+  meta: { display: 'flex', flexWrap: 'wrap' as const, gap: 8, marginTop: 10, color: 'var(--dsw-alias-text-tertiary, #92929b)', fontSize: 11 },
+  empty: { display: 'grid', placeItems: 'center', gap: 8, minHeight: 260, padding: 24, color: 'var(--dsw-alias-text-tertiary, #92929b)', textAlign: 'center' as const },
 } as const
 
 function mediaMeta(item: MediaRefV1): string {
@@ -52,7 +59,18 @@ function ActiveMedia({ item, url }: { readonly item: MediaRefV1; readonly url: s
   if (item.kind === 'audio') return <audio src={url} controls preload="metadata" aria-label={item.title} style={styles.audio} />
   if (item.kind === 'video') return <video src={url} controls preload="metadata" aria-label={item.title} style={styles.video} />
   if (item.kind === 'pdf') return <iframe src={url} title={item.title} sandbox="allow-same-origin" referrerPolicy="no-referrer" style={styles.frame} />
-  return <p role="status">此资源暂不支持内嵌预览，请使用打开或下载。</p>
+  return <DocumentPreview item={item} url={url} />
+}
+
+/** Format-routed document preview: text/CSV/sheet/DOCX, then honest degrade. */
+function DocumentPreview({ item, url }: { readonly item: MediaRefV1; readonly url: string }) {
+  const source = useMemo(() => urlSource(url), [url])
+  const routed = documentPreviewKindOf(item.mediaType)
+  if (routed === 'text') return <MediaTextSourceRenderer media={item} source={source} />
+  if (routed === 'csv') return <MediaCsvRenderer media={item} source={source} />
+  if (routed === 'sheet') return <MediaSheetRenderer media={item} source={source} />
+  if (routed === 'docx') return <MediaDocxRenderer media={item} source={source} />
+  return <p role="status">此文件类型暂不支持内嵌预览，请使用打开或下载。</p>
 }
 
 /** Compact media library and resource viewer for a normal Pane. */
@@ -76,6 +94,7 @@ export function MediaPreviewPane({ media = [], resolveUrl, title = '媒体库' }
 
   useEffect(() => {
     let live = true
+    let resolvedUrl: string | undefined
     setUrl(undefined)
     setError(undefined)
     if (selected === undefined || resolveUrl === undefined || !selected.capabilities.includes('preview')) {
@@ -84,26 +103,26 @@ export function MediaPreviewPane({ media = [], resolveUrl, title = '媒体库' }
     }
     setLoading(true)
     void resolveUrl(selected).then(next => {
+      resolvedUrl = next
       if (live) setUrl(next)
     }).catch(caught => {
       if (live) setError(caught instanceof Error ? caught.message : '资源授权失败')
     }).finally(() => {
       if (live) setLoading(false)
     })
-    return () => { live = false }
+    return () => {
+      live = false
+      if (resolvedUrl?.startsWith('blob:') === true && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(resolvedUrl)
+    }
   }, [resolveUrl, selected])
 
   return (
-    <section aria-label={title} data-dsh-media-preview-pane style={styles.root}>
-      <header style={styles.toolbar}>
-        <h2 style={styles.title}>{title}</h2>
-        <span aria-label="媒体数量" style={{ color: 'var(--dsw-alias-label-tertiary, #92929b)', fontSize: 11 }}>{media.length} 项</span>
-        <input aria-label="筛选媒体" placeholder="筛选" value={query} onChange={event => { setQuery(event.currentTarget.value) }} style={styles.search} />
-      </header>
+    <Surface kind="workspace" aria-label={title} data-dsh-media-preview-pane style={styles.root}>
+      <SurfaceContextBar title={title} status={<span aria-label="媒体数量">{media.length} 项</span>} actions={<label className="ys-field"><span>筛选媒体</span><input aria-label="筛选媒体" placeholder="筛选" value={query} onChange={event => { setQuery(event.currentTarget.value) }} /></label>} />
       <div style={styles.body}>
         <nav aria-label="媒体资源" role="listbox" style={styles.list}>
           {filtered.length === 0
-            ? <div style={styles.empty}><strong>暂无媒体资源</strong><span>当前会话还没有可预览的图片、音频或视频。</span></div>
+            ? <SurfaceState phase="empty" title="暂无媒体资源" description="当前会话还没有可预览的图片、音频或视频。" />
             : filtered.map(item => {
               const identity = `${item.owner}:${item.ref}:${item.version}`
               return <button
@@ -132,7 +151,7 @@ export function MediaPreviewPane({ media = [], resolveUrl, title = '媒体库' }
         </nav>
         <main aria-live="polite" style={styles.viewer}>
           {selected === undefined
-            ? <div style={styles.empty}><strong>选择一个媒体</strong><span>右侧会显示安全预览和资源信息。</span></div>
+            ? <SurfaceState phase="empty" title="选择一个媒体" description="右侧会显示安全预览和资源信息。" />
             : <>
               <div style={styles.viewerToolbar}>
                 <span style={styles.viewerTitle}>{selected.title}</span>
@@ -150,7 +169,7 @@ export function MediaPreviewPane({ media = [], resolveUrl, title = '媒体库' }
             </>}
         </main>
       </div>
-    </section>
+    </Surface>
   )
 }
 

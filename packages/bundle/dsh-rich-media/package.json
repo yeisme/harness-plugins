@@ -25,6 +25,8 @@
   "files": [
     "lib/index.js",
     "lib/client.js",
+    "lib/table.js",
+    "lib/*.cjs",
     "lib/types/**/*.js",
     "lib/types/**/*.d.ts",
     "cordis.patch.yml",
@@ -38,6 +40,10 @@
     "./client": {
       "types": "./lib/types/client/index.d.ts",
       "default": "./lib/client.js"
+    },
+    "./table": {
+      "types": "./lib/types/client/table.d.ts",
+      "default": "./lib/table.js"
     },
     "./types": {
       "types": "./lib/types/host/types.d.ts",
@@ -53,7 +59,8 @@
     "client": {
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
-        "@deepseek-ai/dsh-client-ui-conversation"
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-slots"
       ],
       "platform": "web"
     }
@@ -86,6 +93,13 @@
     "react": "^18.3.1"
   },
   "dependencies": {
-    "@yeisme/dsh-workbench-core": "workspace:*"
+    "@e965/xlsx": "^0.20.3",
+    "@tanstack/react-table": "^9.2.3",
+    "@tanstack/react-virtual": "^3.14.10",
+    "@yeisme/dsh-client-ui-structured-content": "workspace:*",
+    "@yeisme/dsh-client-ui-surface": "workspace:^",
+    "@yeisme/dsh-workbench-core": "workspace:*",
+    "dompurify": "^3.4.14",
+    "mammoth": "^1.12.1"
   }
 }

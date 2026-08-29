@@ -8,30 +8,29 @@
  */
 
 import type { MediaKind, MediaRefV1 } from '../../host/types.ts'
+import { documentPreviewKindOf } from './format-kinds.ts'
 import type { PreviewFamily, PreviewResourceV1 } from './types.ts'
 import { previewResourceKey } from './types.ts'
 
 /** Deterministic kind+mediaType to family resolution. */
 export function mediaFamilyOf(kind: MediaKind, mediaType: string): PreviewFamily {
+  const normalized = mediaType.toLowerCase()
   switch (kind) {
     case 'image': return 'image'
     case 'audio': return 'audio'
     case 'video': return 'video'
     case 'pdf': return 'pdf'
     case 'text': return 'text'
-    case 'document': {
-      const normalized = mediaType.toLowerCase()
-      if (normalized === 'text/csv' || normalized === 'text/tab-separated-values') return 'table'
-      return 'text'
-    }
+    case 'document':
     case 'file': {
-      const normalized = mediaType.toLowerCase()
       if (normalized.startsWith('image/')) return 'image'
       if (normalized.startsWith('audio/')) return 'audio'
       if (normalized.startsWith('video/')) return 'video'
-      if (normalized === 'application/pdf') return 'pdf'
-      if (normalized.startsWith('text/')) return 'text'
-      if (normalized === 'text/csv' || normalized === 'text/tab-separated-values') return 'table'
+      const routed = documentPreviewKindOf(normalized)
+      if (routed === 'pdf') return 'pdf'
+      if (routed === 'csv' || routed === 'sheet') return 'table'
+      if (routed === 'text') return 'text'
+      if (routed === 'docx') return 'document'
       return 'binary'
     }
     default: return 'binary'
