@@ -39,6 +39,7 @@ export default defineConfig([
     sourcemap: true,
     clean: false,
     deps: {
+      alwaysBundle: [/^@yeisme\//u],
       neverBundle: [...clientExternals],
     },
     outputOptions: {

@@ -65,6 +65,7 @@
     }
   },
   "dependencies": {
+    "@yeisme/dsh-client-ui-surface": "workspace:^",
     "zod": "^4.4.3"
   },
   "peerDependencies": {

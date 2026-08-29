@@ -324,6 +324,7 @@ describe('package contract', () => {
     const patch = await readFile(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
 
     expect(manifest.dependencies).toEqual({
+      '@yeisme/dsh-client-ui-surface': 'workspace:^',
       zod: '^4.4.3',
     })
     expect(patch).toContain("name: '@yeisme/dsh-ordo-agent-ops'")

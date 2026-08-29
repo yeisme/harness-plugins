@@ -31,9 +31,32 @@ export type { OrdoAgentOpsPanelFace } from './slots.ts'
 export type { OrdoAgentOpsKey } from './locales.ts'
 export type { OrdoAgentOpsSnapshot } from './contracts.ts'
 export type { OrdoPopupCommandId, OrdoPopupItemV1, OrdoPopupStateV1, OrdoPopupKeyEventV1 } from './popup.ts'
+export {
+  GIT_REVIEW_EVIDENCE_CAPABILITY_V1,
+  deriveGitFileReviewed,
+  evaluateGitCommitReadiness,
+  gitReviewEventNeedsSnapshot,
+  gitReviewPaneReleasesLease,
+  gitReviewRevisionDrift,
+  sortGitReviewQueue,
+} from './git-review.ts'
+export type {
+  GitCommitReadinessV1,
+  GitReviewActionReceiptV1,
+  GitReviewEvidenceCapabilityV1,
+  GitReviewEvidenceEventV1,
+  GitReviewEvidenceSnapshotV1,
+  GitReviewFeedbackV1,
+  GitReviewFreshnessV1,
+  GitReviewHunkEvidenceV1,
+  GitReviewQueueRowV1,
+  GitReviewRiskV1,
+  GitReviewWorktreeEvidenceV1,
+  GitVerificationStateV1,
+} from './git-review.ts'
 
 /** browser entry 与其 root 贡献都需要的公开 DSH services。 */
-export const inject = ['slots', 'remote', 'remote.ordoAgentOps', 'locale']
+export const inject = ['slots', 'remote', 'locale']
 
 type FiberHandle = { dispose(): Promise<void> }
 type SharedClientMount = { references: number; ready: Promise<void>; contribution?: FiberHandle }
@@ -50,8 +73,13 @@ function clientMounts(): WeakMap<object, SharedClientMount> {
 }
 
 function installSidebar(ctx: ClientContext): void {
-  const remote = ctx.get('remote.ordoAgentOps') as ConstructorParameters<typeof OrdoAgentOpsController>[0] | undefined
-  if (remote === undefined) throw new TypeError('Ordo Agent Ops sidebar requires the mounted Host Remote')
+  let remote: ConstructorParameters<typeof OrdoAgentOpsController>[0] | undefined
+  try {
+    remote = ctx.get('remote.ordoAgentOps') as ConstructorParameters<typeof OrdoAgentOpsController>[0] | undefined
+  } catch {
+    remote = undefined
+  }
+  if (remote === undefined) return
   const controller = new OrdoAgentOpsController(remote)
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ordo-agent-ops: dictionaries')
   ctx.effect(() => () => { controller.dispose() }, 'ordo-agent-ops: controller lifecycle')
@@ -60,9 +88,32 @@ function installSidebar(ctx: ClientContext): void {
     void controller.refresh()
   })
 
+  const openAgentsPane = (): boolean => {
+    try {
+      const pane = ctx.get('paneWorkbench' as never) as { openView?(request: unknown): void } | undefined
+      const sessions = ctx.get('sessions' as never) as { list?: { getSnapshot(): { current?: string } } } | undefined
+      const rootSessionId = sessions?.list?.getSnapshot().current
+      if (typeof pane?.openView !== 'function' || rootSessionId === undefined) return false
+      pane.openView({
+        kind: 'subagent.monitor',
+        resourceKey: `subagent:${rootSessionId}`,
+        role: 'navigator',
+        preferredRegion: 'right',
+        retention: 'keep-alive',
+        singleton: true,
+        pinned: true,
+        title: 'Agents',
+      })
+      return true
+    } catch {
+      return false
+    }
+  }
+
   const injected = (): OrdoAgentOpsPanelFace => ({
     hooks: { state: controller.store },
     refresh: () => controller.refresh(),
+    openAgentsPane,
   })
 
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({

@@ -5,7 +5,7 @@
  */
 
 import { Service, type Context } from '@deepseek-ai/cordis'
-import { createElement, type ComponentProps } from 'react'
+import { createElement, forwardRef, type ComponentProps } from 'react'
 
 type Listener = () => void
 
@@ -76,5 +76,8 @@ const icon = (name: string) => (props: ComponentProps<'svg'> & { readonly size?:
 export const IconAgentPresetOutline16 = icon('agent')
 export const IconRefreshOutline16 = icon('refresh')
 export const IconWarningOutline16 = icon('warning')
+export const IconCheckOutline16 = icon('check')
 export const StateDot = ({ state }: { readonly state: string }) =>
   createElement('span', { 'data-test-state-dot': state })
+export const Button = forwardRef<HTMLButtonElement, ComponentProps<'button'>>((props, ref) =>
+  createElement('button', { ...props, ref }))

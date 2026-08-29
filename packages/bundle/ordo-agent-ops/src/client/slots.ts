@@ -7,4 +7,6 @@ export interface OrdoAgentOpsPanelFace {
     state: HostObservable<OrdoAgentOpsViewState>
   }
   refresh: () => Promise<void>
+  /** Opens the canonical Agents Pane; false keeps the compact Ops fallback. */
+  openAgentsPane?: () => boolean
 }

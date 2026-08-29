@@ -6,6 +6,7 @@
  * placeholder、浏览器生成的 approval 或本地 terminal 状态误作为可执行动作。
  */
 
+import { Surface, SurfaceContextBar, SurfaceSection, SurfaceState } from '@yeisme/dsh-client-ui-surface'
 import type { OrdoAgentOpsActionDescriptor, OrdoAgentOpsActionReceipt } from '../host/types.ts'
 
 export interface OrdoAgentOpsToolViewProps {
@@ -17,21 +18,25 @@ export interface OrdoAgentOpsToolViewProps {
 export function OrdoAgentOpsToolView({ action, receipt }: OrdoAgentOpsToolViewProps) {
   if (action === undefined) {
     return (
-      <section aria-label="Ordo action result" aria-live="polite" data-ordo-agent-ops-toolview="unavailable">
-        <strong>Action unavailable</strong>
-        <p>No server-authored action descriptor is available. Refresh the owner projection.</p>
-      </section>
+      <Surface kind="inspector" aria-label="Ordo action result" aria-live="polite" data-ordo-agent-ops-toolview="unavailable">
+        <div className="ys-body">
+          <SurfaceState phase="disabled" title="Action unavailable" description="No server-authored action descriptor is available. Refresh the owner projection." />
+        </div>
+      </Surface>
     )
   }
   return (
-    <section aria-label="Ordo action result" aria-live="polite" data-ordo-agent-ops-toolview="owner-authored">
-      <strong>Owner action preview</strong>
-      <p>{`Target ${action.targetRef}: ${action.safeEffect}`}</p>
-      <p>{`Owner ${action.ownerRef}; expires ${action.expiresAt}.`}</p>
-      <p>{`Decision ${action.decisionRef}; preview digest ${action.previewDigest}.`}</p>
-      {receipt === undefined
-        ? <p>Awaiting an owner-confirmed receipt; no local result is inferred.</p>
-        : <p>{`Receipt ${receipt.receiptRef}: ${receipt.state}; ${receipt.safeSummary}`}</p>}
-    </section>
+    <Surface kind="inspector" aria-label="Ordo action result" aria-live="polite" data-ordo-agent-ops-toolview="owner-authored">
+      <SurfaceContextBar title="Owner action preview" status={receipt?.state ?? 'pending'} />
+      <div className="ys-body">
+        <SurfaceSection title={`Target ${action.targetRef}: ${action.safeEffect}`}>
+          <p>{`Owner ${action.ownerRef}; expires ${action.expiresAt}.`}</p>
+          <p>{`Decision ${action.decisionRef}; preview digest ${action.previewDigest}.`}</p>
+          {receipt === undefined
+            ? <SurfaceState phase="partial" title="Awaiting owner receipt" description="No local result is inferred." />
+            : <SurfaceState phase="success" title={`Receipt ${receipt.receiptRef}: ${receipt.state}`} description={receipt.safeSummary} />}
+        </SurfaceSection>
+      </div>
+    </Surface>
   )
 }

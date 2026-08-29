@@ -9,6 +9,7 @@ vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => import('./browser-runtime
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject } from '../src/client/index.ts'
+import type { OrdoAgentOpsPanelFace } from '../src/client/slots.ts'
 
 const contexts: Context[] = []
 
@@ -41,7 +42,10 @@ async function bench() {
       },
     })
   })
-  return { ctx, slots: ctx.get('slots') as SlotRegistry }
+  const openView = vi.fn()
+  ctx.provide('paneWorkbench', { openView })
+  ctx.provide('sessions', { list: { getSnapshot: () => ({ current: 'session:one' }) } })
+  return { ctx, slots: ctx.get('slots') as SlotRegistry, openView }
 }
 
 describe('@yeisme/dsh-ordo-agent-ops browser consolidation', () => {
@@ -56,5 +60,19 @@ describe('@yeisme/dsh-ordo-agent-ops browser consolidation', () => {
     expect(slots.entries('sidebar.footer.action').filter(entry => entry.id === 'ordo-agent-ops')).toHaveLength(1)
     await second.dispose()
     expect(slots.entries('sidebar.footer.action').filter(entry => entry.id === 'ordo-agent-ops')).toHaveLength(0)
+  })
+
+  it('routes the single Agents launcher to the registered subagent pane', async () => {
+    const { ctx, slots, openView } = await bench()
+    const fiber = await ctx.plugin({ inject: [...inject], apply })
+    const entry = slots.entries('sidebar.footer.action').find(row => row.id === 'ordo-agent-ops')!
+    const face = (entry.inject as () => OrdoAgentOpsPanelFace)()
+    expect(face.openAgentsPane?.()).toBe(true)
+    expect(openView).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'subagent.monitor',
+      resourceKey: 'subagent:session:one',
+      preferredRegion: 'right',
+    }))
+    await fiber.dispose()
   })
 })
