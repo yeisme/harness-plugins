@@ -28,6 +28,58 @@ export interface MediaSubtitleTrack {
   label: string
 }
 
+/**
+ * Lazy waveform enhancer boundary (V3 5.5). The core never imports
+ * wavesurfer.js; a host injects a loader only when the dependency is
+ * available. Timeline/regions/markers are projected onto the container as
+ * owner-authored cues; the enhancer degrades to the dependency-free
+ * WaveformBars + native controls whenever it is absent or fails.
+ */
+export interface WaveformEnhancerHandleV1 {
+  destroy(): void
+}
+
+export interface WaveformEnhancerMountV1 {
+  container: HTMLElement
+  media: HTMLMediaElement
+  /** Owner-precomputed normalized peaks (0..1); never decoded in-browser. */
+  peaks?: readonly number[] | undefined
+  /** Owner-authored marker/region cues projected as data attributes. */
+  cues?: readonly { id: string; label: string; startMs: number }[] | undefined
+}
+
+export interface WaveformEnhancerModuleV1 {
+  create(mount: WaveformEnhancerMountV1): WaveformEnhancerHandleV1 | Promise<WaveformEnhancerHandleV1>
+}
+
+export type WaveformEnhancerLoaderV1 = () => Promise<WaveformEnhancerModuleV1>
+
+/** Owner-authored transcript/caption cue for navigation (not a VTT parser). */
+export interface MediaTranscriptCueV1 {
+  readonly id?: string | undefined
+  readonly label?: string | undefined
+  readonly startMs?: number | undefined
+}
+
+const TRANSCRIPT_LABEL = /^[^<>]{1,120}$/u
+const TRANSCRIPT_ID = /^[A-Za-z0-9._:-]{1,64}$/
+
+/** Only owner-authored, labeled, positively-timed cues become navigation. */
+export function selectSafeTranscriptCues(cues: readonly MediaTranscriptCueV1[] = []): readonly { id: string; label: string; startMs: number }[] {
+  const selected: Array<{ id: string; label: string; startMs: number }> = []
+  for (const [index, cue] of cues.entries()) {
+    if (typeof cue.startMs !== 'number' || !Number.isFinite(cue.startMs) || cue.startMs < 0) continue
+    const label = cue.label?.trim() ?? ''
+    if (!TRANSCRIPT_LABEL.test(label)) continue
+    selected.push({
+      id: cue.id !== undefined && TRANSCRIPT_ID.test(cue.id) ? cue.id : `cue-${index + 1}`,
+      label,
+      startMs: Math.round(cue.startMs),
+    })
+  }
+  return selected.sort((left, right) => left.startMs - right.startMs)
+}
+
 export interface RichMediaCardLabels {
   loading?: string
   failed?: string
@@ -38,6 +90,7 @@ export interface RichMediaCardLabels {
   playbackSpeed?: string
   pictureInPicture?: string
   waveform?: string
+  transcript?: string
 }
 
 export interface RichMediaCardProps {
@@ -52,6 +105,10 @@ export interface RichMediaCardProps {
   subtitleTracks?: readonly MediaSubtitleTrack[] | undefined
   /** Owner-precomputed normalized waveform peaks (0..1) for audio/video. */
   waveformPeaks?: readonly number[] | undefined
+  /** Injected lazy waveform enhancer (wavesurfer.js boundary); absent = native + bars. */
+  loadWaveform?: WaveformEnhancerLoaderV1 | undefined
+  /** Owner-authored transcript/caption cues rendered as seek navigation. */
+  transcriptCues?: readonly MediaTranscriptCueV1[] | undefined
   /** Playback rates offered by the speed control. */
   playbackRates?: readonly number[] | undefined
   /** Offer picture in picture for video when the runtime supports it. */
@@ -72,6 +129,7 @@ const DEFAULT_LABELS: Required<RichMediaCardLabels> = {
   playbackSpeed: 'Speed',
   pictureInPicture: 'Picture in picture',
   waveform: 'Waveform',
+  transcript: 'Transcript',
 }
 
 const DEFAULT_PLAYBACK_RATES: readonly number[] = [0.5, 1, 1.25, 1.5, 2]
@@ -162,15 +220,45 @@ function EnhancedMediaPlayer(props: {
   url: string
   subtitleTracks: readonly MediaSubtitleTrack[]
   waveformPeaks: readonly number[] | undefined
+  loadWaveform: WaveformEnhancerLoaderV1 | undefined
+  transcriptCues: readonly { id: string; label: string; startMs: number }[] | undefined
   playbackRates: readonly number[]
   allowPictureInPicture: boolean | undefined
   labels: Required<RichMediaCardLabels>
 }) {
-  const { media, url, subtitleTracks, waveformPeaks, playbackRates, allowPictureInPicture, labels } = props
+  const { media, url, subtitleTracks, waveformPeaks, loadWaveform, transcriptCues, playbackRates, allowPictureInPicture, labels } = props
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const enhancerHostRef = useRef<HTMLDivElement | null>(null)
   const [rate, setRate] = useState(1)
   const [progress, setProgress] = useState(0)
+  const [enhanced, setEnhanced] = useState(false)
+
+  // Lazy enhancer bridge: mount only when a loader was injected AND the owner
+  // pre-decoded peaks exist; any load/creation failure falls back to bars.
+  useEffect(() => {
+    if (media.kind !== 'audio' || loadWaveform === undefined || waveformPeaks === undefined || waveformPeaks.length === 0) {
+      setEnhanced(false)
+      return
+    }
+    let handle: WaveformEnhancerHandleV1 | undefined
+    let live = true
+    void loadWaveform().then((module) => {
+      if (!live) return
+      const container = enhancerHostRef.current
+      const element = audioRef.current
+      if (container === null || element === null) return
+      void Promise.resolve(module.create({ container, media: element, peaks: waveformPeaks, cues: transcriptCues })).then((resolved) => {
+        if (!live) { resolved.destroy(); return }
+        handle = resolved
+        setEnhanced(true)
+      }, () => { if (live) setEnhanced(false) })
+    }, () => { if (live) setEnhanced(false) })
+    return () => {
+      live = false
+      handle?.destroy()
+    }
+  }, [media.kind, loadWaveform, waveformPeaks, transcriptCues])
 
   const applyRate = (next: number): void => {
     setRate(next)
@@ -195,7 +283,16 @@ function EnhancedMediaPlayer(props: {
 
   return (
     <div data-dsh-rich-media-player={media.kind} style={{ display: 'grid', gap: 4 }}>
-      {waveformPeaks !== undefined && waveformPeaks.length > 0 && (
+      {media.kind === 'audio' && loadWaveform !== undefined && waveformPeaks !== undefined && waveformPeaks.length > 0 && (
+        <div
+          ref={enhancerHostRef}
+          data-dsh-rich-media-waveform-enhanced={enhanced || undefined}
+          role={enhanced ? 'img' : undefined}
+          aria-label={enhanced ? labels.waveform : undefined}
+          style={enhanced ? undefined : { display: 'none' }}
+        />
+      )}
+      {!enhanced && waveformPeaks !== undefined && waveformPeaks.length > 0 && (
         <WaveformBars peaks={waveformPeaks} progress={progress} label={labels.waveform} />
       )}
       {media.kind === 'video' ? (
@@ -220,6 +317,27 @@ function EnhancedMediaPlayer(props: {
           <button type="button" onClick={enterPictureInPicture}>{labels.pictureInPicture}</button>
         )}
       </div>
+      {transcriptCues !== undefined && transcriptCues.length > 0 && (
+        <nav aria-label={labels.transcript} data-dsh-rich-media-transcript>
+          <ol>
+            {transcriptCues.map(cue => (
+              <li key={cue.id}>
+                <button
+                  type="button"
+                  data-cue-id={cue.id}
+                  data-cue-start={String(cue.startMs / 1000)}
+                  onClick={() => {
+                    const element = media.kind === 'video' ? videoRef.current : audioRef.current
+                    if (element !== null) element.currentTime = Math.max(0, cue.startMs) / 1000
+                  }}
+                >
+                  {cue.label}
+                </button>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )}
     </div>
   )
 }
@@ -243,7 +361,7 @@ function MediaElement({ media, url }: { media: MediaRefV1; url: string }) {
 }
 
 /** Compact safe media card used by chat, ToolView, and Pane renderers. */
-export function RichMediaCard({ media, src, resolveUrl, labels, subtitleTracks, waveformPeaks, playbackRates, allowPictureInPicture, onOpenInPane, openInPaneLabel }: RichMediaCardProps) {
+export function RichMediaCard({ media, src, resolveUrl, labels, subtitleTracks, waveformPeaks, loadWaveform, transcriptCues, playbackRates, allowPictureInPicture, onOpenInPane, openInPaneLabel }: RichMediaCardProps) {
   const text = { ...DEFAULT_LABELS, ...labels }
   const { url, failed, retry } = useResolvedSrc(media, src, resolveUrl)
   const size = formatBytes(media.size)
@@ -287,6 +405,8 @@ export function RichMediaCard({ media, src, resolveUrl, labels, subtitleTracks, 
           url={url}
           subtitleTracks={subtitleTracks ?? []}
           waveformPeaks={waveformPeaks}
+          loadWaveform={loadWaveform}
+          transcriptCues={transcriptCues === undefined ? undefined : selectSafeTranscriptCues(transcriptCues)}
           playbackRates={playbackRates ?? DEFAULT_PLAYBACK_RATES}
           allowPictureInPicture={allowPictureInPicture}
           labels={text}
