@@ -130,3 +130,70 @@ describe('honest degradation and disposal (V3 4.1)', () => {
     expect(pane.registerView).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('provider lifecycle and staleness (V3 4.10)', () => {
+  it('re-registering after dispose restores the surface exactly once', () => {
+    const pane = fakePane()
+    const first = applyFileDocumentPaneViews(pane)
+    first.dispose()
+    const second = applyFileDocumentPaneViews(pane)
+    expect(second.registered).toBe(true)
+    expect(pane.registrations.size).toBe(2)
+    expect(pane.registerView).toHaveBeenCalledTimes(4)
+    second.dispose()
+    expect(pane.registrations.size).toBe(0)
+  })
+
+  it('opens after dispose keep the stable dedupe key so re-registration recovers the view', () => {
+    const pane = fakePane()
+    const surface = applyFileDocumentPaneViews(pane)
+    surface.dispose()
+    surface.openDocument(entry('doc-7'))
+    expect(pane.opens.map(open => open.resourceKey)).toEqual(['document:doc-7'])
+    // re-registration restores the kinds; the orphaned view re-binds by key
+    const revived = applyFileDocumentPaneViews(pane)
+    expect(revived.registered).toBe(true)
+    revived.dispose()
+  })
+
+  it('dirty documents survive dispose bookkeeping cleanly (no leaked state across surfaces)', () => {
+    const pane = fakePane()
+    const first = applyFileDocumentPaneViews(pane)
+    first.markDirty('doc-1', true)
+    first.dispose()
+    const second = applyFileDocumentPaneViews(pane)
+    expect(second.openEntry(entry('doc-1'), 'preview')?.blocked).toBeUndefined()
+    second.dispose()
+  })
+
+  it('tree rebuild on rename/move keeps selection stable by opaque id', async () => {
+    const { fileTreePathOf } = await import('../src/file-tree.ts')
+    const before = [
+      { id: 'dir', name: 'dir', kind: 'directory', capabilities: [] },
+      { id: 'f1', name: 'old.ts', kind: 'text', parentId: 'dir', capabilities: [] },
+    ] as never
+    const after = [
+      { id: 'dir', name: 'dir-renamed', kind: 'directory', capabilities: [] },
+      { id: 'f1', name: 'new.ts', kind: 'text', parentId: 'dir', capabilities: [] },
+    ] as never
+    expect(fileTreePathOf(before, 'f1').map(entry => entry.id)).toEqual(['dir', 'f1'])
+    expect(fileTreePathOf(after, 'f1').map(entry => entry.id)).toEqual(['dir', 'f1'])
+    expect(fileTreePathOf(after, 'f1').map(entry => entry.name)).toEqual(['dir-renamed', 'new.ts'])
+  })
+})
+
+describe('content safety negatives (V3 4.10)', () => {
+  it('entry names with path separators or control characters never validate', async () => {
+    const { validateFileEntry } = await import('../src/types.ts')
+    const bads = ['a/b.ts', 'a' + String.fromCharCode(92) + 'b.ts', 'line' + String.fromCharCode(10) + 'break', '']
+    for (const bad of bads) {
+      expect(validateFileEntry({ id: 'x', name: bad, kind: 'file', capabilities: [] }).ok).toBe(false)
+    }
+  })
+
+  it('oversized ids and names are rejected at the validator boundary', async () => {
+    const { validateFileEntry } = await import('../src/types.ts')
+    expect(validateFileEntry({ id: 'x'.repeat(200), name: 'ok.ts', kind: 'file', capabilities: [] }).ok).toBe(false)
+    expect(validateFileEntry({ id: 'x', name: 'n'.repeat(300), kind: 'file', capabilities: [] }).ok).toBe(false)
+  })
+})
