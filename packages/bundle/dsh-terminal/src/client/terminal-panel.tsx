@@ -80,6 +80,7 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
     let inputDispose: { dispose(): void } | undefined
     let resizeDispose: { dispose(): void } | undefined
     let observer: ResizeObserver | undefined
+    let pendingFrame = 0
     let lastSequence = -1
 
     void (async () => {
@@ -146,9 +147,18 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
           observer = new ResizeObserver(entries => {
             const rect = entries[0]?.contentRect
             if (rect === undefined || rect.width < 80 || rect.height < 40) return
-            fit?.fit()
+            // rAF coalescing: bursts of resize entries produce one fit.
+            if (pendingFrame !== 0) return
+            pendingFrame = requestAnimationFrame(() => { pendingFrame = 0; fit?.fit() })
           })
           observer.observe(surface)
+        }
+        // Font/theme refit: a late webfont swap changes cell metrics without a
+        // container resize, so refit once the document fonts settle.
+        if (typeof document !== 'undefined' && (document as Document & { fonts?: { ready: Promise<unknown> } }).fonts !== undefined) {
+          void (document as Document & { fonts: { ready: Promise<unknown> } }).fonts.ready.then(() => {
+            if (!disposed) fit?.fit()
+          })
         }
         if (!disposed) setReady(true)
       } catch (caught) {
@@ -160,6 +170,7 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
       disposed = true
       abort.abort()
       observer?.disconnect()
+      if (pendingFrame !== 0) cancelAnimationFrame(pendingFrame)
       outputDispose?.()
       disposeXtermDisposable(inputDispose)
       disposeXtermDisposable(resizeDispose)

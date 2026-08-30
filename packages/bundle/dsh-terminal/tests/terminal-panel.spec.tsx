@@ -155,7 +155,10 @@ describe('InteractiveTerminal lifecycle (V3 6.1/6.3/6.5)', () => {
     observer.emit(40, 30)
     expect(fit.fit).not.toHaveBeenCalled()
     observer.emit(400, 300)
-    expect(fit.fit).toHaveBeenCalled()
+    observer.emit(500, 400)
+    await new Promise(resolve => setTimeout(resolve, 32))
+    // rAF coalescing: a burst of valid entries produced exactly one fit.
+    expect(fit.fit).toHaveBeenCalledTimes(1)
     expect(container.querySelector('[data-terminal-surface]')).not.toBeNull()
   })
 
