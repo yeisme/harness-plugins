@@ -128,3 +128,36 @@ describe('safe presentation updates (V3 2.6)', () => {
     expect(same.accepted).toBe(false)
   })
 })
+
+describe('V2 persistence allowlist (V3 7.4)', () => {
+  it('round-trips presentation state and drops every forbidden payload key', async () => {
+    const { serializePaneWorkspace, restorePaneWorkspace } = await import('../src/persistence.js')
+    let state = populated()
+    const viewId = Object.keys(state.views)[0]!
+    // malicious extra keys must never survive the field-by-field projection
+    ;(state.views[viewId] as unknown as Record<string, unknown>).content = 'RAW FILE CONTENT'
+    ;(state.views[viewId] as unknown as Record<string, unknown>).accessSource = 'https://evil.example/fetch'
+    ;(state.views[viewId] as unknown as Record<string, unknown>).output = 'xterm buffer\x1b[2J'
+    ;(state.views[viewId] as unknown as Record<string, unknown>).cursor = { row: 3, col: 4 }
+    ;(state.views[viewId] as unknown as Record<string, unknown>).lease = 'token-abc'
+    ;(state.views[viewId] as unknown as Record<string, unknown>).path = '/etc/passwd'
+    ;(state.views[viewId] as unknown as Record<string, unknown>).token = 'Bearer x'
+    ;(state.views[viewId] as unknown as Record<string, unknown>).mediaBytes = 'binary-bytes'
+    const persisted = serializePaneWorkspace(state)
+    const serialized = JSON.stringify(persisted)
+    expect(serialized).not.toContain('RAW FILE CONTENT')
+    expect(serialized).not.toContain('evil.example')
+    expect(serialized).not.toContain('xterm buffer')
+    expect(serialized).not.toContain('token-abc')
+    expect(serialized).not.toContain('/etc/passwd')
+    expect(serialized).not.toContain('Bearer')
+    expect(serialized).not.toContain('binary-bytes')
+    for (const forbidden of ['content', 'accessSource', 'output', 'cursor', 'lease', 'path', 'token', 'mediaBytes']) {
+      expect(persisted.views[viewId!]).not.toHaveProperty(forbidden)
+    }
+    // presentation state survives: safe title + opaque resource key
+    const restored = restorePaneWorkspace(JSON.parse(JSON.stringify(persisted)))
+    expect(restored.views[viewId]?.title).toBe(state.views[viewId]!.title)
+    expect(restored.views[viewId]?.resourceKey).toBe(state.views[viewId]!.resourceKey)
+  })
+})
