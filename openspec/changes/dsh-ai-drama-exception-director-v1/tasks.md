@@ -1,8 +1,8 @@
 ## 1. 异常优先默认投影
 
 - [x] 1.1 将默认 `director` preset 收敛为 Context、Review、Run；Story/Visual/Audio/Delivery 与旧 `show-control` 转为按需打开的 legacy/advanced 视图，additive，不删除既有 pane 实现。 （done 2026-08-30: 默认 preset 既有收敛验证——`applyDirectorPreset` 恰开 Context/Review/Run（set 断言，零 secondary/show-control 泄漏，测）；Story/Visual/Audio 经 `openDramaSecondaryView` 按需（既有）；**show-control 转显式 legacy/advanced**——`DramaShowControlPresetApplyResultV1` 增 `legacy: true` + `deprecation` 常量（两发布窗口保留、独立 removal change），`applyShowPreset` 显式调用时 setMessage 通知 legacy 语义；既有 pane 实现零删除（additive）。Evidence: preset.spec 2 新项（默认恰三视图/legacy 标记）+ 包全量 136/136。）
-- [ ] 1.2 实现 `/drama` 默认投影：当前 context、primary blocker、影响范围、owner reason、一个 owner-approved next action 与 Review/Run/Delivery 深链；多阻塞只呈现排序后首个并给出计数与 Workbench 深链。
-- [ ] 1.3 固定 unknown/partial/stale/owner 不可用行为：显示 typed 状态并禁用 mutation；不自动 retry、不替换 writer、不从展示状态推断 owner 终态。
+- [x] 1.2 实现 `/drama` 默认投影：当前 context、primary blocker、影响范围、owner reason、一个 owner-approved next action 与 Review/Run/Delivery 深链；多阻塞只呈现排序后首个并给出计数与 Workbench 深链。 （done 2026-08-30: `exception-projection.ts` 纯投影——showTitle/showRef（context）、**primary blocker=排序后首个+remaining 计数**（多阻塞永不铺墙）、impactScopeCount（episode refs 去重计数）、ownerReason=safeMessage（唯一展示文案源）、**一个 owner-approved next action**（无 disabledReason 者优先，owner 禁用原因逐字透传）、Review/Run/Delivery 三深链（pane kind 常量）、blockers>1 时 Workbench 溢出深链位。Evidence: exception-projection.spec 4 项 + 包全量 140/140。）
+- [x] 1.3 固定 unknown/partial/stale/owner 不可用行为：显示 typed 状态并禁用 mutation；不自动 retry、不替换 writer、不从展示状态推断 owner 终态。 （done 2026-08-30: 五态 typed 降级（ready/unknown/partial/stale/**owner-unavailable**←offline 映射）——非 ready 一律 `mutationsDisabled` + nextAction 禁用带 `state:` 前缀原因；**纯函数零副作用**=结构性不自动 retry、无 writer 概念、owner 终态只来自 owner 投影字段（无本地推断路径）。Evidence: exception-projection.spec 降级用例（四态循环断言）。）
 
 ## 2. 共享 decision token consumer
 

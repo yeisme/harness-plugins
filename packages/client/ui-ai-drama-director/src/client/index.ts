@@ -102,6 +102,12 @@ import {
   type DramaClientUiSnapshotV1,
 } from './views.js'
 
+export {
+  deriveExceptionFirstProjection,
+  type ExceptionFirstProjectionInput,
+  type ExceptionFirstProjectionV1,
+  type ExceptionProjectionState,
+} from './exception-projection.ts'
 export { DramaClientRegistry } from '@yeisme/dsh-ai-drama-director'
 export type {
   DramaClientRegistrationV1,
