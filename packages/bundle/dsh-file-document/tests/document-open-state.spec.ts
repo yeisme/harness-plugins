@@ -93,3 +93,34 @@ describe('fileTreePathOf breadcrumb chain (V3 4.3)', () => {
     expect(fileTreePathOf(entries, 'orphan').map(entry => entry.id)).toEqual(['orphan'])
   })
 })
+
+describe('formatJsonTree (V3 4.5 tree mode)', () => {
+  it('renders nested objects and arrays as bounded tree lines', async () => {
+    const { formatJsonTree } = await import('../src/client/json-tree.ts')
+    const tree = formatJsonTree(JSON.stringify({ name: 'run', flags: [1, 2], nested: { deep: { leaf: true } } }))
+    expect(tree).toBeDefined()
+    expect(tree).toContain('name: "run"')
+    expect(tree).toContain('[0]: 1')
+    expect(tree).toContain('[1]: 2')
+    expect(tree).toContain('└─')
+    expect(tree!.split('\n').length).toBeGreaterThan(4)
+  })
+
+  it('returns undefined for unparseable sources (plain-source fallback)', async () => {
+    const { formatJsonTree } = await import('../src/client/json-tree.ts')
+    expect(formatJsonTree('not json {')).toBeUndefined()
+    expect(formatJsonTree('')).toBeUndefined()
+  })
+
+  it('bounds oversized values and depth without throwing', async () => {
+    const { formatJsonTree } = await import('../src/client/json-tree.ts')
+    const deep: unknown[] = []
+    let node = deep
+    for (let i = 0; i < 40; i++) { const next: unknown[] = []; node.push(next); node = next }
+    const wide = JSON.stringify(Object.fromEntries(Array.from({ length: 5_000 }, (_, i) => [`k${i}`, 'v'])))
+    const longString = JSON.stringify({ s: 'x'.repeat(10_000) })
+    expect(() => formatJsonTree(JSON.stringify({ deep }))).not.toThrow()
+    expect(formatJsonTree(wide)!.split('\n').length).toBeLessThanOrEqual(2_002)
+    expect(formatJsonTree(longString)).toContain('…')
+  })
+})

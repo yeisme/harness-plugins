@@ -18,6 +18,7 @@ import type { WorkbenchTabV1 } from '@yeisme/dsh-workbench-core'
 import { RichMediaCard, PreviewTableRenderer, createPreviewAccessHandle, delimiterOfMediaType, fileEntryToPreviewResource, parseDelimitedTable } from '@yeisme/dsh-rich-media/client'
 import { FileDocumentPanel, useFileTree } from '@yeisme/dsh-file-document'
 import type { FileEntryV1, FileTreeHostAdapter } from '@yeisme/dsh-file-document'
+import { renderMarkdown } from '@yeisme/dsh-client-ui-desktop-workbench/client'
 import { TerminalPanel, type TerminalPanelState } from '@yeisme/dsh-terminal'
 import { createComposedWorkbenchRegistry } from '../composed-registry.ts'
 import { emptyHostProjection } from '../host-projection.ts'
@@ -116,6 +117,7 @@ export function ComposedWorkbench({ wide, t, hostProjection = emptyHostProjectio
           error={fileTree.status === 'error' ? fileTree.error : undefined}
           onRetry={fileTree.retry}
           renderTable={renderComposedTable}
+          renderMarkdown={(text: string) => renderMarkdown(text)}
         />
       )
     }

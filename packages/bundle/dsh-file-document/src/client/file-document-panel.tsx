@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState, type CSSProperties, type KeyboardEvent, t
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Surface, SurfaceContextBar, SurfaceState } from '@yeisme/dsh-client-ui-surface'
 import type { FileEntryKind, FileEntryV1 } from '../types.ts'
+import { formatJsonTree } from './json-tree.ts'
 import {
   buildFileTree,
   fileTreePathOf,
@@ -53,6 +54,12 @@ export interface FileDocumentPanelProps {
    * ModuleLoader artifacts directly.
    */
   renderTable?: ((entry: FileEntryV1, text: string) => ReactNode) | undefined
+  /**
+   * V3 4.5 markdown renderer injected by the composition layer. Receives the
+   * raw source and returns a sanitized-HTML string (escape-first renderers
+   * only); when absent, markdown falls back to the plain source viewer.
+   */
+  renderMarkdown?: ((text: string) => string) | undefined
 }
 
 const styles = {
@@ -428,7 +435,7 @@ export function documentViewModesOf(entry: FileEntryV1): readonly { mode: Docume
   ]
 }
 
-function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, onRetryText, renderTable }: {
+function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, onRetryText, renderTable, renderMarkdown }: {
   entry: FileEntryV1 | undefined
   previewUrl: string | undefined
   onOpenEntry: ((entry: FileEntryV1) => void) | undefined
@@ -436,6 +443,7 @@ function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, on
   textLoading: boolean
   onRetryText: (() => void) | undefined
   renderTable: ((entry: FileEntryV1, text: string) => ReactNode) | undefined
+  renderMarkdown: ((text: string) => string) | undefined
 }) {
   const [mode, setMode] = useState<DocumentViewMode>('preview')
   if (entry === undefined) {
@@ -494,8 +502,10 @@ function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, on
           activeMode === 'source'
             ? <pre style={styles.previewText} data-dsh-file-preview-source>{text ?? entry.summary ?? ''}</pre>
             : activeMode === 'tree'
-              ? <pre style={styles.previewText} data-dsh-file-preview-tree>{text ?? entry.summary ?? ''}</pre>
-              : <pre style={styles.previewText} data-dsh-file-preview-text>{text ?? entry.summary ?? ''}</pre>
+              ? <pre style={styles.previewText} data-dsh-file-preview-tree>{formatJsonTree(text ?? '') ?? text ?? entry.summary ?? ''}</pre>
+              : entry.mediaType === 'text/markdown' && renderMarkdown !== undefined && text !== undefined
+                ? <div data-dsh-file-preview-markdown className="dsh-markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
+                : <pre style={styles.previewText} data-dsh-file-preview-text>{text ?? entry.summary ?? ''}</pre>
         )}
         {renderState !== 'loading' && isTable && activeMode === 'table' && (
           <div data-dsh-file-preview-table style={{ minHeight: 240 }}>
@@ -662,7 +672,7 @@ function TreeRow({
 }
 
 /** File/Document panel backed by safe file-entry projections. */
-export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOpenEntry, onPinEntry, loadChildren, loading = false, error, onRetry, loadText, showPreviewPanel = true, compact = false, renderTable }: FileDocumentPanelProps) {
+export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOpenEntry, onPinEntry, loadChildren, loading = false, error, onRetry, loadText, showPreviewPanel = true, compact = false, renderTable, renderMarkdown }: FileDocumentPanelProps) {
   const visible = useMemo(() => {
     if (tabId === 'documents') {
       return entries.filter(entry => entry.kind === 'document' || entry.kind === 'pdf' || entry.kind === 'text' || entry.kind === 'directory')
@@ -803,6 +813,7 @@ export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOp
                     setTextById(previous => { const next = { ...previous }; delete next[selectedEntry.id]; return next })
                   }}
                   renderTable={renderTable}
+                  renderMarkdown={renderMarkdown}
                 />
               )}
             </>

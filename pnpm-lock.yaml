@@ -509,6 +509,31 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jsdom@30.0.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(tsx@4.23.12)(yaml@2.9.0)
 
+  packages/bundle/dsh-personal-radar:
+    dependencies:
+      '@yeisme/dsh-client-ui-personal-radar':
+        specifier: workspace:*
+        version: link:../../client/ui-personal-radar
+      '@yeisme/dsh-personal-radar':
+        specifier: workspace:*
+        version: link:../../host/dsh-personal-radar
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: ^4.0.1
+        version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
+      '@deepseek-ai/dsh-client-runtime':
+        specifier: 0.1.0-rc.6
+        version: 0.1.0-rc.6(2e7801b4bc3df44e2ff6c3a6bbd5f2d6)
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(tsx@4.23.12)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jsdom@30.0.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(tsx@4.23.12)(yaml@2.9.0)
+
   packages/bundle/dsh-rich-media:
     dependencies:
       '@e965/xlsx':
@@ -840,6 +865,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-primitives':
         specifier: 0.1.0-rc.6
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
+      '@yeisme/dsh-client-ui-desktop-workbench':
+        specifier: workspace:*
+        version: link:../../client/ui-desktop-workbench
       '@yeisme/dsh-client-ui-surface':
         specifier: workspace:^
         version: link:../../client/ui-surface
@@ -2071,6 +2099,28 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
 
+  packages/client/ui-personal-radar:
+    dependencies:
+      '@yeisme/dsh-personal-radar':
+        specifier: workspace:*
+        version: link:../../host/dsh-personal-radar
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: ^4.0.1
+        version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
+      '@deepseek-ai/dsh-client-runtime':
+        specifier: 0.1.0-rc.6
+        version: 0.1.0-rc.6(2e7801b4bc3df44e2ff6c3a6bbd5f2d6)
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(tsx@4.23.12)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jsdom@30.0.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(tsx@4.23.12)(yaml@2.9.0)
+
   packages/client/ui-selection-annotation:
     dependencies:
       '@yeisme/dsh-selection-host':
@@ -2510,6 +2560,18 @@ importers:
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jsdom@30.0.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(tsx@4.23.12)(yaml@2.9.0)
 
   packages/host/dsh-notify-host:
+    devDependencies:
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(tsx@4.23.12)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jsdom@30.0.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(tsx@4.23.12)(yaml@2.9.0)
+
+  packages/host/dsh-personal-radar:
     devDependencies:
       tsdown:
         specifier: ^0.22.14

@@ -24,5 +24,6 @@ export {
   isDocumentOpenKey,
 } from './document-open-state.ts'
 export type { DocumentOpenAction } from './document-open-state.ts'
+export { formatJsonTree } from './json-tree.ts'
 export { useFileTree } from './use-file-tree.ts'
 export type { FileTreeLoadStatus, UseFileTreeResult } from './use-file-tree.ts'
