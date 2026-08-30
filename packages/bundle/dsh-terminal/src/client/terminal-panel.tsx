@@ -20,6 +20,7 @@ export type TerminalPanelState =
   | 'connected'
   | 'reconnecting'
   | 'exited'
+  | 'lost'
 
 export interface TerminalPanelProps {
   /** Safe terminal state projection from the owning DSH terminal seam. */
@@ -61,6 +62,38 @@ const STATE_TEXT: Record<TerminalPanelState, string> = {
   connected: '已连接',
   reconnecting: '重连中…',
   exited: '已退出',
+  lost: '连接已丢失',
+}
+
+/** V3 6.5 bounded replay: cap resync buffer written on epoch change. */
+export const TERMINAL_REPLAY_MAX_CHUNKS = 200
+
+export interface TerminalReplayPlan {
+  readonly action: 'write' | 'drop'
+  readonly chunks: readonly { readonly data: string; readonly truncated?: boolean | undefined }[]
+  readonly droppedCount: number
+}
+
+/**
+ * Bounded replay after an epoch bump: the owner re-delivers buffered output;
+ * the browser writes at most TERMINAL_REPLAY_MAX_CHUNKS and reports the
+ * honest dropped count instead of flooding the queue.
+ */
+export function planTerminalReplay(chunks: readonly { readonly data: string; readonly truncated?: boolean | undefined }[]): TerminalReplayPlan {
+  if (chunks.length <= TERMINAL_REPLAY_MAX_CHUNKS) {
+    return { action: 'write', chunks, droppedCount: 0 }
+  }
+  return { action: 'write', chunks: chunks.slice(chunks.length - TERMINAL_REPLAY_MAX_CHUNKS), droppedCount: chunks.length - TERMINAL_REPLAY_MAX_CHUNKS }
+}
+
+/**
+ * Browser refresh reattach (V3 6.5): a fresh mount with a known prior epoch
+ * and a new one reattaches without fabricating state; the owner's first
+ * chunk establishes the new baseline (6.1) and any replay rides the plan.
+ */
+export function refreshReattachPlan(previousEpoch: string | undefined, nextEpoch: string): { readonly mode: 'reattach' | 'fresh'; readonly epochChanged: boolean } {
+  const epochChanged = previousEpoch !== undefined && previousEpoch !== nextEpoch
+  return { mode: epochChanged ? 'reattach' : 'fresh', epochChanged }
 }
 
 function disposeXtermDisposable(value: { dispose(): void } | undefined): void {
@@ -280,7 +313,7 @@ function InteractiveTerminal({ host, terminalId, onNewSession, onRename }: { rea
 
 /** Terminal renderer with a lazy xterm boundary and honest fallback states. */
 export function TerminalPanel({ state = 'disconnected', status, host, terminalId, onNewSession, onRename }: TerminalPanelProps) {
-  const interactive = host?.attachTerminal !== undefined && terminalId !== undefined && state !== 'exited'
+  const interactive = host?.attachTerminal !== undefined && terminalId !== undefined && state !== 'exited' && state !== 'lost'
   return (
     <Surface kind="workspace" aria-label="Terminal" data-dsh-terminal-panel data-terminal-state={state}>
       <style data-dsh-terminal-styles>{terminalStyles}</style>

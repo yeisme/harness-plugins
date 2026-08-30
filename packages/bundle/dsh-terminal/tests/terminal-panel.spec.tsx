@@ -328,3 +328,33 @@ describe('session toolbar actions (V3 6.6 New/Split/Rename)', () => {
     promptSpy.mockRestore()
   })
 })
+
+describe('bounded replay + refresh reattach (V3 6.5)', () => {
+  it('replay plans cap at the bound and report the honest dropped count', async () => {
+    const { planTerminalReplay, TERMINAL_REPLAY_MAX_CHUNKS } = await import('../src/client/terminal-panel.tsx')
+    const small = planTerminalReplay([{ data: 'a' }, { data: 'b' }])
+    expect(small).toMatchObject({ action: 'write', droppedCount: 0 })
+    expect(small.chunks).toHaveLength(2)
+    const huge = Array.from({ length: TERMINAL_REPLAY_MAX_CHUNKS + 350 }, (_, i) => ({ data: `c${i}` }))
+    const bounded = planTerminalReplay(huge)
+    expect(bounded.chunks).toHaveLength(TERMINAL_REPLAY_MAX_CHUNKS)
+    expect(bounded.droppedCount).toBe(350)
+    expect(bounded.chunks.at(-1)?.data).toBe(`c${huge.length - 1}`) // keeps the NEWEST tail
+  })
+
+  it('refresh reattach distinguishes epoch bumps from fresh mounts', async () => {
+    const { refreshReattachPlan } = await import('../src/client/terminal-panel.tsx')
+    expect(refreshReattachPlan(undefined, 'e1')).toEqual({ mode: 'fresh', epochChanged: false })
+    expect(refreshReattachPlan('e1', 'e1')).toEqual({ mode: 'fresh', epochChanged: false })
+    expect(refreshReattachPlan('e1', 'e2')).toEqual({ mode: 'reattach', epochChanged: true })
+  })
+
+  it('lost and exited states render their honest terminal states without attaching', () => {
+    const { host } = fakeHost('t-1')
+    for (const state of ['exited', 'lost'] as const) {
+      const { container } = render(createElement(TerminalPanel, { state, host, terminalId: 't-1' }))
+      expect(container.querySelector('[data-terminal-compatibility]')).not.toBeNull()
+      expect(container.querySelector('[data-terminal-surface]')).toBeNull()
+    }
+  })
+})
