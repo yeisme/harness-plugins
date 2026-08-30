@@ -6,8 +6,8 @@
 
 ## 2. 共享 decision token consumer
 
-- [ ] 2.1 接入 owner-authored decision token 的 typed action 消费（费用、版权、canonical accept、外编 apply、final export），提交一律先呈现 exact target/effect/owner/expiry preview 并以 server-minted token CAS。
-- [ ] 2.2 实现幂等 receipt 刷新：已终态 token 返回原 receipt 或 stale/already_decided 时只 refetch；digest/context revision 漂移返回 stale 并禁用 mutation；不建本地审批状态机。
+- [x] 2.1 接入 owner-authored decision token 的 typed action 消费（费用、版权、canonical accept、外编 apply、final export），提交一律先呈现 exact target/effect/owner/expiry preview 并以 server-minted token CAS。 （done 2026-08-30: `decision-token.ts`——五类 DecisionActionKind（cost/rights/canonical-accept/external-edit-apply/final-export）；`deriveDecisionTokenView` 呈现 **exact preview**（target ref+version、owner、actionId、summary、expiresAt）并三重门控（**server-minted token=descriptorRef 缺失**/**expiry 过期**/**kind-preview 一致性**（cost 必带金额/rights 必带状态）——任一即禁 mutation 带原因）；`buildDecisionRequest` 构造 CAS 请求（token ref 逐字回显 + expectedTargetRef/Version + 8-160 idempotency key 界）。Evidence: decision-token.spec 6 项。）
+- [x] 2.2 实现幂等 receipt 刷新：已终态 token 返回原 receipt 或 stale/already_decided 时只 refetch；digest/context revision 漂移返回 stale 并禁用 mutation；不建本地审批状态机。 （done 2026-08-30: `refreshDecisionOutcome(previousReceipt, drift)` 纯函数三路——digest/contextRevision 漂移→**stale-disable**（配合 2.1 门禁即禁 mutation）；已终态（status ok）→**return-original**（原 receipt 直返）；already_decided 或无 receipt→**refetch-only**；函数无状态、无本地审批机、不从展示推断终态。Evidence: decision-token.spec 刷新五断言。）
 
 ## 3. Handoff 与兼容窗口
 

@@ -103,6 +103,14 @@ import {
 } from './views.js'
 
 export {
+  deriveDecisionTokenView,
+  buildDecisionRequest,
+  refreshDecisionOutcome,
+  type DecisionActionKind,
+  type DecisionDescriptorLike,
+  type DecisionTokenViewV1,
+} from './decision-token.ts'
+export {
   deriveExceptionFirstProjection,
   type ExceptionFirstProjectionInput,
   type ExceptionFirstProjectionV1,
