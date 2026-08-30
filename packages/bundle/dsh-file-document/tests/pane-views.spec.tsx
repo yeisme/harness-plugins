@@ -88,6 +88,29 @@ describe('workspace.document non-singleton (V3 4.1)', () => {
   })
 })
 
+describe('openEntry interaction surface (V3 4.2)', () => {
+  it('single click previews, double-click edits durably, duplicate copies, dirty blocks', () => {
+    const pane = fakePane()
+    const surface = applyFileDocumentPaneViews(pane)
+    expect(surface.openEntry(entry('doc-1'), 'preview')).toMatchObject({ mode: 'preview', retention: 'snapshot' })
+    expect(surface.openEntry(entry('doc-1'), 'edit')).toMatchObject({ mode: 'edit', retention: 'keep-alive' })
+    expect(surface.openEntry(entry('doc-1'), 'duplicate')?.resourceKey).toBe('document:doc-1:copy-1')
+    surface.markDirty('doc-1', true)
+    expect(surface.openEntry(entry('doc-1'), 'preview')).toMatchObject({ blocked: 'dirty' })
+    expect(pane.opens.at(-1)?.resourceKey).toBe('document:doc-1:copy-1') // blocked preview swallowed, no open
+    surface.switchSession('s2')
+    expect(pane.opens).toHaveLength(3) // session switch itself never opens
+  })
+
+  it('directories and path-shaped ids never open through openEntry', () => {
+    const pane = fakePane()
+    const surface = applyFileDocumentPaneViews(pane)
+    expect(surface.openEntry({ ...entry('d1'), kind: 'directory' } as never, 'preview')).toBeUndefined()
+    expect(surface.openEntry(entry('a/b'), 'edit')).toBeUndefined()
+    expect(pane.opens).toHaveLength(0)
+  })
+})
+
 describe('honest degradation and disposal (V3 4.1)', () => {
   it('degrades to registered=false without a pane workbench face', () => {
     for (const absent of [undefined, null, {}, { registerView: 1 }, { registerView: () => () => {}, openView: 'nope' }]) {
