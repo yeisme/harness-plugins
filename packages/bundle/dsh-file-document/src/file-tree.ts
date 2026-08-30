@@ -60,3 +60,18 @@ export function toggleFileTreeDirectory(state: FileTreeUiState, entryId: string)
 export function selectFileTreeEntry(state: FileTreeUiState, entryId: string): FileTreeUiState {
   return { expandedIds: new Set(state.expandedIds), selectedId: entryId }
 }
+
+/** Ancestor chain (root first) ending at the entry id, or [] when absent. */
+export function fileTreePathOf(entries: readonly FileEntryV1[], entryId: string | null): readonly FileEntryV1[] {
+  if (entryId === null) return []
+  const byId = new Map(entries.map(entry => [entry.id, entry]))
+  const chain: FileEntryV1[] = []
+  let current = byId.get(entryId)
+  const seen = new Set<string>()
+  while (current !== undefined && !seen.has(current.id)) {
+    seen.add(current.id)
+    chain.unshift(current)
+    current = current.parentId === undefined ? undefined : byId.get(current.parentId)
+  }
+  return chain
+}

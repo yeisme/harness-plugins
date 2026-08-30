@@ -4,6 +4,7 @@ import {
   documentOpenReducer,
   isDocumentOpenKey,
 } from '../src/client/document-open-state.ts'
+import { fileTreePathOf } from '../src/file-tree.ts'
 
 function stateOf(overrides: Partial<Parameters<typeof documentOpenReducer>[0]> = {}) {
   return { ...EMPTY_DOCUMENT_OPEN_STATE, ...overrides }
@@ -73,5 +74,22 @@ describe('isDocumentOpenKey (V3 4.2 key safety)', () => {
     expect(isDocumentOpenKey({ id: 'doc-1', name: 'a.md', kind: 'file', capabilities: [] } as never)).toBe(true)
     expect(isDocumentOpenKey({ id: 'a/b', name: 'a.md', kind: 'file', capabilities: [] } as never)).toBe(false)
     expect(isDocumentOpenKey({ id: 'd1', name: 'dir', kind: 'directory', capabilities: [] } as never)).toBe(false)
+  })
+})
+
+describe('fileTreePathOf breadcrumb chain (V3 4.3)', () => {
+  it('walks ancestors root-first and tolerates cycles or missing parents', () => {
+    const entries = [
+      { id: 'root', name: 'root', kind: 'directory', capabilities: [] },
+      { id: 'src', name: 'src', kind: 'directory', parentId: 'root', capabilities: [] },
+      { id: 'main', name: 'main.ts', kind: 'text', parentId: 'src', capabilities: [] },
+      { id: 'cycle-a', name: 'a', kind: 'directory', parentId: 'cycle-b', capabilities: [] },
+      { id: 'cycle-b', name: 'b', kind: 'directory', parentId: 'cycle-a', capabilities: [] },
+      { id: 'orphan', name: 'orphan', kind: 'file', parentId: 'gone', capabilities: [] },
+    ] as never
+    expect(fileTreePathOf(entries, 'main').map(entry => entry.id)).toEqual(['root', 'src', 'main'])
+    expect(fileTreePathOf(entries, null)).toEqual([])
+    expect(fileTreePathOf(entries, 'cycle-a').map(entry => entry.id)).toEqual(['cycle-b', 'cycle-a']) // bounded: cycle terminates, never loops
+    expect(fileTreePathOf(entries, 'orphan').map(entry => entry.id)).toEqual(['orphan'])
   })
 })

@@ -15,6 +15,7 @@ import { Surface, SurfaceContextBar, SurfaceState } from '@yeisme/dsh-client-ui-
 import type { FileEntryKind, FileEntryV1 } from '../types.ts'
 import {
   buildFileTree,
+  fileTreePathOf,
   initialFileTreeUiState,
   selectFileTreeEntry,
   toggleFileTreeDirectory,
@@ -151,6 +152,29 @@ const styles = {
     fontWeight: 560,
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+  },
+  breadcrumb: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 2,
+    minWidth: 0,
+    overflow: 'hidden',
+    fontSize: '11px',
+    color: 'var(--vk-text-tertiary)',
+    whiteSpace: 'nowrap',
+  },
+  breadcrumbItem: {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    border: 0,
+    padding: '2px 4px',
+    borderRadius: 6,
+    background: 'transparent',
+    color: 'inherit',
+    font: 'inherit',
+    cursor: 'pointer',
   },
   meta: {
     display: 'flex',
@@ -534,6 +558,7 @@ export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOp
   }, [entries, tabId])
   const tree = useMemo(() => buildFileTree(visible), [visible])
   const [uiState, setUiState] = useState(initialFileTreeUiState)
+  const path = useMemo(() => fileTreePathOf(visible, uiState.selectedId), [visible, uiState.selectedId])
   const [loadingIds, setLoadingIds] = useState<ReadonlySet<string>>(() => new Set())
   const [errorIds, setErrorIds] = useState<ReadonlySet<string>>(() => new Set())
 
@@ -617,6 +642,23 @@ export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOp
         ? <SurfaceState phase="empty" title={tabId === 'files' ? '文件源尚未连接' : '还没有可预览的文档'} description={tabId === 'files' ? '连接工作区文件服务后，目录会自动显示在这里。' : '选择可预览的文本、图片或 PDF 后，内容会显示在这里。'} data-dsh-file-empty />
           : (
             <>
+              {path.length > 1 && (
+                <nav aria-label="选定路径" style={styles.breadcrumb} data-dsh-file-breadcrumb>
+                  {path.map((item, index) => (
+                    <span key={item.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
+                      {index > 0 && <span aria-hidden="true">/</span>}
+                      {index === path.length - 1
+                        ? <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--vk-text-secondary)' }}>{item.name}</strong>
+                        : <button
+                            type="button"
+                            style={styles.breadcrumbItem}
+                            onClick={() => setUiState(previous => ({ ...previous, selectedId: item.id }))}
+                            aria-label={`定位到 ${item.name}`}
+                          >{item.name}</button>}
+                    </span>
+                  ))}
+                </nav>
+              )}
               <div style={styles.tree} role="tree" aria-label={tabId === 'files' ? 'Files' : 'Documents'} data-dsh-file-tree>
                 {tree.map(node => (
                   <TreeRow
