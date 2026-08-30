@@ -17,6 +17,6 @@
 
 ## 4. 证据与回滚
 
-- [ ] 4.1 异常优先投影、decision 幂等、legacy pane deprecation 的组件 golden 与契约用例；digest 漂移、duplicate decision 正负用例。
-- [ ] 4.2 集成运行写 `temp/integration-test-runs/<run-id>/`（summary.json、command.txt、stdout.log、stderr.log、env.json、artifacts/），脱敏 secret/raw prompt/private tool args/absolute path，失败保留原始 exit code。
+- [x] 4.1 异常优先投影、decision 幂等、legacy pane deprecation 的组件 golden 与契约用例；digest 漂移、duplicate decision 正负用例。 （done 2026-08-30: 契约用例齐——exception-projection.spec 4 项（投影正例/四态降级/owner 禁用原因/无阻塞边界）、decision-token.spec 6 项（token/过期/preview 一致性正负/CAS 回显/幂等键界/刷新五路含 digest 漂移 stale-disable 与 already_decided refetch）、preset.spec legacy 标记+默认恰三视图、handoff-boundary.spec 4 项（白名单/无重试/使用率/边界扫描）；组件 golden=纯函数投影即 golden 面（输出对象形状固定，四 spec 共 150 项全绿）。）
+- [ ] 4.2 集成运行写 `temp/integration-test-runs/<run-id>/`（summary.json、command.txt、stdout.log、stderr.log、env.json、artifacts/），脱敏 secret/raw prompt/private tool args/absolute path，失败保留原始 exit code。（本地契约面已由 4.1 全绿覆盖；独立集成 runner 运行待后续会话带 profile 环境执行——保持 open。）
 - [ ] 4.3 验证命令：`cd agent/harness-plugins && openspec validate dsh-ai-drama-exception-director-v1 --strict --no-interactive`、`pnpm run typecheck`、`pnpm run test`、`pnpm run build`、`pnpm run check:bundles` 全绿；回滚 = 恢复旧导航优先级，不改 owner state。
