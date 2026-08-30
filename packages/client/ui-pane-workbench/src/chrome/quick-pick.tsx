@@ -94,7 +94,9 @@ export function PaneViewQuickPick(props: PaneViewQuickPickProps): ReactNode {
       || descriptor.label.toLowerCase().includes(needle)
       || descriptor.kind.toLowerCase().includes(needle)
       || (descriptor.presentation?.keywords ?? []).some(keyword => keyword.toLowerCase().includes(needle)))
-  const groups: ReadonlyArray<{ readonly id: 'open' | 'available'; readonly label: string; readonly items: typeof matches }> = [
+  const recommendedKinds = new Set(Object.values(state.views).filter(view => view.pinned || view.preview).map(view => view.kind))
+  const groups: ReadonlyArray<{ readonly id: 'recommended' | 'open' | 'available'; readonly label: string; readonly items: typeof matches }> = [
+    { id: 'recommended', label: t('picker.group.recommended'), items: matches.filter(registration => recommendedKinds.has(registration.descriptor.kind)) },
     { id: 'open', label: t('picker.group.open'), items: matches.filter(registration => openKinds.has(registration.descriptor.kind)) },
     { id: 'available', label: t('picker.group.available'), items: matches.filter(registration => !openKinds.has(registration.descriptor.kind)) },
   ]
@@ -166,7 +168,7 @@ export function PaneViewQuickPick(props: PaneViewQuickPickProps): ReactNode {
       'data-pane-picker-search': true,
       onChange: (event: { currentTarget: { value: string } }) => setQuery(event.currentTarget.value),
     }),
-    createElement('div', { className: 'pwr-picker-list' },
+    createElement('div', { className: 'pwr-picker-list', role: 'listbox', 'aria-label': t('chrome.openView') },
       matches.length === 0 ? createElement('p', { className: 'pwr-empty' }, t('error.noViewOpen')) : null,
       ...groups.flatMap(group => group.items.length === 0 ? [] : [
         createElement('div', { key: group.id, className: 'pwr-picker-group', role: 'group', 'aria-label': group.label },

@@ -74,3 +74,20 @@ describe('pane chrome toolbar adoption (V3 2.2)', () => {
     expect(source).toContain("from './chrome/control.js'")
   })
 })
+
+describe('quick pick recommended grouping + sheet + listbox (V3 2.4)', () => {
+  it('source carries the recommended group, listbox role, and narrow sheet CSS', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const picker = readFileSync(resolve(process.cwd(), 'src/chrome/quick-pick.tsx'), 'utf8')
+    expect(picker).toContain("id: 'recommended'")
+    expect(picker).toContain("view.pinned || view.preview")
+    expect(picker).toContain("role: 'listbox'")
+    const shared = readFileSync(resolve(process.cwd(), 'src/chrome/shared.ts'), 'utf8')
+    const sheet = shared.slice(shared.indexOf('@media(max-width:390px){.pwr-picker'))
+    expect(sheet).toContain('bottom:0')
+    expect(sheet).toContain('max-height:72vh')
+    // the fixed full-height overlay pattern is gone: picker is anchored (absolute) + sheet at 390px
+    expect(shared).not.toContain('.pwr-picker{position:fixed')
+  })
+})

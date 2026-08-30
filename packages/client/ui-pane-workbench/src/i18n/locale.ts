@@ -63,6 +63,7 @@ const EN_BUNDLE: LocaleBundle = {
     // View Picker
     'picker.title': 'Open View',
     'picker.search.placeholder': 'Search views…',
+    'picker.group.recommended': 'Recommended',
     'picker.group.open': 'Open',
     'picker.group.available': 'Available',
     'management.title': 'Pane Center',
@@ -398,6 +399,7 @@ const ZH_BUNDLE: LocaleBundle = {
     // View Picker
     'picker.title': '打开视图',
     'picker.search.placeholder': '搜索视图…',
+    'picker.group.recommended': '推荐',
     'picker.group.open': '已打开',
     'picker.group.available': '可用',
     'management.title': '窗格中心',
