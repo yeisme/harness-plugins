@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Surface, SurfaceContextBar, SurfaceState } from '@yeisme/dsh-client-ui-surface'
+import { openTerminalLink } from './link-policy.ts'
 import type { TerminalAttachmentV2, TerminalHostV2 } from '@yeisme/dsh-terminal-host'
 
 export type TerminalPanelState =
@@ -143,7 +144,9 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
           serializeRef.current = serialize
         } catch { /* optional: Copy falls back to selection */ }
         terminalRef.current = terminal
-        terminal.loadAddon(new WebLinksAddon(() => { void 0 }))
+        // V3 6.7: links go through the deny-by-default policy; nothing is
+        // auto-typed or auto-entered into the PTY.
+        terminal.loadAddon(new WebLinksAddon((_event, uri) => { void openTerminalLink(uri) }))
         terminal.loadAddon(new Unicode11Addon())
         terminal.unicode.activeVersion = '11'
         try {
