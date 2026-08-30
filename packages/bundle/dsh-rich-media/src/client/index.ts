@@ -38,6 +38,15 @@ export { seedMediaPreview, listSeededMedia, subscribeSeededMedia, clearSeededMed
 export { CSV_PARSE_BUDGET, delimiterOfMediaType, parseDelimitedTable } from './preview/csv-parse.ts'
 export { fileEntryToPreviewResource } from './preview/adapters.ts'
 export { PreviewTableRenderer, previewTableRendererDescriptor } from './preview/table-renderer.tsx'
+export {
+  PdfRenderer,
+  loadPdfjs,
+  nextPdfZoom,
+  pdfOutlineFlatten,
+  pdfSearchMatches,
+  PDF_ZOOM_STEPS,
+} from './preview/pdf-renderer.tsx'
+export type { PdfRenderLabels } from './preview/pdf-renderer.tsx'
 export { createPreviewAccessHandle, isPreviewAccessAbort } from './preview/access.ts'
 export type { PreviewAccessHandleV1 } from './preview/types.ts'
 export type { CsvParseBudget, CsvParseResult, CsvTruncateReason } from './preview/csv-parse.ts'

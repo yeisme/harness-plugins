@@ -45,7 +45,13 @@ describe.skipIf(!built)('dsh-rich-media client.js ModuleLoader runtime smoke', (
     expect(exports.MediaSheetRenderer).toBeTypeOf('function')
     expect(exports.classifyFileEntry).toBeTypeOf('function')
     expect(exports.registerFilePreviewRenderers).toBeTypeOf('function')
-    expect(requireSpy.mock.calls.map(call => call[0]).sort()).toEqual([
+    const evaluated = requireSpy.mock.calls.map(call => call[0])
+    // Registration must not evaluate any heavy renderer dep (V3 1.6/4.7):
+    // pdfjs-dist, @e965/xlsx, mammoth, wavesurfer.js, hls.js stay lazy.
+    for (const heavy of ['pdfjs-dist', '@e965/xlsx', 'mammoth', 'wavesurfer.js', 'hls.js']) {
+      expect(evaluated, `heavy dep evaluated: ${heavy}`).not.toContain(heavy)
+    }
+    expect([...new Set(evaluated)].sort()).toEqual([
       '@deepseek-ai/dsh-client-ui-primitives',
       'react',
       'react-dom',

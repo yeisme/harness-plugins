@@ -63,6 +63,12 @@ export interface FileDocumentPanelProps {
   renderMarkdown?: ((text: string) => string) | undefined
   /** Owner-provided bounded bytes for binary preview (V3 4.8); absent keeps the honest unsupported state. */
   bytes?: Uint8Array | undefined
+  /**
+   * V3 4.7 PDF renderer injected by the composition layer (pdfjs worker
+   * path). The native iframe remains ONLY as the worker/CSP-failure
+   * fallback or when no renderer is injected.
+   */
+  renderPdf?: ((entry: FileEntryV1, previewUrl: string) => ReactNode) | undefined
 }
 
 const styles = {
@@ -438,7 +444,7 @@ export function documentViewModesOf(entry: FileEntryV1): readonly { mode: Docume
   ]
 }
 
-function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, onRetryText, renderTable, renderMarkdown, bytes }: {
+function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, onRetryText, renderTable, renderMarkdown, bytes, renderPdf }: {
   entry: FileEntryV1 | undefined
   previewUrl: string | undefined
   onOpenEntry: ((entry: FileEntryV1) => void) | undefined
@@ -448,6 +454,7 @@ function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, on
   renderTable: ((entry: FileEntryV1, text: string) => ReactNode) | undefined
   renderMarkdown: ((text: string) => string) | undefined
   bytes: Uint8Array | undefined
+  renderPdf: ((entry: FileEntryV1, previewUrl: string) => ReactNode) | undefined
 }) {
   const [mode, setMode] = useState<DocumentViewMode>('preview')
   if (entry === undefined) {
@@ -501,7 +508,11 @@ function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, on
         {renderState === 'loading' && <div style={styles.docState} data-dsh-doc-state="loading"><span>正在读取文件…</span></div>}
         {renderState !== 'loading' && entry.kind === 'directory' && <span>展开目录查看文件。</span>}
         {renderState !== 'loading' && canMedia && entry.kind === 'image' && activeMode !== 'source' && <img style={styles.previewImage} src={previewUrl} alt={entry.name} />}
-        {renderState !== 'loading' && canMedia && entry.kind === 'pdf' && activeMode !== 'source' && <iframe style={styles.previewFrame} src={previewUrl} title={entry.name} sandbox="allow-same-origin" referrerPolicy="no-referrer" />}
+        {renderState !== 'loading' && canMedia && entry.kind === 'pdf' && activeMode !== 'source' && (
+          renderPdf !== undefined && previewUrl !== undefined
+            ? renderPdf(entry, previewUrl)
+            : <iframe style={styles.previewFrame} src={previewUrl} title={entry.name} sandbox="allow-same-origin" referrerPolicy="no-referrer" data-dsh-pdf-iframe-fallback />
+        )}
         {renderState !== 'loading' && isText && !textLoading && activeMode !== 'table' && (
           activeMode === 'source'
             ? <pre style={styles.previewText} data-dsh-file-preview-source>{text ?? entry.summary ?? ''}</pre>
@@ -686,7 +697,7 @@ function TreeRow({
 }
 
 /** File/Document panel backed by safe file-entry projections. */
-export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOpenEntry, onPinEntry, loadChildren, loading = false, error, onRetry, loadText, showPreviewPanel = true, compact = false, renderTable, renderMarkdown, bytes }: FileDocumentPanelProps) {
+export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOpenEntry, onPinEntry, loadChildren, loading = false, error, onRetry, loadText, showPreviewPanel = true, compact = false, renderTable, renderMarkdown, bytes, renderPdf }: FileDocumentPanelProps) {
   const visible = useMemo(() => {
     if (tabId === 'documents') {
       return entries.filter(entry => entry.kind === 'document' || entry.kind === 'pdf' || entry.kind === 'text' || entry.kind === 'directory')
@@ -829,6 +840,7 @@ export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOp
                   renderTable={renderTable}
                   renderMarkdown={renderMarkdown}
                   bytes={bytes}
+                  renderPdf={renderPdf}
                 />
               )}
             </>

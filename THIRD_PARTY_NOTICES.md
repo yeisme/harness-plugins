@@ -11,6 +11,7 @@
 | `@e965/xlsx` | ^0.20.3 | Apache-2.0 | XLSX/XLSM sheet 预览（动态 `import()`，仅浏览器变体） |
 | `mammoth` | ^1.12.1 | BSD-2-Clause | DOCX → 受限 HTML 预览（经 pnpm patch 的浏览器变体） |
 | `dompurify` | ^3.4.14 | (MPL-2.0 OR Apache-2.0) | 渲染输出 sanitize，禁 active content |
+| `pdfjs-dist` | ^6.3.289 | Apache-2.0 | PDF 分页/大纲/文本层渲染（dynamic import 懒边界，worker 失败回退 disableWorker） |
 
 传递依赖（由上表引入，未直接 import）：`jszip` ^3.7.1（MIT，mammoth 内部）等；以 lockfile 为准。
 
@@ -21,11 +22,10 @@
 | 包 | License | renderer |
 |---|---|---|
 | `monaco-editor` | MIT | 高级源码/结构化编辑（desktop 显式 advanced mode） |
-| `pdfjs-dist` | Apache-2.0 | PDF 分页/缩略图/搜索/text layer |
 | `wavesurfer.js` | BSD-3-Clause | 音频波形/Timeline/Regions |
 | `hls.js` | Apache-2.0 | MSE 播放（仅 native HLS 不可用时） |
 
-锁定策略：core registry/chrome entry 零上述静态引用（由 `tests/bundle-runtime-smoke.spec.ts` 与 chunk 产物双重钉住）；未来 3D 渲染依赖同样只允许进入本边界，不进入 V3 core。
+锁定策略：core registry/chrome entry 零上述静态引用（pdfjs-dist 已升级为 `@yeisme/dsh-rich-media` 的 dynamic-import 直接依赖，仍不在 core 静态入口）（由 `tests/bundle-runtime-smoke.spec.ts` 与 chunk 产物双重钉住）；未来 3D 渲染依赖同样只允许进入本边界，不进入 V3 core。
 
 ## 3. Worker 与 CSP 注意事项
 
