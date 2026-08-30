@@ -133,7 +133,9 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
         fit.fit()
         outputDispose = attachment.subscribe(chunk => {
           if (chunk.terminalId !== terminalId || chunk.epoch !== attachment?.epoch || chunk.sequence <= lastSequence) return
-          if (chunk.sequence > lastSequence + 1) terminal?.write('\r\n[output gap; reconnect to resync]\r\n')
+          // The first observed chunk after (re)attach is the stream baseline —
+          // a mid-session sequence offset is not a gap.
+          if (lastSequence >= 0 && chunk.sequence > lastSequence + 1) terminal?.write('\r\n[output gap; reconnect to resync]\r\n')
           lastSequence = chunk.sequence
           if (chunk.truncated === true) terminal?.write('\r\n[output truncated; reconnect to resync]\r\n')
           terminal?.write(chunk.data)
