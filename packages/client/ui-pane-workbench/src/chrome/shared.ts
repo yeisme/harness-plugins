@@ -78,6 +78,13 @@ export const REGION_STYLES = `.pwr-root{position:relative;width:100%;height:100%
 .pwr-rail{position:absolute;inset:0 auto 0 0;width:43px;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 5px;box-sizing:border-box;background:var(--dsw-specific-sidebar-fill,#1c1c1f);z-index:3}
 .pwr-rail-fonts{margin-top:auto;display:flex;flex-direction:column;gap:4px}
 .pwr-rail button,.pwr-icon{width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:var(--vk-text-secondary);display:grid;place-items:center;cursor:pointer}
+.pwr-tip{position:relative;display:inline-flex}
+.pwr-tip::after{content:attr(data-tip);position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%) translateY(2px);z-index:60;max-width:240px;padding:4px 8px;border-radius:7px;background:var(--vk-bg-elevated,#2a2a2f);border:1px solid var(--vk-border-l2,rgba(255,255,255,.12));color:var(--vk-text-primary,#ececf1);font-size:11px;line-height:1.45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:0;visibility:hidden;pointer-events:none;transition:opacity 120ms ease-out,transform 120ms ease-out}
+.pwr-tip:hover::after,.pwr-tip:focus-within::after{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+.pwr-tip [data-status='active']{color:var(--vk-state-positive)}
+.pwr-tip [data-status='critical']:not(:disabled){color:var(--vk-state-error)}
+.pwr-icon-badge{font-size:10px;font-variant-numeric:tabular-nums;color:var(--vk-text-tertiary)}
+@media(prefers-reduced-motion:reduce){.pwr-tip::after{transition:none}}
 .pwr-rail button:hover,.pwr-rail button:focus-visible,.pwr-icon:hover,.pwr-icon:focus-visible{background:var(--vk-fill-hover);color:var(--vk-text-primary);outline:2px solid var(--vk-border-focus);outline-offset:-2px}
 .pwr-rail .pwr-active{background:var(--vk-fill-selected);color:var(--vk-text-link);box-shadow:inset 2px 0 0 var(--vk-accent)}
 .pwr-body{position:absolute;inset:0;display:flex;flex-direction:column;min-width:0;min-height:0;background:inherit}

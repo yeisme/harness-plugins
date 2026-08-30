@@ -13,6 +13,7 @@
 
 import { createElement, useMemo, useState, useSyncExternalStore, type MouseEvent, type KeyboardEvent, type PointerEvent } from 'react'
 import { WorkbenchIcon, type WorkbenchIconName } from './icon.js'
+import { WorkbenchIconButton } from './chrome/control.js'
 import { formatT, t } from './i18n/locale.js'
 import {
   filterOverflowTabs,
@@ -261,36 +262,32 @@ export function PaneTabActions(props: PaneTabActionsProps): React.ReactNode {
       onClick: props.onOpenManager,
     }, createElement(WorkbenchIcon, { name: 'list' }), createElement('span', null, props.tabCount ?? group.tabs.length)),
 
-    activeView === undefined ? null : createElement('button', {
-      type: 'button',
-      title: formatT('chrome.moreActions', { name: activeView.title }),
-      'aria-label': formatT('chrome.moreActions', { name: activeView.title }),
+    activeView === undefined ? null : createElement(WorkbenchIconButton, {
+      icon: 'more',
+      label: formatT('chrome.moreActions', { name: activeView.title }),
       'aria-haspopup': 'menu',
       onClick: () => onContextMenu(activeView.id),
-    }, createElement(WorkbenchIcon, { name: 'more' })),
+    }),
 
-    activeView === undefined ? null : createElement('button', {
-      type: 'button',
-      title: maximized ? t('chrome.restorePane') : t('chrome.maximizePane'),
-      'aria-label': maximized ? t('chrome.restorePane') : t('chrome.maximizePane'),
+    activeView === undefined ? null : createElement(WorkbenchIconButton, {
+      icon: maximized ? 'restore' : 'maximize',
+      label: maximized ? t('chrome.restorePane') : t('chrome.maximizePane'),
       onClick: () => {
         controller.dispatch(maximized ? { type: 'restore_layout' } : { type: 'maximize_group', groupId: group.id })
       },
-    }, createElement(WorkbenchIcon, { name: maximized ? 'restore' : 'maximize' })),
+    }),
 
-    activeView === undefined || props.onHidePane !== undefined ? null : createElement('button', {
-      type: 'button',
-      title: formatT('tab.closeWithName', { name: activeView.title }),
-      'aria-label': formatT('tab.closeWithName', { name: activeView.title }),
+    activeView === undefined || props.onHidePane !== undefined ? null : createElement(WorkbenchIconButton, {
+      icon: 'close',
+      label: formatT('tab.closeWithName', { name: activeView.title }),
       onClick: () => controller.dispatch({ type: 'close_view', viewId: activeView.id }),
-    }, createElement(WorkbenchIcon, { name: 'close' })),
+    }),
 
-    props.onHidePane === undefined ? null : createElement('button', {
-      type: 'button',
-      title: t('chrome.hideWorkbench'),
-      'aria-label': t('chrome.hideWorkbench'),
+    props.onHidePane === undefined ? null : createElement(WorkbenchIconButton, {
+      icon: 'collapse',
+      label: t('chrome.hideWorkbench'),
       onClick: props.onHidePane,
-    }, createElement(WorkbenchIcon, { name: 'collapse' })),
+    }),
   )
 }
 
