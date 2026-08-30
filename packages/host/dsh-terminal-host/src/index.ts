@@ -54,6 +54,19 @@ export interface TerminalOutputChunkV2 {
   readonly truncated?: boolean
 }
 
+/**
+ * Additive control lease (V3 6.4). Legacy attachments omit `control` entirely;
+ * when present, input MUST only be written while state is 'granted' —
+ * ungranted keypresses are dropped, never buffered, and takeover enables
+ * input only after the owner grants.
+ */
+export interface TerminalControlLeaseV1 {
+  readonly state: 'granted' | 'pending' | 'denied'
+  readonly busy?: boolean | undefined
+  subscribe(listener: (state: 'granted' | 'pending' | 'denied') => void): () => void
+  requestTakeover?: () => Promise<{ readonly status: 'ok' | 'denied' | 'busy' }> | undefined
+}
+
 export interface TerminalAttachmentV2 {
   readonly terminalId: string
   readonly epoch: string
@@ -65,6 +78,8 @@ export interface TerminalAttachmentV2 {
   resize(cols: number, rows: number): Promise<TerminalMutationReceiptV1>
   /** Detach the browser view without killing the PTY. */
   detach(): Promise<void>
+  /** Optional control lease; absent on legacy attachments (no gate). */
+  readonly control?: TerminalControlLeaseV1 | undefined
 }
 
 export interface TerminalHostV2 extends Omit<TerminalHostV1, 'version'> {

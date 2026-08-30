@@ -36,6 +36,7 @@ const terminalStyles = `
 [data-dsh-terminal-panel] .dt-interactive{min-width:0}
 [data-dsh-terminal-panel] .dt-surface-toolbar{display:flex;justify-content:flex-end;gap:6px;min-height:30px;margin-bottom:6px}
 [data-dsh-terminal-panel] .dt-error{margin-right:auto;color:var(--vk-state-error)}
+[data-dsh-terminal-panel] .dt-lease{margin-right:auto;font-size:12px;color:var(--vk-state-warn)}
 [data-dsh-terminal-panel] [data-terminal-surface]{min-height:320px;overflow:hidden;padding:12px;background:var(--vk-bg-base);border:1px solid var(--vk-border-l2);border-radius:12px}
 [data-dsh-terminal-panel] [data-terminal-surface] { position: relative; }
 [data-dsh-terminal-panel] [data-terminal-surface] .xterm { position: relative; height: 100%; min-height: 292px; padding: 2px; user-select: none; }
@@ -63,9 +64,11 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
   const surfaceRef = useRef<HTMLDivElement>(null)
   const fitRef = useRef<{ fit(): void }>()
   const searchRef = useRef<{ findNext(term: string): boolean; findPrevious(term: string): boolean }>()
+  const attachmentControlRequestRef = useRef<(() => Promise<{ readonly status: 'ok' | 'denied' | 'busy' } | undefined>) | undefined>()
   const [error, setError] = useState<string | undefined>()
   const [ready, setReady] = useState(false)
   const [connectionAttempt, setConnectionAttempt] = useState(0)
+  const [lease, setLease] = useState<'granted' | 'pending' | 'denied' | undefined>()
 
   useEffect(() => {
     const surface = surfaceRef.current
@@ -80,6 +83,7 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
     let inputDispose: { dispose(): void } | undefined
     let resizeDispose: { dispose(): void } | undefined
     let observer: ResizeObserver | undefined
+    let leaseDispose: (() => void) | undefined
     let pendingFrame = 0
     let lastSequence = -1
 
@@ -141,7 +145,18 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
           if (chunk.truncated === true) terminal?.write('\r\n[output truncated; reconnect to resync]\r\n')
           terminal?.write(chunk.data)
         })
-        inputDispose = terminal.onData(data => { void attachment?.writeInput(data) })
+        // V3 6.4 input gate: an explicit lease drops ungranted keypresses
+        // (never buffers); legacy attachments without `control` stay ungated.
+        const leaseOf = () => attachment?.control
+        if (leaseOf() !== undefined) setLease(leaseOf()!.state)
+        const requestTakeover = leaseOf()?.requestTakeover
+        attachmentControlRequestRef.current = requestTakeover === undefined ? undefined : () => Promise.resolve(requestTakeover())
+        leaseDispose = leaseOf()?.subscribe(state => setLease(state))
+        inputDispose = terminal.onData(data => {
+          const control = leaseOf()
+          if (control !== undefined && control.state !== 'granted') return
+          void attachment?.writeInput(data)
+        })
         resizeDispose = terminal.onResize(({ cols, rows }) => { void attachment?.resize(cols, rows) })
         if (typeof ResizeObserver !== 'undefined') {
           observer = new ResizeObserver(entries => {
@@ -170,6 +185,7 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
       disposed = true
       abort.abort()
       observer?.disconnect()
+      leaseDispose?.()
       if (pendingFrame !== 0) cancelAnimationFrame(pendingFrame)
       outputDispose?.()
       disposeXtermDisposable(inputDispose)
@@ -184,6 +200,11 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
   return <div className="dt-interactive">
     {(error !== undefined || ready) && <div className="dt-surface-toolbar">
       {error !== undefined && <span role="alert" className="dt-error">{error}</span>}
+      {ready && lease !== undefined && lease !== 'granted' && <span role="status" data-terminal-lease={lease} className="dt-lease">{lease === 'pending' ? '等待控制授权…（输入未发送）' : '观察中（输入未发送）'}</span>}
+      {ready && lease !== undefined && lease !== 'granted' && host.attachTerminal !== undefined && <Button type="button" size="sm" variant="toolbar" data-terminal-takeover onClick={async () => {
+        const result = await attachmentControlRequestRef.current?.()
+        if (result === undefined || result.status === 'busy') { setLease('pending') }
+      }}>接管</Button>}
       {ready && <Button type="button" size="sm" variant="toolbar" onClick={() => fitRef.current?.fit()} data-terminal-fit>适配窗口</Button>}
       {error !== undefined && <Button type="button" size="sm" variant="toolbar" onClick={() => { setReady(false); setError(undefined); setConnectionAttempt(value => value + 1) }} data-terminal-reconnect>重新连接</Button>}
     </div>}

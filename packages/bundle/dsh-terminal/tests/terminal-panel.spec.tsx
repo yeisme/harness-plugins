@@ -43,7 +43,13 @@ interface FakeAttachment extends TerminalAttachmentV2 {
   emitInput(data: string): void
 }
 
-function fakeHost(terminalId = 't-1'): { host: TerminalHostV2; attachment: FakeAttachment; attach: ReturnType<typeof vi.fn> } {
+interface LeaseControls {
+  state: 'granted' | 'pending' | 'denied'
+  listeners: Set<(state: 'granted' | 'pending' | 'denied') => void>
+  setState(state: 'granted' | 'pending' | 'denied'): void
+}
+
+function fakeHost(terminalId = 't-1', lease?: LeaseControls): { host: TerminalHostV2; attachment: FakeAttachment; attach: ReturnType<typeof vi.fn> } {
   let listener: ((chunk: { terminalId: string; epoch: string; sequence: number; data: string; truncated?: boolean }) => void) | undefined
   const attachment: FakeAttachment = {
     terminalId,
@@ -54,9 +60,22 @@ function fakeHost(terminalId = 't-1'): { host: TerminalHostV2; attachment: FakeA
     writeInput: vi.fn(async () => ({ status: 'ok' as const, terminalId })),
     resize: vi.fn(async () => ({ status: 'ok' as const, terminalId })),
     detach: vi.fn(async () => {}),
+    ...(lease === undefined ? {} : {
+      control: {
+        get state() { return lease.state },
+        subscribe(listener2: (state: 'granted' | 'pending' | 'denied') => void) { lease.listeners.add(listener2); return () => { lease.listeners.delete(listener2) } },
+        requestTakeover: vi.fn(async () => { lease.setState('granted'); return { status: 'ok' as const } }),
+      },
+    }),
   } as FakeAttachment
   const attach = vi.fn(async () => attachment)
   return { host: { version: '0.2.0-rc.1', capability: 'terminal-host', listTerminals: vi.fn(async () => []), openTerminal: vi.fn(async () => ({ id: terminalId, title: 't' } as never)), closeTerminal: vi.fn(async () => ({ status: 'ok', terminalId } as never)), writeInput: vi.fn(async () => ({ status: 'ok', terminalId } as never)), resizeTerminal: vi.fn(async () => ({ status: 'ok', terminalId } as never)), attachTerminal: attach } as unknown as TerminalHostV2, attachment, attach }
+}
+
+function leaseOf(state: 'granted' | 'pending' | 'denied'): LeaseControls {
+  const listeners = new Set<(state: 'granted' | 'pending' | 'denied') => void>()
+  const lease: LeaseControls = { state, listeners, setState(next) { lease.state = next; listeners.forEach(fn => fn(next)) } }
+  return lease
 }
 
 class MockResizeObserver {
@@ -184,5 +203,41 @@ describe('InteractiveTerminal lifecycle (V3 6.1/6.3/6.5)', () => {
     fireEvent.click(container.querySelector('[data-terminal-reconnect]')!)
     await waitFor(() => { expect(attach).toHaveBeenCalledTimes(2) })
     await waitFor(() => { expect(container.querySelector('[data-terminal-fit]')).not.toBeNull() })
+  })
+})
+
+describe('control-lease input gate (V3 6.4)', () => {
+  it('ungranted keypresses are dropped, never buffered or sent', async () => {
+    const lease = leaseOf('pending')
+    const { host, attachment } = fakeHost('t-1', lease)
+    const { container } = render(createElement(TerminalPanel, { state: 'connected', host, terminalId: 't-1' }))
+    await waitFor(() => { expect(container.querySelector('[data-terminal-lease="pending"]')).not.toBeNull() })
+    attachment.emitInput('secret\r')
+    expect(attachment.writeInput).not.toHaveBeenCalled()
+    lease.setState('granted')
+    attachment.emitInput('now-ok\r')
+    await waitFor(() => { expect(attachment.writeInput).toHaveBeenCalledWith('now-ok\r') })
+  })
+
+  it('takeover enables input only after the owner grants', async () => {
+    const lease = leaseOf('denied')
+    const { host, attachment } = fakeHost('t-1', lease)
+    const { container } = render(createElement(TerminalPanel, { state: 'connected', host, terminalId: 't-1' }))
+    await waitFor(() => { expect(container.querySelector('[data-terminal-takeover]')).not.toBeNull() })
+    attachment.emitInput('blocked')
+    expect(attachment.writeInput).not.toHaveBeenCalled()
+    fireEvent.click(container.querySelector('[data-terminal-takeover]')!)
+    await waitFor(() => { expect(container.querySelector('[data-terminal-lease]')).toBeNull() })
+    attachment.emitInput('after-grant')
+    await waitFor(() => { expect(attachment.writeInput).toHaveBeenCalledWith('after-grant') })
+  })
+
+  it('legacy attachments without a control lease stay ungated', async () => {
+    const { host, attachment } = fakeHost('t-1')
+    const { container } = render(createElement(TerminalPanel, { state: 'connected', host, terminalId: 't-1' }))
+    await waitFor(() => { expect(container.querySelector('[data-terminal-fit]')).not.toBeNull() })
+    expect(container.querySelector('[data-terminal-lease]')).toBeNull()
+    attachment.emitInput('legacy')
+    await waitFor(() => { expect(attachment.writeInput).toHaveBeenCalledWith('legacy') })
   })
 })
