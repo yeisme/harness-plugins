@@ -72,6 +72,7 @@ import {
 import {
   applyDirectorPreset,
   applyShowControlPreset,
+  DRAMA_SHOW_CONTROL_DEPRECATION,
   buildDramaViewOpenRequest,
   buildShowControlViewOpenRequest,
   persistDirectorPresetVariant,
@@ -408,6 +409,8 @@ function createRuntime(input: {
       setMessage(availability.reason)
       return undefined
     }
+    // V3 exception-director 1.1/3.2: explicit legacy/advanced opens only.
+    setMessage(DRAMA_SHOW_CONTROL_DEPRECATION)
     const result = applyShowControlPreset(pane)
     emitter.emit('command_opened', { reasonCategory: 'show_control_preset' })
     noteFirstOpen()

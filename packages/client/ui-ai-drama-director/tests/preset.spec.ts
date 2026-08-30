@@ -173,3 +173,25 @@ describe('resolveDramaPresetService', () => {
     }, undefined)).toBeUndefined()
   })
 })
+
+describe('exception-first default projection (V3 exception-director 1.1)', () => {
+  it('the default director preset opens exactly Context/Review/Run — never secondary or show-control views', async () => {
+    const { applyDirectorPreset } = await import('../src/client/preset.ts')
+    const opened: string[] = []
+    const pane = { openView: (request: { readonly resourceKey: string }) => { opened.push(request.resourceKey) } }
+    const result = applyDirectorPreset(pane as never)
+    expect(result.applied).toEqual(['Context', 'Review', 'Run'])
+    expect(result.active).toBe('Context')
+    expect(new Set(opened)).toEqual(new Set(['drama:context', 'drama:review', 'drama:run']))
+    expect(opened.some(key => key.startsWith('drama:show-control') || key.includes('story') || key.includes('visual') || key.includes('audio'))).toBe(false)
+  })
+
+  it('the full-show preset is marked legacy/advanced with a deprecation notice', async () => {
+    const { applyShowControlPreset, DRAMA_SHOW_CONTROL_DEPRECATION } = await import('../src/client/preset.ts')
+    const pane = { openView: () => {} }
+    const result = applyShowControlPreset(pane as never)
+    expect(result.legacy).toBe(true)
+    expect(result.deprecation).toBe(DRAMA_SHOW_CONTROL_DEPRECATION)
+    expect(DRAMA_SHOW_CONTROL_DEPRECATION).toContain('explicit request only')
+  })
+})

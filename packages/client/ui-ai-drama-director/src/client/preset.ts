@@ -116,7 +116,13 @@ export interface DramaShowControlPresetApplyResultV1 {
   readonly applied: readonly ['ShowBoard', 'ReviewInbox', 'Run', 'Delivery']
   readonly active: 'ShowBoard'
   readonly collapsed: 'single-region-tabs'
+  /** V3 exception-director 1.1: legacy/advanced — explicit opens only, never a default. */
+  readonly legacy: true
+  readonly deprecation: string
 }
+
+/** Deprecation notice for the full-show preset; removal is a separate change. */
+export const DRAMA_SHOW_CONTROL_DEPRECATION = 'legacy/advanced view: opens on explicit request only; retained for two plugin release windows'
 
 export function applyShowControlPreset(pane: DramaPaneWorkbenchFace): DramaShowControlPresetApplyResultV1 {
   pane.openView(buildShowControlViewOpenRequest('ShowBoard'))
@@ -124,7 +130,7 @@ export function applyShowControlPreset(pane: DramaPaneWorkbenchFace): DramaShowC
   pane.openView(buildDramaViewOpenRequest('Run'))
   pane.openView(buildShowControlViewOpenRequest('Delivery'))
   pane.openView(buildShowControlViewOpenRequest('ShowBoard'))
-  return { applied: ['ShowBoard', 'ReviewInbox', 'Run', 'Delivery'], active: 'ShowBoard', collapsed: 'single-region-tabs' }
+  return { applied: ['ShowBoard', 'ReviewInbox', 'Run', 'Delivery'], active: 'ShowBoard', collapsed: 'single-region-tabs', legacy: true, deprecation: DRAMA_SHOW_CONTROL_DEPRECATION }
 }
 
 /** Secondary views open on demand only; the default preset never opens them. */
