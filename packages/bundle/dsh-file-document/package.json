@@ -21,7 +21,7 @@
     },
     "./module": "./lib/module.js",
     "./package.json": "./package.json",
-    "./client": "./lib/client/index.js"
+    "./client": "./lib/client.js"
   },
   "files": [
     "lib/index.js",

@@ -1,6 +1,8 @@
 # @yeisme/dsh-next-step-suggestions
 
-DSH Web 可点击“下一步建议”bundle：在 composer 上方渲染建议 chips，点击只把提示词填入输入框，不自动发送、不直接执行。
+DSH Web 可点击“下一步建议”bundle：在 composer 上方渲染建议 chips；Agent 完成轮次且没有更具体来源时，会显示有界 Conversation recap 与三项推荐操作。点击只把提示词填入输入框，不自动发送、不直接执行。
+
+多选模式支持 Tab/Shift+Tab 与左右方向键首尾轮转，Esc 清空选择并退出多选。
 
 ## 安装
 

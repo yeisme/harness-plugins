@@ -4,6 +4,9 @@ const S = '[data-next-step-suggestions]'
 
 const extra = `
 ${S}{display:flex;flex-direction:column;gap:var(--vk-gap-sm);padding:4px 0;min-width:0;background:transparent}
+${S} .ns-recap{display:grid;gap:2px;min-width:0;padding:8px 10px;border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-md);background:var(--vk-fill-subtle)}
+${S} .ns-recap-title{color:var(--vk-text-tertiary);font-size:var(--vk-font-small);font-weight:600}
+${S} .ns-recap-summary{overflow:hidden;color:var(--vk-text-secondary);font-size:var(--vk-font-small);line-height:1.45;text-overflow:ellipsis;white-space:nowrap}
 ${S} .ns-chips{display:flex;flex-wrap:wrap;gap:var(--vk-gap-sm);align-items:center}
 ${S} .ns-chip{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 10px;border:1px solid var(--vk-border-l2);border-radius:999px;background:transparent;color:var(--vk-text-secondary);cursor:pointer;font:inherit}
 ${S} .ns-chip:hover:not(:disabled){color:var(--vk-text-primary);background:var(--vk-fill-hover)}

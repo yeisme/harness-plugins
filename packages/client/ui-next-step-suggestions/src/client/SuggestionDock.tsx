@@ -9,7 +9,7 @@
  * @module @yeisme/dsh-client-ui-next-step-suggestions/SuggestionDock
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { Surface } from '@yeisme/dsh-client-ui-surface'
@@ -25,6 +25,7 @@ import {
 import { SuggestionChip } from './SuggestionChip.tsx'
 import { nextStepSuggestionStyles } from './styles.ts'
 import { NS } from './locales.ts'
+import { completionSuggestions, conversationRecapFromSnapshot } from './conversation-recap.ts'
 
 /** Injected face for the dock: a snapshot function of client-local sources. */
 export interface SuggestionDockInjected {
@@ -73,9 +74,11 @@ export type SuggestionDockProps =
   & PropsLocale<typeof NS>
 
 /** Render the suggestion dock above the composer. */
-export function SuggestionDock({ useProjection, useInput, inputActions, getSources, storage: injectedStorage, t }: SuggestionDockProps) {
+export function SuggestionDock({ useSession, useProjection, useInput, inputActions, getSources, storage: injectedStorage, t }: SuggestionDockProps) {
   const storage = injectedStorage ?? defaultStorage()
   const draft = useInput((state) => state.draft)
+  const sessionSnapshot = useSession(state => state)
+  const chipsRef = useRef<HTMLDivElement>(null)
   const [multiSelect, setMultiSelect] = useState(false)
   const [parallel, setParallel] = useState(false)
   const [applyPreference, setApplyPreference] = useState<SuggestionApplyPreference>(() => readApplyPreference(storage))
@@ -86,13 +89,27 @@ export function SuggestionDock({ useProjection, useInput, inputActions, getSourc
   const readProjection = useProjection as unknown as (key: string) => unknown
   const planValue = readProjection('plan-options') as PlanOptionsProjectionValue | undefined
 
-  const suggestions = useMemo(() => {
+  const sourceSuggestions = useMemo(() => {
     const planSource: SuggestionSource = {
       id: 'plan-options',
       getSuggestions: () => planOptionsToSuggestions(planValue),
     }
     return mergeSuggestions([planSource, ...getSources()])
   }, [planValue, getSources])
+
+  const recap = useMemo(() => conversationRecapFromSnapshot(sessionSnapshot), [sessionSnapshot])
+  const suggestions = useMemo(() => {
+    if (sourceSuggestions.length > 0 || recap === null) return sourceSuggestions
+    return completionSuggestions(recap, {
+      reviewLabel: t('suggestions.reviewResult'),
+      reviewPrompt: t('suggestions.prompt.reviewResult'),
+      verifyLabel: t('suggestions.runVerification'),
+      verifyPrompt: t('suggestions.prompt.runVerification'),
+      continueLabel: t('suggestions.continueNextStep'),
+      continuePrompt: t('suggestions.prompt.continueNextStep'),
+    })
+  }, [recap, sourceSuggestions, t])
+  const visibleRecap = sourceSuggestions.length === 0 ? recap : null
 
   // Prune selections that no longer exist.
   useEffect(() => {
@@ -136,12 +153,32 @@ export function SuggestionDock({ useProjection, useInput, inputActions, getSourc
     setSelectedIds(new Set())
   }
 
+  const focusAdjacentChip = (delta: number) => {
+    const chips = [...(chipsRef.current?.querySelectorAll<HTMLButtonElement>('button.ns-chip:not(:disabled)') ?? [])]
+    if (chips.length === 0) return
+    const current = chips.indexOf(document.activeElement as HTMLButtonElement)
+    const origin = current < 0 ? 0 : current
+    chips[(origin + delta + chips.length) % chips.length]?.focus()
+  }
+
+  const exitMultiSelect = () => {
+    setSelectedIds(new Set())
+    setParallel(false)
+    setMultiSelect(false)
+  }
+
   if (suggestions.length === 0) return null
 
   return (
     <Surface kind="micro" data-next-step-suggestions="" role="group" aria-label={t('suggestions.aria')}>
       <style>{nextStepSuggestionStyles}</style>
-      <div className="ns-chips">
+      {visibleRecap !== null && (
+        <div className="ns-recap" role="status" aria-live="polite">
+          <span className="ns-recap-title">{t('suggestions.recapTitle')}</span>
+          <span className="ns-recap-summary">{visibleRecap.summary}</span>
+        </div>
+      )}
+      <div className="ns-chips" ref={chipsRef}>
         {suggestions.map(suggestion => (
           <SuggestionChip
             key={suggestion.id}
@@ -150,6 +187,8 @@ export function SuggestionDock({ useProjection, useInput, inputActions, getSourc
             disabled={parallel && suggestion.parallelSafe === false}
             multiSelect={multiSelect}
             onActivate={() => handleChip(suggestion)}
+            onNavigate={focusAdjacentChip}
+            onExitMultiSelect={exitMultiSelect}
             t={t}
           />
         ))}
@@ -161,7 +200,10 @@ export function SuggestionDock({ useProjection, useInput, inputActions, getSourc
             checked={multiSelect}
             onChange={(event) => {
               setMultiSelect(event.currentTarget.checked)
-              if (!event.currentTarget.checked) setSelectedIds(new Set())
+              if (!event.currentTarget.checked) {
+                setSelectedIds(new Set())
+                setParallel(false)
+              }
             }}
           />
           {t('suggestions.multiSelect')}
@@ -204,7 +246,9 @@ export function SuggestionDock({ useProjection, useInput, inputActions, getSourc
             </Button>
           </span>
         )}
-        <span className="ns-hint" role="note">{t('suggestions.hint')}</span>
+        <span className="ns-hint" role="note">
+          {multiSelect ? t('suggestions.keyboardHint') : t('suggestions.hint')}
+        </span>
       </div>
     </Surface>
   )

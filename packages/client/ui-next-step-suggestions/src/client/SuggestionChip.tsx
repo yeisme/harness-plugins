@@ -18,6 +18,8 @@ export interface SuggestionChipProps extends PropsLocale<typeof NS> {
   readonly disabled: boolean
   readonly multiSelect: boolean
   readonly onActivate: () => void
+  readonly onNavigate: (delta: number) => void
+  readonly onExitMultiSelect: () => void
 }
 
 /** Render a single suggestion chip. */
@@ -27,6 +29,8 @@ export function SuggestionChip({
   disabled,
   multiSelect,
   onActivate,
+  onNavigate,
+  onExitMultiSelect,
   t,
 }: SuggestionChipProps) {
   const title = suggestion.source === 'plan' ? t('suggestions.source.plan') : suggestion.source
@@ -38,6 +42,20 @@ export function SuggestionChip({
       aria-label={`${suggestion.label}${suggestion.recommended === true ? ` (${t('suggestions.recommended')})` : ''}`}
       title={title}
       disabled={disabled}
+      data-suggestion-id={suggestion.id}
+      onKeyDown={(event) => {
+        if (!multiSelect) return
+        if (event.key === 'Tab') {
+          event.preventDefault()
+          onNavigate(event.shiftKey ? -1 : 1)
+        } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+          event.preventDefault()
+          onNavigate(event.key === 'ArrowLeft' ? -1 : 1)
+        } else if (event.key === 'Escape') {
+          event.preventDefault()
+          onExitMultiSelect()
+        }
+      }}
       onClick={(event) => {
         event.preventDefault()
         onActivate()

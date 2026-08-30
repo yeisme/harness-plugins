@@ -6,11 +6,15 @@
 
 - cookbook/adding-ordo-agent-ops-plugin.md：Ordo Agent Ops 插件的组装/安装方式。
 - cookbook/adding-ordo-agent-ops-plugin.md §8：Ordo、Workbench、pack 与 Control Plane handoff 字段账本。
+- design/dsh-web-ordo-team-hub-v1.md：Session Agents / Ordo Teams 统一 Hub、Task-Agent graph、Host safe projection、响应式与可访问性设计。
+- cookbook/dsh-web-ordo-team-hub.md：Team Hub V1 的英文安装、使用、降级和回滚指南；中文版本为 `cookbook/dsh-web-ordo-team-hub.zh.md`。
+- ../openspec/changes/dsh-web-ordo-team-hub-v1/：DSH Web Ordo Team Hub 的 owning contract 与实施任务。
 - ../packages/bundle/pane-workbench/README.md：Pane Workbench overlay 的安装、快捷操作、排障与 canary handoff。
 - ../packages/bundle/anchored-standard/README.md：Anchored Standard 预设族的安装与行为。
 - ../packages/bundle/dsh-devtools/README.md：DevTools 终端日志、Host/Web 性能、CPU Profile、导出与卸载说明。
 - ../openspec/changes/dsh-devtools-observability-v1/：DevTools V1 合同、架构、验收和实施任务。
 - ../openspec/changes/ordo-dsh-plugin-visualization-v1/：插件合同、状态机、DSH/Workbench 可视化设计。
+- ../openspec/changes/dsh-browser-pane-v1/：契约优先 Browser Pane 的 owner 边界、Agent 协作浏览、实时视口附件、排他人工接管、安全投影与实现任务。
 - design/dsh-web-pane-experience-completion.md：dsh web Pane 体验完成度设计（Experience Tier、做剧 × Workbench 旅程、交互缺口 owner 矩阵），实施见 ../openspec/changes/dsh-web-pane-experience-completion-v1/。
 - design/dsh-workbench-ai-drama-bridge-v2.md：从 CEO、产品与架构角度定义 DSH 创作前台、Workbench 制作现场、Ordo 唯一账本的做剧闭环，以及 Bridge V2 合同、90 天路线、指标、迁移和止损条件；实施记录已归档到 ../openspec/changes/archive/2026-08-29-dsh-workbench-ai-drama-bridge-v2/。
 - design/ai-drama-director-pack.md：Director 与 Show Control Room 的产品边界、命令、preset、owner 投影和 Workbench 可选 handoff。

@@ -2,6 +2,11 @@
 
 (merged from archived change 2026-08-29-dsh-tools-center-observability-v1)
 
+## Purpose
+Define the Tools workbench (tools center) experience inside the `mcp-inspector` entry: responsive layout hierarchy, honest catalog status and filtering, authoritative CAS-based enable/disable, redacted session activity with timeline visualization, additive Tool Hub observability, MCP health degradation, safe error recovery, i18n/a11y, and integration evidence gates.
+
+## Requirements
+
 ### Requirement: Tools 工作台首屏层级
 系统 SHALL 在现有 `conversation.view` 的 `mcp-inspector` entry 内提供紧凑状态条、目录区和活动/详情区；MUST NOT 通过并列主壳或 dashboard card mosaic 实现。宽容器首屏 MUST 同时可见目录与会话活动，内容 MUST 从顶部开始且不得产生被拉伸的空白区。
 

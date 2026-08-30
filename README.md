@@ -18,6 +18,12 @@ Yeisme 自研 DeepSeek Harness（DSH）插件聚合仓库，打包为可通过 `
 preview patch row。完整运行仍取决于 DSH core 发布 composition preview 所需的
 公开只读 seam；在此之前，不把未经验证的 Git 子目录 URL 当作可运行安装合同。
 
+## Ordo Team Hub V1（planned）
+
+现有 Ordo Agent Ops bundle 将 additive 扩展统一 `/agents` Hub：Session Agents 与 Ordo Teams 保持独立视图，Ordo Team Delivery 提供 Task Queue、Task-Agent graph、Inspector、Delivery Room、immutable Activity 与 owner-authored actions。浏览器只接收 Harness Host allowlist 后的 safe projection，不直接访问 Ordo CLI、loopback broker、credential 或 private state。
+
+规格与文档已完成，运行时代码尚未实现：见 [Web 设计](docs/design/dsh-web-ordo-team-hub-v1.md)、[使用指南](docs/cookbook/dsh-web-ordo-team-hub.zh.md) 和 [owning OpenSpec](openspec/changes/dsh-web-ordo-team-hub-v1/)。
+
 ## 全插件热开发
 
 在仓库根运行一条命令，即可构建并 link 安装所有本地 bundle、生成 HMR overlay、启动 DSH Web，并在源码变化后增量重建受影响依赖链：

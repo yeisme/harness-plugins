@@ -2,6 +2,11 @@
 
 (merged from archived change 2026-08-30-dsh-personal-radar-pane-v1)
 
+## Purpose
+Define the Drama Radar Pane surface inside DSH: capability-gated entry with honest degradation, typed intents revalidated by the host, dual text/icon badge states, edition_build-scoped refresh, safe typed refs for Workbench handoff, draft/canonical proposal separation, keyboard-accessible panes, and an installable verifiable bundle contract.
+
+## Requirements
+
 ### Requirement: DSH 入口 MUST capability-gated 且诚实降级
 Drama Radar badge、命令与 Pane 入口 MUST 由 capability probe 驱动：Radar binary 不可达、contract version 不匹配或官方 Pane slot 缺失时，入口 MUST 禁用或隐藏并显示 reason。插件 MUST NOT 使用私有 DOM、iframe 或 fork fallback 冒充完成。
 

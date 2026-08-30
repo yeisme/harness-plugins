@@ -21,6 +21,14 @@ canonical facts；缺失时保持 `needs_contract`/unavailable。
 
 旧的 `@yeisme/dsh-host-ordo-agent-ops`、`@yeisme/dsh-host-ordo-commands` 和 `@yeisme/dsh-client-ui-ordo-agent-ops` 在 `0.1.0-rc.7` 仍可用作兼容 shim，并会给出一次迁移提示；最早可在 `0.1.0-rc.8` 之后由单独变更移除。不要在新 profile 中安装这些 leaf package。
 
+## Team V1 状态（planned）
+
+统一 Agents Hub、Ordo Teams Delivery workspace、Task-Agent graph、Room、Activity 与 surface control 已完成规格，当前 package 尚未实现。后续实现必须 additive 保留现有 `/ordo`、sidebar 和 legacy fallback；browser 只能接收 Host allowlist 后的 safe projection 与 typed actions，不得直接连接 Ordo broker、执行 CLI 或读取 credential/private state。
+
+- [Owning OpenSpec](../../../openspec/changes/dsh-web-ordo-team-hub-v1/)
+- [Web 设计](../../../docs/design/dsh-web-ordo-team-hub-v1.md)
+- [Operator 指南](../../../docs/cookbook/dsh-web-ordo-team-hub.zh.md)
+
 ## 检查与回滚
 
     dsh --profile web --dump-config

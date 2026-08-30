@@ -5,7 +5,7 @@ name: Upstream PR drift
 # opens one issue per broken series; a clean apply closes last run's noise.
 on:
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '0 2 * * 1'
   workflow_dispatch:
   push:
     paths:
@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
   issues: write
+
+concurrency:
+  group: upstream-pr-drift
+  cancel-in-progress: true
 
 jobs:
   apply-check:

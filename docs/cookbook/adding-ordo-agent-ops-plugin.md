@@ -162,3 +162,11 @@ The Control Plane owner remains responsible for the tenant database, OAuth
 issuer, secret store, BFF/access-ticket issuance, and durable revocation. DSH
 never receives credential values, stores generic bearer tokens, or infers
 authorization from a browser parameter. See [the host adapter spec](../../openspec/changes/ordo-dsh-plugin-visualization-v1/specs/dsh-ordo-host-adapter/spec.md).
+
+## 9. Team V1 collaboration Hub
+
+The planned Team V1 surface extends the existing Ordo Agent Ops entry without replacing its legacy run views. Session Agents and Ordo Teams remain separate, while the Team workspace consumes only Ordo-owned safe projections and typed actions through the Harness Host.
+
+- Read the [Team Hub Web design](../design/dsh-web-ordo-team-hub-v1.md) for layout, graph, responsive, accessibility, and security boundaries.
+- Follow the [Team Hub cookbook](dsh-web-ordo-team-hub.md) for capability probes, degraded states, action receipts, and rollback.
+- Track implementation in the [owning OpenSpec](../../openspec/changes/dsh-web-ordo-team-hub-v1/); the documents describe a planned contract, not current runtime support.

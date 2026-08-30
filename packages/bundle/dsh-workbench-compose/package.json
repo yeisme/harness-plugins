@@ -93,7 +93,6 @@
     "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.6",
     "@yeisme/dsh-client-ui-surface": "workspace:^",
     "@yeisme/dsh-pane-workbench": "workspace:*",
-    "@yeisme/dsh-terminal": "workspace:*",
-    "@yeisme/dsh-client-ui-desktop-workbench": "workspace:*"
+    "@yeisme/dsh-terminal": "workspace:*"
   }
 }

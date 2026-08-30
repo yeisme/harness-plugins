@@ -1,6 +1,6 @@
 # DSH × Workbench AI 做剧 Bridge V2：CEO 产品与架构方案
 
-> 状态：提案；Owning OpenSpec：`dsh-workbench-ai-drama-bridge-v2`  
+> 状态：Bridge V2 合同已归档；产品入口职责由 2026-08-30 根 change `ai-drama-director-workspace-editor-roundtrip-v1` 增量 supersede。Wire envelope、鉴权、refetch、replay 与回滚规则保持不变。
 > 决策范围：DSH → Workbench 做剧上下文连续性、产品分工、跨仓合同与上线门  
 > 不包含：Workbench owner state 重构、Ordo 调度/账本改造、旧合同立即删除
 
@@ -8,8 +8,8 @@
 
 DSH 与 Workbench 不应继续按“两个都能做剧的产品”并行堆功能，而应成为一条创作生产漏斗的两个工作面：
 
-- **DSH 是创作入口和协作前台**：承接对话、灵感、即时选择、下一步行动、轻量评审和异常提醒。
-- **Workbench 是制作现场和复杂操作后台**：承接整剧/整集空间组织、多资产比较、批量处理、专业评审和证据复核。
+- **Workbench 是默认导演工作区**：承接建剧、续作、整剧/整集媒体空间组织、多资产比较、专业评审、外编差异和证据复核。
+- **DSH 是异常优先 Agent 导演台**：承接当前对话、context、primary blocker、一个 owner-approved next action 和轻量决定；复杂度上升时 handoff 到 Workbench。
 - **Ordo 是执行与审计唯一账本**：拥有 run/task/session/lease/approval/verification/evidence/closeout；DSH 和 Workbench 都不复制它的状态机。
 
 Bridge V2 的商业意义不是“多一个跳转按钮”，而是降低从创作意图到生产动作的上下文损耗。用户在 DSH 中形成意图，在 Workbench 中扩展复杂度，再回到 DSH 继续协作；资源身份、版本、权限和证据在过程中保持连续。
@@ -33,6 +33,7 @@ Bridge V2 的商业意义不是“多一个跳转按钮”，而是降低从创�
 
 | 用户任务 | 默认工作面 | 原因 |
 | --- | --- | --- |
+| 新建 Show、恢复整剧工作、跨集浏览 | Workbench Creative Production | 默认入口，媒体关系和续作上下文同时可见 |
 | 询问下一步、选择剧集、查看 blocker | DSH | 对话内完成，切换成本最低 |
 | 单项生成、轻量 repair、下一项评审 | DSH Pane | 上下文窄、动作由 owner descriptor 控制 |
 | Episode timeline、跨场景/跨候选比较 | Workbench Creative Production | 需要空间布局和多对象同时可见 |
@@ -45,11 +46,11 @@ Bridge V2 的商业意义不是“多一个跳转按钮”，而是降低从创�
 ### 3.2 目标用户闭环
 
 ```text
-在 DSH 表达意图
-  -> 识别 show / episode / artifact / review / evidence 上下文
-  -> 展示 owner-authored 下一步与风险
+在 Workbench 建剧或继续 Show
+  -> 在 DSH 会话中识别 show / episode / artifact / review / evidence 上下文
+  -> 展示 owner-authored blocker、下一步与风险
   -> 简单任务在 Pane 完成
-  -> 复杂度上升时签发 V2 launchRef
+  -> 复杂度上升时签发 V2 launchRef 返回 Workbench
   -> Workbench /agent 重新鉴权、refetch、打开正确 lens
   -> Workbench 完成复杂操作，结果由 owner/Ordo 记录
   -> DSH 订阅新 projection，继续对话与下一步

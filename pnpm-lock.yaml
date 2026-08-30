@@ -868,9 +868,6 @@ importers:
       '@deepseek-ai/dsh-client-ui-primitives':
         specifier: 0.1.0-rc.6
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
-      '@yeisme/dsh-client-ui-desktop-workbench':
-        specifier: workspace:*
-        version: link:../../client/ui-desktop-workbench
       '@yeisme/dsh-client-ui-surface':
         specifier: workspace:^
         version: link:../../client/ui-surface
@@ -6558,7 +6555,7 @@ snapshots:
       '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/dsh-attachment': 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-brand@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/dsh-client-runtime': 0.1.0-rc.6(2e7801b4bc3df44e2ff6c3a6bbd5f2d6)
-      '@deepseek-ai/dsh-client-ui-conversation': 0.1.0-rc.7(c3d7fae6b078f1b88e0f64bd2e67f555)
+      '@deepseek-ai/dsh-client-ui-conversation': 0.1.0-rc.7(01a8846d7f3fe2472dab000b4ce63879)
       '@deepseek-ai/dsh-invariants': 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)
       clsx: 2.1.1
 

@@ -15,6 +15,7 @@ import { Surface, SurfaceContextBar, SurfaceState } from '@yeisme/dsh-client-ui-
 import type { FileEntryKind, FileEntryV1 } from '../types.ts'
 import { formatJsonTree } from './json-tree.ts'
 import { formatBinaryPreview, BINARY_PREVIEW_MAX_BYTES as BINARY_LABEL } from './binary-preview.ts'
+import { renderSafeMarkdown } from './markdown.ts'
 import {
   buildFileTree,
   fileTreePathOf,
@@ -838,7 +839,7 @@ export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOp
                     setTextById(previous => { const next = { ...previous }; delete next[selectedEntry.id]; return next })
                   }}
                   renderTable={renderTable}
-                  renderMarkdown={renderMarkdown}
+                  renderMarkdown={renderMarkdown ?? ((text: string) => renderSafeMarkdown(text))}
                   bytes={bytes}
                   renderPdf={renderPdf}
                 />

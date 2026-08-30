@@ -25,6 +25,8 @@ function renderChip(props: Partial<Parameters<typeof SuggestionChip>[0]> = {}): 
       disabled: false,
       multiSelect: false,
       onActivate: () => {},
+      onNavigate: () => {},
+      onExitMultiSelect: () => {},
       t: t as never,
       ...props,
     }))

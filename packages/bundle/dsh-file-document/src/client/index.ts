@@ -26,6 +26,7 @@ export {
 export type { DocumentOpenAction } from './document-open-state.ts'
 export { formatJsonTree } from './json-tree.ts'
 export { formatBinaryPreview, BINARY_PREVIEW_MAX_BYTES } from './binary-preview.ts'
+export { escapeHtml, renderSafeMarkdown } from './markdown.ts'
 export type { BinaryPreviewV1 } from './binary-preview.ts'
 export { useFileTree } from './use-file-tree.ts'
 export type { FileTreeLoadStatus, UseFileTreeResult } from './use-file-tree.ts'

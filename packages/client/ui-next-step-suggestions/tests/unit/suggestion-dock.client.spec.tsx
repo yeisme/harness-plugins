@@ -19,6 +19,28 @@ const planValue: PlanOptionsProjectionValue = {
   revisions: [],
 }
 
+const emptySnapshot = {
+  openState: 'open',
+  removed: false,
+  running: false,
+  pending: [],
+  partial: null,
+  turnEnds: new Map(),
+  nodes: [],
+}
+
+const completedSnapshot = {
+  ...emptySnapshot,
+  turnEnds: new Map([[3, 12]]),
+  nodes: [{
+    kind: 'assistant',
+    seq: 11,
+    turn: 3,
+    step: 1,
+    blocks: [{ kind: 'text', text: 'Finished the requested Web work.' }],
+  }],
+}
+
 function memoryStorage(): Storage {
   const entries = new Map<string, string>()
   return {
@@ -31,12 +53,20 @@ function memoryStorage(): Storage {
   }
 }
 
-function renderDock(options: { draft?: string; storage?: Storage } = {}) {
+function renderDock(options: {
+  draft?: string
+  storage?: Storage
+  plan?: PlanOptionsProjectionValue | null
+  snapshot?: typeof emptySnapshot
+} = {}) {
   const setDraft = vi.fn()
   const submit = vi.fn()
+  const projection = options.plan === undefined ? planValue : options.plan ?? undefined
+  const snapshot = options.snapshot ?? emptySnapshot
   const utils = render(
     <SuggestionDock
-      useProjection={(() => planValue) as never}
+      useSession={((selector: (state: typeof emptySnapshot) => unknown) => selector(snapshot)) as never}
+      useProjection={(() => projection) as never}
       useInput={((selector: (state: { draft: string }) => string) => selector({ draft: options.draft ?? '' })) as never}
       inputActions={{ setDraft, submit } as never}
       getSources={() => []}
@@ -51,6 +81,7 @@ describe('SuggestionDock', () => {
   it('renders nothing when there are no suggestions', () => {
     const { container } = render(
       <SuggestionDock
+        useSession={((selector: (state: typeof emptySnapshot) => unknown) => selector(emptySnapshot)) as never}
         useProjection={(() => undefined) as never}
         useInput={((selector: (state: { draft: string }) => string) => selector({ draft: '' })) as never}
         inputActions={{ setDraft: vi.fn(), submit: vi.fn() } as never}
@@ -65,6 +96,28 @@ describe('SuggestionDock', () => {
     renderDock()
     expect(screen.getByRole('button', { name: /快速方案/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /稳妥方案/ })).toBeTruthy()
+  })
+
+  it('shows a recap and exactly three fallback actions after completion', () => {
+    renderDock({ plan: null, snapshot: completedSnapshot })
+    expect(screen.getByText('Finished the requested Web work.')).toBeTruthy()
+    expect(screen.getAllByRole('button')).toHaveLength(3)
+    expect(screen.getByRole('button', { name: /suggestions.reviewResult/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /suggestions.runVerification/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /suggestions.continueNextStep/ })).toBeTruthy()
+  })
+
+  it('keeps specific owner suggestions ahead of the completion fallback', () => {
+    renderDock({ snapshot: completedSnapshot })
+    expect(screen.getAllByRole('button')).toHaveLength(2)
+    expect(screen.queryByText('Finished the requested Web work.')).toBeNull()
+  })
+
+  it('clicking a fallback action writes the draft without submitting', () => {
+    const { setDraft, submit } = renderDock({ plan: null, snapshot: completedSnapshot })
+    fireEvent.click(screen.getByRole('button', { name: /suggestions.reviewResult/ }))
+    expect(setDraft).toHaveBeenCalledWith('suggestions.prompt.reviewResult')
+    expect(submit).not.toHaveBeenCalled()
   })
 
   it('clicking a chip fills the draft and does not submit', () => {
@@ -93,6 +146,29 @@ describe('SuggestionDock', () => {
     expect(called).toContain('请并行执行以下方案')
     expect(called).toContain('/plan-select {"optionId":"fast"}')
     expect(called).toContain('/plan-select {"optionId":"safe"}')
+  })
+
+  it('cycles focus in multi-select and Escape clears selection and exits', () => {
+    renderDock({ plan: null, snapshot: completedSnapshot })
+    const multiSelect = screen.getByRole('checkbox', { name: /multiSelect/i }) as HTMLInputElement
+    fireEvent.click(multiSelect)
+    const chips = screen.getAllByRole('button')
+
+    chips[0]!.focus()
+    fireEvent.keyDown(chips[0]!, { key: 'Tab' })
+    expect(document.activeElement).toBe(chips[1])
+    fireEvent.keyDown(chips[1]!, { key: 'ArrowRight' })
+    expect(document.activeElement).toBe(chips[2])
+    fireEvent.keyDown(chips[2]!, { key: 'Tab' })
+    expect(document.activeElement).toBe(chips[0])
+    fireEvent.keyDown(chips[0]!, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(chips[2])
+
+    fireEvent.click(chips[2]!)
+    expect(chips[2]!.getAttribute('aria-pressed')).toBe('true')
+    fireEvent.keyDown(chips[2]!, { key: 'Escape' })
+    expect(multiSelect.checked).toBe(false)
+    expect(chips[2]!.getAttribute('aria-pressed')).toBeNull()
   })
 })
 

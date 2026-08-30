@@ -67,6 +67,7 @@ describe('FilePane', () => {
     toggle.click()
     const file = await screen.findByText('README.md')
     file.click()
-    expect(await screen.findByText('# readme')).toBeTruthy()
+    // V3 4.5: markdown sources render through the escape-first renderer as a heading
+    expect(await screen.findByRole('heading', { name: 'readme', level: 1 })).toBeTruthy()
   })
 })

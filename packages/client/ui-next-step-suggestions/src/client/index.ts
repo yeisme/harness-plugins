@@ -19,6 +19,8 @@ export { SuggestionDock } from './SuggestionDock.tsx'
 export type { SuggestionDockInjected, SuggestionDockProps } from './SuggestionDock.tsx'
 export { SuggestionSourceRegistry } from './sources.ts'
 export { planOptionsToSuggestions } from './plan-options-source.ts'
+export { completionSuggestions, conversationRecapFromSnapshot } from './conversation-recap.ts'
+export type { CompletionSuggestionCopy, ConversationRecapV1 } from './conversation-recap.ts'
 export { appendPrompt, applySelected, composeParallelPrompt, mergeSuggestions } from './suggestion-composer.ts'
 export type {
   NextStepSuggestionV1,

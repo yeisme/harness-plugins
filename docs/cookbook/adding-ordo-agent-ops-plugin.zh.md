@@ -150,3 +150,11 @@ runtime 或 installation drift、stale context 会使旧 cursor 与 action descr
 Control Plane owner 负责 tenant database、OAuth issuer、secret store、BFF/access-ticket
 签发和 durable revocation。DSH 不接收 credential value、不保存 generic bearer token，
 也不从 browser parameter 推导 authorization。详见[host adapter spec](../../openspec/changes/ordo-dsh-plugin-visualization-v1/specs/dsh-ordo-host-adapter/spec.md)。
+
+## 9. Team V1 协作 Hub
+
+计划中的 Team V1 surface 会 additive 扩展现有 Ordo Agent Ops 入口，而不替换 legacy run views。Session Agents 与 Ordo Teams 保持独立；Team workspace 只能通过 Harness Host 消费 Ordo owner 的 safe projection 和 typed actions。
+
+- 阅读 [Team Hub Web 设计](../design/dsh-web-ordo-team-hub-v1.md)，了解 layout、graph、响应式、可访问性与安全边界。
+- 按 [Team Hub cookbook](dsh-web-ordo-team-hub.zh.md) 检查 capability probe、降级状态、action receipt 与回滚。
+- 在 [owning OpenSpec](../../openspec/changes/dsh-web-ordo-team-hub-v1/) 跟踪实现；这些文档定义 planned contract，不代表当前 runtime 已支持。

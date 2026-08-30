@@ -7,7 +7,7 @@ name: Upstream canary
 # new lockfile. Nobody tracks upstream by hand.
 on:
   schedule:
-    - cron: '30 1 * * *'
+    - cron: '30 1 * * 1'
   workflow_dispatch:
     inputs:
       version:
@@ -22,7 +22,7 @@ permissions:
 
 concurrency:
   group: upstream-canary
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   canary:

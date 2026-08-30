@@ -1,0 +1,50 @@
+name: Docs
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/docs.yml'
+      - 'docs/**'
+      - 'openspec/**'
+      - '**/*.md'
+      - 'scripts/doc-sync.mjs'
+  push:
+    branches:
+      - develop
+      - main
+    paths:
+      - '.github/workflows/docs.yml'
+      - 'docs/**'
+      - 'openspec/**'
+      - '**/*.md'
+      - 'scripts/doc-sync.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: harness-docs-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    name: Docs / OpenSpec validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Documentation sync check
+        run: node scripts/doc-sync.mjs
+
+      - name: Validate every active change
+        run: npx -y @fission-ai/openspec@1.6.0 validate --changes --strict --no-interactive

@@ -144,3 +144,24 @@ describe('formatBinaryPreview (V3 4.8)', () => {
     expect(preview.lines).toHaveLength(BINARY_PREVIEW_MAX_BYTES / 16)
   })
 })
+
+describe('renderSafeMarkdown (V3 4.5 local default)', () => {
+  it('escapes all source before emitting tags; script injection dies', async () => {
+    const { renderSafeMarkdown } = await import('../src/client/markdown.ts')
+    const html = renderSafeMarkdown('# Title\n\n<script>alert(1)</script> **bold** [x](javascript:alert(2))')
+    expect(html).toContain('<h1>Title</h1>')
+    expect(html).toContain('&lt;script&gt;')
+    expect(html).not.toContain('<script>')
+    expect(html).toContain('<strong>bold</strong>')
+    expect(html).not.toContain('javascript:')
+  })
+
+  it('only https/mailto hrefs survive as links', async () => {
+    const { renderSafeMarkdown } = await import('../src/client/markdown.ts')
+    const html = renderSafeMarkdown('[ok](https://example.com) [mail](mailto:a@b.c) [bad](file:///etc/passwd)')
+    expect(html).toContain('href="https://example.com"')
+    expect(html).toContain('href="mailto:a@b.c"')
+    expect(html).not.toContain('file://')
+    expect(html).toContain('bad')
+  })
+})
