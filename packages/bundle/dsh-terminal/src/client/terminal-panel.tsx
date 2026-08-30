@@ -62,6 +62,7 @@ function disposeXtermDisposable(value: { dispose(): void } | undefined): void {
 function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHostV2; readonly terminalId: string }) {
   const surfaceRef = useRef<HTMLDivElement>(null)
   const fitRef = useRef<{ fit(): void }>()
+  const searchRef = useRef<{ findNext(term: string): boolean; findPrevious(term: string): boolean }>()
   const [error, setError] = useState<string | undefined>()
   const [ready, setReady] = useState(false)
   const [connectionAttempt, setConnectionAttempt] = useState(0)
@@ -83,9 +84,12 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
 
     void (async () => {
       try {
-        const [{ Terminal }, { FitAddon }, nextAttachment] = await Promise.all([
+        const [{ Terminal }, { FitAddon }, { SearchAddon }, { WebLinksAddon }, { Unicode11Addon }, nextAttachment] = await Promise.all([
           import('@xterm/xterm'),
           import('@xterm/addon-fit'),
+          import('@xterm/addon-search'),
+          import('@xterm/addon-web-links'),
+          import('@xterm/addon-unicode11'),
           host.attachTerminal(terminalId, { cols: 80, rows: 24, signal: abort.signal }),
         ])
         if (disposed) {
@@ -110,6 +114,22 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
         const fit = new FitAddon()
         fitRef.current = fit
         terminal.loadAddon(fit)
+        // V3 6.2 addon set: search/web-links/unicode11 are core; serialize is
+        // loaded on demand by later close/clipboard slices. WebGL stays an
+        // OPTIONAL lazy import — context loss or an unsupported GPU falls back
+        // to the DOM renderer without restarting the PTY.
+        const search = new SearchAddon()
+        terminal.loadAddon(search)
+        searchRef.current = search
+        terminal.loadAddon(new WebLinksAddon(() => { void 0 }))
+        terminal.loadAddon(new Unicode11Addon())
+        terminal.unicode.activeVersion = '11'
+        try {
+          const { WebglAddon } = await import('@xterm/addon-webgl')
+          const webgl = new WebglAddon()
+          webgl.onContextLoss(() => { webgl.dispose() })
+          terminal.loadAddon(webgl)
+        } catch { /* optional capability: DOM renderer fallback */ }
         fit.fit()
         outputDispose = attachment.subscribe(chunk => {
           if (chunk.terminalId !== terminalId || chunk.epoch !== attachment?.epoch || chunk.sequence <= lastSequence) return
@@ -143,6 +163,7 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
       disposeXtermDisposable(resizeDispose)
       terminal?.dispose()
       fitRef.current = undefined
+      searchRef.current = undefined
       void attachment?.detach()
     }
   }, [host, terminalId, connectionAttempt])
