@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "yeisme.dsh-bundle-compatibility.v1",
+  "package": {
+    "name": "@yeisme/dsh-personal-radar",
+    "version": "0.1.0-rc.1"
+  },
+  "dshHostCompatibility": {
+    "range": ">=0.1.0-rc.6 <0.2.0",
+    "strategy": "capability_probe",
+    "requiredClientRuntime": "0.1.0-rc.6"
+  },
+  "contributions": {
+    "hostPluginName": "dsh-personal-radar",
+    "clientModuleLoaderId": "@yeisme/dsh-personal-radar",
+    "clientExport": "./client"
+  },
+  "profile": {
+    "patch": "./cordis.patch.yml",
+    "rowId": "dsh-personal-radar",
+    "conformanceCommand": "pnpm --dir packages/bundle/dsh-personal-radar run test:profile"
+  },
+  "contracts": [
+    {
+      "id": "radar.mcp.handoff.v1",
+      "status": "preferred",
+      "owner": "cli/short-drama-radar",
+      "note": "consumers must verify against live `radar mcp capabilities`, not a snapshot"
+    }
+  ],
+  "contractDigest": "dc215e6bd922c6615d17e07a52e227e716e2a03e327dd769fd31f1b1562c3ec5",
+  "pluginReleaseDigest": "6409d891f6d77f791f548ba8fdd49f53b01dff6f5d61de21eb69dd509a5897a7"
+}

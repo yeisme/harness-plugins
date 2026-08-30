@@ -1,0 +1,85 @@
+{
+  "name": "@yeisme/dsh-personal-radar",
+  "version": "0.1.0-rc.1",
+  "description": "DSH Personal Drama Radar bundle: badge, /drama radar commands, on-demand radar pane (capability-probed, honest degradation)",
+  "main": "lib/index.mjs",
+  "scripts": {
+    "generate:metadata": "node scripts/generate-bundle-metadata.mjs",
+    "check:metadata": "node scripts/generate-bundle-metadata.mjs --check",
+    "test": "pnpm run build && pnpm run smoke:bundle",
+    "test:declaration": "vitest run",
+    "test:profile": "node scripts/run-profile-conformance.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "pnpm run check:metadata && tsc -p tsconfig.json && tsdown",
+    "bundle": "tsdown",
+    "smoke:bundle": "node scripts/smoke-bundle.mjs"
+  },
+  "keywords": [
+    "dsh",
+    "drama",
+    "radar",
+    "personal"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "types": "lib/index.d.mts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yeisme/harness-plugins.git",
+    "directory": "packages/bundle/dsh-personal-radar"
+  },
+  "files": [
+    "lib/index.mjs",
+    "lib/client.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "cordis.patch.yml",
+    "dsh.compatibility.json",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.mts",
+      "default": "./lib/index.mjs"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./dsh.compatibility.json": "./dsh.compatibility.json",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-runtime"
+      ],
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "dependencies": {
+    "@yeisme/dsh-client-ui-personal-radar": "workspace:*",
+    "@yeisme/dsh-personal-radar": "workspace:*"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

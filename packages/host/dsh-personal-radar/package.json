@@ -1,0 +1,32 @@
+{
+  "name": "@yeisme/dsh-personal-radar",
+  "version": "0.1.0-rc.1",
+  "description": "DSH Personal Drama Radar host contracts: typed /drama radar intents, capability probe, lane intersection, receipt reconcile, badge/Pane reducers, Workbench handoff, and honest degradation",
+  "license": "MIT",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.mts",
+      "default": "./lib/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.json && tsdown src/index.ts --out-dir lib --format esm --dts --clean",
+    "integration:evidence": "node scripts/run-integration-evidence.mjs"
+  },
+  "devDependencies": {
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

@@ -1,0 +1,89 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`radar pane fixed-size snapshots > compare view 100x16 1`] = `
+"Compare · opp:demo-1 vs opp:demo-2                                                                  
+A · Rebirth revenge mini-drama                   | B · Cultivation clan short series                
+market 82 · fit 91 · risk 24                     | market 77 · fit 88 · risk 31                     
+- rising 7-day demand                            | - consistent completion rate                     
+- matches saved themes                           |                                                  
+Esc back                                                                                            
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    "
+`;
+
+exports[`radar pane fixed-size snapshots > detail view 80x24 1`] = `
+"Detail · Rebirth revenge mini-drama                                             
+market 82 · personal fit 91 · risk 24                                           
+ref opp:demo-1 · new · not saved                                                
+                                                                                
+reasons                                                                         
+  - rising 7-day demand                                                         
+  - matches saved themes                                                        
+known limitations                                                               
+  - platform signal is china-only                                               
+                                                                                
+s save · d dismiss · p proposal · w workbench · Esc back                        
+open the Drama Radar pane to review fits                                        
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                "
+`;
+
+exports[`radar pane fixed-size snapshots > list view 80x24 1`] = `
+"Drama Radar · 3 fits · edition edition:demo-2026-08-30                          
+↑/↓ move  Enter detail  c compare  s save  d dismiss  p proposal  w workbench  …
+>     Rebirth revenge mini-drama · market 82 · fit 91 · risk 24 · new           
+      Cultivation clan short series · market 77 · fit 88 · risk 31 · new        
+      Urban fantasy office drama · market 69 · fit 74 · risk 45 · saved         
+open the Drama Radar pane to review fits                                        
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                "
+`;
+
+exports[`radar pane fixed-size snapshots > offline status 60x12 1`] = `
+"Drama Radar — offline                                       
+radar owner unreachable offline; last safe projection is re…
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            "
+`;
