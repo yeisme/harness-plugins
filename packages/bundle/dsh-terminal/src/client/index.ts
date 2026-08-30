@@ -1,4 +1,5 @@
 import { TerminalPanel } from './terminal-panel.tsx'
+import type { TerminalHostV2 } from '@yeisme/dsh-terminal-host'
 /**
  * Terminal client entry (ModuleLoader face)：console 视图 + 命令面。
  *
@@ -116,6 +117,7 @@ export function apply(ctx: Context): () => void {
   }
 
   const pane = optionalLookup(ctx, 'paneWorkbench') as PaneWorkbenchFace | undefined
+  const hostFace = optionalLookup(ctx, 'dsh.terminalHost') as unknown as TerminalHostV2 | undefined
   const paneUsable = pane !== undefined && typeof pane.registerView === 'function' && typeof pane.openView === 'function'
 
   const sessionOptions = (): readonly ConsoleSessionOption[] => {
@@ -179,7 +181,7 @@ export function apply(ctx: Context): () => void {
         singleton: false,
       },
       presentation: { icon: 'terminal', defaultEdge: 'bottom' },
-      component: () => TerminalSessionViewRoot({ mount, sessions: sessionOptions(), t }),
+      component: () => TerminalSessionViewRoot({ mount, sessions: sessionOptions(), t, host: hostFace, openSession: openTerminalSession, renameSession: (sessionId, title) => { if (sessionId !== '') openTerminalSession(sessionId, title) } }),
     }))
     if (typeof pane.registerCommand === 'function') {
       disposers.push(pane.registerCommand({
@@ -261,9 +263,27 @@ function TerminalSessionViewRoot(props: {
   readonly mount: ConsoleMount
   readonly sessions: readonly ConsoleSessionOption[]
   readonly t: ConsoleTranslator
+  readonly host?: TerminalHostV2 | undefined
+  readonly openSession?: ((sessionId: string, title: string) => void) | undefined
+  readonly renameSession?: ((sessionId: string, title: string) => void) | undefined
 }): ReactNode {
   const view = usePaneProjectionOfSession(props.sessions)
-  return TerminalPanel({ state: view?.running === false ? 'exited' : 'connected', status: view?.displayTitle })
+  return TerminalPanel({
+    state: view?.running === false ? 'exited' : 'connected',
+    status: view?.displayTitle,
+    host: props.host,
+    terminalId: view === undefined ? undefined : (props.sessions[0]?.sessionId ?? ''),
+    // V3 6.6: New/Split each opens a FRESH PTY (own session id -> own view);
+    // Rename re-opens the same resource key with the new title.
+    onNewSession: props.host === undefined || props.openSession === undefined ? undefined : () => {
+      void props.host!.openTerminal().then((session: import('@yeisme/dsh-terminal-host').TerminalSessionV1) => {
+        props.openSession!(session.terminalId, session.title)
+      })
+    },
+    onRename: props.renameSession === undefined || view === undefined ? undefined : (title: string) => {
+      props.renameSession!(props.sessions[0]?.sessionId ?? '', title)
+    },
+  })
 }
 
 function usePaneProjectionOfSession(sessions: readonly ConsoleSessionOption[]): { readonly displayTitle: string; readonly running: boolean } | undefined {

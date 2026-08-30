@@ -30,6 +30,10 @@ export interface TerminalPanelProps {
   host?: TerminalHostV2 | undefined
   /** Opaque terminal id to attach when `host` exposes the interactive seam. */
   terminalId?: string | undefined
+  /** V3 6.6: open a NEW PTY session as its own pane view. */
+  readonly onNewSession?: (() => void) | undefined
+  /** V3 6.6: rename this view's title (same resource key, new title). */
+  readonly onRename?: ((title: string) => void) | undefined
 }
 
 const terminalStyles = `
@@ -63,7 +67,7 @@ function disposeXtermDisposable(value: { dispose(): void } | undefined): void {
   value?.dispose()
 }
 
-function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHostV2; readonly terminalId: string }) {
+function InteractiveTerminal({ host, terminalId, onNewSession, onRename }: { readonly host: TerminalHostV2; readonly terminalId: string; readonly onNewSession?: (() => void) | undefined; readonly onRename?: ((title: string) => void) | undefined }) {
   const surfaceRef = useRef<HTMLDivElement>(null)
   const fitRef = useRef<{ fit(): void }>()
   const searchRef = useRef<{ findNext(term: string): boolean; findPrevious(term: string): boolean }>()
@@ -238,6 +242,12 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
           <Button type="button" size="sm" variant="toolbar" data-terminal-find-prev onClick={() => { if (findTerm !== '') searchRef.current?.findPrevious(findTerm) }}>上一处</Button>
           <Button type="button" size="sm" variant="toolbar" data-terminal-find-close onClick={() => setFindOpen(false)}>关闭</Button>
         </span>}
+        {onNewSession !== undefined && <Button type="button" size="sm" variant="toolbar" data-terminal-new onClick={onNewSession}>新建</Button>}
+        {onNewSession !== undefined && <Button type="button" size="sm" variant="toolbar" data-terminal-split onClick={onNewSession}>分屏</Button>}
+        {onRename !== undefined && <Button type="button" size="sm" variant="toolbar" data-terminal-rename onClick={() => {
+          const title = window.prompt('会话标题', '') ?? ''
+          if (title.trim() !== '') onRename(title.trim().slice(0, 80))
+        }}>重命名</Button>}
         <Button type="button" size="sm" variant="toolbar" data-terminal-find onClick={() => setFindOpen(open => !open)}>查找</Button>
         <Button type="button" size="sm" variant="toolbar" data-terminal-copy onClick={() => {
           const text = serializeRef.current?.serialize() ?? ''
@@ -269,7 +279,7 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
 }
 
 /** Terminal renderer with a lazy xterm boundary and honest fallback states. */
-export function TerminalPanel({ state = 'disconnected', status, host, terminalId }: TerminalPanelProps) {
+export function TerminalPanel({ state = 'disconnected', status, host, terminalId, onNewSession, onRename }: TerminalPanelProps) {
   const interactive = host?.attachTerminal !== undefined && terminalId !== undefined && state !== 'exited'
   return (
     <Surface kind="workspace" aria-label="Terminal" data-dsh-terminal-panel data-terminal-state={state}>
@@ -279,7 +289,7 @@ export function TerminalPanel({ state = 'disconnected', status, host, terminalId
         {status !== undefined ? ` · ${status}` : ''}
       </span>} />
       {interactive
-        ? <div className="ys-body"><InteractiveTerminal host={host} terminalId={terminalId} /></div>
+        ? <div className="ys-body"><InteractiveTerminal host={host} terminalId={terminalId} onNewSession={onNewSession} onRename={onRename} /></div>
         : <div className="ys-body"><SurfaceState phase={state === 'exited' ? 'empty' : 'disabled'} title={state === 'exited' ? '该终端已经退出。重新打开会创建新的 DSH PTY 会话。' : '当前没有可附着的 interactive terminal V2 会话；不会显示占位输出或伪输入框。'} aria-label="Terminal compatibility status" data-terminal-compatibility /></div>}
     </Surface>
   )

@@ -306,3 +306,25 @@ describe('terminal toolbar actions (V3 6.2/6.6/6.7)', () => {
     confirmSpy.mockRestore()
   })
 })
+
+describe('session toolbar actions (V3 6.6 New/Split/Rename)', () => {
+  it('New and Split open a fresh PTY session as its own view; empty titles never rename', async () => {
+    const { host } = fakeHost('t-1')
+    const openSession = vi.fn()
+    const rename = vi.fn()
+    const opened = (host as unknown as { openTerminal: ReturnType<typeof vi.fn> }).openTerminal
+    opened.mockResolvedValue({ terminalId: 'fresh-1', title: 'fresh', running: true } as never)
+    const { container } = render(createElement(TerminalPanel, { state: 'connected', host, terminalId: 't-1', onNewSession: () => { void host.openTerminal().then(session => openSession(session.terminalId, session.title)) }, onRename: title => rename(title) }))
+    await waitFor(() => { expect(container.querySelector('[data-terminal-new]')).not.toBeNull() })
+    fireEvent.click(container.querySelector('[data-terminal-new]')!)
+    await waitFor(() => { expect(openSession).toHaveBeenCalledWith('fresh-1', 'fresh') })
+    fireEvent.click(container.querySelector('[data-terminal-split]')!)
+    await waitFor(() => { expect(opened).toHaveBeenCalledTimes(2) })
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValueOnce('  ').mockReturnValueOnce('Renamed' as never)
+    fireEvent.click(container.querySelector('[data-terminal-rename]')!)
+    expect(rename).not.toHaveBeenCalled() // whitespace-only refused
+    fireEvent.click(container.querySelector('[data-terminal-rename]')!)
+    expect(rename).toHaveBeenCalledWith('Renamed')
+    promptSpy.mockRestore()
+  })
+})
