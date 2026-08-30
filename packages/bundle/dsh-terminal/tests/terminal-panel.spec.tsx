@@ -16,6 +16,7 @@ class MockTerminal {
   unicode = { activeVersion: '6' as string }
   open = vi.fn()
   dispose = vi.fn(() => { this.disposed = true })
+  clear = vi.fn()
   write = vi.fn((data: string) => { this.written.push(data) })
   loadAddon = vi.fn((addon: { dispose(): void }) => { this.addons.push(addon) })
   onData = vi.fn((listener: (data: string) => void) => {
@@ -34,6 +35,7 @@ vi.mock('@xterm/addon-search', () => ({ SearchAddon: class { findNext = vi.fn(()
 vi.mock('@xterm/addon-web-links', () => ({ WebLinksAddon: class { constructor(_cb: unknown) {}; dispose = vi.fn() } }))
 vi.mock('@xterm/addon-unicode11', () => ({ Unicode11Addon: class { activate = vi.fn(); dispose = vi.fn() } }))
 vi.mock('@xterm/addon-webgl', () => ({ WebglAddon: class { onContextLoss = vi.fn(); dispose = vi.fn() } }))
+vi.mock('@xterm/addon-serialize', () => ({ SerializeAddon: class { serialize = vi.fn(() => 'buffer-dump'); dispose = vi.fn() } }))
 
 import { TerminalPanel } from '../src/client/terminal-panel.tsx'
 import type { TerminalHostV2, TerminalAttachmentV2 } from '@yeisme/dsh-terminal-host'
@@ -239,5 +241,68 @@ describe('control-lease input gate (V3 6.4)', () => {
     expect(container.querySelector('[data-terminal-lease]')).toBeNull()
     attachment.emitInput('legacy')
     await waitFor(() => { expect(attachment.writeInput).toHaveBeenCalledWith('legacy') })
+  })
+})
+
+describe('terminal toolbar actions (V3 6.2/6.6/6.7)', () => {
+  it('Find opens a search box that drives the search addon', async () => {
+    const { host } = fakeHost('t-1')
+    const { container } = render(createElement(TerminalPanel, { state: 'connected', host, terminalId: 't-1' }))
+    await waitFor(() => { expect(container.querySelector('[data-terminal-find]')).not.toBeNull() })
+    fireEvent.click(container.querySelector('[data-terminal-find]')!)
+    const input = container.querySelector('[data-terminal-find-input]') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'error' } })
+    const terminal = terminalInstances[0]!
+    const searchAddon = terminal.addons.find(addon => 'findNext' in (addon as object)) as unknown as { findNext: ReturnType<typeof vi.fn>; findPrevious: ReturnType<typeof vi.fn> }
+    fireEvent.click(container.querySelector('[data-terminal-find-next]')!)
+    expect(searchAddon.findNext).toHaveBeenCalledWith('error')
+    fireEvent.click(container.querySelector('[data-terminal-find-prev]')!)
+    expect(searchAddon.findPrevious).toHaveBeenCalledWith('error')
+  })
+
+  it('Copy serializes the buffer to the clipboard; Clear clears the terminal', async () => {
+    const { host } = fakeHost('t-1')
+    const writeText = vi.fn(async () => {})
+    Object.assign(navigator, { clipboard: { writeText, readText: vi.fn(async () => '') } })
+    const { container } = render(createElement(TerminalPanel, { state: 'connected', host, terminalId: 't-1' }))
+    await waitFor(() => { expect(container.querySelector('[data-terminal-copy]')).not.toBeNull() })
+    fireEvent.click(container.querySelector('[data-terminal-copy]')!)
+    await waitFor(() => { expect(writeText).toHaveBeenCalledWith('buffer-dump') })
+    const terminal = terminalInstances[0]!
+    const serializeAddon = terminal.addons.find(addon => 'serialize' in (addon as object)) as unknown as { serialize: () => string }
+    expect(serializeAddon.serialize()).toBe('buffer-dump')
+    fireEvent.click(container.querySelector('[data-terminal-clear]')!)
+    expect((terminal as unknown as { clear: ReturnType<typeof vi.fn> }).clear).toHaveBeenCalled()
+  })
+
+  it('Detach only detaches; Kill requires confirmation and the owner close receipt', async () => {
+    const { host, attachment } = fakeHost('t-1')
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const { container } = render(createElement(TerminalPanel, { state: 'connected', host, terminalId: 't-1' }))
+    await waitFor(() => { expect(container.querySelector('[data-terminal-detach]')).not.toBeNull() })
+    fireEvent.click(container.querySelector('[data-terminal-detach]')!)
+    expect(attachment.detach).toHaveBeenCalledTimes(1)
+    expect((host as unknown as { closeTerminal: ReturnType<typeof vi.fn> }).closeTerminal).not.toHaveBeenCalled()
+    fireEvent.click(container.querySelector('[data-terminal-kill]')!)
+    expect((host as unknown as { closeTerminal: ReturnType<typeof vi.fn> }).closeTerminal).not.toHaveBeenCalled() // confirm refused
+    confirmSpy.mockReturnValue(true)
+    fireEvent.click(container.querySelector('[data-terminal-kill]')!)
+    await waitFor(() => { expect((host as unknown as { closeTerminal: ReturnType<typeof vi.fn> }).closeTerminal).toHaveBeenCalledWith('t-1') })
+    confirmSpy.mockRestore()
+  })
+
+  it('multiline paste requires explicit confirmation; refused paste never reaches the PTY', async () => {
+    const { host, attachment } = fakeHost('t-1')
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    Object.assign(navigator, { clipboard: { readText: vi.fn(async () => 'line1\nline2') } })
+    const { container } = render(createElement(TerminalPanel, { state: 'connected', host, terminalId: 't-1' }))
+    await waitFor(() => { expect(container.querySelector('[data-terminal-paste]')).not.toBeNull() })
+    fireEvent.click(container.querySelector('[data-terminal-paste]')!)
+    await waitFor(() => { expect(confirmSpy).toHaveBeenCalled() })
+    expect(attachment.writeInput).not.toHaveBeenCalled()
+    confirmSpy.mockReturnValue(true)
+    fireEvent.click(container.querySelector('[data-terminal-paste]')!)
+    await waitFor(() => { expect(attachment.writeInput).toHaveBeenCalledWith('line1\nline2') })
+    confirmSpy.mockRestore()
   })
 })

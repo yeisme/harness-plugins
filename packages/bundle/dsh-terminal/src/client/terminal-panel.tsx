@@ -37,6 +37,8 @@ const terminalStyles = `
 [data-dsh-terminal-panel] .dt-surface-toolbar{display:flex;justify-content:flex-end;gap:6px;min-height:30px;margin-bottom:6px}
 [data-dsh-terminal-panel] .dt-error{margin-right:auto;color:var(--vk-state-error)}
 [data-dsh-terminal-panel] .dt-lease{margin-right:auto;font-size:12px;color:var(--vk-state-warn)}
+[data-dsh-terminal-panel] .dt-find{display:inline-flex;gap:4px;align-items:center}
+[data-dsh-terminal-panel] .dt-find input{min-height:24px;padding:0 6px;border:1px solid var(--vk-border-l2);border-radius:6px;background:var(--vk-bg-layer-1);color:inherit;font:inherit}
 [data-dsh-terminal-panel] [data-terminal-surface]{min-height:320px;overflow:hidden;padding:12px;background:var(--vk-bg-base);border:1px solid var(--vk-border-l2);border-radius:12px}
 [data-dsh-terminal-panel] [data-terminal-surface] { position: relative; }
 [data-dsh-terminal-panel] [data-terminal-surface] .xterm { position: relative; height: 100%; min-height: 292px; padding: 2px; user-select: none; }
@@ -64,11 +66,18 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
   const surfaceRef = useRef<HTMLDivElement>(null)
   const fitRef = useRef<{ fit(): void }>()
   const searchRef = useRef<{ findNext(term: string): boolean; findPrevious(term: string): boolean }>()
+  const serializeRef = useRef<{ serialize(): string }>()
+  const terminalRef = useRef<{ clear(): void }>()
   const attachmentControlRequestRef = useRef<(() => Promise<{ readonly status: 'ok' | 'denied' | 'busy' } | undefined>) | undefined>()
+  const onDetachRef = useRef<(() => Promise<void>) | undefined>()
+  const onKillRef = useRef<(() => Promise<unknown>) | undefined>()
+  const onPasteRef = useRef<((data: string) => Promise<unknown>) | undefined>()
   const [error, setError] = useState<string | undefined>()
   const [ready, setReady] = useState(false)
   const [connectionAttempt, setConnectionAttempt] = useState(0)
   const [lease, setLease] = useState<'granted' | 'pending' | 'denied' | undefined>()
+  const [findOpen, setFindOpen] = useState(false)
+  const [findTerm, setFindTerm] = useState('')
 
   useEffect(() => {
     const surface = surfaceRef.current
@@ -126,6 +135,14 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
         const search = new SearchAddon()
         terminal.loadAddon(search)
         searchRef.current = search
+        // V3 6.2/6.6: serialize feeds Copy; loaded once with the core set.
+        try {
+          const { SerializeAddon } = await import('@xterm/addon-serialize')
+          const serialize = new SerializeAddon()
+          terminal.loadAddon(serialize)
+          serializeRef.current = serialize
+        } catch { /* optional: Copy falls back to selection */ }
+        terminalRef.current = terminal
         terminal.loadAddon(new WebLinksAddon(() => { void 0 }))
         terminal.loadAddon(new Unicode11Addon())
         terminal.unicode.activeVersion = '11'
@@ -151,6 +168,10 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
         if (leaseOf() !== undefined) setLease(leaseOf()!.state)
         const requestTakeover = leaseOf()?.requestTakeover
         attachmentControlRequestRef.current = requestTakeover === undefined ? undefined : () => Promise.resolve(requestTakeover())
+        // Close/Detach never kills the PTY (owner lifecycle); Kill is explicit.
+        onDetachRef.current = () => nextAttachment.detach()
+        onKillRef.current = () => host.closeTerminal(terminalId)
+        onPasteRef.current = data => nextAttachment.writeInput(data)
         leaseDispose = leaseOf()?.subscribe(state => setLease(state))
         inputDispose = terminal.onData(data => {
           const control = leaseOf()
@@ -193,6 +214,8 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
       terminal?.dispose()
       fitRef.current = undefined
       searchRef.current = undefined
+      serializeRef.current = undefined
+      terminalRef.current = undefined
       void attachment?.detach()
     }
   }, [host, terminalId, connectionAttempt])
@@ -205,7 +228,37 @@ function InteractiveTerminal({ host, terminalId }: { readonly host: TerminalHost
         const result = await attachmentControlRequestRef.current?.()
         if (result === undefined || result.status === 'busy') { setLease('pending') }
       }}>接管</Button>}
-      {ready && <Button type="button" size="sm" variant="toolbar" onClick={() => fitRef.current?.fit()} data-terminal-fit>适配窗口</Button>}
+      {ready && <>
+        {findOpen && <span className="dt-find" role="search">
+          <input aria-label="查找" value={findTerm} onChange={event => setFindTerm(event.currentTarget.value)} data-terminal-find-input />
+          <Button type="button" size="sm" variant="toolbar" data-terminal-find-next onClick={() => { if (findTerm !== '') searchRef.current?.findNext(findTerm) }}>下一处</Button>
+          <Button type="button" size="sm" variant="toolbar" data-terminal-find-prev onClick={() => { if (findTerm !== '') searchRef.current?.findPrevious(findTerm) }}>上一处</Button>
+          <Button type="button" size="sm" variant="toolbar" data-terminal-find-close onClick={() => setFindOpen(false)}>关闭</Button>
+        </span>}
+        <Button type="button" size="sm" variant="toolbar" data-terminal-find onClick={() => setFindOpen(open => !open)}>查找</Button>
+        <Button type="button" size="sm" variant="toolbar" data-terminal-copy onClick={() => {
+          const text = serializeRef.current?.serialize() ?? ''
+          if (text !== '') void navigator.clipboard?.writeText(text).catch(() => {})
+        }}>复制</Button>
+        <Button type="button" size="sm" variant="toolbar" data-terminal-paste onClick={async () => {
+          const gated = lease !== undefined && lease !== 'granted'
+          if (gated) return
+          try {
+            const text = await navigator.clipboard?.readText()
+            if (text === undefined || text === '') return
+            if (/[\r\n\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(text) && !window.confirm('粘贴内容包含多行或控制字符，确认粘贴？')) return
+            await onPasteRef.current?.(text)
+          } catch { /* clipboard is an optional capability */ }
+        }}>粘贴</Button>
+        <Button type="button" size="sm" variant="toolbar" data-terminal-clear onClick={() => terminalRef.current?.clear()}>清屏</Button>
+        <Button type="button" size="sm" variant="toolbar" data-terminal-detach onClick={() => { void onDetachRef.current?.() }}>分离</Button>
+        <Button type="button" size="sm" variant="toolbar" data-terminal-kill onClick={() => {
+          // Close NEVER kills; Kill asks once and requires the owner receipt.
+          if (!window.confirm('终止该 PTY 会话？此操作不可撤销。')) return
+          void onKillRef.current?.()
+        }}>终止</Button>
+        <Button type="button" size="sm" variant="toolbar" onClick={() => fitRef.current?.fit()} data-terminal-fit>适配窗口</Button>
+      </>}
       {error !== undefined && <Button type="button" size="sm" variant="toolbar" onClick={() => { setReady(false); setError(undefined); setConnectionAttempt(value => value + 1) }} data-terminal-reconnect>重新连接</Button>}
     </div>}
     <div ref={surfaceRef} aria-label={error === undefined ? 'Interactive terminal' : `Interactive terminal unavailable: ${error}`} data-terminal-surface />
