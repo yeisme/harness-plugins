@@ -14,6 +14,7 @@ import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Surface, SurfaceContextBar, SurfaceState } from '@yeisme/dsh-client-ui-surface'
 import type { FileEntryKind, FileEntryV1 } from '../types.ts'
 import { formatJsonTree } from './json-tree.ts'
+import { formatBinaryPreview, BINARY_PREVIEW_MAX_BYTES as BINARY_LABEL } from './binary-preview.ts'
 import {
   buildFileTree,
   fileTreePathOf,
@@ -60,6 +61,8 @@ export interface FileDocumentPanelProps {
    * only); when absent, markdown falls back to the plain source viewer.
    */
   renderMarkdown?: ((text: string) => string) | undefined
+  /** Owner-provided bounded bytes for binary preview (V3 4.8); absent keeps the honest unsupported state. */
+  bytes?: Uint8Array | undefined
 }
 
 const styles = {
@@ -435,7 +438,7 @@ export function documentViewModesOf(entry: FileEntryV1): readonly { mode: Docume
   ]
 }
 
-function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, onRetryText, renderTable, renderMarkdown }: {
+function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, onRetryText, renderTable, renderMarkdown, bytes }: {
   entry: FileEntryV1 | undefined
   previewUrl: string | undefined
   onOpenEntry: ((entry: FileEntryV1) => void) | undefined
@@ -444,6 +447,7 @@ function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, on
   onRetryText: (() => void) | undefined
   renderTable: ((entry: FileEntryV1, text: string) => ReactNode) | undefined
   renderMarkdown: ((text: string) => string) | undefined
+  bytes: Uint8Array | undefined
 }) {
   const [mode, setMode] = useState<DocumentViewMode>('preview')
   if (entry === undefined) {
@@ -514,7 +518,17 @@ function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, on
               : renderTable(entry, text)}
           </div>
         )}
-        {renderState === 'unsupported' && entry.kind !== 'directory' && <span>{previewUrl === undefined ? '等待文件服务提供预览授权。' : '此文件类型暂不支持内嵌预览。'}</span>}
+        {renderState === 'unsupported' && entry.kind !== 'directory' && (
+          bytes === undefined
+            ? <span>{previewUrl === undefined ? '等待文件服务提供预览授权。' : '此文件类型暂不支持内嵌预览。'}</span>
+            : (() => {
+              const preview = formatBinaryPreview(bytes)
+              return <div data-dsh-file-preview-binary>
+                <pre style={styles.previewText}>{preview.lines.map(line => `${line.offset}  ${line.hex}  |${line.ascii}|`).join('\n')}</pre>
+                <span>有界字节预览：{preview.totalBytes} 字节{preview.truncated ? `（仅前 ${BINARY_LABEL} 字节）` : ''}；不解压、不解析。</span>
+              </div>
+            })()
+        )}
       </div>
       <footer style={styles.docStatusBar} role="status" data-dsh-doc-status={renderState}>
         <span style={styles.docStatusText}>{[kindLabel(entry.kind), entry.mediaType, size].filter((part): part is string => part !== undefined).join(' · ')}</span>
@@ -672,7 +686,7 @@ function TreeRow({
 }
 
 /** File/Document panel backed by safe file-entry projections. */
-export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOpenEntry, onPinEntry, loadChildren, loading = false, error, onRetry, loadText, showPreviewPanel = true, compact = false, renderTable, renderMarkdown }: FileDocumentPanelProps) {
+export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOpenEntry, onPinEntry, loadChildren, loading = false, error, onRetry, loadText, showPreviewPanel = true, compact = false, renderTable, renderMarkdown, bytes }: FileDocumentPanelProps) {
   const visible = useMemo(() => {
     if (tabId === 'documents') {
       return entries.filter(entry => entry.kind === 'document' || entry.kind === 'pdf' || entry.kind === 'text' || entry.kind === 'directory')
@@ -814,6 +828,7 @@ export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOp
                   }}
                   renderTable={renderTable}
                   renderMarkdown={renderMarkdown}
+                  bytes={bytes}
                 />
               )}
             </>

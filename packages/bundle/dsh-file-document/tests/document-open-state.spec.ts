@@ -124,3 +124,23 @@ describe('formatJsonTree (V3 4.5 tree mode)', () => {
     expect(formatJsonTree(longString)).toContain('…')
   })
 })
+
+describe('formatBinaryPreview (V3 4.8)', () => {
+  it('renders aligned hex/ASCII rows with printable substitution', async () => {
+    const { formatBinaryPreview } = await import('../src/client/binary-preview.ts')
+    const preview = formatBinaryPreview(new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0xff, 0x0a]))
+    expect(preview.lines).toHaveLength(1)
+    expect(preview.lines[0]!.hex.startsWith('48 65 6c 6c 6f 00 ff 0a')).toBe(true)
+    expect(preview.lines[0]!.ascii).toBe('Hello...')
+    expect(preview.truncated).toBe(false)
+    expect(preview.totalBytes).toBe(8)
+  })
+
+  it('caps at the bounded byte limit with an honest truncated flag', async () => {
+    const { formatBinaryPreview, BINARY_PREVIEW_MAX_BYTES } = await import('../src/client/binary-preview.ts')
+    const preview = formatBinaryPreview(new Uint8Array(BINARY_PREVIEW_MAX_BYTES + 100))
+    expect(preview.truncated).toBe(true)
+    expect(preview.totalBytes).toBe(BINARY_PREVIEW_MAX_BYTES + 100)
+    expect(preview.lines).toHaveLength(BINARY_PREVIEW_MAX_BYTES / 16)
+  })
+})
