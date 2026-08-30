@@ -46,6 +46,13 @@ export interface FileDocumentPanelProps {
   showPreviewPanel?: boolean | undefined
   /** Compact navigator chrome for the right-side directory tree. */
   compact?: boolean | undefined
+  /**
+   * V3 4.6 table renderer injected by the composition layer (e.g. the
+   * desktop-workbench apply that already maps file previews onto the
+   * preview-platform renderer). Bundles never import each other's
+   * ModuleLoader artifacts directly.
+   */
+  renderTable?: ((entry: FileEntryV1, text: string) => ReactNode) | undefined
 }
 
 const styles = {
@@ -421,13 +428,14 @@ export function documentViewModesOf(entry: FileEntryV1): readonly { mode: Docume
   ]
 }
 
-function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, onRetryText }: {
+function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, onRetryText, renderTable }: {
   entry: FileEntryV1 | undefined
   previewUrl: string | undefined
   onOpenEntry: ((entry: FileEntryV1) => void) | undefined
   text: string | undefined
   textLoading: boolean
   onRetryText: (() => void) | undefined
+  renderTable: ((entry: FileEntryV1, text: string) => ReactNode) | undefined
 }) {
   const [mode, setMode] = useState<DocumentViewMode>('preview')
   if (entry === undefined) {
@@ -489,8 +497,12 @@ function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, on
               ? <pre style={styles.previewText} data-dsh-file-preview-tree>{text ?? entry.summary ?? ''}</pre>
               : <pre style={styles.previewText} data-dsh-file-preview-text>{text ?? entry.summary ?? ''}</pre>
         )}
-        {renderState !== 'loading' && isText && isTable && activeMode === 'table' && (
-          <div data-dsh-file-preview-table style={styles.docState}><span>表格模式由预览平台渲染器提供（4.6 接线）。</span></div>
+        {renderState !== 'loading' && isTable && activeMode === 'table' && (
+          <div data-dsh-file-preview-table style={{ minHeight: 240 }}>
+            {renderTable === undefined || text === undefined
+              ? <div style={styles.docState}><span>表格渲染由组合层注入（预览平台渲染器接线）。</span></div>
+              : renderTable(entry, text)}
+          </div>
         )}
         {renderState === 'unsupported' && entry.kind !== 'directory' && <span>{previewUrl === undefined ? '等待文件服务提供预览授权。' : '此文件类型暂不支持内嵌预览。'}</span>}
       </div>
@@ -650,7 +662,7 @@ function TreeRow({
 }
 
 /** File/Document panel backed by safe file-entry projections. */
-export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOpenEntry, onPinEntry, loadChildren, loading = false, error, onRetry, loadText, showPreviewPanel = true, compact = false }: FileDocumentPanelProps) {
+export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOpenEntry, onPinEntry, loadChildren, loading = false, error, onRetry, loadText, showPreviewPanel = true, compact = false, renderTable }: FileDocumentPanelProps) {
   const visible = useMemo(() => {
     if (tabId === 'documents') {
       return entries.filter(entry => entry.kind === 'document' || entry.kind === 'pdf' || entry.kind === 'text' || entry.kind === 'directory')
@@ -790,6 +802,7 @@ export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOp
                   onRetryText={loadText === undefined || selectedEntry === undefined ? undefined : () => {
                     setTextById(previous => { const next = { ...previous }; delete next[selectedEntry.id]; return next })
                   }}
+                  renderTable={renderTable}
                 />
               )}
             </>

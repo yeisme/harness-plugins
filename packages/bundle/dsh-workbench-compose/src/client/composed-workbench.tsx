@@ -15,15 +15,25 @@ import { Surface, SurfaceContextBar } from '@yeisme/dsh-client-ui-surface'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { CommandPalette, WorkbenchShell } from '@yeisme/dsh-workbench-core/client'
 import type { WorkbenchTabV1 } from '@yeisme/dsh-workbench-core'
-import { RichMediaCard } from '@yeisme/dsh-rich-media/client'
+import { RichMediaCard, PreviewTableRenderer, createPreviewAccessHandle, delimiterOfMediaType, fileEntryToPreviewResource, parseDelimitedTable } from '@yeisme/dsh-rich-media/client'
 import { FileDocumentPanel, useFileTree } from '@yeisme/dsh-file-document'
-import type { FileTreeHostAdapter } from '@yeisme/dsh-file-document'
+import type { FileEntryV1, FileTreeHostAdapter } from '@yeisme/dsh-file-document'
 import { TerminalPanel, type TerminalPanelState } from '@yeisme/dsh-terminal'
 import { createComposedWorkbenchRegistry } from '../composed-registry.ts'
 import { emptyHostProjection } from '../host-projection.ts'
 import type { WorkbenchHostProjection } from '../host-projection.ts'
 import type { ComposeKey } from './locales.ts'
 import { NS, en, zh } from './locales.ts'
+
+/** V3 4.6: table mode routes through the preview-platform renderer. */
+function renderComposedTable(entry: FileEntryV1, text: string): React.ReactNode {
+  const parsed = parseDelimitedTable(text, delimiterOfMediaType(entry.mediaType))
+  const columns = (parsed.rows[0] ?? []).map((label, index) => ({ id: `col-${index}`, label }))
+  const rows = parsed.rows.slice(1)
+  const resource = fileEntryToPreviewResource(entry)
+  const access = createPreviewAccessHandle({ resource, capabilities: ['preview'], table: rows, columns })
+  return <PreviewTableRenderer resource={resource} access={access} />
+}
 
 export type ComposedWorkbenchProps =
   PropsRuntime<'sidebar.footer.action'> & PropsLocale<'workbenchCompose'>
@@ -105,6 +115,7 @@ export function ComposedWorkbench({ wide, t, hostProjection = emptyHostProjectio
           loading={fileTree.status === 'loading'}
           error={fileTree.status === 'error' ? fileTree.error : undefined}
           onRetry={fileTree.retry}
+          renderTable={renderComposedTable}
         />
       )
     }
