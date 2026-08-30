@@ -122,6 +122,12 @@ export type PaneWorkspaceIntentV1 =
   | { readonly type: 'activate_view'; readonly viewId: string }
   | { readonly type: 'pin_view'; readonly viewId: string; readonly pinned?: boolean }
   | { readonly type: 'set_view_dirty'; readonly viewId: string; readonly dirty: boolean }
+  | {
+    /** V3 2.6 safe presentation update: bounded title with control characters stripped. */
+    readonly type: 'update_view_presentation'
+    readonly viewId: string
+    readonly title?: string
+  }
   | { readonly type: typeof PANE_WORKSPACE_CLOSE_VIEW_INTENT; readonly viewId: string; readonly decision?: 'allow' | 'confirm' | 'deny' }
   | {
     readonly type: 'bulk_close'
@@ -1060,6 +1066,13 @@ function applyCloseView(state: PaneWorkspaceV1, intent: Extract<PaneWorkspaceInt
   return result(next, true, 'closed', `${view.title} closed.`)
 }
 
+/** Bounded safe title for presentation updates (V3 2.6): trim, cap 160, strip control characters. */
+export function sanitizePresentationTitle(input: string | undefined): string | undefined {
+  if (input === undefined) return undefined
+  const stripped = input.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 160)
+  return stripped === '' ? undefined : stripped
+}
+
 function applyBulkClose(state: PaneWorkspaceV1, intent: Extract<PaneWorkspaceIntentV1, { type: 'bulk_close' }>): PaneWorkspaceReducerResultV1 {
   const preflight = preflightBulkClose(state, intent.groupId, intent.mode, intent.sourceViewId, intent.decision)
   if (!preflight.accepted) {
@@ -1236,6 +1249,19 @@ export function reducePaneWorkspace(state: PaneWorkspaceV1, intent: PaneWorkspac
     case 'activate_view': {
       const snapshot = cloneSnapshot(state)
       return activate(snapshot, intent.viewId) ? result(commit(state, snapshot, false), true) : result(state, false, 'unknown_view')
+    }
+    case 'update_view_presentation': {
+      const view = state.views[intent.viewId]
+      if (view === undefined) return result(state, false, 'unknown_view', 'View not found.')
+      let changed = false
+      let next = view
+      const safeTitle = sanitizePresentationTitle(intent.title)
+      if (safeTitle !== undefined && safeTitle !== view.title) {
+        next = { ...next, title: safeTitle }
+        changed = true
+      }
+      if (!changed) return result(state, false, 'no-op', 'No presentation change.')
+      return result({ ...state, views: { ...state.views, [intent.viewId]: next } }, true, 'presentation_updated', 'View presentation updated.')
     }
     case 'pin_view': {
       const view = viewFor(state, intent.viewId)

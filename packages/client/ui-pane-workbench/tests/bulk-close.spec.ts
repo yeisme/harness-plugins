@@ -107,3 +107,24 @@ describe('V4 Task 3.4 Bulk Close', () => {
     expect(Object.values(next.state.views).map(item => item.resourceKey).sort()).toEqual(['file:left', 'file:mid'])
   })
 })
+
+describe('safe presentation updates (V3 2.6)', () => {
+  it('updates a title with control characters stripped and a 160-char cap', () => {
+    const state = populated()
+    const first = Object.values(state.groups).find(group => group.tabs.length > 0)!.tabs[0]!
+    const updated = reducePaneWorkspace(state, { type: 'update_view_presentation', viewId: first, title: `bad${String.fromCharCode(7)}title ${'x'.repeat(300)}` })
+    expect(updated.accepted, updated.reason).toBe(true)
+    const title = updated.state.views[first]?.title ?? ''
+    expect(title.startsWith('badtitle ')).toBe(true)
+    expect(title).toHaveLength(160)
+  })
+
+  it('is a safe no-op for missing views, empty, and unchanged titles', () => {
+    const state = populated()
+    expect(reducePaneWorkspace(state, { type: 'update_view_presentation', viewId: 'nope', title: 'x' }).accepted).toBe(false)
+    expect(reducePaneWorkspace(state, { type: 'update_view_presentation', viewId: Object.keys(state.views)[0]!, title: '   ' }).accepted).toBe(false)
+    const viewId = Object.keys(state.views)[0]!
+    const same = reducePaneWorkspace(state, { type: 'update_view_presentation', viewId, title: state.views[viewId]!.title })
+    expect(same.accepted).toBe(false)
+  })
+})
