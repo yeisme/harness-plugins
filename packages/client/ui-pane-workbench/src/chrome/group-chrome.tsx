@@ -100,6 +100,13 @@ export function GroupChrome(props: {
     const protectedViews = result.details?.bulkCloseSafe?.protectedViews ?? []
     if (protectedViews.length > 0) props.onReviewProtected(protectedViews)
   }
+  // V3 2.5: Close Group is the keyboard/menu equivalent of dragging every tab
+  // away — atomic bulk-close with the same dirty/protected review.
+  const closeGroup = (): void => {
+    const result = props.controller.dispatch({ type: 'bulk_close_safe', groupId: props.group.id, mode: 'unpinned', viewIds: props.group.tabs })
+    const protectedViews = result.details?.bulkCloseSafe?.protectedViews ?? []
+    if (protectedViews.length > 0) props.onReviewProtected(protectedViews)
+  }
   const dropTarget = (event: PointerEvent<HTMLElement>): PaneDragTargetV1 | undefined => {
     const sourceId = drag.drag.status === 'dragging' ? drag.drag.viewId : drag.drag.status === 'pending' ? drag.drag.viewId : undefined
     const source = sourceId === undefined ? undefined : props.state.views[sourceId]
@@ -190,6 +197,7 @@ export function GroupChrome(props: {
     createElement('button', { className: 'pwr-menu-item', role: 'menuitem', type: 'button', onClick: () => { openPaneWorkbenchCoreView(props.controller, DSH_WORKSPACE_DESIGNER_VIEW_KIND); setMenuViewId(undefined) } }, ...menuItem('workspace', t('rail.customize'))),
     createElement('button', { className: 'pwr-menu-item', role: 'menuitem', type: 'button', onClick: () => { props.controller.dispatch({ type: 'pin_view', viewId: menuView.id }); setMenuViewId(undefined) } }, ...menuItem(menuView.pinned ? 'unpin' : 'pin', menuView.pinned ? t('tab.unpin') : t('tab.pin'))),
     createElement('button', { className: 'pwr-menu-item', role: 'menuitem', type: 'button', onClick: () => { close(menuView.id); setMenuViewId(undefined) } }, ...menuItem('close', formatT('tab.closeWithName', { name: menuView.title }))),
+    createElement('button', { className: 'pwr-menu-item', role: 'menuitem', type: 'button', 'data-pane-menu-close-group': true, onClick: () => { closeGroup(); setMenuViewId(undefined) } }, ...menuItem('close', t('tab.closeGroup'))),
     createElement('div', { className: 'pwr-menu-separator', role: 'separator' }),
     createElement('button', { className: 'pwr-menu-item', role: 'menuitem', type: 'button', onClick: () => {
       props.controller.dispatch({ type: 'set_region_visibility', region: props.group.region, visible: false })
