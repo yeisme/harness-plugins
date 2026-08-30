@@ -1,3 +1,4 @@
+import { TerminalPanel } from './terminal-panel.tsx'
 /**
  * Terminal client entry (ModuleLoader face)：console 视图 + 命令面。
  *
@@ -125,6 +126,19 @@ export function apply(ctx: Context): () => void {
     })
   }
 
+  const openTerminalSession = (sessionId: string, title: string): void => {
+    if (mount.getSnapshot() === undefined) return
+    pane?.openView({
+      kind: 'dsh-terminal.session',
+      resourceKey: `terminal:${sessionId}`,
+      role: 'general',
+      preferredRegion: 'bottom',
+      retention: 'keep-alive',
+      singleton: false,
+      title,
+    })
+  }
+
   const openConsole = (): void => {
     if (mount.getSnapshot() === undefined) return
     pane?.openView({
@@ -151,6 +165,22 @@ export function apply(ctx: Context): () => void {
       },
       component: () => ConsolePanelRoot({ mount, sessions: sessionOptions(), currentSessionId: sessions.list.getSnapshot().current, t, refreshSignal, watchOwner }),
     }))
+    // V3 6.8: every DSH terminal is its own keep-alive view keyed by the
+    // owner-issued opaque session id; default dock is Bottom and provider
+    // dispose only detaches (the PTY lifecycle stays with the owner).
+    disposers.push(pane.registerView({
+      descriptor: {
+        kind: 'dsh-terminal.session',
+        label: t('title'),
+        componentKey: 'terminal-session',
+        role: 'general',
+        preferredRegion: 'bottom',
+        retention: 'keep-alive',
+        singleton: false,
+      },
+      presentation: { icon: 'terminal', defaultEdge: 'bottom' },
+      component: () => TerminalSessionViewRoot({ mount, sessions: sessionOptions(), t }),
+    }))
     if (typeof pane.registerCommand === 'function') {
       disposers.push(pane.registerCommand({
         descriptor: {
@@ -160,6 +190,19 @@ export function apply(ctx: Context): () => void {
           slash: { name: 'terminal', hint: t('composer.placeholder'), category: 'pane' },
         },
         execute: openConsole,
+      }))
+      disposers.push(pane.registerCommand({
+        descriptor: {
+          id: 'terminal.open-session',
+          label: `${t('title')} (pane)`,
+          presentation: { launcher: true },
+        },
+        execute: () => {
+          const current = sessions.list.getSnapshot().current
+          if (current === undefined) return
+          const row = sessionOptions().find(option => option.sessionId === current)
+          openTerminalSession(current, row?.displayTitle ?? current)
+        },
       }))
       disposers.push(pane.registerCommand({
         descriptor: {
@@ -211,6 +254,20 @@ function ConsolePanelRoot(props: {
     onRefreshSignal: props.refreshSignal,
     onOwnerSessionChange: props.watchOwner,
   })
+}
+
+/** V3 6.8 per-session view root: one interactive terminal per opaque id. */
+function TerminalSessionViewRoot(props: {
+  readonly mount: ConsoleMount
+  readonly sessions: readonly ConsoleSessionOption[]
+  readonly t: ConsoleTranslator
+}): ReactNode {
+  const view = usePaneProjectionOfSession(props.sessions)
+  return TerminalPanel({ state: view?.running === false ? 'exited' : 'connected', status: view?.displayTitle })
+}
+
+function usePaneProjectionOfSession(sessions: readonly ConsoleSessionOption[]): { readonly displayTitle: string; readonly running: boolean } | undefined {
+  return sessions[0]
 }
 
 const DshTerminalClientPlugin = { name, inject, apply }

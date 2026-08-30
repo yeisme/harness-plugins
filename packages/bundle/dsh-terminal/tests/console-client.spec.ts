@@ -75,8 +75,8 @@ function fakeCtx(options: FakeCtxOptions = {}) {
   }
 
   const pane = options.withPane === false ? undefined : {
-    registerView: (input: { descriptor: Record<string, unknown>; component: () => unknown }) => {
-      views.push({ descriptor: input.descriptor, component: input.component })
+    registerView: (input: { descriptor: Record<string, unknown>; component: () => unknown; presentation?: unknown }) => {
+      views.push({ descriptor: input.descriptor, component: input.component, presentation: input.presentation } as never)
       return () => {}
     },
     openView: (request: Record<string, unknown>) => { openCalls.push(`open:${String(request.kind)}`) },
@@ -117,12 +117,15 @@ describe('terminal console client entry', () => {
     const harness = fakeCtx({ remoteAnswer: method => method.endsWith('probe') ? { ok: true, specVersion: '1.0', serviceAvailable: true, backendTypes: ['shell'] } : { ok: true } })
     const dispose = apply(harness.ctx as never)
     await new Promise(resolve => setTimeout(resolve, 0))
-    expect(harness.views).toHaveLength(1)
+    expect(harness.views).toHaveLength(2)
     expect(harness.views[0]!.descriptor).toMatchObject({ kind: 'dsh-terminal.console', preferredRegion: 'bottom', retention: 'keep-alive', singleton: true })
-    expect(harness.commands).toHaveLength(2)
+    expect(harness.views[1]!.descriptor).toMatchObject({ kind: 'dsh-terminal.session', preferredRegion: 'bottom', retention: 'keep-alive', singleton: false })
+    expect(harness.views[1]!.presentation).toMatchObject({ icon: 'terminal', defaultEdge: 'bottom' })
+    expect(harness.commands).toHaveLength(3)
     expect(harness.commands[0]!.descriptor).toMatchObject({ id: 'terminal.open', slash: { name: 'terminal', category: 'pane' } })
-    expect(harness.commands[1]!.descriptor).toMatchObject({ id: 'terminal.reconnect', label: 'Reconnect terminal', presentation: { launcher: true } })
-    expect(harness.commands[1]!.descriptor.slash).toBeUndefined()
+    expect(harness.commands[1]!.descriptor).toMatchObject({ id: 'terminal.open-session', presentation: { launcher: true } })
+    expect(harness.commands[2]!.descriptor).toMatchObject({ id: 'terminal.reconnect', label: 'Reconnect terminal', presentation: { launcher: true } })
+    expect(harness.commands[2]!.descriptor.slash).toBeUndefined()
     dispose()
   })
 
@@ -137,7 +140,7 @@ describe('terminal console client entry', () => {
     } })
     const dispose = apply(harness.ctx as never)
     await new Promise(resolve => setTimeout(resolve, 0))
-    harness.commands[1]!.execute()
+    harness.commands[2]!.execute()
     await new Promise(resolve => setTimeout(resolve, 0))
     expect(harness.openCalls).toContain('open:dsh-terminal.console')
     expect(probes).toBeGreaterThanOrEqual(2)
