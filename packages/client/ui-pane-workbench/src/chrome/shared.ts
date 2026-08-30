@@ -201,6 +201,32 @@ export const REGION_STYLES = `.pwr-root{position:relative;width:100%;height:100%
 @media(max-width:760px){.pwr-management-advanced-filters.ys-field{grid-template-columns:repeat(2,minmax(0,1fr))}.pwr-management-center{max-height:calc(100vh - 20px)}}
 @media(max-width:600px){.pwr-root[data-region='right'] .pwr-picker{position:fixed;top:56px;right:12px;width:min(340px,calc(100vw - 80px));max-height:min(520px,calc(100vh - 72px))}.pwr-menu{right:4px;width:min(232px,calc(100vw - 16px))}.pwr-management-center{width:calc(100vw - 16px);max-height:calc(100vh - 16px)}.pwr-management-scope{display:none}.pwr-management-footer{flex-wrap:wrap}}
 @media(pointer:coarse){.pwr-tabs{min-height:48px;height:48px}.pwr-tab-item,.pwr-tab{height:44px}.pwr-tab-actions button,.pwr-management-row{min-height:44px}}
+
+/* V3 2.8 responsive + a11y layer */
+.pwr-root *,.pwr-root *::before,.pwr-root *::after{box-sizing:border-box}
+.pwr-root :focus-visible{outline:2px solid var(--vk-border-focus);outline-offset:1px}
+@media(pointer:coarse){
+  .pwr-rail button,.pwr-icon,.pwr-tab,.pwr-menu-item,.pwr-tip button{min-width:44px;min-height:44px}
+  .pwr-rail{width:52px}
+  .pwr-root[data-region='right'] .pwr-body{left:52px;width:calc(100% - 52px)}
+  .pwr-tabs{--pwr-chrome-height:48px;height:48px}
+  .pwr-tip::after{font-size:13px}
+}
+@media(max-width:390px){
+  .pwr-root{--pwr-tab-width:min(30vw,120px);--pwr-control-size:28px;--pwr-chrome-height:38px}
+  .pwr-tabs{gap:2px;padding:4px}
+  .pwr-menu{max-width:min(92vw,280px)}
+  .pwr-root *{scrollbar-width:thin}
+}
+@media(prefers-contrast:more){
+  .pwr-root{--vk-border-l1:rgba(255,255,255,.55);--vk-border-l2:rgba(255,255,255,.7)}
+  .pwr-tab[data-active='true']{outline:1px solid var(--vk-text-primary)}
+  .pwr-icon[data-status='active']{outline:1px solid var(--vk-state-positive)}
+  .pwr-icon[data-status='critical']{outline:1px solid var(--vk-state-error)}
+}
+@media(prefers-reduced-motion:reduce){
+  .pwr-root *{transition:none!important;animation:none!important;scroll-behavior:auto!important}
+}
 `
 
 /** 供 conformance 测试断言 chrome 样式串来自 token registry。 */

@@ -45,3 +45,33 @@ describe('pane workbench chrome token adoption', () => {
     expect(open).toBe(close)
   })
 })
+
+describe('responsive + a11y token layer (V3 2.8)', () => {
+  const styles = REGION_STYLES
+  it('coarse pointers get 44px hit targets and a wider rail', () => {
+    const coarse = styles.slice(styles.indexOf('@media(pointer:coarse)'))
+    expect(coarse).toContain('min-width:44px')
+    expect(coarse).toContain('min-height:44px')
+    expect(coarse).toContain('width:52px')
+  })
+  it('390px keeps controls at 28px-class and menus inside the viewport', () => {
+    const narrow = styles.slice(styles.indexOf('@media(max-width:390px)'))
+    expect(narrow).toContain('--pwr-control-size:28px')
+    expect(narrow).toContain('max-width:min(92vw,280px)')
+  })
+  it('high-contrast strengthens borders and outlines active/critical states non-color-only', () => {
+    const contrast = styles.slice(styles.indexOf('@media(prefers-contrast:more)'))
+    expect(contrast).toContain('rgba(255,255,255,.7)')
+    expect(contrast).toContain("data-status='active'")
+    expect(contrast).toContain("data-status='critical'")
+  })
+  it('reduced motion disables all transitions and animations globally', () => {
+    const motion = styles.slice(styles.indexOf('@media(prefers-reduced-motion:reduce)'))
+    expect(motion).toContain('transition:none')
+    expect(motion).toContain('animation:none')
+  })
+  it('no horizontal overflow: root and layout rows stay overflow-hidden with min-width:0', () => {
+    expect(styles).toMatch(/\.pwr-root\{[^}]*overflow:hidden/)
+    expect(styles).toMatch(/\.pwr-tree\{[^}]*min-width:0/)
+  })
+})
