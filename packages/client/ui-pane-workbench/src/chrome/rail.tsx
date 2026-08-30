@@ -64,6 +64,7 @@ import type {
 } from '../workspace.js'
 import { DSH_SUBAGENT_MONITOR_VIEW_KIND, iconForView, RIGHT_RAIL_WIDTH } from './shared.js'
 import { FontScaleControls, openAgentsMonitor } from './group-chrome.js'
+import { WorkbenchIconButton } from './control.js'
 
 export interface PaneActivityRailProps {
   readonly registry: PaneViewRegistry
@@ -72,6 +73,43 @@ export interface PaneActivityRailProps {
   /** When the body is hidden the rail shows its own Open View trigger. */
   readonly bodyVisible: boolean
   readonly onOpenPicker: () => void
+}
+
+
+const CORE_RAIL_KINDS = new Set<string>([DSH_EXPLORER_VIEW_KIND, DSH_SOURCE_CONTROL_VIEW_KIND, DSH_SUBAGENT_MONITOR_VIEW_KIND])
+
+interface RailCategory {
+  readonly kind: string
+  readonly label: string
+  readonly icon: WorkbenchIconName
+  readonly views: readonly PaneViewInstanceV1[]
+  readonly targetViewId: string
+}
+
+/** Aggregate open views into one category per kind; disposed providers drop out. */
+export function deriveRailCategories(
+  views: readonly PaneViewInstanceV1[],
+  state: PaneWorkspaceV1,
+  registry: PaneViewRegistry,
+): readonly RailCategory[] {
+  const byKind = new Map<string, PaneViewInstanceV1[]>()
+  for (const view of views) {
+    if (CORE_RAIL_KINDS.has(view.kind)) continue
+    if (!registry.has(view.kind)) continue
+    const bucket = byKind.get(view.kind)
+    if (bucket === undefined) byKind.set(view.kind, [view])
+    else bucket.push(view)
+  }
+  return [...byKind.entries()].map(([kind, members]) => {
+    const active = members.find(view => state.groups[view.groupId]?.activeTabId === view.id)
+    return {
+      kind,
+      label: kind.split('.').pop() ?? kind,
+      icon: iconForView(members[0]!),
+      views: members,
+      targetViewId: (active ?? members[0]!).id,
+    }
+  })
 }
 
 /** Activity rail shared by the Core host right region and the Tier 0 overlay host. */
@@ -99,11 +137,25 @@ export function PaneActivityRail(props: PaneActivityRailProps): ReactNode {
       'data-pane-rail-agents': true,
       onClick: () => openAgentsMonitor(controller),
     }, createElement(WorkbenchIcon, { name: 'agents' })) : null,
-    ...openedViews.filter(view => view.kind !== DSH_EXPLORER_VIEW_KIND && view.kind !== DSH_SOURCE_CONTROL_VIEW_KIND && view.kind !== DSH_SUBAGENT_MONITOR_VIEW_KIND).map(view => createElement('button', {
-      key: view.id, type: 'button', title: view.title, 'aria-label': formatT('chrome.openNamedView', { name: view.title }),
-      className: state.activeGroupId === view.groupId && state.groups[view.groupId]?.activeTabId === view.id ? 'pwr-active' : undefined,
-      onClick: () => controller.dispatch({ type: 'activate_view', viewId: view.id }),
-    }, createElement(WorkbenchIcon, { name: iconForView(view) }))),
+    // V3 2.3: one rail entry per provider category (view kind) — multiple
+    // Terminal/Document/Media resources never duplicate rail buttons. The
+    // count rides the decorative badge; activation targets the category's
+    // active view or its first member. Kinds whose provider disposed (not
+    // registered and not core) drop out of the rail.
+    ...deriveRailCategories(openedViews, state, registry).map(category => {
+      const isActive = category.views.some(view => state.groups[view.groupId]?.activeTabId === view.id)
+      return createElement(WorkbenchIconButton, {
+        key: category.kind,
+        icon: category.icon,
+        label: category.views.length === 1
+          ? formatT('chrome.openNamedView', { name: category.views[0]!.title })
+          : formatT('chrome.categoryViews', { name: category.label, count: category.views.length }),
+        status: isActive ? 'active' : 'default',
+        className: isActive ? 'pwr-active' : undefined,
+        badge: category.views.length > 1 ? String(category.views.length) : undefined,
+        onClick: () => controller.dispatch({ type: 'activate_view', viewId: category.targetViewId }),
+      })
+    }),
     createElement('button', {
       type: 'button', title: t('rail.customize'), 'aria-label': t('rail.customize'),
       onClick: () => openPaneWorkbenchCoreView(controller, DSH_WORKSPACE_DESIGNER_VIEW_KIND),

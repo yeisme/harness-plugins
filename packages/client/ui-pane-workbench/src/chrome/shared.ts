@@ -75,7 +75,7 @@ export const CHROME_TOKENS: readonly PanelTokenName[] = ['bg-base','bg-elevated'
 export const CHROME_TOKEN_DECL = `${CHROME_TOKENS.map(name => `--vk-${name}:${panelVar(name)}`).join(';')};--vk-bg-layer-1:var(--vk-bg-base);--vk-bg-layer-2:var(--vk-bg-elevated)`
 
 export const REGION_STYLES = `.pwr-root{position:relative;width:100%;height:100%;min-width:0;min-height:0;overflow:hidden;color:var(--vk-text-primary);background:var(--vk-bg-base);font:var(--dsh-wb-font-size,14px)/1.4 var(--dsw-font-family,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif);--pwr-tab-width:136px;--pwr-tab-height:34px;--pwr-chrome-height:42px;--pwr-control-size:30px;${CHROME_TOKEN_DECL}}
-.pwr-rail{position:absolute;inset:0 auto 0 0;width:43px;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 5px;box-sizing:border-box;background:var(--dsw-specific-sidebar-fill,#1c1c1f);z-index:3}
+.pwr-rail{position:absolute;inset:0 auto 0 0;width:44px;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 5px;box-sizing:border-box;background:var(--dsw-specific-sidebar-fill,#1c1c1f);z-index:3}
 .pwr-rail-fonts{margin-top:auto;display:flex;flex-direction:column;gap:4px}
 .pwr-rail button,.pwr-icon{width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:var(--vk-text-secondary);display:grid;place-items:center;cursor:pointer}
 .pwr-tip{position:relative;display:inline-flex}
