@@ -176,6 +176,47 @@ const styles = {
     font: 'inherit',
     cursor: 'pointer',
   },
+  docToolbar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 0,
+    padding: '6px 8px',
+    borderBottom: '1px solid var(--vk-border-l1, rgba(255,255,255,.06))',
+  },
+  docTitle: {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    fontSize: '12px',
+    fontWeight: 620,
+    color: 'var(--vk-text-secondary)',
+  },
+  docModes: { display: 'flex', gap: 2, marginLeft: 'auto' },
+  docModeButton: {
+    border: 0,
+    padding: '2px 8px',
+    borderRadius: 6,
+    background: 'transparent',
+    color: 'var(--vk-text-tertiary)',
+    font: 'inherit',
+    fontSize: '11px',
+    cursor: 'pointer',
+  },
+  docStatusBar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    padding: '4px 8px',
+    borderTop: '1px solid var(--vk-border-l1, rgba(255,255,255,.06))',
+    fontSize: '11px',
+    color: 'var(--vk-text-tertiary)',
+  },
+  docStatusText: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  docState: { display: 'grid', gap: 6, justifyContent: 'center', alignContent: 'center', minHeight: 80, color: 'var(--vk-text-tertiary)' },
+  docStateTitle: { fontWeight: 600, color: 'var(--vk-text-secondary)' },
   meta: {
     display: 'flex',
     flexWrap: 'wrap',
@@ -365,43 +406,103 @@ function Preview({ entry, previewUrl }: { entry: FileEntryV1; previewUrl: string
   return <div style={styles.meta}>{meta}{previewUrl !== undefined ? ' · 可预览' : ''}</div>
 }
 
-function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading }: {
+type DocumentViewMode = 'preview' | 'source' | 'tree' | 'table' | 'compare'
+
+/** Context modes the document view offers; unavailable ones state why. */
+export function documentViewModesOf(entry: FileEntryV1): readonly { mode: DocumentViewMode; available: boolean; reason?: string }[] {
+  const isText = entry.kind === 'text' || entry.kind === 'document'
+  const isTable = entry.mediaType === 'text/csv' || entry.mediaType === 'text/tab-separated-values'
+  return [
+    { mode: 'preview', available: true },
+    { mode: 'source', available: isText },
+    { mode: 'tree', available: isText && entry.mediaType === 'application/json' },
+    { mode: 'table', available: isTable },
+    { mode: 'compare', available: false, reason: '选择第二个版本后可用' },
+  ]
+}
+
+function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, onRetryText }: {
   entry: FileEntryV1 | undefined
   previewUrl: string | undefined
   onOpenEntry: ((entry: FileEntryV1) => void) | undefined
   text: string | undefined
   textLoading: boolean
+  onRetryText: (() => void) | undefined
 }) {
+  const [mode, setMode] = useState<DocumentViewMode>('preview')
   if (entry === undefined) {
-    return <div style={styles.previewPanel} data-dsh-file-preview-empty><strong>选择一个文件</strong><span style={styles.emptyBody}>单击目录中的文件即可在这里预览，双击或按 Enter 打开。</span></div>
+    return (
+      <section style={styles.previewPanel} aria-label="Document view" data-dsh-file-preview-empty data-dsh-doc-state="empty">
+        <span style={styles.docStateTitle}>尚未选择文件</span>
+        <span style={styles.emptyBody}>在目录中选择一个文件后在此预览。</span>
+        {onOpenEntry !== undefined && <button type="button" style={styles.previewButton} data-dsh-doc-recovery="open-picker">打开文件</button>}
+      </section>
+    )
   }
   const isText = entry.kind === 'text' || entry.kind === 'document'
   const canMedia = previewUrl !== undefined && (entry.kind === 'image' || entry.kind === 'pdf')
+  const isTable = entry.mediaType === 'text/csv' || entry.mediaType === 'text/tab-separated-values'
   const size = formatBytes(entry.size)
+  const modes = documentViewModesOf(entry)
+  const activeMode: DocumentViewMode = mode === 'source' && !isText ? 'preview'
+    : mode === 'tree' && entry.mediaType !== 'application/json' ? 'preview'
+      : mode === 'table' && !isTable ? 'preview' : mode
+  const renderState = textLoading ? 'loading'
+    : isText && text === undefined && entry.summary === undefined ? 'stale'
+      : !isText && !canMedia && entry.kind !== 'directory' ? 'unsupported' : 'ready'
+  const recovery: Record<string, { label: string; action: (() => void) | undefined; kind: string }> = {
+    loading: { label: '重新读取', action: onRetryText, kind: 'retry' },
+    stale: { label: '刷新内容', action: onRetryText, kind: 'refresh' },
+    unsupported: { label: '打开方式', action: onOpenEntry === undefined ? undefined : () => onOpenEntry(entry), kind: 'open' },
+  }
   return (
-    <section style={styles.previewPanel} aria-label={`Preview ${entry.name}`} data-dsh-file-preview>
-      <header style={styles.previewHeader}>
-        <div style={{ minWidth: 0 }}>
-          <div style={styles.previewTitle} title={entry.name}>{entry.name}</div>
-          <div style={styles.meta}>{[kindLabel(entry.kind), entry.mediaType, size].filter((part): part is string => part !== undefined).join(' · ')}</div>
+    <section style={styles.previewPanel} aria-label={`Preview ${entry.name}`} data-dsh-file-preview data-dsh-doc-mode={activeMode}>
+      <header style={styles.docToolbar} role="toolbar" aria-label="文档模式">
+        <strong style={styles.docTitle} title={entry.name}>{entry.name}</strong>
+        <div style={styles.docModes} role="group" aria-label="视图模式">
+          {modes.map(option => (
+            <button
+              key={option.mode}
+              type="button"
+              style={styles.docModeButton}
+              data-dsh-doc-mode-option={option.mode}
+              aria-pressed={activeMode === option.mode}
+              disabled={!option.available}
+              title={option.available ? option.mode : option.reason}
+              onClick={() => setMode(option.mode)}
+            >
+              {option.mode === 'preview' ? '预览' : option.mode === 'source' ? '源码' : option.mode === 'tree' ? '树' : option.mode === 'table' ? '表格' : '对比'}
+            </button>
+          ))}
         </div>
-        <div style={styles.previewActions}>
-          {onOpenEntry !== undefined && <button type="button" style={styles.previewButton} onClick={() => onOpenEntry(entry)}>打开</button>}
-          {previewUrl !== undefined && entry.capabilities.includes('download') && <a href={previewUrl} download={entry.name} style={styles.previewButton}>下载</a>}
-        </div>
+        {previewUrl !== undefined && entry.capabilities.includes('download') && <a href={previewUrl} download={entry.name} style={styles.previewButton}>下载</a>}
       </header>
       <div style={styles.previewBody}>
-        {entry.kind === 'directory' && <span>展开目录查看文件。</span>}
-        {canMedia && entry.kind === 'image' && <img style={styles.previewImage} src={previewUrl} alt={entry.name} />}
-        {canMedia && entry.kind === 'pdf' && <iframe style={styles.previewFrame} src={previewUrl} title={entry.name} sandbox="allow-same-origin" referrerPolicy="no-referrer" />}
-        {isText && textLoading && <span>正在读取文件…</span>}
-        {isText && !textLoading && <pre style={styles.previewText} data-dsh-file-preview-text>{text ?? entry.summary ?? '等待文件服务提供预览。'}</pre>}
-        {!isText && !canMedia && entry.kind !== 'directory' && <span>{previewUrl === undefined ? '等待文件服务提供预览授权。' : '此文件类型暂不支持内嵌预览。'}</span>}
+        {renderState === 'loading' && <div style={styles.docState} data-dsh-doc-state="loading"><span>正在读取文件…</span></div>}
+        {renderState !== 'loading' && entry.kind === 'directory' && <span>展开目录查看文件。</span>}
+        {renderState !== 'loading' && canMedia && entry.kind === 'image' && activeMode !== 'source' && <img style={styles.previewImage} src={previewUrl} alt={entry.name} />}
+        {renderState !== 'loading' && canMedia && entry.kind === 'pdf' && activeMode !== 'source' && <iframe style={styles.previewFrame} src={previewUrl} title={entry.name} sandbox="allow-same-origin" referrerPolicy="no-referrer" />}
+        {renderState !== 'loading' && isText && !textLoading && activeMode !== 'table' && (
+          activeMode === 'source'
+            ? <pre style={styles.previewText} data-dsh-file-preview-source>{text ?? entry.summary ?? ''}</pre>
+            : activeMode === 'tree'
+              ? <pre style={styles.previewText} data-dsh-file-preview-tree>{text ?? entry.summary ?? ''}</pre>
+              : <pre style={styles.previewText} data-dsh-file-preview-text>{text ?? entry.summary ?? ''}</pre>
+        )}
+        {renderState !== 'loading' && isText && isTable && activeMode === 'table' && (
+          <div data-dsh-file-preview-table style={styles.docState}><span>表格模式由预览平台渲染器提供（4.6 接线）。</span></div>
+        )}
+        {renderState === 'unsupported' && entry.kind !== 'directory' && <span>{previewUrl === undefined ? '等待文件服务提供预览授权。' : '此文件类型暂不支持内嵌预览。'}</span>}
       </div>
+      <footer style={styles.docStatusBar} role="status" data-dsh-doc-status={renderState}>
+        <span style={styles.docStatusText}>{[kindLabel(entry.kind), entry.mediaType, size].filter((part): part is string => part !== undefined).join(' · ')}</span>
+        {recovery[renderState] !== undefined && recovery[renderState].action !== undefined && (
+          <button type="button" style={styles.previewButton} data-dsh-doc-recovery={recovery[renderState].kind} onClick={recovery[renderState].action}>{recovery[renderState].label}</button>
+        )}
+      </footer>
     </section>
   )
 }
-
 function TreeRow({
   node,
   depth,
@@ -686,6 +787,9 @@ export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOp
                   onOpenEntry={onOpenEntry}
                   text={selectedEntry === undefined ? undefined : textById[selectedEntry.id]}
                   textLoading={selectedEntry !== undefined && textLoadingId === selectedEntry.id}
+                  onRetryText={loadText === undefined || selectedEntry === undefined ? undefined : () => {
+                    setTextById(previous => { const next = { ...previous }; delete next[selectedEntry.id]; return next })
+                  }}
                 />
               )}
             </>
