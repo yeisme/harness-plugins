@@ -8,7 +8,8 @@
     "test:integration": "node scripts/run-experience-integration.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsc -p tsconfig.json && tsdown",
-    "demo": "vite demo"
+    "demo": "vite demo",
+    "test:integration:v3": "node scripts/run-v3-preview-terminal-integration.mjs"
   },
   "keywords": [],
   "author": "",
