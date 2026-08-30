@@ -11,9 +11,9 @@
 
 ## 3. Handoff 与兼容窗口
 
-- [ ] 3.1 Workbench/外编 handoff 只传 Bridge V2 语义（`DramaContextRef`/`ArtifactRef`/`ActionIntent`/`ReceiptRef` + launch ref）；拒绝 raw route/URL/绝对路径；不信任 DSH 缓存为 canonical state。
-- [ ] 3.2 旧 full-show operational panes 标记 deprecation 与 Workbench handoff，保留至少两个连续插件发布窗口，读取相同 owner projection 并记录使用率；退役由后续独立 removal change 处理。
-- [ ] 3.3 确认未复制 Workbench scene graph、Scaena `EditRevision`/bundle/diff/rebase、Ordo ledger；不建 scheduler、writer lease、approval ledger、capacity reservation 或 terminal result。
+- [x] 3.1 Workbench/外编 handoff 只传 Bridge V2 语义（`DramaContextRef`/`ArtifactRef`/`ActionIntent`/`ReceiptRef` + launch ref）；拒绝 raw route/URL/绝对路径；不信任 DSH 缓存为 canonical state。 （done 2026-08-30 核验+钉住：`DRAMA_HANDOFF_ALLOWED_KEYS` 严格键白名单只含 ref/版本/intent/nonce/expiry（launch ref 经 Bridge V2 `launch-adapter`——bridge-v2 change 交付）；**raw route/URL/path/href/content/body 全在白名单外结构性拒绝**（守卫测试断言八禁键）；gate 注释与实现钉住 no auto-retry/no fuzzy-open；DSH 缓存不作 canonical（digest/nonce 重放门，bridge-v2 证据）。Evidence: handoff-boundary.spec 3.1 两项。）
+- [x] 3.2 旧 full-show operational panes 标记 deprecation 与 Workbench handoff，保留至少两个连续插件发布窗口，读取相同 owner projection 并记录使用率；退役由后续独立 removal change 处理。 （done 2026-08-30 核验+钉住：1.1 已交付 `legacy: true` + `DRAMA_SHOW_CONTROL_DEPRECATION`（明确两发布窗口+独立 removal change）；**使用率记录**=`show_control_preset` reasonCategory evidence emit（既有）+ handoff 深链（`handoff_opened`/`bridge_v2`）双信号；读取相同 owner projection（show-control snapshot 单源，无第二状态源）。Evidence: handoff-boundary.spec 3.2 一项（usage 信号+窗口文案断言）。）
+- [x] 3.3 确认未复制 Workbench scene graph、Scaena `EditRevision`/bundle/diff/rebase、Ordo ledger；不建 scheduler、writer lease、approval ledger、capacity reservation 或 terminal result。 （done 2026-08-30 核验+钉住：**边界扫描守卫**——四个核心 client 模块逐文件断言零 scene-graph/EditRevision/rebase 机制/scheduler/writerLease/approvalLedger/capacityReservation/terminal 推断（八模式 × 四文件）；owner 状态机（scheduler/ledger/lease/reservation）恒在 Ordo/Workbench owner 侧。Evidence: handoff-boundary.spec 3.3 一项。）
 
 ## 4. 证据与回滚
 
