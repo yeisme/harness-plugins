@@ -28,6 +28,10 @@ export interface TerminalMutationReceiptV1 {
   readonly reason?: string
 }
 
+/**
+ * @deprecated Superseded by {@link TerminalHostV2} — retained exactly one RC
+ * window for compatibility; migrate before the next minor.
+ */
 export interface TerminalHostV1 {
   readonly version: '0.1.0-rc.1'
   readonly capability: 'terminal-host'
@@ -221,3 +225,75 @@ export type { AgentsServiceFace, TerminalsServiceFace, TerminalPaneOwner } from 
 export { TerminalPaneRemoteService, terminalPaneRemoteMarkers } from './remote.ts'
 export { apply as terminalPaneHostApply, inject as terminalPaneHostInject, name as terminalPaneHostName } from './plugin.ts'
 export { default as terminalPaneHostPlugin } from './plugin.ts'
+
+/**
+ * Pure fake host adapter (V3 1.2) for tests and demos: deterministic
+ * observe/control/reconnect/exited/error states without a PTY or network.
+ * State transitions are scriptable; nothing here touches an owner authority.
+ */
+export interface FakeTerminalScript {
+  /** Chunk stream the fake attachment replays in order after attach. */
+  readonly chunks?: readonly { readonly data: string; readonly truncated?: boolean }[]
+  /** Rejects the attach promise with this message (error state). */
+  readonly attachError?: string | undefined
+  /** Attachment behavior once attached. */
+  readonly attachment?: {
+    readonly epoch?: string | undefined
+    readonly controlState?: 'granted' | 'pending' | 'denied' | undefined
+  } | undefined
+}
+
+export function createFakeTerminalHostV2(script: FakeTerminalScript = {}): TerminalHostV2 {
+  const sessions: import('./index.js').TerminalSessionV1[] = [{ terminalId: 'fake-1', title: 'fake', running: true }]
+  const receipts = () => ({ status: 'ok' as const, terminalId: 'fake-1' })
+  return {
+    version: '0.2.0-rc.1',
+    capability: 'terminal-host',
+    listTerminals: async () => sessions,
+    openTerminal: async (title?: string) => {
+      const session = { terminalId: `fake-${sessions.length + 1}`, title: title ?? `fake-${sessions.length + 1}`, running: true }
+      sessions.push(session)
+      return session
+    },
+    closeTerminal: async () => receipts(),
+    writeInput: async () => receipts(),
+    resizeTerminal: async () => receipts(),
+    attachTerminal: async (terminalId: string, options?: { readonly signal?: AbortSignal | undefined }) => {
+      if (script.attachError !== undefined) throw new Error(script.attachError)
+      if (options?.signal?.aborted) throw new Error('aborted')
+      const epoch = script.attachment?.epoch ?? 'epoch-1'
+      let lastSequence = 0
+      const listeners = new Set<(chunk: import('./index.js').TerminalOutputChunkV2) => void>()
+      const controlState = script.attachment?.controlState ?? 'granted'
+      const controlListeners = new Set<(state: 'granted' | 'pending' | 'denied') => void>()
+      const attachment: TerminalAttachmentV2 = {
+        terminalId,
+        epoch,
+        subscribe: listener => {
+          listeners.add(listener)
+          for (const chunk of script.chunks ?? []) {
+            listener({ terminalId, epoch, sequence: ++lastSequence, data: chunk.data, ...(chunk.truncated === undefined ? {} : { truncated: chunk.truncated }) })
+          }
+          return () => { listeners.delete(listener) }
+        },
+        writeInput: async () => receipts(),
+        resize: async () => receipts(),
+        detach: async () => { listeners.clear() },
+        ...(controlState === undefined ? {} : {
+          control: {
+            state: controlState,
+            subscribe: (listener: (state: 'granted' | 'pending' | 'denied') => void) => {
+              controlListeners.add(listener)
+              return () => { controlListeners.delete(listener) }
+            },
+            requestTakeover: async () => {
+              for (const listener of controlListeners) listener('granted')
+              return { status: 'ok' as const }
+            },
+          },
+        }),
+      }
+      return attachment
+    },
+  }
+}

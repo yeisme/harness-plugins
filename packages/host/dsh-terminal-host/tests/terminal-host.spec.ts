@@ -110,3 +110,46 @@ describe('@yeisme/dsh-terminal-host', () => {
     expect(isTerminalHostV1(createTerminalHostPlaceholder())).toBe(true)
   })
 })
+
+describe('createFakeTerminalHostV2 (V3 1.2 pure state adapter)', () => {
+  it('exposes the versioned V2 contract with a deprecated V1 retained alongside', async () => {
+    const { createFakeTerminalHostV2 } = await import('../src/index.ts')
+    const host = createFakeTerminalHostV2()
+    expect(host.version).toBe('0.2.0-rc.1')
+    expect(host.capability).toBe('terminal-host')
+    expect(await host.listTerminals()).toHaveLength(1)
+    const opened = await host.openTerminal('second')
+    expect(opened.title).toBe('second')
+    expect((await host.listTerminals()).length).toBe(2)
+  })
+
+  it('replays scripted chunks in order with a fresh baseline sequence', async () => {
+    const { createFakeTerminalHostV2 } = await import('../src/index.ts')
+    const host = createFakeTerminalHostV2({ chunks: [{ data: 'hello' }, { data: 'world', truncated: true }] })
+    const attachment = await host.attachTerminal('fake-1')
+    const seen: string[] = []
+    attachment.subscribe(chunk => { seen.push(chunk.data) })
+    expect(seen).toEqual(['hello', 'world'])
+    expect(attachment.epoch).toBe('epoch-1')
+  })
+
+  it('models the error state via attach rejection and exited sessions stay listed', async () => {
+    const { createFakeTerminalHostV2 } = await import('../src/index.ts')
+    const host = createFakeTerminalHostV2({ attachError: 'seam offline' })
+    await expect(host.attachTerminal('fake-1')).rejects.toThrow('seam offline')
+    const receipt = await host.closeTerminal('fake-1')
+    expect(receipt.status).toBe('ok')
+  })
+
+  it('models the control lease with a takeover grant', async () => {
+    const { createFakeTerminalHostV2 } = await import('../src/index.ts')
+    const host = createFakeTerminalHostV2({ attachment: { controlState: 'pending' } })
+    const attachment = await host.attachTerminal('fake-1')
+    expect(attachment.control?.state).toBe('pending')
+    const states: string[] = []
+    attachment.control?.subscribe(state => { states.push(state) })
+    expect(await attachment.control?.requestTakeover?.()).toEqual({ status: 'ok' })
+    expect(states).toContain('granted')
+    await attachment.detach()
+  })
+})
