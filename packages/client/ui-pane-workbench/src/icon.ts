@@ -22,6 +22,10 @@ export type WorkbenchIconName =
   | 'media'
   | 'terminal'
   | 'search'
+  | 'filter'
+  | 'message'
+  | 'chevron-right'
+  | 'chevron-down'
   | 'git'
   | 'git-branch'
   | 'folder'
@@ -32,11 +36,12 @@ export type WorkbenchIconName =
   | 'font-decrease'
   | 'font-increase'
 
-/** Frozen semantic icon set (V3 1.1). Registrations reference names, never glyph markup. */
+/** Additive semantic icon set. Registrations reference names, never glyph markup. */
 export const WORKBENCH_ICON_NAMES = [
   'add', 'close', 'maximize', 'restore', 'more', 'pin', 'unpin', 'split', 'move',
   'move-right', 'move-down', 'split-left', 'split-right', 'split-up', 'split-down',
-  'workspace', 'document', 'file', 'media', 'terminal', 'search', 'git',
+  'workspace', 'document', 'file', 'media', 'terminal', 'search', 'filter',
+  'message', 'chevron-right', 'chevron-down', 'git',
   'git-branch', 'folder', 'window', 'agents', 'list', 'collapse',
   'font-decrease', 'font-increase',
 ] as const satisfies readonly WorkbenchIconName[]
@@ -69,6 +74,10 @@ const PATHS: Record<WorkbenchIconName, string> = {
   media: 'M5 5h14v14H5zM8 15l3-3 2 2 2-3 2 4',
   terminal: 'm5 7 5 5-5 5M12 17h7',
   search: 'm20 20-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z',
+  filter: 'M4 6h16M7 12h10M10 18h4',
+  message: 'M5 5h14v11H9l-4 3V5Z',
+  'chevron-right': 'm9 5 7 7-7 7',
+  'chevron-down': 'm5 9 7 7 7-7',
   git: 'M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5',
   'git-branch': 'M6 3v12M6 15a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3M6 6a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm12 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
   folder: 'M4 5h6l2 2h8v12H4z',

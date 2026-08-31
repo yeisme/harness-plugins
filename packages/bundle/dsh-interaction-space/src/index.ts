@@ -9,4 +9,5 @@
  * @module @yeisme/dsh-interaction-space
  */
 
-export { name } from '@yeisme/dsh-client-ui-interaction-space/client'
+export const name = 'dsh-interaction-space'
+export function apply(): void {}

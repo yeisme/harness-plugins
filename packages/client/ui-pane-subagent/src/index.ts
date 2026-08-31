@@ -144,6 +144,7 @@ export function apply(ctx: Context): () => void {
           retention: 'keep-alive',
           singleton: true,
         },
+        i18n: { namespace: 'paneWorkbench', labelKey: 'rail.agents' },
         component: createSubagentMonitorView(controller),
       }))
     } catch (error) {

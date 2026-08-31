@@ -79,7 +79,9 @@ describe('Subagent Monitor apply', () => {
     expect(button.textContent).toBe('')
     expect(document.querySelector('[data-subagent-monitor-sidebar]')?.getAttribute('data-wide')).toBe('false')
     fireEvent.click(button)
-    expect(pane.registerView).toHaveBeenCalledOnce()
+    expect(pane.registerView).toHaveBeenCalledWith(expect.objectContaining({
+      i18n: { namespace: 'paneWorkbench', labelKey: 'rail.agents' },
+    }))
     expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({ kind: 'subagent.monitor', preferredRegion: 'right' }))
   })
 

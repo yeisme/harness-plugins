@@ -19,10 +19,12 @@ import {
   boundedPaneDescription,
   buildPaneManagementEntries,
   filterAndRankPaneEntries,
+  suggestSimilarPaneEntries,
   type PaneConversationSearchHostV1,
   type PaneConversationSearchItemV1,
   type PaneManagementEntrySource,
   type PaneManagementEntryV1,
+  type PaneManagementFiltersV1,
   type PaneManagementMode,
   type PaneWorkspaceContextProviderV1,
   type PaneWorkspaceSearchItemV1,
@@ -62,14 +64,14 @@ export function PaneCloseUndoToast({ controller }: { readonly controller: PaneWo
 interface ConversationState {
   readonly items: readonly PaneConversationSearchItemV1[]
   readonly nextCursor?: string
-  readonly status: 'idle' | 'loading' | 'ready' | 'error'
+  readonly status: 'idle' | 'loading' | 'ready' | 'partial' | 'error'
   readonly reason?: string
 }
 
 interface WorkspaceSearchState {
   readonly items: readonly PaneWorkspaceSearchItemV1[]
   readonly nextCursor?: string
-  readonly status: 'idle' | 'loading' | 'ready' | 'error'
+  readonly status: 'idle' | 'loading' | 'ready' | 'partial' | 'error'
   readonly reason?: string
 }
 
@@ -95,6 +97,21 @@ function sourceLabel(source: PaneManagementEntrySource): string {
   if (source === 'tab') return t('management.source.tab')
   if (source === 'history') return t('management.source.history')
   return t('management.includeConversation')
+}
+
+function statusLabel(status: string): string {
+  return tWithFallback(`state.${status}`, status)
+}
+
+function searchReasonLabel(reason?: string): string {
+  if (reason === 'permission_denied') return t('management.search.reason.permission_denied')
+  if (reason === 'contract_mismatch') return t('management.search.reason.contract_mismatch')
+  if (reason === 'offline') return t('management.search.reason.offline')
+  return t('management.search.reason.failed')
+}
+
+function retryableSearchReason(reason?: string): boolean {
+  return reason === 'offline' || reason === 'search_failed' || reason === 'workspace_search_failed'
 }
 
 function activeGroup(controller: PaneWorkbenchController): PaneGroupV1 | undefined {
@@ -136,6 +153,8 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
   const [scrollTop, setScrollTop] = useState(0)
   const [focusedIndex, setFocusedIndex] = useState(0)
   const [detailKey, setDetailKey] = useState<string>()
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [createGroupOpen, setCreateGroupOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const rootRef = useRef<HTMLElement>(null)
   const conversationAbort = useRef<AbortController>()
@@ -150,13 +169,24 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
   }, [props.mode])
   useEffect(() => setProtectedViews(props.initialProtectedViews ?? []), [props.initialProtectedViews])
 
-  const entries = useMemo(() => buildPaneManagementEntries({
-    registrations: props.registry.snapshot(),
-    state: workspace,
-    history: management.history,
-    profile: management.profile,
-    workspace: management.workspace,
-  }), [props.registry, workspace, management, localeRevision])
+  const entries = useMemo(() => {
+    const registrations = props.registry.snapshot()
+    const byKind = new Map(registrations.map(registration => [registration.descriptor.kind, registration]))
+    return buildPaneManagementEntries({
+      registrations,
+      state: workspace,
+      history: management.history,
+      profile: management.profile,
+      workspace: management.workspace,
+    }).map(entry => {
+      const registration = byKind.get(entry.kind)
+      const i18n = registration?.i18n
+      if (registration === undefined || i18n?.namespace !== 'paneWorkbench') return entry
+      if (entry.source !== 'pane' && entry.title !== registration.descriptor.label) return entry
+      const title = tWithFallback(i18n.labelKey, entry.title)
+      return title === entry.title ? entry : { ...entry, title, keywords: [...entry.keywords, registration.descriptor.label, title] }
+    })
+  }, [props.registry, workspace, management, localeRevision])
 
   const sourceFilter = source === 'all' ? undefined : new Set<PaneManagementEntrySource>([source])
   const groups = useMemo(() => [...new Set(entries.map(entry => entry.groupId))].sort(), [entries])
@@ -165,7 +195,7 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
   const kinds = useMemo(() => [...new Set(entries.map(entry => entry.kind))].sort(), [entries])
   const statuses = useMemo(() => [...new Set(entries.flatMap(entry => entry.statusTokens))].sort(), [entries])
   const workspaceTargets = props.workspaceContext?.listWorkspaces?.() ?? []
-  const localResults = useMemo(() => workspaceFilter !== 'current' && workspaceFilter !== 'all' ? [] : filterAndRankPaneEntries(entries, query, {
+  const filters = useMemo<PaneManagementFiltersV1>(() => ({
     ...(sourceFilter === undefined ? {} : { sources: sourceFilter }),
     ...(groupFilter === 'all' ? {} : { groupIds: new Set([groupFilter]) }),
     ...(regionFilter === 'all' ? {} : { regions: new Set([regionFilter as 'right' | 'bottom']) }),
@@ -173,7 +203,23 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
     ...(kindFilter === 'all' ? {} : { kinds: new Set([kindFilter]) }),
     ...(statusFilter === 'all' ? {} : { statuses: new Set([statusFilter]) }),
     ...(pinnedFilter === 'all' ? {} : { pinned: pinnedFilter === 'pinned' }),
-  }), [entries, query, sourceFilter, groupFilter, regionFilter, ownerFilter, kindFilter, statusFilter, pinnedFilter, workspaceFilter])
+  }), [sourceFilter, groupFilter, regionFilter, ownerFilter, kindFilter, statusFilter, pinnedFilter])
+  const localResults = useMemo(() => workspaceFilter !== 'current' && workspaceFilter !== 'all'
+    ? []
+    : filterAndRankPaneEntries(entries, query, filters), [entries, query, filters, workspaceFilter])
+  const activeFilterCount = Number(groupFilter !== 'all')
+    + Number(regionFilter !== 'all')
+    + Number(ownerFilter !== 'all')
+    + Number(kindFilter !== 'all')
+    + Number(statusFilter !== 'all')
+    + Number(pinnedFilter !== 'all')
+    + Number(workspaceFilter !== 'current')
+  const sourceCounts = useMemo(() => ({
+    all: entries.length,
+    pane: entries.filter(entry => entry.source === 'pane').length,
+    tab: entries.filter(entry => entry.source === 'tab').length,
+    history: entries.filter(entry => entry.source === 'history').length,
+  }), [entries])
 
   const conversationEnabled = includeConversation || /^@conversation(?:\s|$)/i.test(query.trim())
   const conversationQuery = query.trim().replace(/^@conversation\s*/i, '')
@@ -200,11 +246,13 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
       setConversation(current => ({
         items: append ? [...current.items, ...page.items].slice(0, 100) : page.items.slice(0, 100),
         nextCursor: page.nextCursor,
-        status: 'ready',
+        status: page.status === 'partial' ? 'partial' : 'ready',
+        ...(page.status === 'partial' && page.reason !== undefined ? { reason: page.reason } : {}),
       }))
     }).catch(error => {
       if (abort.signal.aborted) return
-      setConversation({ items: [], status: 'error', reason: error instanceof Error ? error.message : 'search_failed' })
+      void error
+      setConversation({ items: [], status: 'error', reason: 'search_failed' })
     })
   }
 
@@ -238,7 +286,8 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
       setWorkspaceSearch(current => ({
         items: append ? [...current.items, ...page.items].slice(0, 100) : page.items.slice(0, 100),
         nextCursor: page.nextCursor,
-        status: 'ready',
+        status: page.status === 'partial' ? 'partial' : 'ready',
+        ...(page.status === 'partial' && page.reason !== undefined ? { reason: page.reason } : {}),
       }))
     }).catch(() => {
       if (!abort.signal.aborted) setWorkspaceSearch({ items: [], status: 'error', reason: 'workspace_search_failed' })
@@ -290,10 +339,19 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
     ...(item.description === undefined ? {} : { description: boundedPaneDescription(item.description) }),
   }))
   const results = [...localResults, ...workspaceEntries, ...conversationEntries].slice(0, 200)
+  const remoteLoading = conversation.status === 'loading' || workspaceSearch.status === 'loading'
+  const similarResults = useMemo(() => results.length > 0
+    || remoteLoading
+    || conversationEnabled
+    || (workspaceFilter !== 'current' && workspaceFilter !== 'all')
+    ? []
+    : suggestSimilarPaneEntries(entries, query, filters), [results.length, remoteLoading, conversationEnabled, workspaceFilter, entries, query, filters])
+  const displayResults = results.length > 0 ? results : similarResults
+  const showingSimilarResults = results.length === 0 && similarResults.length > 0
   const customLabels = new Map(management.profile.groups.map(group => [group.id, group.label]))
   const detailEntry = detailKey === undefined
     ? undefined
-    : [...entries, ...results].find(entry => entry.key === detailKey)
+    : [...entries, ...displayResults].find(entry => entry.key === detailKey)
 
   const detailFields = (entry: PaneManagementEntryV1): readonly { field: string; label: string; value: string }[] => [
     { field: 'source', label: t('management.details.source'), value: sourceLabel(entry.source) },
@@ -301,7 +359,7 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
     { field: 'kind', label: t('management.details.kind'), value: entry.kind },
     ...(entry.role === undefined ? [] : [{ field: 'role', label: t('management.details.role'), value: tWithFallback(`role.${entry.role}`, entry.role) }]),
     ...(entry.region === undefined ? [] : [{ field: 'region', label: t('management.details.region'), value: t(`region.${entry.region}`) }]),
-    ...(entry.statusTokens.length === 0 ? [] : [{ field: 'status', label: t('management.details.status'), value: entry.statusTokens.join(' · ') }]),
+    ...(entry.statusTokens.length === 0 ? [] : [{ field: 'status', label: t('management.details.status'), value: entry.statusTokens.map(statusLabel).join(' · ') }]),
     ...(entry.descriptor?.presentation?.keywords === undefined ? [] : [{ field: 'keywords', label: t('management.details.keywords'), value: entry.descriptor.presentation.keywords.join(' · ') }]),
     ...(entry.workspaceRef === undefined ? [] : [{ field: 'workspace', label: t('management.details.workspace'), value: workspaceTargets.find(target => target.workspaceRef === entry.workspaceRef)?.label ?? entry.workspaceRef }]),
     ...(entry.source === 'history' && entry.updatedAt !== undefined ? [{ field: 'closedAt', label: t('management.details.closedAt'), value: entry.updatedAt }] : []),
@@ -362,9 +420,9 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
   }, [entries, management.profile, mode])
 
   const showSearchResults = query.trim().length > 0 || workspaceFilter !== 'current'
-  const flatRows = showSearchResults ? results : [...displayGroups.values()].flat()
-  const virtual = flatRows.length > 50 ? windowVirtualRows(flatRows, scrollTop, 420, 44) : {
-    start: 0, end: flatRows.length, offset: 0, height: flatRows.length * 44, items: flatRows, total: flatRows.length,
+  const flatRows = showSearchResults ? displayResults : [...displayGroups.values()].flat()
+  const virtual = flatRows.length > 50 ? windowVirtualRows(flatRows, scrollTop, 420, 48) : {
+    start: 0, end: flatRows.length, offset: 0, height: flatRows.length * 48, items: flatRows, total: flatRows.length,
   }
 
   const closeWithRestore = (): void => {
@@ -385,7 +443,7 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
       retention: descriptor.retention,
       singleton: descriptor.singleton,
       pinned: management.workspace.pinnedResourceKeys.includes(`view:${descriptor.kind}`),
-      title: descriptor.label,
+      title: entry.title,
       ...(targetGroupId === undefined ? {} : { targetGroupId }),
     })
     if (splitEdge !== undefined) {
@@ -469,6 +527,17 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
     if (label.length === 0) return
     props.controller.saveCustomGroup({ label })
     setNewGroup('')
+    setCreateGroupOpen(false)
+  }
+
+  const resetFilters = (): void => {
+    setGroupFilter('all')
+    setRegionFilter('all')
+    setOwnerFilter('all')
+    setKindFilter('all')
+    setStatusFilter('all')
+    setPinnedFilter('all')
+    setWorkspaceFilter('current')
   }
 
   const addSelectedToGroup = (): void => {
@@ -487,6 +556,40 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
     for (const view of selectedViews()) props.controller.dispatch({ type: 'move_view', viewId: view.id, targetGroupId: moveTargetGroup })
     setSelected(new Set())
   }
+
+  const searchStateRow = (
+    state: Pick<ConversationState, 'status' | 'reason'>,
+    loadingKey: string,
+    retry: () => void,
+  ): ReactNode => {
+    if (state.status === 'idle' || state.status === 'ready') return null
+    if (state.status === 'loading') {
+      return createElement('p', { className: 'pwr-management-search-state', role: 'status' },
+        createElement('span', { className: 'pwr-management-spinner', 'aria-hidden': true }),
+        createElement('span', null, t(loadingKey)))
+    }
+    if (state.status === 'partial') {
+      return createElement('p', { className: 'pwr-management-search-state pwr-management-search-state-partial', role: 'status' },
+        createElement(WorkbenchIcon, { name: 'message', size: 14 }),
+        createElement('span', null, t('management.search.partial')))
+    }
+    const retryable = retryableSearchReason(state.reason)
+    return createElement('div', { className: 'pwr-management-search-state pwr-management-search-state-error', role: 'alert' },
+      createElement(WorkbenchIcon, { name: 'message', size: 14 }),
+      createElement('span', null, searchReasonLabel(state.reason)),
+      retryable ? createElement('button', { type: 'button', onClick: retry }, t('management.search.retry')) : null)
+  }
+
+  const filterField = (
+    label: string,
+    value: string,
+    onChange: (value: string) => void,
+    options: readonly { readonly value: string; readonly label: string }[],
+    disabled = false,
+  ): ReactNode => createElement('label', null,
+    createElement('span', null, label),
+    createElement('select', { value, disabled, onChange: (event: ChangeEvent<HTMLSelectElement>) => onChange(event.currentTarget.value) },
+      ...options.map(option => createElement('option', { key: option.value, value: option.value }, option.label))))
 
   const rowNodes = (rows: readonly PaneManagementEntryV1[], offset = 0): ReactNode[] => rows.map((entry, index) => {
     const selectedRow = selected.has(entry.key)
@@ -516,7 +619,7 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
       createElement('strong', null, entry.title),
       createElement('small', null, `${sourceLabel(entry.source)} · ${groupLabel(entry.groupId, customLabels.get(entry.groupId))}${entry.workspaceRef === undefined ? '' : ` · ${workspaceTargets.find(target => target.workspaceRef === entry.workspaceRef)?.label ?? entry.workspaceRef}`}`),
       entry.description === undefined ? null : createElement('small', { className: 'pwr-management-row-desc', title: entry.description }, entry.description)),
-    entry.statusTokens.length === 0 ? null : createElement('span', { className: 'pwr-management-status' }, entry.statusTokens.join(' · '))),
+    entry.statusTokens.length === 0 ? null : createElement('span', { className: 'pwr-management-status' }, entry.statusTokens.map(statusLabel).join(' · '))),
     createElement('button', {
       type: 'button', className: 'pwr-management-info',
       title: t('management.details.toggle'),
@@ -529,7 +632,13 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
       title: entry.pinned ? t('management.unfavorite') : t('management.favorite'),
       'aria-label': entry.pinned ? t('management.unfavorite') : t('management.favorite'),
       onClick: () => props.controller.toggleFavorite(entry.kind),
-    }, createElement(WorkbenchIcon, { name: entry.pinned ? 'unpin' : 'pin', size: 14 })) : null)
+    }, createElement(WorkbenchIcon, { name: entry.pinned ? 'unpin' : 'pin', size: 14 })) : null,
+    entry.source === 'pane' ? createElement('button', {
+      type: 'button', className: 'pwr-management-target-trigger',
+      title: formatT('management.targetFor', { title: entry.title }),
+      'aria-label': formatT('management.targetFor', { title: entry.title }),
+      onClick: () => { setDetailKey(undefined); setTargetEntry(entry) },
+    }, createElement(WorkbenchIcon, { name: 'chevron-right', size: 15 })) : null)
   })
 
   const onDialogKeyDown = (event: KeyboardEvent<HTMLElement>): void => {
@@ -567,10 +676,21 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
     onKeyDown: onDialogKeyDown,
   },
   createElement('header', { className: 'pwr-management-header' },
-    createElement('div', { className: 'pwr-management-modes', role: 'tablist', 'aria-label': t('management.title') },
-      createElement('button', { type: 'button', role: 'tab', 'aria-selected': mode === 'open', onClick: () => { setMode('open'); setSource('all') } }, t('management.openMode')),
-      createElement('button', { type: 'button', role: 'tab', 'aria-selected': mode === 'manage', onClick: () => { setMode('manage'); setSource('tab') } }, t('management.manageMode'))),
-    createElement('button', { type: 'button', className: 'pwr-icon', onClick: closeWithRestore, 'aria-label': t('chrome.closeViewSelector') }, createElement(WorkbenchIcon, { name: 'close' }))),
+    createElement('div', { className: 'pwr-management-title' },
+      createElement(WorkbenchIcon, { name: 'window', size: 18 }),
+      createElement('strong', null, t('management.title'))),
+    createElement('div', { className: 'pwr-management-header-actions' },
+      createElement('span', { className: 'pwr-management-scope' },
+        createElement(WorkbenchIcon, { name: 'workspace', size: 14 }),
+        formatT('management.currentScope', { scope: t(`management.scope.${management.scope.kind}`) })),
+      createElement('button', { type: 'button', className: 'pwr-icon', onClick: closeWithRestore, 'aria-label': t('chrome.closeViewSelector') }, createElement(WorkbenchIcon, { name: 'close' })))),
+  createElement('div', { className: 'pwr-management-modes', role: 'tablist', 'aria-label': t('management.title') },
+    createElement('button', { type: 'button', role: 'tab', 'aria-selected': mode === 'open', onClick: () => { setMode('open'); setSource('all'); setSelected(new Set()) } },
+      createElement(WorkbenchIcon, { name: 'window', size: 15 }),
+      createElement('span', null, t('management.openMode'))),
+    createElement('button', { type: 'button', role: 'tab', 'aria-selected': mode === 'manage', onClick: () => { setMode('manage'); setSource('tab'); setCreateGroupOpen(false) } },
+      createElement(WorkbenchIcon, { name: 'list', size: 15 }),
+      createElement('span', null, t('management.manageMode')))),
   createElement('div', { className: 'pwr-management-search' },
     createElement(WorkbenchIcon, { name: 'search', size: 16 }),
     createElement('input', {
@@ -580,43 +700,83 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
       placeholder: t('management.search.placeholder'),
       'aria-label': t('management.search.placeholder'),
       onChange: (event: ChangeEvent<HTMLInputElement>) => { setQuery(event.currentTarget.value); setFocusedIndex(0); setScrollTop(0); setDetailKey(undefined) },
-    })),
+    }),
+    query.length === 0 ? createElement('kbd', { 'aria-label': t('management.search.shortcut') }, '⌘P') : createElement('button', {
+      type: 'button', className: 'pwr-management-search-clear',
+      'aria-label': t('management.search.clear'),
+      onClick: () => { setQuery(''); setFocusedIndex(0); setScrollTop(0); searchRef.current?.focus() },
+    }, createElement(WorkbenchIcon, { name: 'close', size: 14 }))),
   createElement('div', { className: 'pwr-management-filters', role: 'toolbar', 'aria-label': t('management.title') },
-    ...(['all', 'pane', 'tab', 'history'] as const).map(value => createElement('button', {
-      key: value, type: 'button', 'aria-pressed': source === value, onClick: () => setSource(value),
-    }, value === 'all' ? t('management.title') : sourceLabel(value))),
+    ...([
+      ['all', 'list', t('management.source.all')],
+      ['pane', 'window', sourceLabel('pane')],
+      ['tab', 'document', sourceLabel('tab')],
+      ['history', 'restore', sourceLabel('history')],
+    ] as const).map(([value, icon, label]) => createElement('button', {
+      key: value, type: 'button', 'aria-label': label, 'aria-pressed': source === value, onClick: () => setSource(value),
+    },
+    createElement(WorkbenchIcon, { name: icon, size: 14 }),
+    createElement('span', null, label),
+    createElement('small', null, sourceCounts[value]))),
     createElement('button', {
       type: 'button',
       'aria-pressed': conversationEnabled,
       disabled: props.conversationSearch === undefined,
       title: props.conversationSearch === undefined ? t('management.conversationUnavailable') : undefined,
       onClick: () => setIncludeConversation(value => !value),
-    }, t('management.includeConversation')),
-    createElement('span', { className: 'pwr-management-scope' }, formatT('management.currentScope', { scope: t(`management.scope.${management.scope.kind}`) }))),
-  createElement('div', { className: 'pwr-management-advanced-filters ys-field', 'aria-label': t('management.filters') },
-    createElement('select', { value: groupFilter, onChange: (event: ChangeEvent<HTMLSelectElement>) => setGroupFilter(event.currentTarget.value), 'aria-label': t('management.filter.group') },
-      createElement('option', { value: 'all' }, t('management.filter.group')),
-      ...groups.map(group => createElement('option', { key: group, value: group }, groupLabel(group, customLabels.get(group))))),
-    createElement('select', { value: regionFilter, onChange: (event: ChangeEvent<HTMLSelectElement>) => setRegionFilter(event.currentTarget.value), 'aria-label': t('management.filter.region') },
-      createElement('option', { value: 'all' }, t('management.filter.region')),
-      ...regions.map(region => createElement('option', { key: region, value: region }, region))),
-    createElement('select', { value: ownerFilter, onChange: (event: ChangeEvent<HTMLSelectElement>) => setOwnerFilter(event.currentTarget.value), 'aria-label': t('management.filter.owner') },
-      createElement('option', { value: 'all' }, t('management.filter.owner')),
-      ...owners.map(owner => createElement('option', { key: owner, value: owner }, owner))),
-    createElement('select', { value: kindFilter, onChange: (event: ChangeEvent<HTMLSelectElement>) => setKindFilter(event.currentTarget.value), 'aria-label': t('management.filter.type') },
-      createElement('option', { value: 'all' }, t('management.filter.type')),
-      ...kinds.map(kind => createElement('option', { key: kind, value: kind }, kind))),
-    createElement('select', { value: statusFilter, onChange: (event: ChangeEvent<HTMLSelectElement>) => setStatusFilter(event.currentTarget.value), 'aria-label': t('management.filter.status') },
-      createElement('option', { value: 'all' }, t('management.filter.status')),
-      ...statuses.map(status => createElement('option', { key: status, value: status }, status))),
-    createElement('select', { value: pinnedFilter, onChange: (event: ChangeEvent<HTMLSelectElement>) => setPinnedFilter(event.currentTarget.value), 'aria-label': t('management.filter.pinned') },
-      createElement('option', { value: 'all' }, t('management.filter.pinned')),
-      createElement('option', { value: 'pinned' }, t('management.filter.onlyPinned')),
-      createElement('option', { value: 'unpinned' }, t('management.filter.onlyUnpinned'))),
-    createElement('select', { value: workspaceFilter, disabled: props.workspaceContext?.search === undefined, onChange: (event: ChangeEvent<HTMLSelectElement>) => setWorkspaceFilter(event.currentTarget.value), 'aria-label': t('management.filter.workspace') },
-      createElement('option', { value: 'current' }, t('management.filter.currentWorkspace')),
-      workspaceTargets.length > 1 ? createElement('option', { value: 'all' }, t('management.filter.allWorkspaces')) : null,
-      ...workspaceTargets.filter(target => target.workspaceRef !== management.scope.ref).map(target => createElement('option', { key: target.workspaceRef, value: target.workspaceRef }, target.label)))),
+    },
+    createElement(WorkbenchIcon, { name: 'message', size: 14 }),
+    createElement('span', null, t('management.includeConversation'))),
+    createElement('button', {
+      type: 'button', className: 'pwr-management-filter-toggle',
+      'aria-expanded': filtersOpen,
+      'aria-controls': 'pwr-management-advanced-filters',
+      onClick: () => setFiltersOpen(value => !value),
+    },
+    createElement(WorkbenchIcon, { name: 'filter', size: 14 }),
+    createElement('span', null, t('management.filters')),
+    activeFilterCount === 0 ? null : createElement('small', null, activeFilterCount),
+    createElement(WorkbenchIcon, { name: 'chevron-down', size: 13 }))),
+  filtersOpen ? createElement('section', { id: 'pwr-management-advanced-filters', className: 'pwr-management-advanced-filters ys-field', 'aria-label': t('management.filters') },
+    createElement('header', null,
+      createElement('strong', null, activeFilterCount === 0 ? t('management.filters') : formatT('management.filter.activeCount', { count: activeFilterCount })),
+      createElement('button', { type: 'button', disabled: activeFilterCount === 0, onClick: resetFilters }, t('management.filter.reset'))),
+    createElement('div', { className: 'pwr-management-filter-grid' },
+      filterField(t('management.filter.label.group'), groupFilter, setGroupFilter, [
+        { value: 'all', label: t('management.filter.group') },
+        ...groups.map(group => ({ value: group, label: groupLabel(group, customLabels.get(group)) })),
+      ]),
+      filterField(t('management.filter.label.region'), regionFilter, setRegionFilter, [
+        { value: 'all', label: t('management.filter.region') },
+        ...regions.map(region => ({ value: region, label: t(`region.${region}`) })),
+      ]),
+      filterField(t('management.filter.label.owner'), ownerFilter, setOwnerFilter, [
+        { value: 'all', label: t('management.filter.owner') },
+        ...owners.map(owner => ({ value: owner, label: owner })),
+      ]),
+      filterField(t('management.filter.label.type'), kindFilter, setKindFilter, [
+        { value: 'all', label: t('management.filter.type') },
+        ...kinds.map(kind => ({ value: kind, label: kind })),
+      ]),
+      filterField(t('management.filter.label.status'), statusFilter, setStatusFilter, [
+        { value: 'all', label: t('management.filter.status') },
+        ...statuses.map(status => ({ value: status, label: statusLabel(status) })),
+      ]),
+      filterField(t('management.filter.label.pinned'), pinnedFilter, setPinnedFilter, [
+        { value: 'all', label: t('management.filter.pinned') },
+        { value: 'pinned', label: t('management.filter.onlyPinned') },
+        { value: 'unpinned', label: t('management.filter.onlyUnpinned') },
+      ]),
+      filterField(t('management.filter.label.workspace'), workspaceFilter, setWorkspaceFilter, [
+        { value: 'current', label: t('management.filter.currentWorkspace') },
+        ...(workspaceTargets.length > 1 ? [{ value: 'all', label: t('management.filter.allWorkspaces') }] : []),
+        ...workspaceTargets.filter(target => target.workspaceRef !== management.scope.ref).map(target => ({ value: target.workspaceRef, label: target.label })),
+      ], props.workspaceContext?.search === undefined))) : null,
+  mode === 'manage' ? createElement('div', { className: 'pwr-management-utility-actions' },
+    createElement('button', { type: 'button', onClick: () => closeSelectedSafely(Object.values(workspace.views).filter(view => !view.pinned).map(view => view.id)) },
+      createElement(WorkbenchIcon, { name: 'close', size: 14 }), t('management.closeUnpinned')),
+    createElement('button', { type: 'button', disabled: management.history.length === 0, onClick: () => props.controller.restoreClosedBatch() },
+      createElement(WorkbenchIcon, { name: 'restore', size: 14 }), t('management.restoreLast'))) : null,
   notice === undefined ? null : createElement('p', { className: 'pwr-management-notice', role: 'status' }, notice),
   protectedViews.length === 0 ? null : createElement('section', { className: 'pwr-management-protected', 'aria-label': t('management.protectedTitle') },
     createElement('strong', null, t('management.protectedTitle')),
@@ -628,16 +788,18 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
         createElement('small', null, t(`management.protectedReason.${item.reason}`)),
         closable ? createElement('button', { type: 'button', onClick: () => confirmProtectedClose(item) }, t('management.confirmClose')) : null)
     })),
-  conversation.status === 'error' ? createElement('p', { className: 'pwr-management-notice', role: 'alert' }, conversation.reason) : null,
-  workspaceSearch.status === 'error' ? createElement('p', { className: 'pwr-management-notice', role: 'alert' }, workspaceSearch.reason) : null,
+  searchStateRow(conversation, 'management.search.loadingConversation', () => loadConversation()),
+  searchStateRow(workspaceSearch, 'management.search.loadingWorkspace', () => loadWorkspaceSearch()),
   detailEntry === undefined ? null : detailPanel(detailEntry),
   showSearchResults || flatRows.length > 50
     ? createElement('div', {
       className: 'pwr-management-list pwr-management-list-virtual',
       onScroll: (event: UIEvent<HTMLDivElement>) => setScrollTop(event.currentTarget.scrollTop),
-    }, createElement('div', { style: { height: virtual.height, position: 'relative' } },
+    },
+      showingSimilarResults ? createElement('h3', { className: 'pwr-management-similar-title' }, t('management.similar.title')) : null,
+      createElement('div', { style: { height: Math.max(virtual.height, displayResults.length === 0 ? 160 : 0), position: 'relative' } },
       createElement('div', { style: { transform: `translateY(${virtual.offset}px)` } }, ...rowNodes(virtual.items, virtual.start))),
-      results.length === 0 ? createElement('p', { className: 'pwr-empty' }, t('management.noResults')) : null,
+      displayResults.length === 0 && !remoteLoading ? createElement('p', { className: 'pwr-empty' }, t('management.noResults')) : null,
       conversation.nextCursor === undefined ? null : createElement('button', {
         type: 'button', className: 'pwr-management-load-more', disabled: conversation.status === 'loading',
         onClick: () => loadConversation(conversation.nextCursor, true),
@@ -664,33 +826,38 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
         })
         .flatMap(([groupId, rows]) => rows.length === 0 ? [] : [
           createElement('section', { key: groupId, className: 'pwr-management-group', 'aria-label': groupLabel(groupId, customLabels.get(groupId)) },
-            createElement('h3', null, groupLabel(groupId, customLabels.get(groupId))),
+            createElement('h3', null,
+              createElement('span', null, groupLabel(groupId, customLabels.get(groupId))),
+              createElement('small', null, rows.length)),
             ...rowNodes([...rows].sort((left, right) => (left.order ?? Number.MAX_SAFE_INTEGER) - (right.order ?? Number.MAX_SAFE_INTEGER) || left.title.localeCompare(right.title)))),
         ])),
-  mode === 'open' && management.profile.groups.length > 0 ? createElement('div', { className: 'pwr-management-custom-groups', 'aria-label': t('management.customGroups') },
-    ...management.profile.groups.map(group => createElement('div', { key: group.id },
-      createElement('input', {
-        value: groupDrafts[group.id] ?? group.label,
-        'aria-label': t('management.groupName'),
-        onChange: (event: ChangeEvent<HTMLInputElement>) => setGroupDrafts(current => ({ ...current, [group.id]: event.currentTarget.value })),
-        onBlur: () => {
-          const label = groupDrafts[group.id]
-          if (label !== undefined) props.controller.editCustomGroup(group.id, { label })
-        },
-      }),
-      createElement('button', { type: 'button', title: t('management.pinGroup'), 'aria-label': t('management.pinGroup'), onClick: () => props.controller.editCustomGroup(group.id, { pinned: !group.pinned }) }, createElement(WorkbenchIcon, { name: group.pinned ? 'unpin' : 'pin', size: 13 })),
-      createElement('button', { type: 'button', title: t('management.moveGroupUp'), 'aria-label': t('management.moveGroupUp'), onClick: () => props.controller.editCustomGroup(group.id, { move: -1 }) }, '↑'),
-      createElement('button', { type: 'button', title: t('management.moveGroupDown'), 'aria-label': t('management.moveGroupDown'), onClick: () => props.controller.editCustomGroup(group.id, { move: 1 }) }, '↓'),
-      createElement('button', { type: 'button', title: t('management.deleteGroup'), 'aria-label': t('management.deleteGroup'), onClick: () => props.controller.deleteCustomGroup(group.id) }, createElement(WorkbenchIcon, { name: 'close', size: 13 })))),
-  ) : null,
-  mode === 'manage' ? createElement('footer', { className: 'pwr-management-footer ys-field' },
-    createElement('button', { type: 'button', disabled: selected.size === 0, onClick: () => pinSelected(true) }, t('management.pinSelected')),
-    createElement('button', { type: 'button', disabled: selected.size === 0, onClick: () => pinSelected(false) }, t('management.unpinSelected')),
-    createElement('button', { type: 'button', disabled: selected.size === 0, onClick: () => closeSelectedSafely() }, t('management.closeSelected')),
-    createElement('button', {
-      type: 'button', onClick: () => closeSelectedSafely(Object.values(workspace.views).filter(view => !view.pinned).map(view => view.id)),
-    }, t('management.closeUnpinned')),
-    createElement('button', { type: 'button', disabled: management.history.length === 0, onClick: () => props.controller.restoreClosedBatch() }, t('management.restoreLast')),
+  mode === 'open' && !showSearchResults ? createElement('div', { className: 'pwr-management-create-area' },
+    createGroupOpen ? createElement('div', { className: 'pwr-management-create-editor', 'aria-label': t('management.customGroups') },
+      ...management.profile.groups.map(group => createElement('div', { key: group.id, className: 'pwr-management-custom-group' },
+        createElement('input', {
+          value: groupDrafts[group.id] ?? group.label,
+          'aria-label': t('management.groupName'),
+          onChange: (event: ChangeEvent<HTMLInputElement>) => setGroupDrafts(current => ({ ...current, [group.id]: event.currentTarget.value })),
+          onBlur: () => {
+            const label = groupDrafts[group.id]
+            if (label !== undefined) props.controller.editCustomGroup(group.id, { label })
+          },
+        }),
+        createElement('button', { type: 'button', title: t('management.pinGroup'), 'aria-label': t('management.pinGroup'), onClick: () => props.controller.editCustomGroup(group.id, { pinned: !group.pinned }) }, createElement(WorkbenchIcon, { name: group.pinned ? 'unpin' : 'pin', size: 13 })),
+        createElement('button', { type: 'button', title: t('management.moveGroupUp'), 'aria-label': t('management.moveGroupUp'), onClick: () => props.controller.editCustomGroup(group.id, { move: -1 }) }, '↑'),
+        createElement('button', { type: 'button', title: t('management.moveGroupDown'), 'aria-label': t('management.moveGroupDown'), onClick: () => props.controller.editCustomGroup(group.id, { move: 1 }) }, '↓'),
+        createElement('button', { type: 'button', title: t('management.deleteGroup'), 'aria-label': t('management.deleteGroup'), onClick: () => props.controller.deleteCustomGroup(group.id) }, createElement(WorkbenchIcon, { name: 'close', size: 13 })))),
+      createElement('div', { className: 'pwr-management-new-group' },
+        createElement('input', { value: newGroup, placeholder: t('management.groupName'), 'aria-label': t('management.groupName'), onChange: (event: ChangeEvent<HTMLInputElement>) => setNewGroup(event.currentTarget.value) }),
+        createElement('button', { type: 'button', disabled: newGroup.trim().length === 0, onClick: createGroup }, t('management.createGroup')),
+        createElement('button', { type: 'button', onClick: () => { setCreateGroupOpen(false); setNewGroup('') }, 'aria-label': t('chrome.closeViewSelector') }, createElement(WorkbenchIcon, { name: 'close', size: 14 }))))
+      : createElement('button', { type: 'button', className: 'pwr-management-create-trigger', onClick: () => setCreateGroupOpen(true) },
+        createElement(WorkbenchIcon, { name: 'add', size: 14 }), t('management.createGroup'))) : null,
+  mode === 'manage' && selected.size > 0 ? createElement('footer', { className: 'pwr-management-footer ys-field' },
+    createElement('strong', null, formatT('management.selectedCount', { count: selected.size })),
+    createElement('button', { type: 'button', onClick: () => pinSelected(true) }, t('management.pinSelected')),
+    createElement('button', { type: 'button', onClick: () => pinSelected(false) }, t('management.unpinSelected')),
+    createElement('button', { type: 'button', onClick: () => closeSelectedSafely() }, t('management.closeSelected')),
     createElement('select', { value: moveTargetGroup, onChange: (event: ChangeEvent<HTMLSelectElement>) => setMoveTargetGroup(event.currentTarget.value), 'aria-label': t('management.moveSelected') },
       createElement('option', { value: '' }, t('management.moveSelected')),
       ...Object.values(workspace.groups).map(group => createElement('option', { key: group.id, value: group.id }, groupPlacementLabel(group)))),
@@ -699,9 +866,7 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
       createElement('option', { value: '' }, t('management.createGroup')),
       ...management.profile.groups.map(group => createElement('option', { key: group.id, value: group.id }, group.label))),
     createElement('button', { type: 'button', disabled: selected.size === 0 || groupForSelection.length === 0, onClick: addSelectedToGroup }, t('management.createGroup')),
-  ) : createElement('footer', { className: 'pwr-management-footer ys-field' },
-    createElement('input', { value: newGroup, placeholder: t('management.groupName'), 'aria-label': t('management.groupName'), onChange: (event: ChangeEvent<HTMLInputElement>) => setNewGroup(event.currentTarget.value) }),
-    createElement('button', { type: 'button', disabled: newGroup.trim().length === 0, onClick: createGroup }, t('management.createGroup'))),
+  ) : null,
   targetEntry === undefined ? null : createElement('div', { className: 'pwr-management-target', role: 'dialog', 'aria-label': t('management.target') },
     createElement('strong', null, targetEntry.title),
     createElement('button', { type: 'button', onClick: () => openDescriptor(targetEntry) }, t('management.targetCurrent')),

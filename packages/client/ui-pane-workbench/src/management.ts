@@ -778,30 +778,86 @@ export function filterAndRankPaneEntries(
 ): readonly PaneManagementEntryV1[] {
   const needle = query.trim().replace(/^@conversation\s*/i, '').toLocaleLowerCase()
   const matches = entries.filter(entry => {
-    if (filters.sources !== undefined && !filters.sources.has(entry.source)) return false
-    if (filters.groupIds !== undefined && !filters.groupIds.has(entry.groupId)) return false
-    if (filters.regions !== undefined && (entry.region === undefined || !filters.regions.has(entry.region))) return false
-    if (filters.owners !== undefined && (entry.owner === undefined || !filters.owners.has(entry.owner))) return false
-    if (filters.kinds !== undefined && !filters.kinds.has(entry.kind)) return false
-    if (filters.pinned !== undefined && entry.pinned !== filters.pinned) return false
-    if (filters.statuses !== undefined && !entry.statusTokens.some(status => filters.statuses!.has(status))) return false
+    if (!entryPassesPaneFilters(entry, filters)) return false
     if (needle.length === 0) return true
-    return [entry.title, entry.kind, entry.owner, entry.groupId, entry.description, ...entry.keywords, ...entry.statusTokens]
+    return paneEntrySearchFields(entry)
       .some(value => value?.toLocaleLowerCase().includes(needle) === true)
   })
   return matches.sort((left, right) => {
-    const score = (entry: PaneManagementEntryV1): number => {
-      const exact = needle.length > 0 && (entry.title.toLocaleLowerCase() === needle || entry.kind.toLocaleLowerCase() === needle)
-      return Number(exact) * 10_000
-        + Number(entry.active) * 5_000
-        + Number(entry.source === 'tab') * 3_000
-        + Number(entry.pinned) * 2_000
-        + Number(entry.recent) * 1_000
-        + Number(entry.source === 'pane') * 500
-        + Number(entry.source === 'history') * 100
-    }
-    return score(right) - score(left)
+    return paneEntryRank(right, needle) - paneEntryRank(left, needle)
       || (left.order ?? Number.MAX_SAFE_INTEGER) - (right.order ?? Number.MAX_SAFE_INTEGER)
       || left.title.localeCompare(right.title)
   }).slice(0, 200)
+}
+
+function entryPassesPaneFilters(entry: PaneManagementEntryV1, filters: PaneManagementFiltersV1): boolean {
+  if (filters.sources !== undefined && !filters.sources.has(entry.source)) return false
+  if (filters.groupIds !== undefined && !filters.groupIds.has(entry.groupId)) return false
+  if (filters.regions !== undefined && (entry.region === undefined || !filters.regions.has(entry.region))) return false
+  if (filters.owners !== undefined && (entry.owner === undefined || !filters.owners.has(entry.owner))) return false
+  if (filters.kinds !== undefined && !filters.kinds.has(entry.kind)) return false
+  if (filters.pinned !== undefined && entry.pinned !== filters.pinned) return false
+  if (filters.statuses !== undefined && !entry.statusTokens.some(status => filters.statuses!.has(status))) return false
+  return true
+}
+
+function paneEntrySearchFields(entry: PaneManagementEntryV1): readonly (string | undefined)[] {
+  return [entry.title, entry.kind, entry.owner, entry.groupId, entry.description, ...entry.keywords, ...entry.statusTokens]
+}
+
+function paneEntryRank(entry: PaneManagementEntryV1, needle = ''): number {
+  const exact = needle.length > 0 && (entry.title.toLocaleLowerCase() === needle || entry.kind.toLocaleLowerCase() === needle)
+  return Number(exact) * 10_000
+    + Number(entry.active) * 5_000
+    + Number(entry.source === 'tab') * 3_000
+    + Number(entry.pinned) * 2_000
+    + Number(entry.recent) * 1_000
+    + Number(entry.source === 'pane') * 500
+    + Number(entry.source === 'history') * 100
+}
+
+function normalizedBigrams(value: string): ReadonlySet<string> {
+  const points = Array.from(value.normalize('NFKC').toLocaleLowerCase().trim())
+  const grams = new Set<string>()
+  for (let index = 0; index + 1 < points.length; index += 1) grams.add(`${points[index]}${points[index + 1]}`)
+  return grams
+}
+
+/** Bounded typo fallback. Strict substring search remains the primary path. */
+export function suggestSimilarPaneEntries(
+  entries: readonly PaneManagementEntryV1[],
+  query: string,
+  filters: PaneManagementFiltersV1 = {},
+  limit = 3,
+): readonly PaneManagementEntryV1[] {
+  const needle = query.trim().normalize('NFKC').toLocaleLowerCase()
+  const queryGrams = normalizedBigrams(needle)
+  if (queryGrams.size === 0 || limit <= 0) return []
+  const seen = new Set<string>()
+  return entries
+    .filter(entry => entryPassesPaneFilters(entry, filters))
+    .map(entry => {
+      const fields = paneEntrySearchFields(entry).flatMap(value => value === undefined ? [] : [value.normalize('NFKC').toLocaleLowerCase()])
+      if (fields.some(value => value.includes(needle))) return { entry, similarity: 0 }
+      const similarity = fields.reduce((best, value) => {
+        const candidate = normalizedBigrams(value)
+        let shared = 0
+        for (const gram of queryGrams) if (candidate.has(gram)) shared += 1
+        return Math.max(best, shared / queryGrams.size)
+      }, 0)
+      return { entry, similarity }
+    })
+    .filter(candidate => candidate.similarity >= 1 / 3)
+    .sort((left, right) => right.similarity - left.similarity
+      || paneEntryRank(right.entry) - paneEntryRank(left.entry)
+      || (left.entry.order ?? Number.MAX_SAFE_INTEGER) - (right.entry.order ?? Number.MAX_SAFE_INTEGER)
+      || left.entry.title.localeCompare(right.entry.title))
+    .filter(candidate => {
+      const identity = candidate.entry.source === 'pane' ? `pane:${candidate.entry.kind}` : candidate.entry.key
+      if (seen.has(identity)) return false
+      seen.add(identity)
+      return true
+    })
+    .slice(0, Math.min(3, Math.floor(limit)))
+    .map(candidate => candidate.entry)
 }

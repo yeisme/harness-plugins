@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { apply, name } from '../src/index.ts'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 
@@ -12,6 +13,11 @@ const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')) 
 }
 
 describe('dsh-interaction-space bundle contract', () => {
+  it('exposes a valid no-op host plugin', () => {
+    expect(name).toBe('dsh-interaction-space')
+    expect(apply).toBeTypeOf('function')
+  })
+
   it('declares one additive patch with a single bundle row', async () => {
     const patch = await readFile(join(root, 'cordis.patch.yml'), 'utf8')
     expect(manifest.dsh.bundle.patch).toBe('./cordis.patch.yml')

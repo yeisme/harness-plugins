@@ -6,7 +6,7 @@ import { PaneWorkbenchController } from '../src/controller.js'
 import { setActiveLocale } from '../src/i18n/locale.js'
 import { PaneCloseUndoToast, PaneManagementCenter } from '../src/management-center.js'
 import type { PaneConversationSearchHostV1, PaneWorkspaceContextProviderV1 } from '../src/management.js'
-import { PaneViewContent } from '../src/region-chrome.js'
+import { PaneViewContent, REGION_STYLES } from '../src/region-chrome.js'
 import { PaneViewRegistry } from '../src/view-registry.js'
 
 afterEach(() => {
@@ -45,7 +45,7 @@ describe('PaneManagementCenter', () => {
     await act(async () => { vi.advanceTimersByTime(200); await Promise.resolve() })
     expect(search).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Include conversation content' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Search conversations' }))
     await act(async () => { vi.advanceTimersByTime(160); await Promise.resolve() })
     expect(search).toHaveBeenCalledTimes(1)
 
@@ -75,7 +75,8 @@ describe('PaneManagementCenter', () => {
     controller.setManagementContext('local')
     render(createElement(PaneManagementCenter, { mode: 'open', registry: registryFixture(), controller, workspaceContext, onClose: vi.fn() }))
     expect(search).not.toHaveBeenCalled()
-    fireEvent.change(screen.getByRole('combobox', { name: 'Workspace scope' }), { target: { value: 'workspace:other' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced filters' }))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Workspace' }), { target: { value: 'workspace:other' } })
     await act(async () => { vi.advanceTimersByTime(160); await Promise.resolve() })
     expect(search).toHaveBeenCalledWith(expect.objectContaining({ workspaceRefs: ['workspace:other'], limit: 20 }), expect.any(AbortSignal))
     expect(screen.getAllByText('Remote workspace tab summary').length).toBeGreaterThan(0)
@@ -89,6 +90,134 @@ describe('PaneManagementCenter', () => {
     const panel = screen.getByRole('region', { name: 'Pane details' })
     expect(within(panel).getByText('Remote workspace tab summary')).toBeTruthy()
     expect(within(panel).getByText('Other project')).toBeTruthy()
+  })
+
+  it('keeps advanced filters collapsed, counts active filters, and resets them together', () => {
+    render(createElement(PaneManagementCenter, { mode: 'open', registry: registryFixture(), controller: new PaneWorkbenchController(), onClose: vi.fn() }))
+    const toggle = screen.getByRole('button', { name: /Advanced filters/ })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByRole('combobox', { name: 'Owner' })).toBeNull()
+
+    fireEvent.click(toggle)
+    const owner = screen.getByRole('combobox', { name: 'Owner' }) as HTMLSelectElement
+    fireEvent.change(owner, { target: { value: 'git' } })
+    expect(toggle.textContent).toContain('1')
+    fireEvent.click(toggle)
+    expect(screen.queryByRole('combobox', { name: 'Owner' })).toBeNull()
+
+    fireEvent.click(toggle)
+    fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }))
+    expect((screen.getByRole('combobox', { name: 'Owner' }) as HTMLSelectElement).value).toBe('all')
+    expect(toggle.textContent).not.toContain('1')
+  })
+
+  it('opens group creation and selected-item actions only when requested', () => {
+    const registry = registryFixture()
+    render(createElement(PaneManagementCenter, { mode: 'open', registry, controller: new PaneWorkbenchController(), onClose: vi.fn() }))
+    expect(screen.queryByRole('textbox', { name: 'Group name' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Create group' }))
+    expect(screen.getByRole('textbox', { name: 'Group name' })).toBeTruthy()
+
+    cleanup()
+    const controller = new PaneWorkbenchController()
+    controller.openView({ kind: 'git.status', resourceKey: 'view:git.status', role: 'content', preferredRegion: 'right', retention: 'snapshot', singleton: true, title: 'Git' })
+    render(createElement(PaneManagementCenter, { mode: 'manage', registry, controller, onClose: vi.fn() }))
+    expect(screen.queryByRole('button', { name: 'Close selected safely' })).toBeNull()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Git' }))
+    expect(screen.getByRole('button', { name: 'Close selected safely' })).toBeTruthy()
+    expect(screen.getByText('1 selected')).toBeTruthy()
+  })
+
+  it('opens the target picker from the discoverable row chevron', () => {
+    render(createElement(PaneManagementCenter, { mode: 'open', registry: registryFixture(), controller: new PaneWorkbenchController(), onClose: vi.fn() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Choose open target for Git' }))
+    expect(screen.getByRole('dialog', { name: 'Open target' })).toBeTruthy()
+  })
+
+  it('shows bounded local typo suggestions without invoking conversation search', () => {
+    const registry = registryFixture()
+    registry.registerView({
+      descriptor: { kind: 'explorer.files', label: 'Explorer', componentKey: 'explorer', role: 'content', preferredRegion: 'right', retention: 'snapshot', singleton: true, presentation: { group: 'development' } },
+      component: () => null,
+    })
+    const search = vi.fn()
+    render(createElement(PaneManagementCenter, {
+      mode: 'open', registry, controller: new PaneWorkbenchController(),
+      conversationSearch: { capability: 'pane.conversation-search.v1', search, open: vi.fn() }, onClose: vi.fn(),
+    }))
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Exploer' } })
+    expect(screen.getByRole('heading', { name: 'You might be looking for' })).toBeTruthy()
+    expect(screen.getByText('Explorer')).toBeTruthy()
+    expect(search).not.toHaveBeenCalled()
+  })
+
+  it('localizes built-in provider labels and preserves UI state across locale switches', () => {
+    setActiveLocale('zh')
+    const registry = new PaneViewRegistry({ capabilities: new Set() })
+    registry.registerView({
+      descriptor: { kind: 'git.status', label: 'Source Control', componentKey: 'git', role: 'content', preferredRegion: 'right', retention: 'snapshot', singleton: true, presentation: { group: 'development', owner: 'git' } },
+      component: () => null,
+      i18n: { namespace: 'paneWorkbench', labelKey: 'rail.sourceControl' },
+    })
+    registry.registerView({
+      descriptor: { kind: 'subagent.monitor', label: 'Agents', componentKey: 'agents', role: 'navigator', preferredRegion: 'right', retention: 'keep-alive', singleton: true, presentation: { group: 'agents', owner: 'ordo' } },
+      component: () => null,
+      i18n: { namespace: 'paneWorkbench', labelKey: 'rail.agents' },
+    })
+    render(createElement(PaneManagementCenter, { mode: 'open', registry, controller: new PaneWorkbenchController(), onClose: vi.fn() }))
+    expect(screen.getByText('源代码管理')).toBeTruthy()
+    expect(screen.getAllByText('智能体').length).toBeGreaterThan(0)
+    expect(screen.getByRole('region', { name: '窗格中心' }).textContent).not.toMatch(/Pane|Tab|Agent/)
+
+    fireEvent.click(screen.getByRole('button', { name: /高级筛选/ }))
+    fireEvent.change(screen.getByRole('combobox', { name: '所有者' }), { target: { value: 'git' } })
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: '源代码' } })
+    act(() => { setActiveLocale('en') })
+    expect((screen.getByRole('searchbox') as HTMLInputElement).value).toBe('源代码')
+    expect((screen.getByRole('combobox', { name: 'Owner' }) as HTMLSelectElement).value).toBe('git')
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Owner' }), { target: { value: 'all' } })
+    expect(screen.getByText('Source Control')).toBeTruthy()
+  })
+
+  it('renders partial search state and retries only transient errors', async () => {
+    vi.useFakeTimers()
+    const partial: PaneConversationSearchHostV1 = {
+      capability: 'pane.conversation-search.v1',
+      search: vi.fn(async () => ({ status: 'partial' as const, reason: 'offline', items: [] })),
+      open: vi.fn(),
+    }
+    const first = render(createElement(PaneManagementCenter, { mode: 'open', registry: registryFixture(), controller: new PaneWorkbenchController(), conversationSearch: partial, onClose: vi.fn() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Search conversations' }))
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'pane' } })
+    await act(async () => { vi.advanceTimersByTime(200); await Promise.resolve() })
+    expect(screen.getByText('Some results may be unavailable.')).toBeTruthy()
+
+    first.unmount()
+    let attempt = 0
+    const failing: PaneConversationSearchHostV1 = {
+      capability: 'pane.conversation-search.v1',
+      search: vi.fn(async () => (++attempt === 1
+        ? { status: 'offline' as const, reason: 'offline', items: [] }
+        : { status: 'permission_denied' as const, reason: 'permission_denied', items: [] })),
+      open: vi.fn(),
+    }
+    render(createElement(PaneManagementCenter, { mode: 'open', registry: registryFixture(), controller: new PaneWorkbenchController(), conversationSearch: failing, onClose: vi.fn() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Search conversations' }))
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'pane' } })
+    await act(async () => { vi.advanceTimersByTime(200); await Promise.resolve() })
+    fireEvent.click(screen.getByRole('button', { name: 'Retry search' }))
+    await act(async () => { await Promise.resolve() })
+    expect(screen.getByText('You do not have permission to search this source.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Retry search' })).toBeNull()
+  })
+
+  it('ships a full-screen 390px contract with one scrollable result region', () => {
+    expect(REGION_STYLES).toContain('.pwr-management-center{inset:0;width:100vw;height:100vh;height:100dvh')
+    expect(REGION_STYLES).toContain('.pwr-management-filter-grid{grid-template-columns:1fr}')
+    expect(REGION_STYLES).toContain('.pwr-management-list{flex:1;min-height:120px;max-height:none')
+    expect(REGION_STYLES).toContain('.pwr-management-target-trigger')
+    expect(REGION_STYLES).toContain('{min-height:44px}')
   })
 
   it('closes safe selections immediately and lists protected tabs for explicit per-item confirmation', () => {
@@ -208,7 +337,7 @@ describe('PaneManagementCenter', () => {
       open: vi.fn(),
     }
     render(createElement(PaneManagementCenter, { mode: 'open', registry: registryFixture(), controller: new PaneWorkbenchController(), conversationSearch: host, onClose: vi.fn() }))
-    fireEvent.click(screen.getByRole('button', { name: 'Include conversation content' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Search conversations' }))
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'pane' } })
     await act(async () => { vi.advanceTimersByTime(200); await Promise.resolve() })
     expect(screen.getByText('the pinned pane contract')).toBeTruthy()

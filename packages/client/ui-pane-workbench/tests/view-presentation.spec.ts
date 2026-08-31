@@ -18,10 +18,11 @@ function baseRegistration(presentation?: unknown): Record<string, unknown> {
   }
 }
 
-describe('frozen WorkbenchIconName set (V3 1.1)', () => {
-  it('exposes the frozen semantic set and a runtime guard', () => {
+describe('additive WorkbenchIconName set', () => {
+  it('exposes the semantic set and a runtime guard', () => {
     expect(WORKBENCH_ICON_NAMES).toContain('terminal')
     expect(WORKBENCH_ICON_NAMES).toContain('media')
+    expect(WORKBENCH_ICON_NAMES).toEqual(expect.arrayContaining(['filter', 'message', 'chevron-right', 'chevron-down']))
     expect(isWorkbenchIconName('terminal')).toBe(true)
     expect(isWorkbenchIconName('Terminal')).toBe(false)
     expect(isWorkbenchIconName('svg:inject')).toBe(false)

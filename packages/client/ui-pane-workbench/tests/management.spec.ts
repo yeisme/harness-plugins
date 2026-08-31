@@ -9,6 +9,7 @@ import {
   pruneClosedHistory,
   resolvePaneManagementShortcut,
   sanitizePaneRestoreState,
+  suggestSimilarPaneEntries,
   type PaneClosedHistoryBatchV1,
   type PaneManagementProfileV1,
   type PaneManagementScopeV1,
@@ -118,6 +119,28 @@ describe('Pane management contracts', () => {
     expect(ranked[0]).toMatchObject({ source: 'tab', title: 'Git', active: true, pinned: true })
     expect(ranked.some(entry => entry.source === 'pane' && entry.kind === 'git.status')).toBe(true)
     expect(filterAndRankPaneEntries(entries, 'source control')[0]?.kind).toBe('git.status')
+  })
+
+  it('suggests at most three deterministic local typo matches without crossing filters', () => {
+    const registry = new PaneViewRegistry({ capabilities: new Set() })
+    for (const [kind, label, owner] of [
+      ['explorer.files', 'Explorer', 'files'],
+      ['explorer.search', 'Explorer Search', 'files'],
+      ['explorer.symbols', 'Explorer Symbols', 'files'],
+      ['explorer.remote', 'Explorer Remote', 'remote'],
+    ] as const) {
+      registry.registerView({
+        descriptor: { kind, label, componentKey: kind, role: 'content', preferredRegion: 'right', retention: 'snapshot', singleton: true, presentation: { group: 'development', owner } },
+        component: () => null,
+      })
+    }
+    const entries = buildPaneManagementEntries({ registrations: registry.snapshot(), state: createPaneWorkspace(), history: [], profile })
+    expect(filterAndRankPaneEntries(entries, 'Exploer')).toHaveLength(0)
+    const suggestions = suggestSimilarPaneEntries(entries, 'Exploer', { sources: new Set(['pane']), owners: new Set(['files']) })
+    expect(suggestions).toHaveLength(3)
+    expect(suggestions.every(entry => entry.owner === 'files')).toBe(true)
+    expect(suggestions.map(entry => entry.title)).toEqual(['Explorer', 'Explorer Search', 'Explorer Symbols'])
+    expect(suggestSimilarPaneEntries(entries, 'x')).toEqual([])
   })
 
   it('carries pane descriptions through entries, matches description-only queries, and stamps history freshness', () => {
