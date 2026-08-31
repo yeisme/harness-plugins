@@ -10,3 +10,4 @@
 
 /** Experimental API marker: contracts may change within the 0.1.0-rc series. */
 export const BROWSER_PANE_EXPERIMENTAL_API = 'browser.automation.experimental.v0.1' as const
+export * from './contracts.js'
