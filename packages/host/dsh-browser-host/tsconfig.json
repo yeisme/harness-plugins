@@ -9,6 +9,8 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
+    "declaration": true,
+    "declarationMap": false,
     "rootDir": "src",
     "outDir": "lib/types"
   },
