@@ -7,6 +7,16 @@ export {
   agentsHubTaskRows,
   agentsHubDeliveryOptions,
 } from './hub-state.ts'
+export {
+  resolveOrdoTeamLayout,
+  ordoTeamTaskQueue,
+  ordoTeamGraph,
+  ordoTeamRelationList,
+  ordoTeamInspector,
+  sanitizeRoomBody,
+  appendRoomEntry,
+} from './team-workspace.ts'
+export type { OrdoTeamLayoutMode, OrdoTeamTaskQueueRowV1, OrdoTeamGraphNodeV1, OrdoTeamGraphEdgeV1, OrdoTeamInspectorViewV1, OrdoTeamRoomEventV1, OrdoTeamRoomEntryV1 } from './team-workspace.ts'
 export type { AgentsHubTab, AgentsHubStateV1, AgentsHubSessionAgentRow, AgentsHubHeaderV1, AgentsHubLegacyFallbacks } from './hub-state.ts'
 /** @deprecated 0.1.0-rc.7 compatibility browser entry. */
 
