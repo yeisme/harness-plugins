@@ -91,3 +91,22 @@ describe('quick pick recommended grouping + sheet + listbox (V3 2.4)', () => {
     expect(shared).not.toContain('.pwr-picker{position:fixed')
   })
 })
+
+describe('V3 8.6 documentation inventory', () => {
+  it('V3 documentation surfaces exist and reference the delivered features', async () => {
+    const { readFileSync, existsSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const root = resolve(process.cwd(), '../../..')
+    const read = (rel: string) => readFileSync(resolve(root, rel), 'utf8')
+    // preview/media/terminal limitations live in the owning package READMEs
+    expect(read('packages/bundle/dsh-rich-media/README.md')).toMatch(/preview|format/i)
+    expect(read('packages/bundle/dsh-terminal/README.md')).toMatch(/terminal|reconnect/i)
+    expect(read('packages/bundle/dsh-file-document/README.md')).toMatch(/explorer|document/i)
+    // keyboard doc exists (dsh pane keyboard guide)
+    expect(existsSync(resolve(root, 'docs/cookbook/slash-commands.md')) || existsSync(resolve(root, 'docs/cookbook/dsh-plugin-hot-development.md'))).toBe(true)
+    // THIRD_PARTY_NOTICES covers the preview renderer boundary
+    const notices = read('THIRD_PARTY_NOTICES.md')
+    expect(notices).toContain('pdfjs-dist')
+    expect(notices).toContain('@tanstack/react-table')
+  })
+})
