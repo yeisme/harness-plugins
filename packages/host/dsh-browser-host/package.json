@@ -1,0 +1,28 @@
+{
+  "name": "@yeisme/dsh-browser-host",
+  "version": "0.1.0-rc.1",
+  "private": true,
+  "type": "module",
+  "description": "Experimental Browser Pane host contracts: safe automation projection, typed actions, and viewport leases. The browser process, pages, network, and credentials stay with the external automation owner.",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.json && tsdown"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsdown": "^0.22.2",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7",
+    "zod": "^4.4.3"
+  }
+}

@@ -7,7 +7,7 @@
 
 ## 1. Host contract 与 fake Provider
 
-- [ ] 1.1 创建 `packages/host/dsh-browser-host/`，package 为 `@yeisme/dsh-browser-host@0.1.0-rc.1`，配置 strict ESM typecheck/test/build scripts 与 experimental API markers。
+- [x] 1.1 创建 `packages/host/dsh-browser-host/`，package 为 `@yeisme/dsh-browser-host@0.1.0-rc.1`，配置 strict ESM typecheck/test/build scripts 与 experimental API markers。 （done 2026-08-31: 包骨架落地——strict tsconfig（noUncheckedIndexedAccess/exactOptionalPropertyTypes/verbatimModuleSyntax）、typecheck/test/build 三脚本、tsdown ESM 输出、`BROWSER_PANE_EXPERIMENTAL_API` v0.1 实验标记常量；TSC ✅/build ✅/test 骨架就绪（1.4 负例起填充）。lockfile 已同步（78 projects）。）
 - [ ] 1.2 实现 `BrowserAutomationProviderV1`、`BrowserPaneHostV1`、`dsh.browserPaneHost`、binding/probe/session-discovery/snapshot/reconcile types、`BrowserViewportLeaseV1`、`BrowserControlLeaseV1` 与 typed input/ack types。
 - [ ] 1.3 为 exact context/provider/session/version/digest/generation/page/epoch binding、64 KiB event payload 与 domain collection budgets 实现 strict validators。
 - [ ] 1.4 增加负例 fixtures，覆盖 cookie/header/Authorization/secret/token/credential、raw/signed URL、userinfo/query value、absolute path、raw DOM/page/screenshot/download bytes、raw prompt、provider payload、private arguments 与完整思维链泄漏。
