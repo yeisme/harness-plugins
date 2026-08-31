@@ -105,3 +105,32 @@ describe('Room surface (§3.4)', () => {
     expect(entries.at(-1)?.id).toBe('room:219')
   })
 })
+
+import { reduceOrdoTeamPalette, shouldRefetchOnReceipt, type OrdoTeamPaletteStateV1 } from '../src/client/team-workspace.ts'
+
+describe('Owner Action Palette flow (§3.4)', () => {
+  const initial: OrdoTeamPaletteStateV1 = { pending: undefined, lastReceiptRef: undefined }
+  const request = { actionId: 'handoff-1', targetRef: 'task:1', idempotencyKey: 'key-12345678', contextRevision: 3 }
+
+  it('request arms a pending preview; confirm converts to a receipt', () => {
+    const armed = reduceOrdoTeamPalette(initial, { type: 'request', request })
+    expect(armed.pending).toEqual(request)
+    const confirmed = reduceOrdoTeamPalette(armed, { type: 'confirmed', receiptRef: 'receipt:1' })
+    expect(confirmed).toEqual({ pending: undefined, lastReceiptRef: 'receipt:1' })
+  })
+
+  it('control loss and dismissal close a pending confirmation; stale revisions invalidate it', () => {
+    const armed = reduceOrdoTeamPalette(initial, { type: 'request', request })
+    expect(reduceOrdoTeamPalette(armed, { type: 'control_lost' }).pending).toBeUndefined()
+    const reArmed = reduceOrdoTeamPalette(initial, { type: 'request', request })
+    expect(reduceOrdoTeamPalette(reArmed, { type: 'revision_changed', revision: 4 }).pending).toBeUndefined()
+    expect(reduceOrdoTeamPalette(reArmed, { type: 'revision_changed', revision: 3 }).pending).toEqual(request)
+    expect(reduceOrdoTeamPalette(initial, { type: 'dismiss' })).toBe(initial)
+  })
+
+  it('receipt-driven refresh fires only for new receipts', () => {
+    const state = reduceOrdoTeamPalette(initial, { type: 'receipt', receiptRef: 'receipt:1' })
+    expect(shouldRefetchOnReceipt(state, 'receipt:1')).toBe(false)
+    expect(shouldRefetchOnReceipt(state, 'receipt:2')).toBe(true)
+  })
+})

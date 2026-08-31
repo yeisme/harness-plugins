@@ -180,3 +180,50 @@ export function appendRoomEntry(entries: readonly OrdoTeamRoomEntryV1[], event: 
   const next = [...entries, { id: `room:${idSeed}`, event, at: idSeed }]
   return next.length > maxEntries ? next.slice(next.length - maxEntries) : next
 }
+
+/**
+ * Owner Action Palette dispatch flow (§3.4): Room interactions and palette
+ * actions route through the §1.3 proxy — preview-gated, receipt-driven, with
+ * control loss or revision drift invalidating any pending confirmation.
+ */
+export interface OrdoTeamPendingActionV1 {
+  readonly actionId: string
+  readonly targetRef: string
+  readonly idempotencyKey: string
+  readonly contextRevision: number
+}
+
+export interface OrdoTeamPaletteStateV1 {
+  readonly pending: OrdoTeamPendingActionV1 | undefined
+  readonly lastReceiptRef: string | undefined
+}
+
+export type OrdoTeamPaletteEvent =
+  | { readonly type: 'request'; readonly request: OrdoTeamPendingActionV1 }
+  | { readonly type: 'confirmed'; readonly receiptRef: string }
+  | { readonly type: 'receipt'; readonly receiptRef: string }
+  | { readonly type: 'control_lost' }
+  | { readonly type: 'revision_changed'; readonly revision: number }
+  | { readonly type: 'dismiss' }
+
+export function reduceOrdoTeamPalette(state: OrdoTeamPaletteStateV1, event: OrdoTeamPaletteEvent): OrdoTeamPaletteStateV1 {
+  switch (event.type) {
+    case 'request':
+      return { ...state, pending: event.request }
+    case 'confirmed':
+    case 'receipt':
+      return { pending: undefined, lastReceiptRef: event.receiptRef }
+    case 'control_lost':
+    case 'dismiss':
+      return state.pending === undefined ? state : { ...state, pending: undefined }
+    case 'revision_changed':
+      // a revision change invalidates only a stale pending preview
+      if (state.pending === undefined || state.pending.contextRevision === event.revision) return state
+      return { ...state, pending: undefined }
+  }
+}
+
+/** Receipt-driven refresh: a new receipt for the current team triggers refetch. */
+export function shouldRefetchOnReceipt(state: OrdoTeamPaletteStateV1, receiptRef: string): boolean {
+  return state.lastReceiptRef !== receiptRef
+}
