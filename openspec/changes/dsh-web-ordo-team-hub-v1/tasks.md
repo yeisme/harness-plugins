@@ -23,7 +23,7 @@
 - [x] 4.1 完成 keyboard golden journey、focus return、ARIA、non-color status、high contrast和reduced-motion coverage （done 2026-08-31: **keyboard golden journey**——Task Queue→relation list→Inspector 全量可遍历（每行 task 皆有 Inspector 投影，测），graph 非唯一入口（§3.3 等价表示合同）；**non-color status**——行携带文本 state/criticality/blockerCount 三重（非仅颜色，测）；**degraded states**——空投影全表面零抛错（unavailable/offline 诚实可读，测）；ARIA/focus return 由 §2.1 单视图 kind + pane-workbench focus restore 底座（2.4/2.7 证据）承担；high contrast/reduced-motion 由 pane-workbench 2.8 全局层承担（chrome-tokens.spec 六维断言）。浏览器 golden 截图旅程归 4.2 visual fixtures。）
 - [ ] 4.2 添加共享 semantic fixtures及1280/1024/800/<768、large graph、degraded states visual fixtures
 - [ ] 4.3 运行 `pnpm run typecheck`、`pnpm run test`、`pnpm run test:visual`、`pnpm run check:bundles` 和 `pnpm run check:surfaces`
-- [ ] 4.4 运行 `openspec validate dsh-web-ordo-team-hub-v1 --strict --no-interactive`、`pnpm run build` 和 `git diff --check`
+- [x] 4.4 运行 `openspec validate dsh-web-ordo-team-hub-v1 --strict --no-interactive`、`pnpm run build` 和 `git diff --check` （done 2026-08-31: strict validate ✅（valid）；本包 build ✅；`git diff --check` 零输出 ✅。）
 
 ## 5. 文档
 
