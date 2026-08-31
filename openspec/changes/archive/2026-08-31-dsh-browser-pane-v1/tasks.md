@@ -81,9 +81,9 @@ git diff --check
 
 ## 5. Promotion boundary
 
-- [ ] 5.1 将 v0.1 completion verdict 记录为 Browser Pane consumer/fake-provider conformance，不扩大为真实浏览器运行时验收。
-- [ ] 5.2 接入真实 Provider 前，另建 owner OpenSpec，覆盖 process/session lifecycle、network/SSRF/egress、credential injection、media transport、downloads、evidence retention、authorization、operations 与 rollback。
-- [ ] 5.3 每个具体 Provider adapter 都必须 optional 且可移除；缺失或回滚后 Pane 返回 `needs_contract`，不得删除 owner data。
+- [x] 5.1 将 v0.1 completion verdict 记录为 Browser Pane consumer/fake-provider conformance，不扩大为真实浏览器运行时验收。 （done 2026-08-31: verdict=**consumer/fake-provider conformance**——§1-§4 全部证据基于 strict validators+deterministic fake provider+fake viewport transport（integration 矩阵 `real_browser_runtime: deferred_to_owner_openspec` 显式标注）；README 状态节声明 no real browser runtime wired。不扩大验收边界。）
+- [x] 5.2 接入真实 Provider 前，另建 owner OpenSpec，覆盖 process/session lifecycle、network/SSRF/egress、credential injection、media transport、downloads、evidence retention、authorization、operations 与 rollback。 （done 2026-08-31: 记录为待办边界——README *Privacy & external owner* 节+§5.3 合同已固定真实 provider 须另建 owner OpenSpec（process/session lifecycle/network SSRS/credential/media/downloads/evidence/auth/ops/rollback 十域清单见 proposal owner 表）；本 change 不实现真实 provider，无需现在建该 OpenSpec——在真实 provider 启动时建。）
+- [x] 5.3 每个具体 Provider adapter 都必须 optional 且可移除；缺失或回滚后 Pane 返回 `needs_contract`，不得删除 owner data。 （done 2026-08-31: 结构性满足——bundle 无任何具体 provider 依赖（3.5 禁令扫描钉死零 playwright/puppeteer/selenium）；provider 经 Cordis context 注入（缺→needs_contract，registration 测）；回滚=禁用 bundle（README 回滚节：停注册零数据删除）；owner data 零持久化（pane 只存 ephemeral view state，localStorage/sessionStorage 禁项在 §8 security boundary）。）
 
 ## Completion criteria
 
