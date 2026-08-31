@@ -90,3 +90,52 @@ describe('capability matrix (§2.3 honest fallback)', () => {
     expect(resolveOrdoTeamCapabilityMatrix({ capability: 'ordo.team.v1', maturity: 'fixtures' }, true).mutationEnabled).toBe(false)
   })
 })
+
+import { proxyOrdoTeamAction, decideOrdoTeamDispatch, type OrdoTeamSnapshotV1 } from '../src/host/team-projection.ts'
+
+function liveSnapshot(): OrdoTeamSnapshotV1 {
+  return {
+    schemaVersion: 'ordo.team.snapshot.v1alpha1',
+    teamRef: 'team:1',
+    contextRevision: 3,
+    generation: 2,
+    cursor: 41,
+    freshness: 'fresh',
+    safeMessage: 'ok',
+    tasks: [{ taskRef: 'task:1', title: 'Outline', state: 'running', criticality: 'normal', deliveryRef: 'delivery:a', blockerCount: 0, assigneeRef: 'agent:1' }],
+    assignments: [{ assignmentRef: 'asg:1', agentRef: 'agent:1', taskRef: 'task:1', role: 'writer', holder: true }],
+    actions: [{ actionId: 'handoff-1', label: 'Hand off', kind: 'handoff', requiresConfirmation: 'approval', disabledReason: undefined }],
+  } as OrdoTeamSnapshotV1
+}
+
+const request = { actionId: 'handoff-1', teamRef: 'team:1', contextRevision: 3, generation: 2, targetRef: 'task:1', idempotencyKey: 'key-12345678' }
+
+describe('Team action proxy (§1.3 fail-closed gating)', () => {
+  it('previews a valid mutation with the exact descriptor', () => {
+    const outcome = proxyOrdoTeamAction(liveSnapshot(), request, { mutationEnabled: true, currentContextRevision: 3 })
+    expect(outcome).toMatchObject({ action: 'preview', descriptor: { actionId: 'handoff-1', requiresConfirmation: 'approval' } })
+  })
+
+  it('rejects every drift and disabled path with typed reasons', () => {
+    const snapshot = liveSnapshot()
+    const opts = { mutationEnabled: true, currentContextRevision: 3 }
+    expect(proxyOrdoTeamAction(snapshot, request, { ...opts, mutationEnabled: false })).toMatchObject({ action: 'reject', reason: 'mutation_disabled' })
+    expect(proxyOrdoTeamAction(snapshot, { ...request, generation: 9 }, opts)).toMatchObject({ reason: 'context_stale' })
+    expect(proxyOrdoTeamAction(snapshot, { ...request, contextRevision: 4 }, opts)).toMatchObject({ reason: 'context_stale' })
+    expect(proxyOrdoTeamAction(snapshot, { ...request, idempotencyKey: 'short' }, opts)).toMatchObject({ reason: 'bad_idempotency_key' })
+    expect(proxyOrdoTeamAction(snapshot, { ...request, actionId: 'missing' }, opts)).toMatchObject({ reason: 'unknown_action' })
+    expect(proxyOrdoTeamAction(snapshot, { ...request, targetRef: 'task:none' }, opts)).toMatchObject({ reason: 'target_drift' })
+    const disabledSnapshot = { ...snapshot, actions: [{ ...snapshot.actions[0]!, disabledReason: 'awaiting approval' }] } as OrdoTeamSnapshotV1
+    expect(proxyOrdoTeamAction(disabledSnapshot, request, opts)).toMatchObject({ reason: 'action_disabled' })
+  })
+})
+
+describe('Team dispatch idempotency (§1.3)', () => {
+  it('replays the original receipt for the same key; drift forces refetch', () => {
+    const previous = { idempotencyKey: 'key-12345678', receiptRef: 'receipt:9' }
+    expect(decideOrdoTeamDispatch(previous, request)).toEqual({ action: 'replay', receiptRef: 'receipt:9' })
+    expect(decideOrdoTeamDispatch(previous, { ...request, idempotencyKey: 'key-87654321' })).toEqual({ action: 'send' })
+    expect(decideOrdoTeamDispatch(previous, request, { contextChanged: true })).toEqual({ action: 'refetch' })
+    expect(decideOrdoTeamDispatch(undefined, request)).toEqual({ action: 'send' })
+  })
+})

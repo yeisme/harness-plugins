@@ -195,3 +195,70 @@ export function resolveOrdoTeamCapabilityMatrix(
     fallback: sessionHostAvailable ? 'hub-session-agents' : 'legacy-pane',
   }
 }
+
+/**
+ * Team action proxy (§1.3): surface control recheck, permission, preview /
+ * approval, target revision match, and idempotency — fail-closed, purely
+ * derived from the validated projection. The Host adapter performs the
+ * owner call; this module decides whether a dispatch may even be attempted.
+ */
+export interface OrdoTeamActionRequestInputV1 {
+  readonly actionId: string
+  readonly teamRef: string
+  readonly contextRevision: number
+  readonly generation: number
+  readonly targetRef: string
+  readonly idempotencyKey: string
+}
+
+export type OrdoTeamActionProxyOutcome =
+  | { readonly action: 'preview'; readonly descriptor: OrdoTeamActionDescriptorV1 }
+  | { readonly action: 'reject'; readonly reason: 'mutation_disabled' | 'unknown_action' | 'action_disabled' | 'context_stale' | 'target_drift' | 'bad_idempotency_key' }
+
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,159}$/
+
+export function proxyOrdoTeamAction(
+  snapshot: OrdoTeamSnapshotV1,
+  request: OrdoTeamActionRequestInputV1,
+  options: { readonly mutationEnabled: boolean; readonly currentContextRevision: number },
+): OrdoTeamActionProxyOutcome {
+  if (!options.mutationEnabled) return { action: 'reject', reason: 'mutation_disabled' }
+  if (request.teamRef !== snapshot.teamRef || request.generation !== snapshot.generation) {
+    return { action: 'reject', reason: 'context_stale' }
+  }
+  if (request.contextRevision !== options.currentContextRevision) {
+    return { action: 'reject', reason: 'context_stale' }
+  }
+  if (!IDEMPOTENCY_KEY.test(request.idempotencyKey)) {
+    return { action: 'reject', reason: 'bad_idempotency_key' }
+  }
+  const descriptor = snapshot.actions.find(candidate => candidate.actionId === request.actionId)
+  if (descriptor === undefined) return { action: 'reject', reason: 'unknown_action' }
+  if (descriptor.disabledReason !== undefined) return { action: 'reject', reason: 'action_disabled' }
+  const taskKnown = snapshot.tasks.some(task => task.taskRef === request.targetRef)
+  const assignmentKnown = snapshot.assignments.some(assignment => assignment.assignmentRef === request.targetRef || assignment.agentRef === request.targetRef)
+  if (!taskKnown && !assignmentKnown) return { action: 'reject', reason: 'target_drift' }
+  return { action: 'preview', descriptor }
+}
+
+/**
+ * Idempotent dispatch decision (§1.3): a receipt for the same idempotency
+ * key replays verbatim; a drift after the fact forces refetch, never a
+ * second mutation.
+ */
+export type OrdoTeamDispatchOutcome =
+  | { readonly action: 'send' }
+  | { readonly action: 'replay'; readonly receiptRef: string }
+  | { readonly action: 'refetch' }
+
+export function decideOrdoTeamDispatch(
+  previous: { readonly idempotencyKey: string; readonly receiptRef: string } | undefined,
+  request: OrdoTeamActionRequestInputV1,
+  drift: { readonly contextChanged?: boolean | undefined } = {},
+): OrdoTeamDispatchOutcome {
+  if (drift.contextChanged === true) return { action: 'refetch' }
+  if (previous !== undefined && previous.idempotencyKey === request.idempotencyKey) {
+    return { action: 'replay', receiptRef: previous.receiptRef }
+  }
+  return { action: 'send' }
+}

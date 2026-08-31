@@ -161,6 +161,8 @@ export {
   validateOrdoTeamEvent,
   gateOrdoTeamEvent,
   resolveOrdoTeamCapabilityMatrix,
+  proxyOrdoTeamAction,
+  decideOrdoTeamDispatch,
 } from './team-projection.ts'
 export type {
   OrdoTeamCapabilityV1,
@@ -172,6 +174,9 @@ export type {
   OrdoTeamEventV1,
   OrdoTeamEventOutcome,
   OrdoTeamCapabilityMatrixV1,
+  OrdoTeamActionRequestInputV1,
+  OrdoTeamActionProxyOutcome,
+  OrdoTeamDispatchOutcome,
 } from './team-projection.ts'
 
 export default OrdoAgentOpsGateway
