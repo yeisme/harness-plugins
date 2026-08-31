@@ -63,3 +63,49 @@ describe('browser action request validation', () => {
     expect(validateBrowserActionRequest({ ...request, navigationDraft: 'https://user:pass@evil.example' })).toBeUndefined()
   })
 })
+
+import { validateBrowserPaneSnapshot } from '../src/validation.js'
+
+describe('negative fixture battery (browser-pane 1.4)', () => {
+  it('rejects cookie/header/authorization/secret/token/credential carriers', () => {
+    for (const bad of [
+      'cookie: sessionid=abc',
+      'authorization: Bearer x',
+      'secret_key=abc',
+      'token: abc123',
+      'password=hunter2',
+      '-----BEGIN PRIVATE KEY-----',
+    ]) {
+      expect(validateBrowserPaneSnapshot(snapshot({ safeMessage: bad })), bad).toBeUndefined()
+    }
+  })
+
+  it('rejects raw and signed URLs, userinfo, and query values', () => {
+    expect(validateBrowserPaneSnapshot(snapshot({ safeMessage: 'go to https://a.example/x?token=1' }))).toBeUndefined()
+    expect(validateBrowserPaneSnapshot(snapshot({ safeMessage: 'https://user:pass@a.example' }))).toBeUndefined()
+    expect(validateBrowserPaneSnapshot(snapshot({ safeMessage: 'see ?code=xyz' }))).toBeUndefined()
+  })
+
+  it('rejects absolute paths and DOM/screenshot/download byte shapes', () => {
+    expect(validateBrowserPaneSnapshot(snapshot({ safeMessage: '/etc/passwd contents' }))).toBeUndefined()
+    expect(validateBrowserPaneSnapshot(snapshot({ safeMessage: 'C:\\Users\\home\\file' }))).toBeUndefined()
+    expect(validateBrowserPaneSnapshot(snapshot({ pages: [{ pageRef: 'page:1', location: { protocol: 'about:', host: 'localhost', pathDigest: 'a1b2c3d4e5' }, status: 'ready', agentActivityCount: 0, dom: '<html>' }] }))).toBeUndefined()
+  })
+
+  it('rejects raw prompt / provider payload / private args / reasoning leakage in summaries', () => {
+    for (const bad of ['prompt: you are...', 'provider_payload:{...}', 'tool_args: --secret 1', 'chain_of_thought: first I...']) {
+      // exact-key schemas reject these as unknown fields; text regex catches URL/credential variants
+      const result = validateBrowserPaneSnapshot(snapshot({ pages: [{ pageRef: 'page:1', location: { protocol: 'about:', host: 'localhost', pathDigest: 'a1b2c3d4e5' }, status: 'ready', agentActivityCount: 0, [bad.split(':')[0]]: bad }] }))
+      expect(result, bad).toBeUndefined()
+    }
+  })
+
+  it('credential absence: no valid projection ever contains auth-shaped fields (exact keys)', () => {
+    const valid = validateBrowserPaneSnapshot(snapshot())
+    expect(valid).toBeDefined()
+    for (const field of ['cookie', 'header', 'authorization', 'token', 'credential', 'dom', 'screenshot', 'download']) {
+      expect(valid, field).not.toHaveProperty(field)
+      expect(valid?.pages[0], field).not.toHaveProperty(field)
+    }
+  })
+})
