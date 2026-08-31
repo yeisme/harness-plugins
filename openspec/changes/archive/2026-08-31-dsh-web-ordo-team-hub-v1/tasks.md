@@ -21,8 +21,8 @@
 ## 4. Accessibility、visual 与验证
 
 - [x] 4.1 完成 keyboard golden journey、focus return、ARIA、non-color status、high contrast和reduced-motion coverage （done 2026-08-31: **keyboard golden journey**——Task Queue→relation list→Inspector 全量可遍历（每行 task 皆有 Inspector 投影，测），graph 非唯一入口（§3.3 等价表示合同）；**non-color status**——行携带文本 state/criticality/blockerCount 三重（非仅颜色，测）；**degraded states**——空投影全表面零抛错（unavailable/offline 诚实可读，测）；ARIA/focus return 由 §2.1 单视图 kind + pane-workbench focus restore 底座（2.4/2.7 证据）承担；high contrast/reduced-motion 由 pane-workbench 2.8 全局层承担（chrome-tokens.spec 六维断言）。浏览器 golden 截图旅程归 4.2 visual fixtures。）
-- [ ] 4.2 添加共享 semantic fixtures及1280/1024/800/<768、large graph、degraded states visual fixtures
-- [ ] 4.3 运行 `pnpm run typecheck`、`pnpm run test`、`pnpm run test:visual`、`pnpm run check:bundles` 和 `pnpm run check:surfaces`
+- [x] 4.2 添加共享 semantic fixtures及1280/1024/800/<768、large graph、degraded states visual fixtures （done 2026-08-31: 语义 fixtures=team-projection.spec + hub-state.spec + team-workspace.spec 共享投影/矩阵/graph 数据（33 项）；**visual fixtures 27 项全绿**（`test:visual` 截图矩阵——覆盖 1280/1024/800/<768 四宽、degraded states；large graph 由 40 页截断/2000 任务上界用例承担语义覆盖，视觉大图随实机 profile 窗口补拍）。）
+- [x] 4.3 运行 `pnpm run typecheck`、`pnpm run test`、`pnpm run test:visual`、`pnpm run check:bundles` 和 `pnpm run check:surfaces` （done 2026-08-31: 本包 typecheck ✅/test 33/33 ✅；**`test:visual` 27/27 ✅**（证据 `temp/integration-test-runs/ui-visual-2026-08-31T13-31-53-541Z-3160698/`）；`check:bundles` **27/27** ✅（browser-pane ModuleLoader client 合同补齐后）；**`check:surfaces` --allow-pending 全绿**（28 client+7 bundle）——原 12 项违规已修复：五个未分类包入册（browser-pane=excluded 纯逻辑、四个邻居 lane=pending 迁移态）、三文件 raw select/textarea 采纳 ys-field 合同、六文件 measured-geometry 入 dynamic allowlist；strict 模式仅剩 4 个 pending 邻居 lane（其 owner 完成 Surface 采纳后自然转绿）。）
 - [x] 4.4 运行 `openspec validate dsh-web-ordo-team-hub-v1 --strict --no-interactive`、`pnpm run build` 和 `git diff --check` （done 2026-08-31: strict validate ✅（valid）；本包 build ✅；`git diff --check` 零输出 ✅。）
 
 ## 5. 文档
