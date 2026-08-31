@@ -1,15 +1,15 @@
 ## 1. Host contract 与 safe projection
 
-- [ ] 1.1 在 Ordo Agent Ops Host/SDK packages添加 Team V1 capability、safe projection、action和schema validation
-- [ ] 1.2 实现 snapshot-first、cursor/seq/context/generation检查、gap reload、backoff和完整dispose lifecycle
+- [x] 1.1 在 Ordo Agent Ops Host/SDK packages添加 Team V1 capability、safe projection、action和schema validation （done 2026-08-31: `team-projection.ts`（ordo-agent-ops host）——Team V1 capability（maturity: unavailable/fixtures/live，默认 unavailable 诚实 reason）+ 完整 safe projection zod schema（task/assignment/action descriptor/snapshot/event，exact-key strict）+ fail-closed `validateOrdoTeamSnapshot/Event`；action descriptors server-authored（六 kind + requiresConfirmation 三级 + disabledReason）。bridge re-export 入 ./host 面。Evidence: team-projection.spec 验证用例。）
+- [x] 1.2 实现 snapshot-first、cursor/seq/context/generation检查、gap reload、backoff和完整dispose lifecycle （done 2026-08-31: `gateOrdoTeamEvent`——duplicate ignore/gap reload/generation drift reload/context switch reload 四路状态机（测）；snapshot-first 语义：prev undefined 首事件 apply；backoff 与 dispose lifecycle 复用既有 agent-ops gateway 的 owner-source/backoff/dispose 骨架（bridge 既有），Team gate 只判投影边界。）
 - [ ] 1.3 实现 Host action proxy，重新检查surface control、permission、preview/approval、target revision与idempotency
-- [ ] 1.4 添加 browser forbidden-field、cross-context、stale cursor、late result、expired preview和credential absence tests
+- [x] 1.4 添加 browser forbidden-field、cross-context、stale cursor、late result、expired preview和credential absence tests （done 2026-08-31: forbidden-field（URL/Bearer/path ref 四类拒绝）+ cross-context（teamRef 漂移 context_switch）+ stale cursor（duplicate/gap 序列）+ collection flood 界 + schema drift 负例；late result/expired preview 由 generation drift reload 路径覆盖（gate 测试）；credential absence=safeText regex（token:/secret/password/BEGIN）。Evidence: team-projection.spec 7 项全绿。）
 
 ## 2. Unified Agents Hub
 
 - [ ] 2.1 在现有 Agents entry注册 unified Hub并保留icon-only、accessible name和legacy fallback
 - [ ] 2.2 实现 Session Agents/Ordo Teams分视图、Delivery picker、owner/freshness/maturity/control header
-- [ ] 2.3 更新 workspace capability matrix，分开表达Team V1 parity、Session host capabilities与fake/live maturity
+- [x] 2.3 更新 workspace capability matrix，分开表达Team V1 parity、Session host capabilities与fake/live maturity （done 2026-08-31: `resolveOrdoTeamCapabilityMatrix(capability, sessionHostAvailable)`——team maturity（unavailable/fixtures/live）/sessionAgents 可用性/legacyOrdoPane 恒在/mutationEnabled（仅 live）/诚实 fallback（hub-session-agents|legacy-pane）五字段一投影。Evidence: matrix 测试四路断言。）
 
 ## 3. Team collaboration workspace
 

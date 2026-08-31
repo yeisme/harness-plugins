@@ -154,4 +154,24 @@ function unknownDecision(
   return { kind: 'unknown', state, safeSummary }
 }
 
+export {
+  ORDO_TEAM_SNAPSHOT_SCHEMA,
+  ORDO_TEAM_EVENT_SCHEMA,
+  validateOrdoTeamSnapshot,
+  validateOrdoTeamEvent,
+  gateOrdoTeamEvent,
+  resolveOrdoTeamCapabilityMatrix,
+} from './team-projection.ts'
+export type {
+  OrdoTeamCapabilityV1,
+  OrdoTeamMaturity,
+  OrdoTeamTaskV1,
+  OrdoTeamAssignmentV1,
+  OrdoTeamActionDescriptorV1,
+  OrdoTeamSnapshotV1,
+  OrdoTeamEventV1,
+  OrdoTeamEventOutcome,
+  OrdoTeamCapabilityMatrixV1,
+} from './team-projection.ts'
+
 export default OrdoAgentOpsGateway
