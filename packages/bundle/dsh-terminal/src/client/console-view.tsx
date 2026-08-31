@@ -150,7 +150,7 @@ export function TerminalConsoleView({ controller, sessions, currentSessionId, t,
     </>} />
     <div className="tc-bar">
       <label className="tc-badge" htmlFor="tc-owner-select">{t('owner.label')}</label>
-      <select
+      <select data-ys-field="1"
         id="tc-owner-select"
         className="tc-owner"
         value={state.ownerSessionId ?? ''}
@@ -159,7 +159,7 @@ export function TerminalConsoleView({ controller, sessions, currentSessionId, t,
       >
         {options.map(option => <option key={option.sessionId} value={option.sessionId}>{option.displayTitle}</option>)}
       </select>
-      <select
+      <select data-ys-field="1"
         aria-label={t('title')}
         value={state.activeTerminalId ?? ''}
         onChange={event => { void controller.selectTerminal(event.target.value) }}

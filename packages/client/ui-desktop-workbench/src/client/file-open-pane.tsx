@@ -316,7 +316,7 @@ function LegacyFileOpenPane({ host, entry }: Omit<FileOpenPaneProps, 'semanticSe
             ? <section className="dwo-markdown-block" data-dsh-markdown-block data-active="true" key={index}>
                 <label className="dwo-markdown-block-source">
                   <span>{`区块 ${index + 1} 源码`}</span>
-                  <textarea autoFocus className="dwo-markdown-block-editor" rows={editorRows(block.source)} aria-label={`编辑 ${entry.name} 的 Markdown 区块 ${index + 1}`} value={block.source} spellCheck={false} onChange={event => { updateBlock(index, event.target.value) }} onKeyDown={event => { onEditorKeyDown(event); if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); setActiveBlock(undefined) } }} onBlur={() => { setActiveBlock(undefined) }} />
+                  <textarea autoFocus className="dwo-markdown-block-editor ys-field__input" rows={editorRows(block.source)} aria-label={`编辑 ${entry.name} 的 Markdown 区块 ${index + 1}`} value={block.source} spellCheck={false} onChange={event => { updateBlock(index, event.target.value) }} onKeyDown={event => { onEditorKeyDown(event); if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); setActiveBlock(undefined) } }} onBlur={() => { setActiveBlock(undefined) }} />
                 </label>
                 <div className="dwo-markdown-live" aria-live="polite">
                   <span className="dwo-markdown-live-label">实时渲染</span>
@@ -328,7 +328,7 @@ function LegacyFileOpenPane({ host, entry }: Omit<FileOpenPaneProps, 'semanticSe
               </section>)}
         </div>}
         {text !== undefined && viewMode === 'source' && !canEdit && <pre className="dwo-file-source" data-dsh-file-open-text>{draft}</pre>}
-        {text !== undefined && ((viewMode === 'source' && canEdit) || (!markdown && viewMode === 'edit')) && <label className="dwo-file-editor-field"><textarea className="dwo-file-editor" aria-label={`编辑 ${entry.name}`} value={draft} spellCheck={false} wrap="off" data-dsh-file-open-editor data-dsh-file-source-editor={viewMode === 'source' || undefined} onChange={event => { setDraft(event.target.value); setNotice(undefined) }} onKeyDown={onEditorKeyDown} /></label>}
+        {text !== undefined && ((viewMode === 'source' && canEdit) || (!markdown && viewMode === 'edit')) && <label className="ys-field dwo-file-editor-field"><textarea className="dwo-file-editor" aria-label={`编辑 ${entry.name}`} value={draft} spellCheck={false} wrap="off" data-dsh-file-open-editor data-dsh-file-source-editor={viewMode === 'source' || undefined} onChange={event => { setDraft(event.target.value); setNotice(undefined) }} onKeyDown={onEditorKeyDown} /></label>}
         {!markdown && visibleText !== undefined && viewMode === 'preview' && <pre className="dwo-file-source" data-dsh-file-open-text>{visibleText}</pre>}
       </div>
       <div className="dwo-file-status" role={error === undefined ? 'status' : 'alert'} data-dsh-file-open-status>{status}</div>
