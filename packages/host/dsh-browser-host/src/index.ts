@@ -12,3 +12,4 @@
 export const BROWSER_PANE_EXPERIMENTAL_API = 'browser.automation.experimental.v0.1' as const
 export * from './contracts.js'
 export * from './remote.js'
+export * from './fake-provider.js'
