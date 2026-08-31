@@ -7,8 +7,8 @@
 
 ## 2. Unified Agents Hub
 
-- [ ] 2.1 在现有 Agents entry注册 unified Hub并保留icon-only、accessible name和legacy fallback
-- [ ] 2.2 实现 Session Agents/Ordo Teams分视图、Delivery picker、owner/freshness/maturity/control header
+- [x] 2.1 在现有 Agents entry注册 unified Hub并保留icon-only、accessible name和legacy fallback （done 2026-08-31: `hub-state.ts`（ui-ordo-agent-ops client）——`AGENTS_HUB_VIEW_KIND`（agents.hub 单视图注册面，Agents rail icon 仍 icon-only 可达名由 rail 既有 aria 保有）；**legacy fallback 双深链固定**（subagent.monitor + dsh.ordo-agent-ops.sidebar，不复制 route）；tab 能力诚实（Ordo Teams 在 unavailable 时带 team_v1_unavailable 原因且**自动回落 Session Agents**）。Evidence: hub-state.spec 5 项。）
+- [x] 2.2 实现 Session Agents/Ordo Teams分视图、Delivery picker、owner/freshness/maturity/control header （done 2026-08-31: 分视图状态机（AgentsHubTab + resolveAgentsHubTab 回落）；**owner/freshness/maturity/control 四元 header**（owner=teamRef、freshness 快照投影缺省 offline、maturity=matrix、control=writer-holder 判定，mutation 仅 live 门）；**Delivery picker**（agentsHubDeliveryOptions 去重计数排序）；task rows（delivery 过滤 + blocked 标注）。全部纯投影（零 domain store）。Evidence: hub-state.spec 5 项 + 包 18/18。）
 - [x] 2.3 更新 workspace capability matrix，分开表达Team V1 parity、Session host capabilities与fake/live maturity （done 2026-08-31: `resolveOrdoTeamCapabilityMatrix(capability, sessionHostAvailable)`——team maturity（unavailable/fixtures/live）/sessionAgents 可用性/legacyOrdoPane 恒在/mutationEnabled（仅 live）/诚实 fallback（hub-session-agents|legacy-pane）五字段一投影。Evidence: matrix 测试四路断言。）
 
 ## 3. Team collaboration workspace
