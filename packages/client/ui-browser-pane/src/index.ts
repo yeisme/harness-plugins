@@ -12,3 +12,4 @@ export const BROWSER_PANE_CLIENT_VIEW_KIND = 'dsh.browser' as const
 export const BROWSER_PANE_CLIENT_EXPERIMENTAL = 'browser.pane.client.experimental.v0.1' as const
 export * from './view-model.js'
 export * from './viewport-transport.js'
+export * from './control-lease.js'
