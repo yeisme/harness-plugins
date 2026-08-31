@@ -134,3 +134,31 @@ describe('Owner Action Palette flow (§3.4)', () => {
     expect(shouldRefetchOnReceipt(state, 'receipt:2')).toBe(true)
   })
 })
+
+describe('a11y golden journeys (§4.1)', () => {
+  it('keyboard path: tab → queue → relation list → inspector covers every fact without the graph', () => {
+    const snapshotOf = snapshot
+    const queue = ordoTeamTaskQueue(snapshotOf())
+    const relations = ordoTeamRelationList(snapshotOf())
+    let inspected = 0
+    for (const row of queue) {
+      if (ordoTeamInspector(snapshotOf(), row.taskRef) !== undefined) inspected += 1
+    }
+    expect(inspected).toBe(queue.length)
+    expect(relations.length).toBeGreaterThanOrEqual(1)
+  })
+  it('status is never color-only: rows carry textual state and criticality', () => {
+    const rows = ordoTeamTaskQueue(snapshot())
+    for (const row of rows) {
+      expect(row.state).toMatch(/pending|assigned|running|blocked|completed/)
+      expect(['normal', 'critical']).toContain(row.criticality)
+      expect(typeof row.blockerCount).toBe('number')
+    }
+  })
+  it('degraded states stay readable: empty projection yields empty surfaces, not errors', () => {
+    expect(() => ordoTeamTaskQueue(undefined)).not.toThrow()
+    expect(() => ordoTeamGraph(undefined)).not.toThrow()
+    expect(() => ordoTeamRelationList(undefined)).not.toThrow()
+    expect(() => ordoTeamInspector(undefined, 'x')).not.toThrow()
+  })
+})
