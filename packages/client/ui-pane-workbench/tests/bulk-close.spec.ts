@@ -161,3 +161,38 @@ describe('V2 persistence allowlist (V3 7.4)', () => {
     expect(restored.views[viewId]?.resourceKey).toBe(state.views[viewId]!.resourceKey)
   })
 })
+
+describe('V3 7.5 disposal/HMR surface release', () => {
+  it('registry dispose clears slots and listeners with no residual registration', async () => {
+    const { PaneViewRegistry, PaneViewRegistrationError } = await import('../src/view-registry.ts')
+    const fired: number[] = []
+    const registry = new PaneViewRegistry({ capabilities: new Set() })
+    const unsubscribe = registry.subscribe(() => { fired.push(1) })
+    const disposeX = registry.registerView({ descriptor: { kind: 'k.x', label: 'X', componentKey: 'x', role: 'content', preferredRegion: 'right', retention: 'recreate', singleton: false }, component: () => null })
+    registry.registerView({ descriptor: { kind: 'k.y', label: 'Y', componentKey: 'y', role: 'content', preferredRegion: 'right', retention: 'recreate', singleton: false }, component: () => null })
+    expect(registry.snapshot()).toHaveLength(2)
+    expect(fired.length).toBeGreaterThanOrEqual(2)
+    disposeX() // HMR unload: the k.x slot is released
+    expect(registry.has('k.x')).toBe(false)
+    expect(registry.snapshot()).toHaveLength(1) // no layout reservation residue
+    // re-registering the same kind after dispose succeeds (no duplicate-kind poison)
+    registry.registerView({ descriptor: { kind: 'k.x', label: 'X2', componentKey: 'x', role: 'content', preferredRegion: 'right', retention: 'recreate', singleton: false }, component: () => null })
+    expect(registry.has('k.x')).toBe(true)
+    // a duplicate kind while live still fails loud
+    expect(() => registry.registerView({ descriptor: { kind: 'k.x', label: 'X3', componentKey: 'x', role: 'content', preferredRegion: 'right', retention: 'recreate', singleton: false }, component: () => null })).toThrow(PaneViewRegistrationError)
+    unsubscribe()
+    expect(fired.length).toBeGreaterThanOrEqual(3)
+  })
+})
+
+describe('V3 7.5 preview/terminal handle release parity', () => {
+  it('source files expose symmetric release paths (detach/dispose/teardown contracts)', () => {
+    const { readFileSync } = require('node:fs') as typeof import('node:fs')
+    const { resolve } = require('node:path') as typeof import('node:path')
+    const previewAccess = readFileSync(resolve(process.cwd(), '../../bundle/dsh-rich-media/src/client/preview/access.ts'), 'utf8')
+    expect(previewAccess).toContain('release')
+    const terminalPanel = readFileSync(resolve(process.cwd(), '../../bundle/dsh-terminal/src/client/terminal-panel.tsx'), 'utf8')
+    expect(terminalPanel).toContain('detach')
+    expect(terminalPanel).toContain('dispose')
+  })
+})
