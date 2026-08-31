@@ -13,3 +13,4 @@ export const BROWSER_PANE_CLIENT_EXPERIMENTAL = 'browser.pane.client.experimenta
 export * from './view-model.js'
 export * from './viewport-transport.js'
 export * from './control-lease.js'
+export * from './navigation.js'
