@@ -25,7 +25,7 @@ pnpm --filter @yeisme/dsh-browser-host run build
 
 ## 2. Client Browser Pane
 
-- [ ] 2.1 创建 `packages/client/ui-browser-pane/`，package 为 `@yeisme/dsh-client-ui-browser-pane@0.1.0-rc.1`，只消费 `@yeisme/dsh-browser-host`、Pane Workbench/public UI surfaces、React 与已批准 DSH peers。
+- [x] 2.1 创建 `packages/client/ui-browser-pane/`，package 为 `@yeisme/dsh-client-ui-browser-pane@0.1.0-rc.1`，只消费 `@yeisme/dsh-browser-host`、Pane Workbench/public UI surfaces、React 与已批准 DSH peers。 （done 2026-08-31: 包骨架落地——deps **仅** @yeisme/dsh-browser-host workspace + react peer（零其它运行时依赖，dependency-allowlist 结构性满足）；strict tsconfig（jsx/react-jsx+noUncheckedIndexedAccess+exactOptionalPropertyTypes）；typecheck/test/build 三脚本绿；`BROWSER_PANE_CLIENT_VIEW_KIND`（dsh.browser）+ 实验标记常量。workspace 79 projects。）
 - [ ] 2.2 基于 `PaneEventEnvelopeV1` 实现 bounded reducer/controller，覆盖 snapshot、duplicate、gap、reset、invalidate、receipt、late event 与 context/session/generation/page/epoch changes。
 - [ ] 2.3 实现 local phases 与 Provider status gating；`search_only`、`needs_contract`、`unavailable` 不得渲染 live controls 或 fake page state。
 - [ ] 2.4 实现非 singleton `dsh.browser` view：内部 page Tabs、navigation toolbar、safe location display/editor、video viewport、control indicator 与 activity/evidence/download/receipt drawer。
