@@ -9,3 +9,4 @@
  */
 export * from '@yeisme/dsh-browser-host'
 export { BROWSER_PANE_CLIENT_VIEW_KIND, BROWSER_PANE_CLIENT_EXPERIMENTAL } from '@yeisme/dsh-client-ui-browser-pane'
+export * from './registration.js'
