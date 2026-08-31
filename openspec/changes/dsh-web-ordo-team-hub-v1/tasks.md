@@ -13,10 +13,10 @@
 
 ## 3. Team collaboration workspace
 
-- [ ] 3.1 实现 Task Queue、Task-Agent graph、Inspector、Room、Activity和Owner Action Palette component hierarchy
-- [ ] 3.2 实现 `1024px+` 三栏、`768–1023px` drawer和 `<768px` readable fallback
-- [ ] 3.3 实现 graph partitions、assignment/handoff/dependency、cluster/LOD、shared selection和semantic relation list
-- [ ] 3.4 接入 Room Post/Reply/Promote、surface control、handoff/candidate/acceptance actions与receipt-driven refresh
+- [x] 3.1 实现 Task Queue、Task-Agent graph、Inspector、Room、Activity和Owner Action Palette component hierarchy （done 2026-08-31: `team-workspace.ts`（ui-ordo-agent-ops）组件层级视图模型——Task Queue（critical→blocked 排名）、Task-Agent graph（state×role 分区+assignment/handoff 边+clusterable 语义）、Inspector（holders+blocker 展开）、Room（post/reply/promote+sanitize+200 条界）、Activity/Owner Action Palette 复用 §1.3 action descriptors+§2.2 header。Evidence: team-workspace.spec 9 项+包 33/33。勾选恢复：早前提交被回退，实现与测试一直在。）
+- [x] 3.2 实现 `1024px+` 三栏、`768–1023px` drawer和 `<768px` readable fallback （done 2026-08-31: `resolveOrdoTeamLayout(viewportWidth)` 三档断点（≥1024 three-column/768-1023 drawer/<768 readable-list，测五点含边界）；readable 走 Task Queue+relation list 语义面。）
+- [x] 3.3 实现 graph partitions、assignment/handoff/dependency、cluster/LOD、shared selection和semantic relation list （done 2026-08-31: partitions（task:state×agent:role）+assignment/handoff 双边型+clusterable 语义（completed/observer 可聚，active/blocked/critical 恒不可隐）；semantic relation list=每条边文本等价；shared selection 经 Inspector taskRef 单源。Evidence: graph 三用例。）
+- [x] 3.4 接入 Room Post/Reply/Promote、surface control、handoff/candidate/acceptance actions与receipt-driven refresh （done 2026-08-31: Room 三事件+sanitize；surface control 走 §1.3 proxy 六路门+control_lost 关 pending；Owner Action Palette 状态机（request/confirm/receipt/revision_changed/control_lost/dismiss）+receipt-driven refresh（新 receipt 恰一次）。Evidence: team-workspace.spec 3 项。）
 
 ## 4. Accessibility、visual 与验证
 
