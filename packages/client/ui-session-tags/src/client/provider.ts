@@ -20,6 +20,7 @@
  * @module @yeisme/dsh-client-ui-session-tags/client/provider
  */
 
+import { composeDisposers, type Disposable } from '@yeisme/dsh-plugin-contracts'
 import type { SessionTagsController } from './controller.ts'
 
 /** 上游 `SessionGroupingProviderV1Alpha1` 的结构镜像（seam 未发布前的本地合同）。 */
@@ -105,8 +106,10 @@ interface Projection {
 /**
  * 组装 tags 分组 provider。订阅 controller；controller 进入非 ready 态
  * （loading/error）时产出空快照——宁可无分组，不可伪造标签。
+ * 返回值带 `dispose()`：释放对 controller 与 sessions store 的订阅
+ * （sessions store 是宿主长驻 store，不随 controller dispose 释放）。
  */
-export function createSessionTagsProvider(deps: SessionTagsProviderDeps): SessionGroupingProviderV1Alpha1 {
+export function createSessionTagsProvider(deps: SessionTagsProviderDeps): SessionGroupingProviderV1Alpha1 & Disposable {
   const collator = new Intl.Collator(deps.locale ?? undefined, {
     numeric: true,
     sensitivity: 'variant',
@@ -139,8 +142,15 @@ export function createSessionTagsProvider(deps: SessionTagsProviderDeps): Sessio
     for (const listener of [...listeners]) listener()
   }
 
-  deps.controller.subscribe(rebuild)
-  deps.onSessionsChanged?.(rebuild)
+  // G21 dispose 收口：两处上游订阅收纳进具名 unsubscribe 句柄，
+  // provider.dispose() 随注册 fiber 释放；composeDisposers 保证幂等
+  // （与 register.ts cleanup 中的 controller.dispose() 先后无关）。
+  const subscription = {
+    unsubscribe: composeDisposers(
+      deps.controller.subscribe(rebuild),
+      ...(deps.onSessionsChanged === undefined ? [] : [deps.onSessionsChanged(rebuild)]),
+    ),
+  }
   rebuild()
 
   return {
@@ -159,6 +169,9 @@ export function createSessionTagsProvider(deps: SessionTagsProviderDeps): Sessio
       return () => {
         listeners.delete(listener)
       }
+    },
+    dispose(): void {
+      subscription.unsubscribe()
     },
     sessionActions: [
       {

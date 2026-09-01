@@ -40,6 +40,7 @@
     "@yeisme/dsh-git-host": "workspace:*",
     "@yeisme/dsh-notify-host": "workspace:*",
     "@yeisme/dsh-ordo-agent-ops": "workspace:*",
+    "@yeisme/dsh-plugin-contracts": "workspace:^",
     "@yeisme/dsh-session-manager": "workspace:*",
     "@yeisme/dsh-terminal": "workspace:*",
     "@yeisme/dsh-terminal-host": "workspace:*",

@@ -131,10 +131,12 @@ export function EditInlineEditor({ initialText, saving, error, saveLabel, cancel
 export function makeEditAction(controller: ChatRewriteController) {
   return function EditAction({ seq, useSession, sessionId, t }: EditActionProps) {
     const snapshot = useSession((value) => value)
+    // G21 dispose 收口：useSyncExternalStore 在卸载时调用 subscribe 返回的
+    // 退订函数；绑定句柄显式携带 this（store 是 class 实例）。
     const state = useSyncExternalStore(
-      listener => controller.store.subscribe(listener),
-      () => controller.store.getSnapshot(),
-      () => controller.store.getSnapshot(),
+      controller.store.subscribe.bind(controller.store),
+      controller.store.getSnapshot.bind(controller.store),
+      controller.store.getSnapshot.bind(controller.store),
     )
     const firstRound = controller.supportsFirstRound()
     const decision = useMemo(

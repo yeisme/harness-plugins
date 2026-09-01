@@ -320,6 +320,7 @@ export async function registerSessionTagsClient(
       labels: { menu: 'By function', unclassified: 'Unclassified', manage: 'Organize conversation' },
     })
     disposers.push(groupings.register(organizationProvider as never))
+    disposers.push(() => { organizationProvider.dispose() })
     if (slots !== undefined && typeof slots.inject === 'function' && typeof slots.register === 'function') {
       const organizationEditorRef = organizationEditor
       disposers.push(slots.inject('shell.overlay', () => slots.register({
@@ -345,6 +346,7 @@ export async function registerSessionTagsClient(
 
   ctx.effect(() => () => {
     if (typeof window !== 'undefined') window.removeEventListener('focus', onFocus)
+    provider.dispose()
     for (const dispose of disposers.splice(0)) dispose()
     controller.dispose()
     organizationController?.dispose()

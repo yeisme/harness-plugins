@@ -1,6 +1,7 @@
 import { createElement, useEffect, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Surface, SurfaceActionBar, SurfaceContextBar, SurfaceSection } from '@yeisme/dsh-client-ui-surface'
+import { subscriptionHandle } from '@yeisme/dsh-plugin-contracts'
 import { t } from './i18n/locale.js'
 import type { PaneLocalViewProps, PaneViewRegistryReader } from './view-registry.js'
 import { createPaneWorkspace, type PaneWorkspaceV1 } from './workspace.js'
@@ -36,7 +37,8 @@ export function WorkspaceDesignerInteraction(props: {
   const [, setRevision] = useState(0)
   useEffect(() => {
     if (props.registry === undefined) return
-    return props.registry.subscribe(() => setRevision(value => value + 1))
+    const registryEvents = subscriptionHandle(props.registry.subscribe(() => setRevision(value => value + 1)))
+    return () => registryEvents.unsubscribe()
   }, [props.registry])
   const palette = listDesignerPaletteEntries(props.registry?.snapshot() ?? [])
   const place = (entry: DesignerPaletteEntryV1): void => {

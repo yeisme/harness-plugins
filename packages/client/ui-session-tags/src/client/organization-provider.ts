@@ -1,5 +1,6 @@
 /** Workspace → function hierarchy projection for the additive grouping seam. */
 
+import type { Disposable } from '@yeisme/dsh-plugin-contracts'
 import type { SessionOrganizationController } from './organization-controller.ts'
 import type { SessionGroupingProviderV1Alpha1, SessionGroupingSnapshotV1Alpha1 } from './provider.ts'
 
@@ -19,7 +20,7 @@ export function createSessionFunctionsProvider(input: {
   readonly sessions: () => readonly OrganizationSessionRef[]
   readonly onManage: (sessionId: string) => void
   readonly labels?: { readonly menu?: string; readonly unclassified?: string; readonly manage?: string } | undefined
-}): SessionGroupingProviderV1Alpha1 {
+}): SessionGroupingProviderV1Alpha1 & Disposable {
   const listeners = new Set<() => void>()
   let previous: SessionGroupingSnapshotV1Alpha1 = EMPTY
   let revision = 0
@@ -67,17 +68,22 @@ export function createSessionFunctionsProvider(input: {
     previous = Object.freeze({ revision, groups: Object.freeze(groups), searchTermsBySession: Object.freeze(searchTermsBySession) })
     return previous
   }
-  input.controller.subscribe(() => {
-    const before = previous
-    const after = build()
-    if (before !== after) for (const listener of [...listeners]) listener()
-  })
+  // G21 dispose 收口：controller 订阅收纳进具名 unsubscribe 句柄，
+  // dispose() 随注册 fiber 释放，不依赖 controller.dispose() 清空监听。
+  const subscription = {
+    unsubscribe: input.controller.subscribe(() => {
+      const before = previous
+      const after = build()
+      if (before !== after) for (const listener of [...listeners]) listener()
+    }),
+  }
   return {
     id: SESSION_FUNCTIONS_PROVIDER_ID,
     label: () => input.labels?.menu ?? 'By function',
     order: 90,
     getSnapshot: build,
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener) } },
+    dispose(): void { subscription.unsubscribe() },
     sessionActions: [{
       id: MANAGE_ORGANIZATION_ACTION_ID,
       label: () => input.labels?.manage ?? 'Organize conversation',

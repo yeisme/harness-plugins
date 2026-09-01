@@ -1,0 +1,15 @@
+# Yeisme DSH File/Document bundle.
+# Install the Workbench Core row first (this module registers its tabs there):
+#   dsh plugin --profile web add @yeisme/dsh-workbench-core
+# then:
+#   dsh plugin --profile web add @yeisme/dsh-file-document
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/dsh-file-document
+#
+# One profile row adding the File & Document workbench module. The file
+# tree, watcher, document parsing, and preview authorization remain with
+# DSH/domain owners: only opaque file refs and owner-authorized previews
+# cross the projection boundary.
+- insert:
+    - id: dsh-file-document
+      name: '@yeisme/dsh-file-document'

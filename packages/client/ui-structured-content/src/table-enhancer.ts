@@ -21,6 +21,8 @@ interface TableRecord {
   readonly table: HTMLTableElement
   readonly wrapper: HTMLElement
   readonly toolbar: HTMLElement
+  readonly copyButton: HTMLButtonElement
+  readonly onCopy: () => void
   readonly oldTabIndex: string | null
   readonly oldRole: string | null
   readonly oldAriaLabel: string | null
@@ -101,12 +103,15 @@ export class MarkdownTableEnhancer {
     copy.type = 'button'
     copy.className = 'sc-action'
     copy.textContent = this.labels.copy
-    copy.addEventListener('click', () => {
+    // G21 dispose 收口：click 监听具名收纳，restore 时显式摘除
+    // （不依赖 toolbar 脱离 DOM 后的被动回收）。
+    const onCopy = (): void => {
       void table.ownerDocument.defaultView?.navigator.clipboard?.writeText(tableToTsv(table)).then(() => {
         copy.textContent = this.labels.copied
         table.ownerDocument.defaultView?.setTimeout(() => { copy.textContent = this.labels.copy }, 1500)
       }).catch(() => {})
-    })
+    }
+    copy.addEventListener('click', onCopy)
     actions.append(copy)
     toolbar.append(title, actions)
     wrapper.prepend(toolbar)
@@ -114,6 +119,8 @@ export class MarkdownTableEnhancer {
       table,
       wrapper,
       toolbar,
+      copyButton: copy,
+      onCopy,
       oldTabIndex: wrapper.getAttribute('tabindex'),
       oldRole: wrapper.getAttribute('role'),
       oldAriaLabel: wrapper.getAttribute('aria-label'),
@@ -129,6 +136,7 @@ export class MarkdownTableEnhancer {
   }
 
   private restore(record: TableRecord): void {
+    record.copyButton.removeEventListener('click', record.onCopy)
     record.toolbar.remove()
     for (const attr of [TABLE_FLAG, 'data-dsh-structured-content', 'data-kind', 'data-surface']) record.wrapper.removeAttribute(attr)
     this.restoreAttr(record.wrapper, 'tabindex', record.oldTabIndex)

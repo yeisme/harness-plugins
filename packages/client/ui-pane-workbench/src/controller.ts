@@ -1,3 +1,4 @@
+import { subscriptionHandle, type SubscriptionHandle } from '@yeisme/dsh-plugin-contracts'
 import { PaneDragCoordinator } from './drag-coordinator.js'
 import type { ExperienceTierTrackerV1, WorkspaceDisabledReasonKey } from './experience-tier.js'
 import { t } from './i18n/locale.js'
@@ -122,9 +123,9 @@ export class PaneWorkbenchController {
   private readonly workspaceListeners = new Set<() => void>()
   private readonly managementListeners = new Set<() => void>()
   private managementSnapshotCache: PaneManagementSnapshotV1 | undefined
-  private registryDispose: (() => void) | undefined
+  private registryEvents: SubscriptionHandle | undefined
   private layoutHandle: PaneWorkspaceLayoutHandle | undefined
-  private layoutDispose: (() => void) | undefined
+  private layoutEvents: SubscriptionHandle | undefined
   private syncingLayout = false
   private currentSession = 'root'
   private managementScope: PaneManagementScopeV1 = { kind: 'session', ref: 'session:root' }
@@ -154,13 +155,13 @@ export class PaneWorkbenchController {
     this.visible = this.state.regions.right.visible || this.state.regions.bottom.visible
     this.drag = new PaneDragCoordinator(() => this.state, intent => this.dispatch(intent))
     if (options.registry !== undefined) {
-      this.registryDispose = options.registry.subscribe(() => {
+      this.registryEvents = subscriptionHandle(options.registry.subscribe(() => {
         const next = markOrphanedPaneViews(this.state, options.registry!)
         if (next === this.state) return
         this.state = next
         this.persist()
         this.emitWorkspace()
-      })
+      }))
     }
   }
 
@@ -205,11 +206,11 @@ export class PaneWorkbenchController {
   bindWorkspaceLayout(handle: PaneWorkspaceLayoutHandle): () => void {
     if (this.layoutHandle !== undefined) throw new Error('paneWorkbench: workspace layout handle already bound')
     this.layoutHandle = handle
-    this.layoutDispose = handle.subscribe(() => this.syncFromLayout())
+    this.layoutEvents = subscriptionHandle(handle.subscribe(() => this.syncFromLayout()))
     this.syncLayout()
     return () => {
-      this.layoutDispose?.()
-      this.layoutDispose = undefined
+      this.layoutEvents?.unsubscribe()
+      this.layoutEvents = undefined
       if (this.layoutHandle === handle) this.layoutHandle = undefined
     }
   }
@@ -312,10 +313,10 @@ export class PaneWorkbenchController {
 
   dispose(): void {
     this.persist()
-    this.registryDispose?.()
-    this.registryDispose = undefined
-    this.layoutDispose?.()
-    this.layoutDispose = undefined
+    this.registryEvents?.unsubscribe()
+    this.registryEvents = undefined
+    this.layoutEvents?.unsubscribe()
+    this.layoutEvents = undefined
     this.layoutHandle = undefined
     this.drag.dispose()
     this.visibilityListeners.clear()

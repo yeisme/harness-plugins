@@ -309,21 +309,27 @@ function installAvailable(ctx: ClientContext, slots: SlotsFace, pane: CreatorPan
   })
   disposers.push(slots.inject('sidebar.footer.action', () => slots.register({ name: 'sidebar.footer.action', id: 'creator-studio-sidebar', order: 39 }, launcher)))
   const timer = setInterval(() => { void controller.refresh() }, 15_000)
-  const offReset = ctx.on('connection/reset', () => { controller.reset(); void controller.refresh() })
+  // G21 dispose 收口：宿主事件/会话订阅收纳进具名 unsubscribe 句柄，
+  // cleanup 显式释放（对齐 dispose 合同的释放形状）。
+  const resetSignal = {
+    unsubscribe: ctx.on('connection/reset', () => { controller.reset(); void controller.refresh() }),
+  }
   const sessions = ctx.get('sessions' as never) as { list?: { getSnapshot(): { current?: string }; subscribe(listener: () => void): () => void } } | undefined
   let sessionId = sessions?.list?.getSnapshot().current
-  const offSession = sessions?.list?.subscribe(() => {
-    const next = sessions.list?.getSnapshot().current
-    if (next === sessionId) return
-    sessionId = next
-    controller.reset()
-    void controller.refresh()
-  }) ?? (() => {})
+  const sessionSignal = {
+    unsubscribe: sessions?.list?.subscribe(() => {
+      const next = sessions.list?.getSnapshot().current
+      if (next === sessionId) return
+      sessionId = next
+      controller.reset()
+      void controller.refresh()
+    }) ?? (() => {}),
+  }
   void controller.refresh()
   return () => {
     clearInterval(timer)
-    offSession()
-    offReset()
+    sessionSignal.unsubscribe()
+    resetSignal.unsubscribe()
     for (const dispose of disposers.reverse()) dispose()
     controller.dispose()
   }

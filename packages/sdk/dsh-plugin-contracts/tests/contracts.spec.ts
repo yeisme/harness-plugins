@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { composeDisposers, probeCapability, type Disposable, type Disposer, type ProjectionFreshness, type ProbeResult } from '../src/index.js'
+import { browserPreferenceStorage, composeDisposers, probeCapability, subscriptionHandle, type Disposable, type Disposer, type PreferenceStorage, type ProjectionFreshness, type ProbeResult } from '../src/index.js'
 
 /**
  * 契约防漂移测试（G18 §6.2）：形状冻结（消费方与 sdk 声明不一致即红）
@@ -41,6 +41,73 @@ describe('probeCapability', () => {
   it('passes non-undefined values through as available (including falsy)', () => {
     expect(probeCapability(() => 0)).toEqual({ status: 'available', capability: 0 })
     expect(probeCapability(() => 'x')).toEqual({ status: 'available', capability: 'x' })
+  })
+})
+
+describe('browserPreferenceStorage', () => {
+  it('keeps the preference face structurally frozen (getItem/setItem only)', () => {
+    expectTypeOf<PreferenceStorage>().toMatchTypeOf<{
+      getItem(key: string): string | null
+      setItem(key: string, value: string): void
+    }>()
+  })
+
+  it('returns the global storage face when present', () => {
+    const storage: PreferenceStorage = { getItem: () => 'append', setItem: () => {} }
+    vi.stubGlobal('localStorage', storage)
+    try {
+      expect(browserPreferenceStorage()).toBe(storage)
+      const probed = probeCapability(browserPreferenceStorage)
+      expect(probed).toEqual({ status: 'available', capability: storage })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('maps a missing storage global to needs_contract via the probe (in-process degradation)', () => {
+    vi.stubGlobal('localStorage', undefined)
+    try {
+      expect(browserPreferenceStorage()).toBeUndefined()
+      expect(probeCapability(browserPreferenceStorage)).toEqual({ status: 'needs_contract' })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('swallows storage access errors instead of throwing (never fake available)', () => {
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new Error('SecurityError')
+      },
+    })
+    try {
+      expect(browserPreferenceStorage()).toBeUndefined()
+      expect(probeCapability(browserPreferenceStorage)).toEqual({ status: 'needs_contract' })
+    } finally {
+      delete (globalThis as { localStorage?: unknown }).localStorage
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
+describe('subscriptionHandle', () => {
+  it('gives a single subscription an idempotent, named unsubscribe face', () => {
+    const calls: string[] = []
+    const handle = subscriptionHandle(() => calls.push('off'))
+    expectTypeOf(handle).toMatchTypeOf<Disposable>()
+    handle.unsubscribe()
+    handle.unsubscribe()
+    handle.dispose()
+    expect(calls).toEqual(['off'])
+  })
+
+  it('keeps the handle usable as a SubscribeFace release shape', () => {
+    const off = vi.fn()
+    const handle = subscriptionHandle(off)
+    handle.unsubscribe()
+    expectTypeOf(handle.unsubscribe).toEqualTypeOf<() => void>()
+    expect(off).toHaveBeenCalledTimes(1)
   })
 })
 

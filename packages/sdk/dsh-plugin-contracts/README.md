@@ -18,8 +18,16 @@ harness-plugins 各包重复的三类形状，供包间保持一致，并以 con
   （官方 seam 未到岗，不注册入口）、抛错 → `unavailable`（附脱敏 reason）、
   返回值 → `available`。probe-first 降级教义的统一实现。
 - **dispose**：`Disposable`（幂等 dispose 面-reference）、`Disposer`、
-  `SubscribeFace`、`composeDisposers`（多 disposer 组合为单个幂等 disposer）。
+  `SubscribeFace`、`composeDisposers`（多 disposer 组合为单个幂等 disposer）、
+  `subscriptionHandle()`（G21 1.2：单个订阅收口为幂等具名 unsubscribe 句柄，
+  acquire 处可见 release，供 dispose-hmr-conformance 对称清零）。
   dispose-hmr-conformance 观测门以本合同为对称性参照。
+- **browser**（G21 1.3）：`PreferenceStorage`（`getItem`/`setItem` 结构面）+
+  `browserPreferenceStorage()`——浏览器 storage 全局访问的唯一审阅点；
+  client/bundle 代码不直接触碰 storage 全局（SAFEPROJ/BROWSER_STORAGE_ACCESS
+  红线），一律经 `probeCapability(browserPreferenceStorage)` 三态降级；
+  只许存自有命名空间的偏好枚举/有界摘要，禁止 domain state、凭据、
+  raw prompt、绝对路径。
 
 ## 消费试点（G18 §6.3）
 

@@ -28,3 +28,24 @@ export function composeDisposers(...disposers: Disposer[]): Disposer {
     for (const disposer of disposers) disposer()
   }
 }
+
+/**
+ * 单个订阅的具名释放句柄（G21）：dispose-hmr-conformance 观测门要求
+ * 「acquire 处可见 release」——订阅点经 subscriptionHandle() 取得句柄，
+ * 释放点显式 handle.unsubscribe()，释放路径在订阅所在文件内可见，
+ * 而不是只存在于裸回调转发里。幂等语义与 Disposable 一致。
+ */
+export interface SubscriptionHandle extends Disposable {
+  unsubscribe(): void
+}
+
+/** 把 subscribe 返回的 disposer 收口为幂等的具名 unsubscribe 句柄。 */
+export function subscriptionHandle(off: Disposer): SubscriptionHandle {
+  let disposed = false
+  const unsubscribe = (): void => {
+    if (disposed) return
+    disposed = true
+    off()
+  }
+  return { unsubscribe, dispose: unsubscribe }
+}

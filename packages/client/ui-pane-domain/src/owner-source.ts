@@ -25,7 +25,7 @@ import {
   type PaneProjectionEntityV1,
   type PaneStatus,
 } from '@yeisme/dsh-pane-protocol'
-import type { Disposable, Disposer } from '@yeisme/dsh-plugin-contracts'
+import { subscriptionHandle, type Disposable, type Disposer } from '@yeisme/dsh-plugin-contracts'
 import type { DomainOwner } from './owners.js'
 import { isDomainOwner, normalizeDomainSnapshot, type DomainActionV1, type DomainItemV1, type DomainSnapshotV1 } from './snapshot.js'
 
@@ -268,7 +268,9 @@ export class DomainOwnerSourceBridge implements DomainOwnerSourceService {
   open(): void {
     if (this.disposed) return
     this.reread()
-    this.disposers.push(this.transport.subscribe(event => { this.apply(event) }))
+    // push 订阅收口为具名句柄；dispose() 逆序释放全部 disposer。
+    const events = subscriptionHandle(this.transport.subscribe(event => { this.apply(event) }))
+    this.disposers.push(() => events.unsubscribe())
     if (this.transport.onUnavailable !== undefined) {
       this.disposers.push(this.transport.onUnavailable(() => {
         // 断线只降级显示，不重试、不重读。

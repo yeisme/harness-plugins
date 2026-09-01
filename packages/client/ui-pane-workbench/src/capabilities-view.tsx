@@ -20,6 +20,7 @@ import {
   type WorkspaceCapabilityRowV1,
   type WorkspaceProbeStateV1,
 } from './experience-tier.js'
+import { subscriptionHandle } from '@yeisme/dsh-plugin-contracts'
 import { t, tWithFallback } from './i18n/locale.js'
 import type { PaneLocalViewProps, PaneViewRegistry } from './view-registry.js'
 
@@ -67,7 +68,10 @@ function CapabilityRow(props: {
 
 export function WorkspaceCapabilitiesView(props: WorkspaceCapabilitiesViewProps): ReactNode {
   const [, setRevision] = useState(0)
-  useEffect(() => props.tracker.subscribe(() => setRevision(value => value + 1)), [props.tracker])
+  useEffect(() => {
+    const trackerEvents = subscriptionHandle(props.tracker.subscribe(() => setRevision(value => value + 1)))
+    return () => trackerEvents.unsubscribe()
+  }, [props.tracker])
   const snapshot = props.tracker.getSnapshot()
   const matrix = useMemo(() => projectCapabilityMatrix(snapshot), [snapshot])
   const shownReasons = useRef(new Set<string>())

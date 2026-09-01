@@ -67,10 +67,12 @@ export type RetryActionProps = PropsRuntime<'conversation.chat.assistant-actions
 export function makeRetryAction(controller: ChatRewriteController) {
   return function RetryAction({ messageId, useSession, sessionId, t }: RetryActionProps) {
     const snapshot = useSession((value) => value)
+    // G21 dispose 收口：useSyncExternalStore 在卸载时调用 subscribe 返回的
+    // 退订函数；绑定句柄显式携带 this（store 是 class 实例）。
     const state = useSyncExternalStore(
-      listener => controller.store.subscribe(listener),
-      () => controller.store.getSnapshot(),
-      () => controller.store.getSnapshot(),
+      controller.store.subscribe.bind(controller.store),
+      controller.store.getSnapshot.bind(controller.store),
+      controller.store.getSnapshot.bind(controller.store),
     )
     const firstRound = controller.supportsFirstRound()
     const decision = useMemo(

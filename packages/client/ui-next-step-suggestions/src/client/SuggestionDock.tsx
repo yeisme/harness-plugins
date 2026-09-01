@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import { browserPreferenceStorage, probeCapability } from '@yeisme/dsh-plugin-contracts'
 import { Surface } from '@yeisme/dsh-client-ui-surface'
 import type { NextStepSuggestionV1, PlanOptionsProjectionValue, SuggestionSource } from './types.ts'
 import { planOptionsToSuggestions } from './plan-options-source.ts'
@@ -30,7 +31,7 @@ import { completionSuggestions, conversationRecapFromSnapshot } from './conversa
 /** Injected face for the dock: a snapshot function of client-local sources. */
 export interface SuggestionDockInjected {
   readonly getSources: () => readonly SuggestionSource[]
-  /** 可注入的偏好存储；缺省安全访问 window.localStorage（不可用则进程内）。 */
+  /** 可注入的偏好存储；缺省经 sdk seam 探测浏览器偏好存储（不可用则进程内）。 */
   readonly storage?: SuggestionStorage
 }
 
@@ -43,12 +44,15 @@ export type SuggestionStorage = Pick<Storage, 'getItem' | 'setItem'>
  */
 const APPLY_PREFERENCE_KEY = 'nextStepSuggestions.applyPreference'
 
+/**
+ * G21 safe-projection 收口：client 代码不直接触碰浏览器 storage 全局
+ * （SAFEPROJ/BROWSER_STORAGE_ACCESS 观测红线）。缺省经 sdk 契约 seam 探测，
+ * probe 三态降级——needs_contract/unavailable 时退化为进程内状态，
+ * 不影响写入草稿的行为。
+ */
 function defaultStorage(): SuggestionStorage | undefined {
-  try {
-    return window.localStorage ?? undefined
-  } catch {
-    return undefined
-  }
+  const probed = probeCapability(browserPreferenceStorage)
+  return probed.status === 'available' ? probed.capability : undefined
 }
 
 function readApplyPreference(storage: SuggestionStorage | undefined): SuggestionApplyPreference {

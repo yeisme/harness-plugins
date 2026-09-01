@@ -4,13 +4,14 @@
  * 不注册 slot、不 shadowing 宿主渲染：以 selectionchange 观察器把文本
  * 选区接到浮动操作条与紧凑 Composer overlay。发送动作经 CustomEvent
  * 交给宿主/工作台桥接（conversation runtime 由 DSH 拥有）；无桥接时评论
- * 本地保存、询问诚实降级。kill-switch：
- * `localStorage['dsh-selection-annotation'] === 'off'`。
+ * 本地保存、询问诚实降级。kill-switch：浏览器偏好存储中
+ * `'dsh-selection-annotation' === 'off'`（经 sdk 契约 seam 读取）。
  *
  * @module @yeisme/dsh-client-ui-selection-annotation/client
  */
 
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import { browserPreferenceStorage, probeCapability } from '@yeisme/dsh-plugin-contracts'
 import type { AnchorDraft } from '@yeisme/dsh-selection-host'
 import { captureFromSelection, selectionToAnchorDraft } from './dom-anchors.ts'
 import { CompactComposerController, type ComposerAdapter } from './composer.ts'
@@ -81,12 +82,12 @@ export async function apply(ctx: ClientContext, runtimeOptions: RuntimeOptions =
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => {}
   const labels = labelsFor(window.navigator.language)
 
-  let disabled = false
-  try {
-    disabled = window.localStorage?.getItem(SELECTION_ANNOTATION_KILL_SWITCH) === 'off'
-  } catch {
-    disabled = false
-  }
+  // G21 safe-projection 收口：client 代码不直接触碰浏览器 storage 全局
+  // （SAFEPROJ/BROWSER_STORAGE_ACCESS 观测红线）。kill-switch 经 sdk 契约
+  // seam 三态探测读取；probe 不可用或读取失败都视为未禁用（诚实降级）。
+  const preferences = probeCapability(browserPreferenceStorage)
+  const disabled = preferences.status === 'available'
+    && preferences.capability.getItem(SELECTION_ANNOTATION_KILL_SWITCH) === 'off'
   if (disabled) return () => {}
 
   injectSelectionAnnotationStyles(document)
@@ -131,53 +132,58 @@ export async function apply(ctx: ClientContext, runtimeOptions: RuntimeOptions =
     `
     const textarea = overlay.querySelector('textarea')
     if (textarea !== null) {
-      textarea.addEventListener('input', event => {
-        composer.update((event.target as HTMLTextAreaElement).value)
-      })
       textarea.focus()
     }
-    for (const button of Array.from(overlay.querySelectorAll('button'))) {
-      button.addEventListener('click', () => {
-        const intent = button.dataset.intent as 'ask' | 'comment' | 'edit' | undefined
-        if (intent !== undefined) {
-          composer.setIntent(intent)
-          renderOverlay()
-          return
-        }
-        if (button.dataset.action === 'close') {
-          overlay.style.display = 'none'
-          return
-        }
-        if (button.dataset.action === 'expand') {
-          // Draft, attachments and anchor context survive the round trip.
-          composer.expand()
+  }
+
+  // G21 dispose 收口：Composer 交互监听以事件委托挂在常驻 overlay 上
+  // （一次挂载、dispose 显式摘除）；innerHTML 重渲染不再累积元素监听。
+  const onOverlayInput = (event: Event): void => {
+    if (event.target instanceof HTMLTextAreaElement) composer.update(event.target.value)
+  }
+  const onOverlayClick = (event: MouseEvent): void => {
+    const button = event.target instanceof Element ? event.target.closest('button') : null
+    if (button === null) return
+    const intent = button.dataset.intent as 'ask' | 'comment' | 'edit' | undefined
+    if (intent !== undefined) {
+      composer.setIntent(intent)
+      renderOverlay()
+      return
+    }
+    if (button.dataset.action === 'close') {
+      overlay.style.display = 'none'
+      return
+    }
+    if (button.dataset.action === 'expand') {
+      // Draft, attachments and anchor context survive the round trip.
+      composer.expand()
+      window.dispatchEvent(new CustomEvent(SELECTION_ANNOTATION_SUBMIT_EVENT, {
+        detail: { intent: composer.getState().intent, text: composer.getState().text, anchor: pendingAnchor, approvalPolicy: 'preview-first' } satisfies SelectionAnnotationSubmitDetail,
+      }))
+      renderOverlay()
+      return
+    }
+    if (button.dataset.action === 'send') {
+      void (async () => {
+        const before = composer.getState()
+        const result = await composer.submit()
+        // 评论默认不调模型：本地保存后仍通知宿主桥接（如批注面板）。
+        if (result.status === 'local' || result.status === 'sent') {
           window.dispatchEvent(new CustomEvent(SELECTION_ANNOTATION_SUBMIT_EVENT, {
-            detail: { intent: composer.getState().intent, text: composer.getState().text, anchor: pendingAnchor, approvalPolicy: 'preview-first' } satisfies SelectionAnnotationSubmitDetail,
+            detail: {
+              intent: before.intent,
+              text: before.text,
+              anchor: pendingAnchor,
+              approvalPolicy: 'preview-first',
+            } satisfies SelectionAnnotationSubmitDetail,
           }))
-          renderOverlay()
-          return
         }
-        if (button.dataset.action === 'send') {
-          void (async () => {
-            const before = composer.getState()
-            const result = await composer.submit()
-            // 评论默认不调模型：本地保存后仍通知宿主桥接（如批注面板）。
-            if (result.status === 'local' || result.status === 'sent') {
-              window.dispatchEvent(new CustomEvent(SELECTION_ANNOTATION_SUBMIT_EVENT, {
-                detail: {
-                  intent: before.intent,
-                  text: before.text,
-                  anchor: pendingAnchor,
-                  approvalPolicy: 'preview-first',
-                } satisfies SelectionAnnotationSubmitDetail,
-              }))
-            }
-            renderOverlay()
-          })()
-        }
-      })
+        renderOverlay()
+      })()
     }
   }
+  overlay.addEventListener('input', onOverlayInput)
+  overlay.addEventListener('click', onOverlayClick)
 
   const openComposer = (intent: 'ask' | 'comment' | 'edit'): void => {
     composer.setIntent(intent)
@@ -251,6 +257,8 @@ export async function apply(ctx: ClientContext, runtimeOptions: RuntimeOptions =
 
   const dispose = (): void => {
     if (repositionTimer !== undefined) clearTimeout(repositionTimer)
+    overlay.removeEventListener('input', onOverlayInput)
+    overlay.removeEventListener('click', onOverlayClick)
     document.removeEventListener('selectionchange', handleSelectionChange)
     document.removeEventListener('keydown', overlayKeydown, true)
     toolbar.dispose()

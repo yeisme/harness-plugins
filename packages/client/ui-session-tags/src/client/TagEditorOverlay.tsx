@@ -197,12 +197,12 @@ export function createTagEditorOverlayEntry(
   labels?: TagEditorOverlayLabels,
 ): () => JSX.Element | null {
   const dictionary = labels ?? TAG_EDITOR_OVERLAY_LABELS_EN
+  // G21 dispose 收口：绑定的 subscribe 句柄在 entry 生命周期内稳定；
+  // React useSyncExternalStore 在卸载时调用其返回的退订函数完成释放。
+  const subscribe = editor.subscribe.bind(editor)
+  const getSnapshot = (): TagEditorOverlayProps['state'] => editor.getSnapshot()
   return function SessionTagsEditorOverlayEntry(): JSX.Element | null {
-    const state = useSyncExternalStore(
-      listener => editor.subscribe(listener),
-      () => editor.getSnapshot(),
-      () => editor.getSnapshot(),
-    )
+    const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
     return (
       <TagEditorOverlay
         state={state}

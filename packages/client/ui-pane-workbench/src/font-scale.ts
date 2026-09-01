@@ -1,4 +1,7 @@
-/** Unified workbench font size: 12–18px, stored in localStorage. */
+/** Unified workbench font size: 12–18px, persisted via the workbench storage seam. */
+
+import { probeWorkbenchStorage } from './browser-storage.js'
+import type { PaneWorkspaceStorageV1 } from './persistence.js'
 
 export const WORKBENCH_FONT_SIZE_MIN = 12
 export const WORKBENCH_FONT_SIZE_MAX = 18
@@ -14,13 +17,8 @@ function clampFontSize(value: number): number {
   return Math.min(WORKBENCH_FONT_SIZE_MAX, Math.max(WORKBENCH_FONT_SIZE_MIN, Math.round(value)))
 }
 
-function storage(): Pick<Storage, 'getItem' | 'setItem'> | undefined {
-  try {
-    if (typeof localStorage === 'undefined' || localStorage === null) return undefined
-    return localStorage
-  } catch {
-    return undefined
-  }
+function storage(): PaneWorkspaceStorageV1 | undefined {
+  return probeWorkbenchStorage()
 }
 
 function readStoredFontSize(): number {

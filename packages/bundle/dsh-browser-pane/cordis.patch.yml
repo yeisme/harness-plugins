@@ -1,0 +1,15 @@
+# Yeisme DSH Browser Pane bundle (experimental v0.1 rc).
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-browser-pane
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/dsh-browser-pane
+#
+# One profile row composing the host contracts (@yeisme/dsh-browser-host)
+# with the client view (@yeisme/dsh-client-ui-browser-pane). Live surfaces
+# register only after a compatible BrowserAutomationProviderV1 probe
+# succeeds; without a provider the entry stays honest (needs_contract /
+# unavailable) and renders no live controls. No real browser runtime is
+# wired in v0.1 rc; sessions, leases, and page state remain with DSH Host.
+- insert:
+    - id: dsh-browser-pane
+      name: '@yeisme/dsh-browser-pane'

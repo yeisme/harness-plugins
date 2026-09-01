@@ -11,6 +11,7 @@ import {
   type UIEvent,
 } from 'react'
 import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { subscriptionHandle } from '@yeisme/dsh-plugin-contracts'
 import { Surface } from '@yeisme/dsh-client-ui-surface'
 import type { PaneWorkbenchController } from './controller.js'
 import { WorkbenchIcon, type WorkbenchIconName } from './icon.js'
@@ -160,7 +161,10 @@ export function PaneManagementCenter(props: PaneManagementCenterProps): ReactNod
   const conversationAbort = useRef<AbortController>()
   const workspaceAbort = useRef<AbortController>()
 
-  useEffect(() => props.registry.subscribe(() => setRegistryRevision(value => value + 1)), [props.registry])
+  useEffect(() => {
+    const registryEvents = subscriptionHandle(props.registry.subscribe(() => setRegistryRevision(value => value + 1)))
+    return () => registryEvents.unsubscribe()
+  }, [props.registry])
   useEffect(() => props.workspaceContext?.subscribe?.(() => setWorkspaceRevision(value => value + 1)), [props.workspaceContext])
   useEffect(() => { searchRef.current?.focus() }, [])
   useEffect(() => {

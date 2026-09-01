@@ -7,7 +7,9 @@ import type { OrganizationEditorController } from './organization-editor.ts'
 import { sessionTagsOverlayStyles } from './styles.ts'
 
 export function OrganizationEditorOverlay({ controller }: { readonly controller: OrganizationEditorController }) {
-  const state = useSyncExternalStore(listener => controller.subscribe(listener), () => controller.getSnapshot())
+  // G21 dispose 收口：useSyncExternalStore 在卸载时调用 subscribe 返回的退订函数；
+  // 绑定句柄显式携带 this（controller 是 class 实例）。
+  const state = useSyncExternalStore(controller.subscribe.bind(controller), controller.getSnapshot.bind(controller))
   if (!state.open) return null
   return (
     <Modal open onClose={() => controller.close()} title="设置功能类型" headless>

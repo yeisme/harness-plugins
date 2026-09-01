@@ -12,6 +12,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
+import { subscriptionHandle } from '@yeisme/dsh-plugin-contracts'
 import { panelVar, type PanelTokenName } from '@yeisme/dsh-client-ui-visual-kit'
 import type { ArtifactIntentV1, PaneContextV1 } from '@yeisme/dsh-pane-protocol'
 import {
@@ -83,7 +84,10 @@ export function PaneViewQuickPick(props: PaneViewQuickPickProps): ReactNode {
   const [query, setQuery] = useState('')
   const rootRef = useRef<HTMLElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
-  useEffect(() => props.registry.subscribe(() => setRevision(value => value + 1)), [props.registry])
+  useEffect(() => {
+    const registryEvents = subscriptionHandle(props.registry.subscribe(() => setRevision(value => value + 1)))
+    return () => registryEvents.unsubscribe()
+  }, [props.registry])
   useEffect(() => { searchRef.current?.focus() }, [])
   const state = props.controller.getSnapshot()
   const openKinds = new Set(Object.values(state.views).map(view => view.kind))

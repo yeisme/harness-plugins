@@ -12,6 +12,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
+import { subscriptionHandle } from '@yeisme/dsh-plugin-contracts'
 import { panelVar, type PanelTokenName } from '@yeisme/dsh-client-ui-visual-kit'
 import type { ArtifactIntentV1, PaneContextV1 } from '@yeisme/dsh-pane-protocol'
 import {
@@ -149,7 +150,10 @@ export function PaneRegionChrome(props: PaneRegionChromeProps): ReactNode {
   const hiddenBottomDropTarget = (): PaneDragTargetV1 | undefined => centerDropTarget(state, drag, hiddenBottomGroupId)
 
   useEffect(() => subscribeWorkbenchFontSize(setFontSize), [])
-  useEffect(() => props.registry.subscribe(() => setRegistryRevision(value => value + 1)), [props.registry])
+  useEffect(() => {
+    const registryEvents = subscriptionHandle(props.registry.subscribe(() => setRegistryRevision(value => value + 1)))
+    return () => registryEvents.unsubscribe()
+  }, [props.registry])
   useEffect(() => { applyWorkbenchFontSizeTo(rootRef.current, fontSize) }, [fontSize])
   useEffect(() => {
     if (props.region !== 'bottom' || !region.visible || hasViews) return

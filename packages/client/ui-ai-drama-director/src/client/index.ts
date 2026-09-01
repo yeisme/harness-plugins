@@ -365,13 +365,19 @@ function createRuntime(input: {
     return activation
   }
 
-  disposers.push(contextStore.subscribe(() => {
-    const context = contextStore.getSnapshot().context
-    input.showControlController?.bind(context?.showRef, context?.contextRevision)
-    emitChange()
-  }))
+  // G21 dispose 收口：上游 store 订阅收纳进具名 unsubscribe 句柄，
+  // 经 disposers 在 runtime dispose 时显式释放（不再依赖裸退订函数）。
+  const contextSignal = {
+    unsubscribe: contextStore.subscribe(() => {
+      const context = contextStore.getSnapshot().context
+      input.showControlController?.bind(context?.showRef, context?.contextRevision)
+      emitChange()
+    }),
+  }
+  disposers.push(() => { contextSignal.unsubscribe() })
   if (input.creatorRuntime !== undefined) {
-    disposers.push(input.creatorRuntime.subscribe(() => emitChange()))
+    const runtimeSignal = { unsubscribe: input.creatorRuntime.subscribe(() => emitChange()) }
+    disposers.push(() => { runtimeSignal.unsubscribe() })
   }
 
   const commands = toCommandEntries(probe)

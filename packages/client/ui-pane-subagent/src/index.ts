@@ -3,6 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SubagentAddress } from '@deepseek-ai/dsh-client-connection/client'
 import { createElement, type ReactNode } from 'react'
 import { Button, IconAgentPresetOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { subscriptionHandle } from '@yeisme/dsh-plugin-contracts'
 import { SubagentMonitorController } from './controller.js'
 import { createSubagentMonitorView } from './view.js'
 
@@ -112,7 +113,11 @@ export function apply(ctx: Context): () => void {
   const mountPane = (nextPane: PaneWorkbenchFace): void => {
     const controller = new SubagentMonitorController({
       getSnapshot: () => sessions.list.getSnapshot() as never,
-      subscribe: listener => sessions.list.subscribe(listener),
+      // 订阅经具名句柄转发；controller dispose 时统一 unsubscribe。
+      subscribe: listener => {
+        const events = subscriptionHandle(sessions.list.subscribe(listener))
+        return () => events.unsubscribe()
+      },
       refresh: parentSessionId => void sessions.refreshSubagents(parentSessionId),
       openSubagent: address => sessions.openSubagent(address as never),
       detail: {
@@ -177,12 +182,12 @@ export function apply(ctx: Context): () => void {
     const initialPane = resolvePaneWorkbench(ctx)
     if (initialPane !== undefined) mountPane(initialPane)
     disposeLauncher = registerLauncher()
-    const disposeServiceListener = ctx.on('internal/service', (name, value) => {
+    const serviceEvents = subscriptionHandle(ctx.on('internal/service', (name, value) => {
       if (name !== 'paneWorkbench') return
       refreshPane(asPaneWorkbench(value))
-    }, { global: true })
+    }, { global: true }))
     return () => {
-      disposeServiceListener()
+      serviceEvents.unsubscribe()
       disposeLauncher()
       disposePane()
     }

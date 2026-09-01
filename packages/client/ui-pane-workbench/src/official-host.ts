@@ -14,6 +14,7 @@
  */
 
 import { createElement, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
+import { subscriptionHandle } from '@yeisme/dsh-plugin-contracts'
 import { Surface } from '@yeisme/dsh-client-ui-surface'
 import type { PaneWorkbenchController } from './controller.js'
 import { geometryDisabledReasonKey } from './experience-tier.js'
@@ -197,7 +198,11 @@ export function OfficialOverlayPaneHost({ registry, controller, handoff, convers
   const [menuViewId, setMenuViewId] = useState<string>()
   const [menuNotice, setMenuNotice] = useState<string>()
   const rootRef = useRef<HTMLElement>(null)
-  useEffect(() => tierTracker?.subscribe(() => setTierRevision(value => value + 1)), [tierTracker])
+  useEffect(() => {
+    if (tierTracker === undefined) return
+    const tierEvents = subscriptionHandle(tierTracker.subscribe(() => setTierRevision(value => value + 1)))
+    return () => tierEvents.unsubscribe()
+  }, [tierTracker])
   usePaneTabFocusRestore(controller, rootRef, overlayActiveTabId, '[data-pane-open-view-trigger]')
 
   const [viewportWidth = 1280, viewportHeight = 800] = viewport.split(':').map(Number)

@@ -20,13 +20,20 @@
       "default": "./lib/index.js"
     },
     "./module": "./lib/module.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json",
     "./client": "./lib/client.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
   },
   "files": [
     "lib/index.js",
     "lib/types/**/*.js",
     "lib/types/**/*.d.ts",
+    "cordis.patch.yml",
     "README.md"
   ],
   "keywords": [],

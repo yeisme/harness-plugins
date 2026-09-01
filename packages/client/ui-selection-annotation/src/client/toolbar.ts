@@ -68,13 +68,18 @@ const TOOLBAR_CLASS = 'dsh-selection-toolbar'
 const TOOLBAR_NARROW_CLASS = 'dsh-selection-toolbar--narrow'
 const TOOLBAR_EDGE_CLASS = 'dsh-selection-toolbar--edge'
 
+interface ToolbarButton {
+  readonly element: HTMLButtonElement
+  readonly onClick: () => void
+}
+
 /**
  * DOM controller for the floating toolbar. Renders buttons, tracks focus for
  * keyboard navigation and repositions on demand.
  */
 export class SelectionToolbarController {
   private readonly element: HTMLElement
-  private readonly buttons: HTMLButtonElement[] = []
+  private readonly buttons: ToolbarButton[] = []
   private readonly options: SelectionToolbarOptions
   private readonly labels: SelectionAnnotationLabels
   private readonly keydownHandler: (event: KeyboardEvent) => void
@@ -111,9 +116,11 @@ export class SelectionToolbarController {
       button.title = entry.label
       button.setAttribute('aria-label', entry.label)
       button.textContent = options.narrow === true ? entry.icon : entry.label
-      button.addEventListener('click', () => this.options.onAction(entry.action))
+      // G21 dispose 收口：click 监听具名收纳，dispose 时显式摘除。
+      const onClick = (): void => { this.options.onAction(entry.action) }
+      button.addEventListener('click', onClick)
       this.element.append(button)
-      this.buttons.push(button)
+      this.buttons.push({ element: button, onClick })
     }
 
     this.keydownHandler = event => this.handleKeydown(event)
@@ -147,7 +154,7 @@ export class SelectionToolbarController {
   moveFocus(delta: number): HTMLButtonElement | undefined {
     if (this.buttons.length === 0) return undefined
     this.focusIndex = (this.focusIndex + delta + this.buttons.length) % this.buttons.length
-    const button = this.buttons[this.focusIndex]
+    const button = this.buttons[this.focusIndex]?.element
     button?.focus()
     return button
   }
@@ -181,8 +188,8 @@ export class SelectionToolbarController {
   /** Narrow panes degrade text buttons to icon buttons; aria-labels stay. */
   setNarrow(narrow: boolean): void {
     this.element.classList.toggle(TOOLBAR_NARROW_CLASS, narrow)
-    for (const button of this.buttons) {
-      button.textContent = narrow ? button.dataset.icon ?? button.textContent : button.dataset.label ?? button.textContent
+    for (const { element } of this.buttons) {
+      element.textContent = narrow ? element.dataset.icon ?? element.textContent : element.dataset.label ?? element.textContent
     }
   }
 
@@ -199,6 +206,7 @@ export class SelectionToolbarController {
     if (this.disposed) return
     this.disposed = true
     const doc = this.options.root ?? document
+    for (const { element, onClick } of this.buttons) element.removeEventListener('click', onClick)
     doc.removeEventListener('keydown', this.keydownHandler, true)
     this.element.remove()
   }

@@ -2,7 +2,9 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import { createElement, type ReactNode } from 'react'
+import { subscriptionHandle } from '@yeisme/dsh-plugin-contracts'
 import { dispatchArtifactHandoff, probeArtifactHandoffChannel, ARTIFACT_INTENT_VOCABULARY } from './artifacts.js'
+import { probeWorkbenchStorage } from './browser-storage.js'
 import { PaneWorkbenchController } from './controller.js'
 import {
   closePaneWorkbenchCoreView,
@@ -204,7 +206,10 @@ function bindPaneWorkbenchLocale(ctx: Pick<ClientContext, 'get'>): () => void {
       }))
     }
     sync()
-    if (typeof locale.subscribe === 'function') disposers.push(locale.subscribe(sync))
+    if (typeof locale.subscribe === 'function') {
+      const localeEvents = subscriptionHandle(locale.subscribe(sync))
+      disposers.push(() => localeEvents.unsubscribe())
+    }
   } catch {
     for (const dispose of disposers.reverse()) dispose()
     return () => {}
@@ -254,16 +259,6 @@ export function probePaneWorkbenchHost(ctx: Pick<ClientContext, 'get'>): PaneWor
   }
 }
 
-function browserStorage(): Storage | undefined {
-  if (typeof document === 'undefined' || document.defaultView === null) return undefined
-  if (/jsdom/i.test(document.defaultView.navigator.userAgent)) return undefined
-  try {
-    return document.defaultView.localStorage
-  } catch {
-    return undefined
-  }
-}
-
 interface PaneWorkbenchRuntime {
   readonly registry: PaneViewRegistry
   readonly controller: PaneWorkbenchController
@@ -287,7 +282,7 @@ function createPaneWorkbenchRuntime(tier: ExperienceTierTrackerV1, ctx: Pick<Cli
   })
   const commands = new PaneCommandRegistry()
   const intents = new PaneIntentDispatcher()
-  const storage = browserStorage()
+  const storage = probeWorkbenchStorage()
   const persistence = storage === undefined ? undefined : new PaneWorkspacePersistenceAdapter(storage)
   const managementPersistence = storage === undefined ? undefined : new PaneManagementPersistenceAdapter(storage)
   const renditionRenderer = readContextService<PaneSafeRenditionRendererV1>(ctx, PANE_RENDITION_RENDERER_CONTEXT_KEY)
@@ -403,14 +398,17 @@ function bindSessionSync(ctx: ClientContext, controller: PaneWorkbenchController
     closePaneWorkbenchCoreView(controller, DSH_TOOL_DETAILS_VIEW_KIND)
   }
   syncSession()
-  lifecycle.push(sessionList?.subscribe(syncSession) ?? (() => {}))
+  const sessionEvents = sessionList === undefined ? undefined : subscriptionHandle(sessionList.subscribe(syncSession))
+  lifecycle.push(() => sessionEvents?.unsubscribe())
 }
 
 /** Seam hot-plug invalidation: re-judge the tier when the command surface announces a change. */
 function bindExperienceTierHotplug(ctx: ClientContext, tier: ExperienceTierTrackerV1, lifecycle: Array<() => void>): void {
   const commands = readContextService<{ subscribe?: (listener: () => void) => () => void }>(ctx, COMMAND_SURFACE_CONTEXT_KEY)
-  const unsubscribe = typeof commands?.subscribe === 'function' ? commands.subscribe(() => tier.invalidate()) : undefined
-  lifecycle.push(unsubscribe ?? (() => {}))
+  const commandEvents = typeof commands?.subscribe === 'function'
+    ? subscriptionHandle(commands.subscribe(() => tier.invalidate()))
+    : undefined
+  lifecycle.push(() => commandEvents?.unsubscribe())
 }
 
 /** Attaches the Core Pane chrome (layout owner + both workspace slots) for an existing runtime. Unwinds itself on failure. */
@@ -510,7 +508,7 @@ function mountOverlayPaneHost(ctx: ClientContext, slots: SlotRegistryLike, tier:
       if (declared !== undefined) tier.invalidate()
       return () => {}
     }))
-    lifecycle.push(tier.subscribe(() => {
+    const tierEvents = subscriptionHandle(tier.subscribe(() => {
       if (overlayChrome === undefined || tier.getSnapshot().tier === 0) return
       if (!probePaneWorkbenchHost(ctx).available) return
       const workspaceLayout = readContextService<WorkspaceLayoutServiceLike>(ctx, 'workspaceLayout')
@@ -524,6 +522,7 @@ function mountOverlayPaneHost(ctx: ClientContext, slots: SlotRegistryLike, tier:
       overlayChrome = undefined
       focusActiveTabAfterUpgrade(controller)
     }))
+    lifecycle.push(() => tierEvents.unsubscribe())
     bindSessionSync(ctx, controller, lifecycle)
     bindExperienceTierHotplug(ctx, tier, lifecycle)
     return disposeLifecycle

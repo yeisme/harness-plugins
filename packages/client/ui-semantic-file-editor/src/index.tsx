@@ -66,6 +66,22 @@ declare global {
 
 const monacoLoads = new Map<string, Promise<MonacoFace>>()
 
+/**
+ * G21 dispose 收口：loader script 的 load/error 监听成对挂载、任一触发即
+ * 先摘下双监听再转发（`once` 兜底）——监听不残留在常驻 document.head 的
+ * script 元素上，加载失败也完成释放。
+ */
+function attachLoaderListeners(target: HTMLScriptElement, onLoad: () => void, onError: () => void): void {
+  const detach = (): void => {
+    target.removeEventListener('load', forwardLoad)
+    target.removeEventListener('error', forwardError)
+  }
+  const forwardLoad = (): void => { detach(); onLoad() }
+  const forwardError = (): void => { detach(); onError() }
+  target.addEventListener('load', forwardLoad, { once: true })
+  target.addEventListener('error', forwardError, { once: true })
+}
+
 function loadMonaco(assetBase: string): Promise<MonacoFace> {
   const normalized = assetBase.replace(/\/$/, '')
   const existing = monacoLoads.get(normalized)
@@ -93,16 +109,14 @@ function loadMonaco(assetBase: string): Promise<MonacoFace> {
     if (window.monaco !== undefined) { resolve(window.monaco); return }
     const current = document.querySelector<HTMLScriptElement>(`script[data-dsh-monaco-loader="${normalized}"]`)
     if (current !== null) {
-      current.addEventListener('load', finish, { once: true })
-      current.addEventListener('error', () => { reject(new Error('Monaco loader failed')) }, { once: true })
+      attachLoaderListeners(current, finish, () => { reject(new Error('Monaco loader failed')) })
       return
     }
     const script = document.createElement('script')
     script.src = `${normalized}/loader.js`
     script.async = true
     script.dataset.dshMonacoLoader = normalized
-    script.addEventListener('load', finish, { once: true })
-    script.addEventListener('error', () => { reject(new Error('Monaco loader failed')) }, { once: true })
+    attachLoaderListeners(script, finish, () => { reject(new Error('Monaco loader failed')) })
     document.head.append(script)
   })
   monacoLoads.set(normalized, pending)

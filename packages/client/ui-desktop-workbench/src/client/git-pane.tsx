@@ -32,6 +32,7 @@ import type {
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { buildPanelStyles } from '@yeisme/dsh-client-ui-visual-kit'
 import { Surface, SurfaceContextBar, SurfaceState } from '@yeisme/dsh-client-ui-surface'
+import { browserPreferenceStorage, probeCapability } from '@yeisme/dsh-plugin-contracts'
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 
 export interface GitStatusFileV1 {
@@ -179,7 +180,17 @@ function mapWindowFile(file: GitStatusFileWindowItemV1): GitStatusFileV1 {
 }
 function statusFromWindow(window: GitStatusWindowV1): GitStatusV1 { return { branch: window.branch, files: window.files.map(mapWindowFile), repositoryRef: window.repositoryRef, worktreeRef: window.worktreeRef, revision: window.revision, cursor: window.cursor, freshness: window.freshness } }
 function safeId(prefix: string): string { const random = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`; return `${prefix}:${random}` }
-function readDiffLayout(workspaceRef: string): GitDiffLayoutV2 { try { return localStorage.getItem(`dsh.git.diff-layout:${workspaceRef}`) === 'side_by_side' ? 'side_by_side' : 'unified' } catch { return 'unified' } }
+/**
+ * G21 safe-projection 收口：client 代码不直接触碰浏览器 storage 全局
+ * （SAFEPROJ/BROWSER_STORAGE_ACCESS 观测红线）。展示偏好读写经 sdk 契约
+ * seam 三态探测；probe 不可用按缺省偏好降级，读写失败不抛错。
+ */
+function preferenceStorage() {
+  const probed = probeCapability(browserPreferenceStorage)
+  return probed.status === 'available' ? probed.capability : undefined
+}
+function readDiffLayout(workspaceRef: string): GitDiffLayoutV2 { try { return preferenceStorage()?.getItem(`dsh.git.diff-layout:${workspaceRef}`) === 'side_by_side' ? 'side_by_side' : 'unified' } catch { return 'unified' } }
+function writePreference(key: string, value: string): void { try { preferenceStorage()?.setItem(key, value) } catch { /* optional presentation persistence */ } }
 function riskWeight(risk: GitReviewQueueRowV1['risk']): number { return risk === 'conflict' ? 5 : risk === 'revision_drift' ? 4 : risk === 'verification_failed' ? 3 : risk === 'feedback' ? 2 : risk === 'approval' ? 1 : 0 }
 function sortedQueue(rows: readonly GitReviewQueueRowV1[]): readonly GitReviewQueueRowV1[] { return [...rows].sort((a, b) => riskWeight(b.risk) - riskWeight(a.risk) || Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt)) }
 function readiness(evidence: GitReviewWorktreeEvidenceV1 | undefined, revision: string | undefined, agentWorktree: boolean, ordoOnline: boolean): readonly string[] {
@@ -357,20 +368,24 @@ export function GitPane({ host, review, workspaceRef = 'workspace:current', repo
   useEffect(() => { refresh(statusCursorStack.at(-1)) }, [refresh, statusCursorStack])
   useEffect(() => {
     if (host.statusWindow?.subscribe === undefined || selectedRepository === undefined) return
-    return host.statusWindow.subscribe({ repositoryRef: selectedRepository.repositoryRef, worktreeRef: selectedRepository.worktreeRef }, event => {
+    // G21 dispose 收口：窗口订阅收纳进具名 unsubscribe 句柄，cleanup 显式释放。
+    const subscription = { unsubscribe: host.statusWindow.subscribe({ repositoryRef: selectedRepository.repositoryRef, worktreeRef: selectedRepository.worktreeRef }, event => {
       if (event.kind === 'changed' && (statusWindow === undefined || event.sequence === statusWindow.sequence + 1)) refresh(statusCursorStack.at(-1))
       else setStatus(current => current === undefined ? current : { ...current, freshness: 'stale' })
-    })
+    }) }
+    return () => { subscription.unsubscribe() }
   }, [host.statusWindow, refresh, selectedRepository, statusCursorStack, statusWindow])
 
   const refreshReview = useCallback(() => { if (review === undefined) return; setReviewLoading(true); setReviewError(undefined); void review.snapshot({ workspaceRef, limit: PAGE_LIMIT }).then(next => { setReviewSnapshot(next); setReviewLoading(false) }, caught => { setReviewError(caught instanceof Error ? caught.message : String(caught)); setReviewLoading(false) }) }, [review, workspaceRef])
   useEffect(() => { refreshReview() }, [refreshReview])
   useEffect(() => {
     if (review?.subscribe === undefined) return
-    return review.subscribe({ workspaceRef }, event => {
+    // G21 dispose 收口：审查队列订阅收纳进具名 unsubscribe 句柄，cleanup 显式释放。
+    const subscription = { unsubscribe: review.subscribe({ workspaceRef }, event => {
       if (event.kind === 'changed' && (reviewSnapshot === undefined || event.sequence === reviewSnapshot.sequence + 1)) refreshReview()
       else setReviewSnapshot(current => current === undefined ? current : { ...current, freshness: 'stale' })
-    })
+    }) }
+    return () => { subscription.unsubscribe() }
   }, [refreshReview, review, reviewSnapshot, workspaceRef])
   useEffect(() => { if (view !== 'history' || host.historyWindow === undefined || repositoryRef === undefined || worktreeRef === undefined) return; setHistoryLoading(true); setHistoryError(undefined); void host.historyWindow.window({ repositoryRef, worktreeRef, limit: PAGE_LIMIT }).then(window => { setHistory(window.commits); setHistoryRevision(window.revision); setHistoryLoading(false) }, caught => { setHistoryError(caught instanceof Error ? caught.message : String(caught)); setHistoryLoading(false) }) }, [host.historyWindow, repositoryRef, view, worktreeRef])
   const createCompare = async (): Promise<void> => {
@@ -380,7 +395,7 @@ export function GitPane({ host, review, workspaceRef = 'workspace:current', repo
       if (selected.length !== 2) return
       const session = await host.compareSession.create({ repositoryRef, worktreeRef, baseRef: selected[1]!.commitRef, targetRef: selected[0]!.commitRef, revision: historyRevision, layout: diffLayout, pinned: true })
       setCompareSessionRef(session.sessionRef)
-      try { localStorage.setItem(`dsh.git.compare:${workspaceRef}`, JSON.stringify({ sessionRef: session.sessionRef, repositoryRef: session.repositoryRef, worktreeRef: session.worktreeRef, baseRef: session.baseRef, targetRef: session.targetRef, revision: session.revision, layout: session.layout, pinned: session.pinned })) } catch { /* optional presentation persistence */ }
+      writePreference(`dsh.git.compare:${workspaceRef}`, JSON.stringify({ sessionRef: session.sessionRef, repositoryRef: session.repositoryRef, worktreeRef: session.worktreeRef, baseRef: session.baseRef, targetRef: session.targetRef, revision: session.revision, layout: session.layout, pinned: session.pinned }))
     } catch (caught) { setHistoryError(caught instanceof Error ? caught.message : String(caught)) }
   }
 
@@ -394,7 +409,7 @@ export function GitPane({ host, review, workspaceRef = 'workspace:current', repo
     setDiffLoading(true); void read.call(host, entry.file.path).then(next => { setDiff(next); setDiffLoading(false) }, caught => { setDiffError(caught instanceof Error ? caught.message : String(caught)); setDiffLoading(false) })
   }, [diffLayout, host, repositoryRef, worktreeRef])
 
-  const changeLayout = (layout: GitDiffLayoutV2): void => { setDiffLayout(layout); try { localStorage.setItem(`dsh.git.diff-layout:${workspaceRef}`, layout) } catch { /* optional */ }; if (selectedEntry !== undefined) openDiff(selectedEntry, layout) }
+  const changeLayout = (layout: GitDiffLayoutV2): void => { setDiffLayout(layout); writePreference(`dsh.git.diff-layout:${workspaceRef}`, layout); if (selectedEntry !== undefined) openDiff(selectedEntry, layout) }
   const dispatchReview = async (intent: Parameters<NonNullable<GitReviewEvidenceCapabilityV1['dispatch']>>[0]): Promise<GitReviewActionReceiptV1 | undefined> => { if (review?.dispatch === undefined || governanceDisabled) return undefined; setBusy(true); try { const receipt = await review.dispatch(intent); if (receipt.status !== 'ok') setError(receipt.reason ?? `${receipt.action} 未完成`); else refreshReview(); return receipt } finally { setBusy(false) } }
   const requestPreflight = async (intent: GitMutationIntentV2): Promise<void> => { if (host.mutationActionsV2 === undefined) return; setBusy(true); setError(undefined); try { const next = await host.mutationActionsV2.preflight(intent); setPendingIntent(intent); setPreflight(next) } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)) } finally { setBusy(false) } }
   const confirmPreflight = useCallback(async (): Promise<void> => {

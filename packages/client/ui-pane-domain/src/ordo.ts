@@ -1,6 +1,7 @@
 /** Ordo Agent Ops → Ordo Team Pane 的映射与 live owner source 适配。 */
 
 import type { PaneContextV1 } from '@yeisme/dsh-pane-protocol'
+import { subscriptionHandle } from '@yeisme/dsh-plugin-contracts'
 import { ORDO_CLOSED_ACTIONS } from './actions.js'
 import type { DomainOwnerEventTransport } from './owner-source.js'
 import { domainSnapshotEvent, type DomainItemV1, type DomainItemLinkV1, type DomainSnapshotV1 } from './snapshot.js'
@@ -140,7 +141,8 @@ export function createOrdoOwnerTransport(input: OrdoOwnerTransportInput): Domain
       }
     },
     subscribe(listener) {
-      return input.events.subscribe(event => {
+      // 转发 owner 事件源；取消订阅收口为具名句柄，由调用方（bridge dispose）释放。
+      const events = subscriptionHandle(input.events.subscribe(event => {
         const candidate = event as OrdoAgentOpsEventLike
         if (candidate === null || typeof candidate !== 'object' || typeof candidate.sequence !== 'number') return
         listener({
@@ -155,7 +157,8 @@ export function createOrdoOwnerTransport(input: OrdoOwnerTransportInput): Domain
           op: 'append',
           payload: { value: { kind: 'event', ref: candidate.entityRef, summary: candidate.safeDeltaOrSummary, eventType: candidate.eventType } },
         })
-      })
+      }))
+      return () => events.unsubscribe()
     },
     ...(input.events.onUnavailable === undefined ? {} : { onUnavailable: input.events.onUnavailable.bind(input.events) }),
     ...(input.events.onAvailable === undefined ? {} : { onAvailable: input.events.onAvailable.bind(input.events) }),
