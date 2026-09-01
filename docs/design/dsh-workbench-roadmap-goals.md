@@ -24,6 +24,10 @@
 | G15 | Director Operational Panes | 发布共享 Creator runtime，并把 Context/Story/Visual/Audio/Run/Review 六个 Pane 接入真实安全投影 | `dsh-ai-drama-operational-panes-v1`：共享 store、显式 refresh、legacy 只读回退、状态重置和六 Pane 测试全绿 |
 | G16 | Show Control Room | 提供单 Show 绑定的 Episode Board、Review Inbox、Asset Wall、Delivery 与 owner batch action | `dsh-ai-drama-show-control-room-v1`：四 Pane、四命令、`show-control` preset、100 项边界与 owner adapter conformance 全绿 |
 | G17 | Review & Delivery Depth | 补齐富媒体时间轴、selection-owner 批注、跨集/版本比较和交付审计深度 | `dsh-ai-drama-review-delivery-depth-v1`：媒体生命周期、版本围栏、批注 repair handoff、rights/evidence/receipt history 全绿 |
+| G18 | 插件开发工具链地基 | `packages/tool/dsh-plugin-toolchain` 统一 `pnpm check:plugins`（declaration-lint / safe-projection-audit / dispose-hmr-conformance / visual-token-conformance）+ `packages/sdk/dsh-plugin-contracts` 内部契约 | `dsh-plugin-dev-toolchain-v1` 全绿；`pnpm check:plugins` 对 31 包跑通并出基线报告（首跑允许既有红灯） |
+| G19 | 真实数据自控链 | ordo/team-hub 接本地 ordo CLI 真数据 + token/session/model/用量面板接官方已有 seam；只做自控数据源 | `dsh-web-real-data-self-owned-v1` 全绿；常用面板真数据率 ≥80% |
+| G20 | 命令入口收敛 | 31 bundle 散落 Modal/按钮入口 additive 注册进统一 slash+Palette 目录；只消费 command-first 产物不复制实现 | `dsh-web-command-entry-convergence-v1` 全绿；常用动作均可从 Palette/slash 发现并执行 |
+| G21 | 一致性全覆盖 + 薄生态 | visual-token-conformance 铺满剩余包至零红灯 + `packages/catalog` 静态清单薄做 + `packages/example` 单个参考插件 | `dsh-plugin-consistency-coverage-v1` 全绿；`pnpm check:plugins` 31 包零红灯 |
 
 ## Goal → Spec 任务映射
 
@@ -46,6 +50,10 @@
 | G15 | `openspec/changes/dsh-ai-drama-operational-panes-v1/tasks.md` |
 | G16 | `openspec/changes/dsh-ai-drama-show-control-room-v1/tasks.md` |
 | G17 | `openspec/changes/dsh-ai-drama-review-delivery-depth-v1/tasks.md` |
+| G18 | `openspec/changes/dsh-plugin-dev-toolchain-v1/tasks.md`、`docs/design/dsh-plugin-dev-toolchain-and-experience.md` §Wave 1 |
+| G19 | `openspec/changes/dsh-web-real-data-self-owned-v1/tasks.md`、`docs/design/dsh-plugin-dev-toolchain-and-experience.md` §Wave 2 |
+| G20 | `openspec/changes/dsh-web-command-entry-convergence-v1/tasks.md`、`docs/design/dsh-plugin-dev-toolchain-and-experience.md` §Wave 3 |
+| G21 | `openspec/changes/dsh-plugin-consistency-coverage-v1/tasks.md`、`docs/design/dsh-plugin-dev-toolchain-and-experience.md` §Wave 4 |
 
 ## 推进节奏建议
 
@@ -57,3 +65,4 @@
 6. G13 先完成合同冻结和跨仓 fixture，再分别推进 DSH provider 与 Workbench consumer；不得用单仓测试替代 rollout-ready 结论。
 7. G14 已归档；真实 `dsh plugin add` 与 Web boot 仍是可选 host integration，不作为插件完成阻塞。
 8. G15 → G16 → G17 顺序推进：先稳定当前集运行时，再开放全剧聚合，最后叠加专业审片深度；任何阶段都不得把 owner ledger 下沉到浏览器。
+9. DX 四波 lane（G18 → G19 → G20 → G21，2026-08-31 设计定稿）排队于在途 V3 系列收尾之后，骨架已建、tasks 不勾：G18 机械化地基先行（稳定性观测门 + 一致性工具同体）；G19 只接自控数据源；G20 硬门 = `dsh-web-command-first-interaction-v1` 冻结；G21 硬门之一 = G19 起点要求的 `ordo-dsh-plugin-visualization-v1` 已归档。sdk/catalog/example 按内部定位薄做，不承诺对外 semver。设计全文见 [dsh-plugin-dev-toolchain-and-experience.md](./dsh-plugin-dev-toolchain-and-experience.md)。
