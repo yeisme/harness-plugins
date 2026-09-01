@@ -21,12 +21,14 @@
     "ui:acceptance": "pnpm --filter @yeisme/dsh-client-ui-mcp-inspector run ui:acceptance",
     "dsh:dev": "node scripts/dsh-dev.mjs",
     "test:dsh-dev": "node --test scripts/dsh-dev.spec.mjs",
-    "test:dsh-dev:integration": "node scripts/run-dsh-dev-integration-tests.mjs"
+    "test:dsh-dev:integration": "node scripts/run-dsh-dev-integration-tests.mjs",
+    "check:plugins": "node scripts/check-plugins.mjs"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@playwright/test": "1.60.0",
     "@types/node": "^22.0.0",
+    "@yeisme/dsh-plugin-toolchain": "workspace:*",
     "tsdown": "^0.22.2",
     "tsx": "^4.23.12",
     "typescript": "^5.6.0",

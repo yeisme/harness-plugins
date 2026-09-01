@@ -8,6 +8,7 @@
  * @module @yeisme/dsh-client-ui-next-step-suggestions/sources
  */
 
+import type { Disposer } from '@yeisme/dsh-plugin-contracts'
 import type { SuggestionSource } from './types.ts'
 
 /** Ordered client-local registry of suggestion sources. */
@@ -20,7 +21,7 @@ export class SuggestionSourceRegistry {
    * @param source - source to register.
    * @returns A disposer that removes the source.
    */
-  registerSource(source: SuggestionSource): () => void {
+  registerSource(source: SuggestionSource): Disposer {
     this.#sources.push(source)
     return () => {
       const index = this.#sources.indexOf(source)

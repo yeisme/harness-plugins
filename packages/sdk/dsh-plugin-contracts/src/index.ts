@@ -1,0 +1,5 @@
+export type { ProjectionFreshness, SafeProjectionMeta, BoundedSummary } from './projection.js'
+export { probeCapability } from './probe.js'
+export type { ProbeDegradation, ProbeResult } from './probe.js'
+export { composeDisposers } from './dispose.js'
+export type { Disposable, Disposer, SubscribeFace } from './dispose.js'

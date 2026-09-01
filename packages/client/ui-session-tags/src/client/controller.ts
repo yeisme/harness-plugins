@@ -21,6 +21,7 @@
  * @module @yeisme/dsh-client-ui-session-tags/client/controller
  */
 
+import type { Disposable } from '@yeisme/dsh-plugin-contracts'
 import type {
   SessionTagsListAnswerV1,
   SessionTagsListEntryV1,
@@ -46,7 +47,7 @@ const LOADING: SessionTagsControllerState = Object.freeze({ status: 'loading' })
  * sessionTags list 的 generation-aware 控制器。
  * 通过 getSnapshot/subscribe 表现为稳定的外部 store 源。
  */
-export class SessionTagsController {
+export class SessionTagsController implements Disposable {
   private readonly remote: SessionTagsRemoteFace
   private state: SessionTagsControllerState = IDLE
   private readonly listeners = new Set<() => void>()

@@ -44,7 +44,8 @@
     "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.6",
     "@yeisme/dsh-client-ui-surface": "workspace:^",
     "@yeisme/dsh-client-ui-visual-kit": "workspace:^",
-    "@yeisme/dsh-pane-protocol": "workspace:^"
+    "@yeisme/dsh-pane-protocol": "workspace:^",
+    "@yeisme/dsh-plugin-contracts": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

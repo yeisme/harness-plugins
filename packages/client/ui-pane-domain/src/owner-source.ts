@@ -25,6 +25,7 @@ import {
   type PaneProjectionEntityV1,
   type PaneStatus,
 } from '@yeisme/dsh-pane-protocol'
+import type { Disposable, Disposer } from '@yeisme/dsh-plugin-contracts'
 import type { DomainOwner } from './owners.js'
 import { isDomainOwner, normalizeDomainSnapshot, type DomainActionV1, type DomainItemV1, type DomainSnapshotV1 } from './snapshot.js'
 
@@ -51,11 +52,10 @@ export interface DomainOwnerEventTransport {
 }
 
 /** 挂载到 Host context 的正式 owner source 服务面（客户端经 `ctx.get('domain.<owner>')` 消费）。 */
-export interface DomainOwnerSourceService {
+export interface DomainOwnerSourceService extends Disposable {
   readonly owner: DomainOwner
   getSnapshot(): DomainSnapshotV1
-  subscribe(listener: (snapshot: DomainSnapshotV1) => void): () => void
-  dispose(): void
+  subscribe(listener: (snapshot: DomainSnapshotV1) => void): Disposer
 }
 
 /** bridge 内部的折叠状态；引用稳定，便于订阅者做相等性判断。 */

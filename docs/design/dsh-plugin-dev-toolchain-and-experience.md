@@ -44,6 +44,18 @@
 - tool 层只读 inspect 被测包、不改 source；报告落 `temp/toolchain-runs/<date>/`（脱敏同集成证据规则）。
 - **验收**：`pnpm check:plugins` 对 31 包跑通并出基线报告；首跑允许既有红灯（量化基线），清零归 Wave 4 完成点。
 
+**Wave 1 基线结论（2026-09-01 首跑，`temp/toolchain-runs/2026-09-01T014345901Z-toolchain/`）**：
+
+| 检查器 | 覆盖 | 红灯 | 基线要点 |
+| --- | --- | --- | --- |
+| bundle-contract | 27 bundle | 0 | 收编后与 `check:bundles` 逐字等价（27/27 PASS） |
+| declaration-lint | 30 bundle | 2 | `DECL/PATCH_MISSING`：dsh-browser-pane、dsh-file-document（属实，缺 cordis.patch.yml）；30 note（21 bundle→bundle、9 client→bundle 为既定组合形态记录，层规则按仓现实校准） |
+| safe-projection-audit | 597 文件 | 12 | 10 处浏览器 storage 直访 + 2 处非本地 URL 字面量，全部为待 owner 复核观测点 |
+| dispose-hmr-conformance | 449 文件 | 36 | 强信号项：session-tags provider/overlay×4、pane-workbench client.ts/region-chrome.ts 等无释放路径 host 订阅；G21 定点修复输入 |
+| visual-token-conformance | 26 包 | 0 | surfaces 门（--allow-pending）不回退；token-rate 全量记基线，阈值化归 G21 |
+
+合计基线红灯 50；sdk 契约包（projection/probe/dispose 三组）+ 三试点（ui-pane-domain、ui-next-step-suggestions、ui-session-tags）落地，纯类型层等价替换。首跑红灯量在 R9 预期范围内（观测门先行），清零轨迹以 G18 基线报告为对照归 G21。
+
 ### Wave 2 — 真实数据自控链（G19 / `dsh-web-real-data-self-owned-v1`）
 
 消化「真实数据感」，只选自己可控的数据源（R7）。

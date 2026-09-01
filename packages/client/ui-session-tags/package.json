@@ -63,6 +63,7 @@
   "dependencies": {
     "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.6",
     "@yeisme/dsh-client-ui-surface": "workspace:^",
-    "@yeisme/dsh-client-ui-visual-kit": "workspace:^"
+    "@yeisme/dsh-client-ui-visual-kit": "workspace:^",
+    "@yeisme/dsh-plugin-contracts": "workspace:^"
   }
 }

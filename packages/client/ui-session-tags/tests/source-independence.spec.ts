@@ -39,11 +39,13 @@ describe('source independence', () => {
       dependencies?: Record<string, string>
     }
     // visual kit 是本仓自有的样式常量包（零运行时依赖），3.4 采纳为显式放行项；
+    // plugin-contracts 是本仓自有的纯类型/合同包（G18 §6 试点，零运行时依赖），同类放行；
     // DSH 私有源码依赖仍然禁止。
     expect(Object.keys(manifest.dependencies ?? {})).toEqual([
       '@deepseek-ai/dsh-client-ui-primitives',
       '@yeisme/dsh-client-ui-surface',
       '@yeisme/dsh-client-ui-visual-kit',
+      '@yeisme/dsh-plugin-contracts',
     ])
     for (const name of Object.keys(manifest.peerDependencies ?? {})) {
       expect(name === '@deepseek-ai/cordis'
