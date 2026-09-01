@@ -13,6 +13,7 @@ import { Surface } from '@yeisme/dsh-client-ui-surface'
 import { WorkbenchShell } from '@yeisme/dsh-workbench-core/client'
 import type { WorkbenchTabV1 } from '@yeisme/dsh-workbench-core'
 import type { SessionManagerHostV1, SessionSummaryV1 } from '@yeisme/dsh-session-manager'
+import { resolveSessionManagerHost } from '@yeisme/dsh-session-manager'
 import { desktopWorkbenchStyles } from './desktop-workbench-styles.ts'
 import { SessionSidebar, type SessionLineageBadge } from './session-sidebar.tsx'
 
@@ -21,7 +22,10 @@ export interface DesktopWorkbenchShellProps {
   tabs: readonly WorkbenchTabV1[]
   /** Render the active tab content. */
   renderTab: (tab: WorkbenchTabV1) => ReactNode
-  /** Optional session manager host adapter. */
+  /**
+   * Optional session manager host adapter. Falls back to the host- or
+   * plugin-bound real service when one is live, then to the honest placeholder.
+   */
   sessionHost?: SessionManagerHostV1 | undefined
   /** Optional callback when a session is opened. */
   onOpenSession?: ((sessionId: string) => void) | undefined
@@ -40,7 +44,7 @@ export function DesktopWorkbenchShell({ tabs, renderTab, sessionHost, onOpenSess
     <Surface kind="workspace" data-dsh-desktop-workbench data-sidebar-visible={String(sidebarVisible)}>
       <style data-dsh-desktop-workbench-styles>{desktopWorkbenchStyles}</style>
       <div data-dsh-desktop-shell-sidebar>
-        <SessionSidebar host={sessionHost ?? fallbackHost} onOpenSession={onOpenSession} lineageOf={lineageOf} />
+        <SessionSidebar host={sessionHost ?? resolveSessionManagerHost()} onOpenSession={onOpenSession} lineageOf={lineageOf} />
       </div>
       <main data-dsh-desktop-main>
         <header data-dsh-desktop-toolbar>
@@ -89,20 +93,6 @@ export function DesktopWorkbenchShell({ tabs, renderTab, sessionHost, onOpenSess
   )
 }
 
-const fallbackHost = {
-  version: '0.1.0-rc.1',
-  capability: 'session-manager',
-  async listSessions() {
-    return []
-  },
-  async archiveSession(sessionId: string) { return { status: 'not_implemented' as const, sessionId } },
-  async restoreSession(sessionId: string) { return { status: 'not_implemented' as const, sessionId } },
-  async trashSession(sessionId: string) { return { status: 'not_implemented' as const, sessionId } },
-  async purgeSession(sessionId: string) { return { status: 'not_implemented' as const, sessionId } },
-  async setLabels(sessionId: string) { return { status: 'not_implemented' as const, sessionId } },
-  async pauseSession(sessionId: string) { return { status: 'not_implemented' as const, sessionId } },
-  async resumeSession(sessionId: string) { return { status: 'not_implemented' as const, sessionId } },
-  async forkSession(sessionId: string) { return { status: 'not_implemented' as const, sessionId } },
-} satisfies SessionManagerHostV1
+
 
 export default DesktopWorkbenchShell

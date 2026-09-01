@@ -1,4 +1,4 @@
-> 状态：进行中（2026-08-31 设计定稿；起点硬门 = `ordo-dsh-plugin-visualization-v1` 归档，且排队于 G18 之后；2026-09-01 完成 §1 数据源审计 1.1/1.2，基线真数据率 4/10=40%，账本见 audit-ledger.md；其余未启动）。
+> 状态：进行中（2026-08-31 设计定稿；起点硬门 = `ordo-dsh-plugin-visualization-v1` 归档，且排队于 G18 之后；2026-09-01 完成 §1 数据源审计 1.1/1.2，基线真数据率 4/10=40%，账本见 audit-ledger.md；2026-09-01 完成 §3 官方已有 seam 真数据化 3.1/3.2（#6 接线，真数据率 5/10=50%）；§2/§4 未启动）。
 
 ## 1. 数据源审计
 
@@ -15,8 +15,10 @@
 
 ## 3. 官方已有 seam 真数据化
 
-- [ ] 3.1 token/session/model/用量相关面板逐一接官方已有 seam；seam 缺失处保留 probe-first 降级与原因。
-- [ ] 3.2 移除主路径上的静态演示数据；演示数据仅保留在显式标注的降级/空态。
+- [x] 3.1 token/session/model/用量相关面板逐一接官方已有 seam；seam 缺失处保留 probe-first 降级与原因。
+  Evidence (2026-09-01): 面板 #6 会话侧栏接线官方 seam：生产 adapter `packages/host/dsh-session-manager/src/adapter.ts:204,272,299`（listSessions 折叠 + archive 持久写 + fork 官方工厂）、动态激活 `src/index.ts:294`、消费面 `packages/bundle/dsh-desktop-workbench/src/index.ts:51,128` + `src/client/composed-workbench.tsx:79` + `packages/client/ui-desktop-workbench/src/client/desktop-workbench-shell.tsx:47`（真数据率 4/10=40%→5/10=50%，账本 §1 #6/§4）；#7（账本 §1 #7 行：`provider-adapter.ts:52-67` 空 accounts 投影、`pane-views.tsx:45-47` cookieJars 缺席禁用 apply/switch/clear）与 #8（账本 §1 #8 行：`p0-catalog.ts:106` disabled+reason）降级诚实性核验为只读引用，未改并行 lane 包。
+- [x] 3.2 移除主路径上的静态演示数据；演示数据仅保留在显式标注的降级/空态。
+  Evidence (2026-09-01): 审计账本 §1 表明主路径零静态演示数据——10 面板中真数据 5 + probe 降级 4（降级均为空态/禁用+原因，无伪造行）；唯一 fixture transport 为 #10（ui-command-experience-web `src/transport.ts:4` 自述 MSW fixture 占位、`:39` 占位端点），其生产未挂载（bundle 以 handoff descriptor 描述、不进 ModuleLoader）且归并行 command-first lane 所有（账本 §3 处置：本 change 不动），主路径因此无需移除项。
 
 ## 4. 验证与证据
 

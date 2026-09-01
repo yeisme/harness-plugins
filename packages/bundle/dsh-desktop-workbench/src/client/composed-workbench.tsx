@@ -20,7 +20,7 @@ import {
 } from '@yeisme/dsh-client-ui-desktop-workbench/client'
 import { sessionLineageLabel } from '@yeisme/dsh-client-ui-conversation-rewrite'
 import type { SessionManagerHostV1, SessionSummaryV1 } from '@yeisme/dsh-session-manager'
-import { createSessionManagerHostPlaceholder } from '@yeisme/dsh-session-manager'
+import { resolveSessionManagerHost } from '@yeisme/dsh-session-manager'
 import type { FileHostV1 } from '@yeisme/dsh-file-host'
 import { createFileHostPlaceholder } from '@yeisme/dsh-file-host'
 import type { TerminalHostV1, TerminalHostV2 } from '@yeisme/dsh-terminal-host'
@@ -30,7 +30,10 @@ import { TerminalPanel, type TerminalPanelState } from '@yeisme/dsh-terminal'
 import { createDesktopWorkbenchRegistry } from '../composed-registry.ts'
 
 export interface ComposedDesktopWorkbenchProps {
-  /** Optional session manager host adapter. */
+  /**
+   * Optional session manager host adapter. Falls back to the host- or
+   * plugin-bound real service when one is live, then to the honest placeholder.
+   */
   sessionHost?: SessionManagerHostV1 | undefined
   /** Optional file host adapter. */
   fileHost?: FileHostV1 | undefined
@@ -73,7 +76,7 @@ export function ComposedDesktopWorkbench({
 }: ComposedDesktopWorkbenchProps) {
   const registry = useMemo(createDesktopWorkbenchRegistry, [])
   const tabs = registry.snapshot().tabs
-  const effectiveSessionHost = sessionHost ?? createSessionManagerHostPlaceholder()
+  const effectiveSessionHost = sessionHost ?? resolveSessionManagerHost()
   const effectiveFileHost = fileHost ?? createFileHostPlaceholder()
   const effectiveNotificationHost = notificationHost ?? createNotificationHostPlaceholder()
   const lineageOf = useMemo(() => (session: SessionSummaryV1) => sessionLineageLabel(session), [])
