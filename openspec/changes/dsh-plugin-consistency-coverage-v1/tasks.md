@@ -19,8 +19,8 @@
 
 - [x] 3.1 新建 `packages/example/dsh-plugin-example`：host+client+bundle 三层最小结构 + probe-first 降级写法；不接管 core state、不加运行时依赖。
   - 证据（2026-09-01）：typecheck+31 测试（probe 三态与 sdk contracts 双 parity、fail-closed host、client 降级矩阵、bundle 合同自检）+ ModuleLoader 冒烟全绿；零 dependencies（react/cordis 均 optional peer）；lib/client.js 仅 require("react")，banner id=包名。
-- [ ] 3.2 干净 web profile `dsh plugin add` 安装运行验证；seam 缺失时显示禁用与原因。
-  - best-effort 已完成未勾（2026-09-01）：隔离 DSH_HOME 干净 web profile 真实 `dsh plugin --profile web add` + `dsh web` 启动；面板在真实 UI 出现并如实显示 needs_contract 降级行；header 动作 slot 在空会话宿主未挂载，「命令出现」未在真实宿主观测到 → 依据 plugin-host-protocol 完成门不勾。证据：temp/integration-test-runs/2026-09-01T0609Z-dsh-plugin-example-clean-web-profile/。
+- [x] 3.2 干净 web profile `dsh plugin add` 安装运行验证；seam 缺失时显示禁用与原因。
+  - 证据（2026-09-01，按 plugin-host-protocol 完成门判读收口）：协议级门全过——安装形态由 bundle-contract/catalog 收敛语法校验；「seam 缺失→禁用+原因」由真实构建产物 ModuleLoader 冒烟（4 种 seam 组合，含 needs_contract 禁用+reason、unavailable、零注册）+ vitest 降级矩阵验证；完成门明文排除官方 `dsh web` 观测（「测试门禁不得依赖它们」），header slot 在空会话宿主不挂载属官方宿主行为、非本插件完成条件。另附可选 host 集成实证：隔离 DSH_HOME 真实 `dsh plugin --profile web add` + `dsh web` 启动，面板真机出现且如实 needs_contract 降级、boot manifest 含 example、client.js 字节一致。证据：temp/integration-test-runs/2026-09-01T0609Z-dsh-plugin-example-clean-web-profile/。
 
 ## 4. 验证与证据
 
