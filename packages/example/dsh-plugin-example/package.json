@@ -1,0 +1,86 @@
+{
+  "name": "@yeisme/dsh-plugin-example",
+  "version": "0.1.0-rc.1",
+  "description": "DSH plugin example: minimal host+client+bundle reference plugin demonstrating probe-first degradation (disabled with reason when a seam is missing)",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "pnpm --filter @yeisme/dsh-plugin-contracts run build && pnpm run build && vitest run && pnpm run smoke:bundle",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json && tsdown",
+    "bundle": "tsdown",
+    "smoke:bundle": "node scripts/smoke-bundle.mjs"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "example",
+    "plugin"
+  ],
+  "author": "yeisme",
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ],
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.0-rc.6",
+    "react": "^18.3.1"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-runtime": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-slots": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@types/react": "~18.3.31",
+    "@yeisme/dsh-plugin-contracts": "workspace:*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

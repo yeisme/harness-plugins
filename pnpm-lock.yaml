@@ -21,6 +21,9 @@ importers:
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.1
+      '@yeisme/dsh-plugin-catalog':
+        specifier: workspace:*
+        version: link:packages/catalog/dsh-plugin-catalog
       '@yeisme/dsh-plugin-toolchain':
         specifier: workspace:*
         version: link:packages/tool/dsh-plugin-toolchain
@@ -1187,6 +1190,21 @@ importers:
         specifier: 0.1.0-rc.8
         version: 0.1.0-rc.8(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-client-runtime@0.1.0-rc.6(2e7801b4bc3df44e2ff6c3a6bbd5f2d6))(@deepseek-ai/dsh-client-ui-theme@0.1.0-rc.8(dfde9e0a51eaca79f2903bb5de0d8208))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
 
+  packages/catalog/dsh-plugin-catalog:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.1
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(tsx@4.23.12)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jsdom@30.0.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(tsx@4.23.12)(yaml@2.9.0)
+
   packages/client/command-experience-core:
     dependencies:
       zod:
@@ -1596,6 +1614,9 @@ importers:
       '@yeisme/dsh-ordo-agent-ops':
         specifier: workspace:*
         version: link:../../bundle/ordo-agent-ops
+      '@yeisme/dsh-plugin-contracts':
+        specifier: workspace:^
+        version: link:../../sdk/dsh-plugin-contracts
       '@yeisme/dsh-session-manager':
         specifier: workspace:*
         version: link:../../host/dsh-session-manager
@@ -2074,6 +2095,9 @@ importers:
       '@yeisme/dsh-pane-protocol':
         specifier: workspace:^
         version: link:../../host/pane-protocol
+      '@yeisme/dsh-plugin-contracts':
+        specifier: workspace:^
+        version: link:../../sdk/dsh-plugin-contracts
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.1
@@ -2117,6 +2141,9 @@ importers:
       '@yeisme/dsh-pane-protocol':
         specifier: workspace:^
         version: link:../../host/pane-protocol
+      '@yeisme/dsh-plugin-contracts':
+        specifier: workspace:^
+        version: link:../../sdk/dsh-plugin-contracts
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.1
@@ -2182,6 +2209,9 @@ importers:
 
   packages/client/ui-selection-annotation:
     dependencies:
+      '@yeisme/dsh-plugin-contracts':
+        specifier: workspace:^
+        version: link:../../sdk/dsh-plugin-contracts
       '@yeisme/dsh-selection-host':
         specifier: workspace:*
         version: link:../../host/dsh-selection-host
@@ -2462,6 +2492,40 @@ importers:
 
   packages/client/ui-visual-kit:
     devDependencies:
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(tsx@4.23.12)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jsdom@30.0.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(tsx@4.23.12)(yaml@2.9.0)
+
+  packages/example/dsh-plugin-example:
+    dependencies:
+      '@deepseek-ai/dsh-client-runtime':
+        specifier: 0.1.0-rc.6
+        version: 0.1.0-rc.6(2e7801b4bc3df44e2ff6c3a6bbd5f2d6)
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: 0.1.0-rc.6
+        version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: ^4.0.1
+        version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
+      '@types/react':
+        specifier: ~18.3.31
+        version: 18.3.31
+      '@yeisme/dsh-plugin-contracts':
+        specifier: workspace:*
+        version: link:../../sdk/dsh-plugin-contracts
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
       tsdown:
         specifier: ^0.22.14
         version: 0.22.14(tsx@4.23.12)(typescript@5.9.3)

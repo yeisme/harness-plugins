@@ -1,0 +1,43 @@
+{
+  "name": "@yeisme/dsh-plugin-catalog",
+  "version": "0.1.0-rc.1",
+  "description": "DSH plugin catalog: build-time static manifest of installable harness-plugins bundles plus a local query CLI; no network service, no telemetry, no second registry",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.mts",
+      "default": "./lib/index.mjs"
+    },
+    "./cli": {
+      "types": "./lib/cli.d.mts",
+      "default": "./lib/cli.mjs"
+    },
+    "./generate": {
+      "types": "./lib/generate.d.mts",
+      "default": "./lib/generate.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "dsh-plugin-catalog": "./lib/cli.mjs"
+  },
+  "files": [
+    "lib/**",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.json && tsdown && node lib/cli.mjs generate",
+    "catalog": "node lib/cli.mjs",
+    "manifest:generate": "node lib/cli.mjs generate"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

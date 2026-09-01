@@ -28,6 +28,7 @@
     "@deepseek-ai/cordis": "^4.0.1",
     "@playwright/test": "1.60.0",
     "@types/node": "^22.0.0",
+    "@yeisme/dsh-plugin-catalog": "workspace:*",
     "@yeisme/dsh-plugin-toolchain": "workspace:*",
     "tsdown": "^0.22.2",
     "tsx": "^4.23.12",

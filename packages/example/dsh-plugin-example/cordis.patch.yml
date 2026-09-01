@@ -1,0 +1,14 @@
+# Yeisme DSH plugin example — reference bundle (G21 dsh-plugin-consistency-coverage-v1 §3).
+# Install from this checkout into a clean profile:
+#   dsh plugin --profile web add ./packages/example/dsh-plugin-example
+#
+# One profile row composing the three reference faces of this package:
+# - Host face (root export): probes an optional host seam and fails closed
+#   (registers nothing, fakes nothing) while the seam is missing.
+# - Client face (./client): probes slots / paneWorkbench / the demo data seam
+#   before registering anything; a missing seam degrades visibly — the header
+#   entry stays visible but disabled with a readable reason, never a dead
+#   button and never a faked host.
+- insert:
+    - id: dsh-plugin-example
+      name: '@yeisme/dsh-plugin-example'
