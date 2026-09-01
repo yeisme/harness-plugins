@@ -1,9 +1,11 @@
-> 状态：骨架（2026-08-31 设计定稿；起点硬门 = `ordo-dsh-plugin-visualization-v1` 归档，且排队于 G18 之后；全任务未启动）。
+> 状态：进行中（2026-08-31 设计定稿；起点硬门 = `ordo-dsh-plugin-visualization-v1` 归档，且排队于 G18 之后；2026-09-01 完成 §1 数据源审计 1.1/1.2，基线真数据率 4/10=40%，账本见 audit-ledger.md；其余未启动）。
 
 ## 1. 数据源审计
 
-- [ ] 1.1 盘点常用面板（ordo/team-hub、token/session/model/用量、command-first 状态中枢）数据源现状，产出三态标注审计清单与基线真数据率。
-- [ ] 1.2 把审计清单落为本 change 的验收账本文件，随任务推进更新。
+- [x] 1.1 盘点常用面板（ordo/team-hub、token/session/model/用量、command-first 状态中枢）数据源现状，产出三态标注审计清单与基线真数据率。
+  Evidence (2026-09-01): 10 面板逐一以代码事实标注三态（真数据 4 / probe 降级 5 / 静态演示 1），基线真数据率 4/10=40%；证据 file:line 见 audit-ledger.md §1（token/session 官方 seam 链、ordo owner seam 缺席 needs_contract、session-manager placeholder、command-first fixture transport 等）。
+- [x] 1.2 把审计清单落为本 change 的验收账本文件，随任务推进更新。
+  Evidence (2026-09-01): 新建 openspec/changes/dsh-web-real-data-self-owned-v1/audit-ledger.md（§1 审计表+§2 真数据率+§3 seam 缺失底账+§4 变更记录表，随任务推进追加行）。
 
 ## 2. ordo/team-hub 真数据链
 
