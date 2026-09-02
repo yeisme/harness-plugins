@@ -1,0 +1,29 @@
+## 0. 规格与文档基线
+
+- [x] 0.1 [owner: plugin platform spec] 冻结 base pack、structured surface、parity、health 与 additive compatibility；Acceptance: 不建立 registry/marketplace/第二真相；Validation: `openspec validate dsh-personal-coding-plugin-platform-v1 --strict --no-interactive`；Expected: valid。
+- [x] 0.2 [owner: docs] 新增个人编码发行/插件 surface 设计文档并更新 `docs/README.md`；Acceptance: 清楚区分当前可用与计划能力；Validation: `git diff --check`。Evidence: `docs/design/dsh-personal-coding-plugin-platform.md` 与索引已落地；SDK/example/base bundle README 留在对应实现任务中更新。
+
+## 1. SDK 与结构化 surface
+
+- [x] 1.1 [owner: `packages/sdk/dsh-plugin-contracts`] additive 实现 contribution/view/action/health/receipt V1 类型、codec、probe 和 redaction；Dependencies: none；Acceptance: 六 view kinds、有界 payload、敏感字段 fail closed，复杂协议/边界中文注释；Validation: `pnpm --filter @yeisme/dsh-plugin-contracts test`；Evidence: `packages/sdk/dsh-plugin-contracts/tests/surface.spec.ts`、`personal-coding.spec.ts`。
+- [x] 1.2 [owner: SDK tests] 固定 Web host、TUI structural mirror、unknown version/kind、stale revision、dispose/reload fixtures；Dependencies: 1.1；Acceptance: 旧 exports/consumers 继续编译，任一字段丢失红灯；Validation: SDK build/typecheck/test；Evidence: SDK tests + root cross-project verifier。
+- [x] 1.3 [owner: `packages/example/dsh-plugin-example`] 扩展参考插件为 command + list/detail/diff + previewed action + health 的双表面示例；Dependencies: 1.1；Acceptance: 缺 seam/版本不兼容可降级，零 canonical state；Validation: `pnpm --filter @yeisme/dsh-plugin-example test`；Evidence: `packages/example/dsh-plugin-example/tests/structured-surface.spec.ts`。
+
+## 2. 基础包、Packs 与 Catalog
+
+- [x] 2.1 [owner: `packages/bundle/dsh-personal-coding-base`] 创建最小基础 bundle 与 Cordis patch，组合 allowlisted coding capabilities；Dependencies: 1.x；Acceptance: 不默认加入创作/领域 panes，无 duplicate insert，复杂组合说明中文注释；Validation: focused bundle smoke；Evidence: `packages/bundle/dsh-personal-coding-base/`、`scripts/generate-personal-coding-base.mjs`。
+- [x] 2.2 [owner: catalog] 为 base 与 packs 增加静态 metadata、stable ids、dependencies、critical/optional 和 source path；Dependencies: 2.1；Acceptance: 无网络/遥测，unknown/uninstallable pack fail closed；Validation: `pnpm --filter @yeisme/dsh-plugin-catalog test`；Evidence: `packages/catalog/dsh-plugin-catalog/tests/personal-coding.spec.ts`。
+- [x] 2.3 [owner: toolchain] 增加 base graph、pack compatibility、structured projection、health isolation 与 size/startup checks；Dependencies: 1-2；Acceptance: 冲突 insert、敏感 payload、任意 renderer、silent failure 均红灯；Validation: `pnpm --filter @yeisme/dsh-plugin-toolchain test`；Evidence: `packages/tool/dsh-plugin-toolchain/tests/personal-coding-contract.spec.ts`。
+
+## 3. Parity、Health 与命令
+
+- [x] 3.1 [owner: parity fixtures] 建立 personal coding command/view/action/receipt fixture，固定 id/owner/effect/risk/version/reason；Dependencies: 1.x；Acceptance: Web/TUI 语义一致，renderer/像素不纳入比较；Validation: focused parity tests；Evidence: SDK personal-coding fixture + root verifier。
+- [x] 3.2 [owner: plugin health] 实现 contribution 级 available/degraded/disabled projection、critical/optional 聚合、bounded fix 和 retry/reconcile policy；Dependencies: 1.1；Acceptance: 单 pack 失败不阻断 base，unknown action outcome 不自动 retry；Validation: fault-injection tests；Evidence: SDK/toolchain tests。
+- [x] 3.3 [owner: command-experience] additive 投影 `/ordo run launch` capability，保留 `/ordo` namespace 和现有目录；Dependencies: Ordo schema fixture；Acceptance: 仅有 `run start` 时仍 disabled，不解析/执行 shell string；Validation: `pnpm --filter @yeisme/dsh-command-experience test` 与 `test:integration`；Evidence: `packages/client/command-experience-core/tests/p0-catalog.test.ts`。
+- [x] 3.4 [owner: Web contract consumer] 接入 V1 probe/fixtures/disabled states，不建设新视觉面板；Dependencies: 1-3；Acceptance: contract parity 通过且 presentation 如实 unavailable；Validation: focused Web adapter tests；Evidence: `packages/client/ui-command-experience-web/tests/personal-coding.spec.ts`。
+
+## 4. 集成与质量门
+
+- [x] 4.1 [owner: integration] 用真实 local DSH profile 验证 base install/boot、optional pack failure、hot dispose/reload、Web/TUI fixture 和 Ordo unavailable/available；Dependencies: 1-3；Acceptance: 成功/失败 evidence 六件套完整且无敏感内容。Evidence: disposable `DSH_HOME` setup installs TUI-safe sibling layers (command/workbench-core/terminal/Ordo) plus composition marker; mermaid optional pack keeps base; injected browser add failure rolls back; unknown pack fail-closed exit 2; dump-config names members and excludes webServer plugins; help names `dsh`; doctor JSON redacts secrets/paths and treats Ordo as optional degraded. Two real `dsh --profile tui --debug-tui` PTY boots load plugins, show ready chrome, two-step quit, `wait_status=0`/`exitcode=0`, no plugin-tree errors, transcripts in artifacts. Latest six-pack `temp/integration-test-runs/2026-09-02T13-27-07-104Z-2299225/` (`status: passed`); consistent prior run `temp/integration-test-runs/2026-09-02T13-26-26-379Z-2293678/`. No user profile was mutated.
+- [x] 4.2 [owner: maintainer] 运行 `pnpm run typecheck && pnpm run test && pnpm run test:integration && pnpm run build && pnpm run check:bundles && pnpm run check:surfaces && pnpm run check:plugins && openspec validate dsh-personal-coding-plugin-platform-v1 --strict --no-interactive`；Dependencies: 4.1；Acceptance: 全绿且无 contract drift。Evidence: workspace typecheck、test、integration、build 均 exit 0；component evidence `temp/integration-test-runs/2026-09-02T13-28-15-432Z-2b6d4955/summary.json` passed，并产出五张状态截图；bundle contracts 27/27；Web surface conformance 29 client + 7 bundle；plugin checks 六类全部零 findings（bundle 27、declaration 31、safe projection 625、dispose/HMR 471、visual 26、personal coding 10）；strict OpenSpec valid。
+- [x] 4.3 [owner: compatibility reviewer] 记录 SDK/bundle/command surfaces 为 additive、内部 V1 稳定 floor、consumer list 和 rollback；Dependencies: 4.2；Acceptance: `breaking_surfaces=[]`，未来 rename/removal 至少一个 release 双读。Evidence: `docs/design/dsh-personal-coding-plugin-platform.md` 已记录 additive surfaces、V1 floor、consumer/rollback 和双读约束，`breaking_surfaces=[]`。

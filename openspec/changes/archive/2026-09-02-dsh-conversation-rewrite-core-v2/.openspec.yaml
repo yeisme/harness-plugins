@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-09-02
+goal: 抽取 Web 与 TUI 共用的纯 TypeScript 对话改写边界与分阶段恢复核心，同时保持现有 Web 包和 DSH Session
+  owner 语义兼容
