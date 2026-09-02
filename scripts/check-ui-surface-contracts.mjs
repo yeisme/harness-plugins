@@ -31,6 +31,7 @@ const clientCatalog = {
   'ui-session-cookie-manager': 'adopted',
   'ui-selection-annotation': 'pending', // neighbor lane: adopting shared Surface/token contract
   'ui-session-tags': 'adopted',
+  'ui-session-status': 'excluded', // pure view-model/state logic; Web rendering is owned by ui-command-experience-web (SESSION_STATUS_VIEW_ID)
   'ui-structured-content': 'embed',
   'ui-surface': 'adopted',
   'ui-token-usage': 'adopted',

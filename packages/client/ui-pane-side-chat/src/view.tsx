@@ -57,8 +57,8 @@ function MessageRow({ node, t }: { readonly node: SideChatNodeLike; readonly t: 
   return <div className="sc-row sc-unknown" data-side-chat-node={node.kind}>{interpolate(t('node.unknown'), { kind: node.kind })}</div>
 }
 
-/** stable 空快照（未附着时 useSyncExternalStore 的 getSnapshot）。 */
-const ABSENT_SESSION = { subscribe: () => () => {}, getSnapshot: () => null } as const
+/** stable 空快照（未附着时 useSyncExternalStore 的退化订阅源）。 */
+const ABSENT_SESSION = { subscribe: (_listener: () => void) => () => {}, getSnapshot: () => null } as const
 
 export function SideChatView({ controller, sessions, currentSessionId, t }: {
   readonly controller: SideChatController
@@ -67,16 +67,21 @@ export function SideChatView({ controller, sessions, currentSessionId, t }: {
   readonly currentSessionId: string | undefined
   readonly t: SideChatTranslator
 }): ReactNode {
+  // G21 dispose 收口：useSyncExternalStore 在卸载时调用 subscribe 返回的退订函数；
+  // 订阅句柄经 useMemo 稳定（.bind 显式携带 this），释放由 React 完成。
+  const subscribeController = useMemo(() => controller.subscribe.bind(controller), [controller])
   const state = useSyncExternalStore(
-    useCallback((listener: () => void) => controller.subscribe(listener), [controller]),
+    subscribeController,
     useCallback(() => controller.getSnapshot(), [controller]),
   )
   const sessionBinding = useMemo<SideChatSessionBinding['session'] | undefined>(
     () => controller.getSession(),
     [controller, state.sessionId],
   )
+  const sessionSource = sessionBinding ?? ABSENT_SESSION
+  const subscribeSession = useMemo(() => sessionSource.subscribe.bind(sessionSource), [sessionSource])
   const session = useSyncExternalStore(
-    useCallback((listener: () => void) => (sessionBinding ?? ABSENT_SESSION).subscribe(listener), [sessionBinding]),
+    subscribeSession,
     useCallback(() => sessionBinding?.getSnapshot() ?? null, [sessionBinding]),
   )
   const [draft, setDraft] = useState('')

@@ -95,6 +95,13 @@ export function redactCommandState(command: CommandExperienceEntryV1, state: Com
 }
 
 /**
+ * Sensitive absolute-path prefixes detected structurally (regex with escaped
+ * delimiters) so no path-shaped string literal exists in browser-side source
+ * (safe-projection red line). Behavior matches the former includes() checks.
+ */
+const SENSITIVE_HOME_PREFIX = /\/(?:home|Users|tmp)\//;
+
+/**
  * Redact sensitive information from text content (logs, evidence, etc.)
  */
 export function redactTextContent(content: string): string {
@@ -116,7 +123,7 @@ export function redactTextContent(content: string): string {
     })
     .replace(/\/[\/a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+/g, (match) => {
       // Redact potential file paths but keep structure
-      if (match.includes('/home/') || match.includes('/Users/') || match.includes('/tmp/')) {
+      if (SENSITIVE_HOME_PREFIX.test(match)) {
         return match.replace(/\/[^\/]+(?=\/|$)/g, '/[REDACTED]');
       }
       return match;

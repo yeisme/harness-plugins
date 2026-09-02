@@ -12,6 +12,8 @@
  * @module @yeisme/dsh-client-ui-pane-side-chat/controller
  */
 
+import { subscriptionHandle } from '@yeisme/dsh-plugin-contracts'
+
 /** 官方 client runtime faces 的结构化子集（与 ISessions/SessionFace 对齐）。 */
 export interface SideChatSessionsFace {
   readonly list: {
@@ -123,14 +125,17 @@ export class SideChatController {
       this.patch({ phase: 'unresolvable', sessionId, error: `session ${sessionId} cannot be resolved for side chat` })
       return
     }
-    this.disposeSession = binding.session.subscribe(() => {
+    // G21 dispose 收口：session 订阅经 sdk 幂等句柄收口，释放路径（detach/rebind）
+    // 在订阅所在文件显式可见；重复释放为 no-op。
+    const sessionEvents = subscriptionHandle(binding.session.subscribe(() => {
       if (this.disposed) return
       const snapshot = binding.session.getSnapshot()
       this.patch({
         promptError: snapshot.promptError?.message,
         sending: false,
       })
-    })
+    }))
+    this.disposeSession = () => sessionEvents.unsubscribe()
   }
 
   private titleOf(sessionId: string): string {

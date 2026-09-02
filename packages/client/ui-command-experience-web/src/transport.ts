@@ -3,6 +3,9 @@
  *
  * The plugin only submits opaque refs and correlation ids. MSW fixtures
  * stand in for the owner when official DSH receipts are unavailable.
+ * The base URL is owner-supplied: the default resolves to same-origin
+ * relative paths so no raw provider URL is baked into browser-side
+ * source (safe-projection red line).
  */
 
 export interface OwnerActionTransportRequest {
@@ -36,11 +39,9 @@ export interface OwnerActionTransport {
   readonly listThreads: () => Promise<Array<{ id: string; title: string }>>;
 }
 
-const DEFAULT_BASE = 'https://api.deepseek.com/v1';
-
 export function createOwnerActionTransport(
   fetchImpl: typeof fetch = fetch,
-  baseUrl = DEFAULT_BASE,
+  baseUrl = '',
 ): OwnerActionTransport {
   return {
     async submit(request) {

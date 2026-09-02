@@ -31,6 +31,7 @@ import {
 import { buildP0Catalog, OFFICIAL_OWNED_INSPECT_NAMES, type OwnerCapabilitySnapshot } from './p0-catalog';
 import type { CommandExperienceEntryV1 } from './types';
 import { registerConvergedSource, unloadConvergedSource } from './entry-convergence';
+import { subscriptionHandle } from '@yeisme/dsh-plugin-contracts';
 
 export interface SlashPaneViewRecord extends PaneSlashViewSnapshot {
   readonly resourceKey?: string;
@@ -219,17 +220,25 @@ export function createSlashRuntime(host: SlashRuntimeHost = {}): SlashRuntime {
   };
 
   rebuild();
+  // G21 dispose 收口：订阅点经 sdk 幂等句柄收口，释放路径在订阅所在文件
+  // 显式可见（dispose-hmr-conformance 观测门对称性）。
   if (host.paneWorkbench !== undefined) {
-    disposers.push(host.paneWorkbench.views.subscribe(rebuild));
-    disposers.push(host.paneWorkbench.commands.subscribe(rebuild));
+    const viewEvents = subscriptionHandle(host.paneWorkbench.views.subscribe(rebuild));
+    disposers.push(() => viewEvents.unsubscribe());
+    const commandEvents = subscriptionHandle(host.paneWorkbench.commands.subscribe(rebuild));
+    disposers.push(() => commandEvents.unsubscribe());
   }
   if (host.hostCommands?.subscribe !== undefined) {
-    disposers.push(host.hostCommands.subscribe(rebuild));
+    const hostCommandEvents = subscriptionHandle(host.hostCommands.subscribe(rebuild));
+    disposers.push(() => hostCommandEvents.unsubscribe());
   }
 
   return {
     snapshot: () => directory.snapshot(),
-    subscribe: (listener) => directory.subscribe(listener),
+    subscribe(listener: () => void): () => void {
+      const events = subscriptionHandle(directory.subscribe(listener));
+      return () => events.unsubscribe();
+    },
     surfaces: () => surfacesFrom(host),
     execute(command, query) {
       const plan = planInspectCommand({
@@ -340,9 +349,9 @@ export function syncInspectRegistrations(
     }
   };
   applySnapshot();
-  const unsubscribe = runtime.subscribe(applySnapshot);
+  const directoryEvents = subscriptionHandle(runtime.subscribe(applySnapshot));
   return () => {
-    unsubscribe();
+    directoryEvents.unsubscribe();
     for (const dispose of active.values()) dispose();
     active.clear();
   };

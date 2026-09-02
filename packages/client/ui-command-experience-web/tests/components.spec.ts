@@ -23,6 +23,7 @@ import {
   MALICIOUS_PLUGIN_DESCRIPTOR,
   MOCK_SESSIONS,
   MOCK_THREADS,
+  OWNER_ACTION_BASE_URL,
   WEB_COMMAND_CATALOG,
   ownerActionHandlers,
 } from './fixtures';
@@ -127,7 +128,7 @@ describe('CommandSelector keyboard flow', () => {
     store.dispatch({ type: 'SELECT_COMMAND', command: resume });
     store.dispatch({ type: 'OPEN_SELECTOR' });
 
-    const transport = createOwnerActionTransport();
+    const transport = createOwnerActionTransport(fetch, OWNER_ACTION_BASE_URL);
     const sessions = await transport.listSessions();
     const items = sessions.map((session) => ({
       id: session.id,
@@ -187,7 +188,7 @@ describe('CommandSelector keyboard flow', () => {
   });
 
   it('loads thread options from the owner-action fixture without changing draft on failed receipt', async () => {
-    const transport = createOwnerActionTransport();
+    const transport = createOwnerActionTransport(fetch, OWNER_ACTION_BASE_URL);
     const threads = await transport.listThreads();
     expect(threads.map((thread) => thread.id)).toEqual(MOCK_THREADS.map((thread) => thread.id));
 

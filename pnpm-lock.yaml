@@ -1207,6 +1207,9 @@ importers:
 
   packages/client/command-experience-core:
     dependencies:
+      '@yeisme/dsh-plugin-contracts':
+        specifier: workspace:^
+        version: link:../../sdk/dsh-plugin-contracts
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -1813,6 +1816,9 @@ importers:
       '@yeisme/dsh-client-ui-structured-content':
         specifier: workspace:*
         version: link:../ui-structured-content
+      '@yeisme/dsh-plugin-contracts':
+        specifier: workspace:^
+        version: link:../../sdk/dsh-plugin-contracts
       mermaid:
         specifier: ^11.4.0
         version: 11.17.2
@@ -2055,6 +2061,9 @@ importers:
       '@yeisme/dsh-client-ui-surface':
         specifier: workspace:^
         version: link:../ui-surface
+      '@yeisme/dsh-plugin-contracts':
+        specifier: workspace:^
+        version: link:../../sdk/dsh-plugin-contracts
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.1

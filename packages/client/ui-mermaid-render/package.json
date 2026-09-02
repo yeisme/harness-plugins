@@ -45,6 +45,7 @@
   },
   "dependencies": {
     "@yeisme/dsh-client-ui-structured-content": "workspace:*",
+    "@yeisme/dsh-plugin-contracts": "workspace:^",
     "mermaid": "^11.4.0"
   },
   "peerDependencies": {

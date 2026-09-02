@@ -3,12 +3,13 @@
  *
  * 不注册 slot、不 shadowing 任何宿主渲染：只以观察器把已稳定的
  * ```mermaid``` fence 增量嫁接为净化 SVG figure。kill-switch：
- * `localStorage['dsh-mermaid'] === 'off'`。
+ * 偏好存储 `dsh-mermaid === 'off'`（经 sdk seam 三态探测访问）。
  *
  * @module @yeisme/dsh-client-ui-mermaid-render/client
  */
 
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import { browserPreferenceStorage, probeCapability } from '@yeisme/dsh-plugin-contracts'
 import { MarkdownTableEnhancer } from '@yeisme/dsh-client-ui-structured-content'
 import { labelsFor } from './locales.ts'
 import { createMermaidRenderer } from './render.ts'
@@ -34,9 +35,13 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
     ? { title: 'Table', copy: 'Copy TSV', copied: 'Copied' }
     : { title: '表格', copy: '复制 TSV', copied: '已复制' })
   tableEnhancer.start(document.documentElement)
+  // G21 safe-projection 收口：浏览器 storage 只经 sdk seam 三态探测访问
+  // （SAFEPROJ/BROWSER_STORAGE_ACCESS 观测红线）；不可用（SSR/隐私模式）时
+  // 视为未关闭，渲染主路径不受影响。
   let disabled = false
   try {
-    disabled = window.localStorage?.getItem('dsh-mermaid') === 'off'
+    const probed = probeCapability(browserPreferenceStorage)
+    disabled = probed.status === 'available' && probed.capability.getItem('dsh-mermaid') === 'off'
   } catch {
     disabled = false
   }

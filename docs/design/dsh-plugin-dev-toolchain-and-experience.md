@@ -143,3 +143,15 @@ R8 要求 DX 实现排队于「在途 V3 系列收尾」之后，目的是避免
 - **Wave 3 节奏外部制约**：受 command-first 冻结时间影响，波动直接传导 G20。
 - **首跑红灯量未知**：31 包 conformance 基线红灯量未探测，Wave 1 验收以「跑通+基线报告」为界，清零量归 Wave 4 评估。
 - **跨 lane 包接触**：Wave 2 会改 ordo-agent-ops 相关包，与在途 ordo visualization change 存在包重叠；以「该 change 先归档」为硬门。
+
+## 8. 四波收口结论（2026-09-02）
+
+| Wave | change | 状态 | 结论 |
+| --- | --- | --- | --- |
+| W1/G18 | dsh-plugin-dev-toolchain-v1 | 已归档（2026-09-01） | 五检查器 + 基线报告落地；`pnpm check:plugins` 成为机械化门禁入口；基线 50 红（dispose 36、safeproj 12、decl 2、visual-token 0）。 |
+| W2/G19 | dsh-web-real-data-self-owned-v1 | 已归档（2026-09-02） | 审计账本 + SessionManagerHostV1 官方 seam 生产接线，真数据率 40%→50%；ordo 两面板按 DAG 等 ordo-viz 归档。 |
+| W3/G20 | dsh-web-command-entry-convergence-v1 | 已归档（2026-09-02） | 入口收敛消费 command-first 冻结产物；command-first 三 change（web/tui command-first、real-data）全归档，其包面随之解冻。 |
+| W4/G21 | dsh-plugin-consistency-coverage-v1 | 进行中（5/10） | catalog/example 两新包落地；红灯 50→16（2026-09-01）→9（2026-09-02，含 VT 回归清零）；余 9 项全部位于四个在途 lane 禁改包（dsh-terminal 3、ui-interaction-space 2、ordo-agent-ops 2、dsh-rich-media 2），清零条件 = 对应 lane 冻结（见 change tasks 1.2/1.3 归属记录）。 |
+
+- 清零轨迹对照 G18 基线：dispose 36→8、safeproj 12→1、decl-lint 2→0、visual-token 0→0（09-02 曾因新增包 ui-session-status 未分类回红 1，当日补分类清零）；bundle-contract 全程 0。
+- 14 天 dogfood 观测（R11 主指标）：窗口 2026-09-01 起，观测记录以 `temp/toolchain-runs/<ts>-toolchain` 门禁报告序列为准（每日收口跑 `pnpm check:plugins` 落盘）；窗口未满，结论以窗口末报告为准。

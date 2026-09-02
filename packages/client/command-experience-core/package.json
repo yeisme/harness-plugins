@@ -50,6 +50,7 @@
     "vitest": "^3.2.7"
   },
   "dependencies": {
+    "@yeisme/dsh-plugin-contracts": "workspace:^",
     "zod": "^4.4.3"
   }
 }

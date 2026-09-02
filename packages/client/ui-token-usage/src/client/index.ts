@@ -12,11 +12,11 @@
  * @module @yeisme/dsh-client-ui-token-usage/client
  */
 
-import { createElement, useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { createElement, useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SurfaceState } from '@yeisme/dsh-client-ui-surface'
-import { ControllerBinding, OverlayToggle, TokenUsageController } from './controller.ts'
+import { ControllerBinding, OverlayToggle, TokenUsageController, type TokenUsageControllerState } from './controller.ts'
 import { en, NS, zh, type TokenUsageKey, type TokenUsageTranslator } from './locales.ts'
 import { TokenUsagePanel } from './panel.tsx'
 import { deriveTokenUsageViewModel } from './projection.ts'
@@ -28,6 +28,12 @@ export const inject = ['slots', 'locale'] as const
 
 /** Stable empty-controller snapshot for useSyncExternalStore before attach. */
 const IDLE_SURFACE_STATE = Object.freeze({ status: 'idle' }) as { readonly status: 'idle' }
+
+/** Stable idle store source：controller 未附着时的订阅/快照退化（零注册、零渲染）。 */
+const IDLE_STATE_STORE: { readonly subscribe: (listener: () => void) => () => void; readonly getSnapshot: () => TokenUsageControllerState | { readonly status: 'idle' } } = Object.freeze({
+  subscribe: (_listener: () => void) => () => {},
+  getSnapshot: () => IDLE_SURFACE_STATE,
+})
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -87,15 +93,20 @@ function TokenUsageSurface({ binding, t }: {
   readonly binding: ControllerBinding
   readonly t: TokenUsageTranslator
 }): ReactNode {
+  // G21 dispose 收口：useSyncExternalStore 在卸载时调用 subscribe 返回的退订函数；
+  // 订阅句柄经 useMemo 稳定（.bind 显式携带 this 语义），释放由 React 完成。
+  const subscribeBinding = useMemo(() => binding.subscribe.bind(binding), [binding])
   const controller = useSyncExternalStore(
-    useCallback((listener: () => void) => binding.subscribe(listener), [binding]),
+    subscribeBinding,
     useCallback(() => binding.getSnapshot(), [binding]),
   )
   // Subscribe to the controller state too: refresh() settles asynchronously
   // and the snapshot must be cached between emissions (stable getSnapshot).
+  const stateSource = controller ?? IDLE_STATE_STORE
+  const subscribeState = useMemo(() => stateSource.subscribe.bind(stateSource), [stateSource])
   const state = useSyncExternalStore(
-    useCallback((listener: () => void) => controller?.subscribe(listener) ?? (() => {}), [controller]),
-    useCallback(() => controller?.getSnapshot() ?? IDLE_SURFACE_STATE, [controller]),
+    subscribeState,
+    useCallback(() => stateSource.getSnapshot(), [stateSource]),
   )
   const [refreshing, setRefreshing] = useState(false)
   useEffect(() => {
@@ -119,12 +130,15 @@ function OverlaySeat({ binding, toggle, t }: {
   readonly toggle: OverlayToggle
   readonly t: TokenUsageTranslator
 }): ReactNode {
+  // G21 dispose 收口：同上——订阅句柄经 useMemo 稳定，React 卸载时调用退订函数释放。
+  const subscribeToggle = useMemo(() => toggle.subscribe.bind(toggle), [toggle])
   const open = useSyncExternalStore(
-    useCallback((listener: () => void) => toggle.subscribe(listener), [toggle]),
+    subscribeToggle,
     useCallback(() => toggle.isOpen(), [toggle]),
   )
+  const subscribeBinding = useMemo(() => binding.subscribe.bind(binding), [binding])
   const controller = useSyncExternalStore(
-    useCallback((listener: () => void) => binding.subscribe(listener), [binding]),
+    subscribeBinding,
     useCallback(() => binding.getSnapshot(), [binding]),
   )
   useEffect(() => {

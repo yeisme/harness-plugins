@@ -60,8 +60,10 @@ export const MALICIOUS_PLUGIN_DESCRIPTOR = {
   execute: () => 'must-not-run',
 };
 
-// Base URL for DSH owner action API
-const BASE_URL = 'https://api.deepseek.com/v1';
+// Base URL for DSH owner action API (owner-supplied fixture base; browser-side
+// source keeps no raw provider URL default)
+export const OWNER_ACTION_BASE_URL = 'https://api.deepseek.com/v1';
+const BASE_URL = OWNER_ACTION_BASE_URL;
 
 // Types for owner action responses
 export interface OwnerActionRequest {
