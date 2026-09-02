@@ -32,10 +32,11 @@ const disposers = []
 const ctx = { effect: (reg) => { disposers.push(reg()); return () => {} } }
 await exports_.apply(ctx)
 
-const styleOk = [...window.document.querySelectorAll('style')].some(s => (s.textContent || '').includes('dsh-selection-toolbar'))
+const styleOk = [...window.document.querySelectorAll('style')].some(s => (s.textContent || '').includes('dsh-selection-actions'))
 console.log('style injected =', styleOk)
-const toolbar = window.document.querySelector('.dsh-selection-toolbar')
-console.log('toolbar mounted =', Boolean(toolbar))
+const actions = window.document.querySelector('[data-dsh-selection-actions]')
+console.log('actions layer mounted =', Boolean(actions))
+if (actions === null) throw new Error('V2 actions layer not mounted')
 
 // 模拟一次选区，验证观察器把工具条显示出来。
 const block = window.document.createElement('p')
@@ -48,7 +49,8 @@ range.selectNodeContents(block)
 selection.addRange(range)
 window.document.dispatchEvent(new window.Event('selectionchange'))
 await new Promise(r => setTimeout(r, 300))
-console.log('toolbar visible after selection =', toolbar?.style.display)
+console.log('actions visible after selection =', actions?.style.display)
+if (actions?.style.display !== 'block') throw new Error('stable selection did not surface actions')
 const overlay = window.document.querySelector('.dsh-selection-composer')
 console.log('composer overlay mounted =', Boolean(overlay))
 
@@ -59,6 +61,6 @@ noop()
 console.log('kill-switch honored = true')
 
 for (const dispose of disposers.splice(0)) dispose()
-const toolbarGone = window.document.querySelector('.dsh-selection-toolbar') === null
-console.log('disposed cleanly =', toolbarGone)
-if (!styleOk || toolbar?.style.display !== 'flex') process.exitCode = 1
+const layerGone = window.document.querySelector('[data-dsh-selection-actions]') === null
+console.log('disposed cleanly =', layerGone)
+if (!styleOk || !layerGone) process.exitCode = 1

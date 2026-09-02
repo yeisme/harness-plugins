@@ -673,6 +673,9 @@ importers:
 
   packages/bundle/dsh-selection-annotation:
     dependencies:
+      '@yeisme/dsh-client-ui-interaction-space':
+        specifier: workspace:*
+        version: link:../../client/ui-interaction-space
       '@yeisme/dsh-client-ui-selection-annotation':
         specifier: workspace:*
         version: link:../../client/ui-selection-annotation
@@ -1769,6 +1772,9 @@ importers:
       '@yeisme/dsh-client-ui-surface':
         specifier: workspace:^
         version: link:../ui-surface
+      '@yeisme/dsh-client-ui-visual-kit':
+        specifier: workspace:^
+        version: link:../ui-visual-kit
       '@yeisme/dsh-selection-host':
         specifier: workspace:*
         version: link:../../host/dsh-selection-host
@@ -2269,6 +2275,9 @@ importers:
 
   packages/client/ui-selection-annotation:
     dependencies:
+      '@yeisme/dsh-client-ui-interaction-space':
+        specifier: workspace:*
+        version: link:../ui-interaction-space
       '@yeisme/dsh-plugin-contracts':
         specifier: workspace:^
         version: link:../../sdk/dsh-plugin-contracts

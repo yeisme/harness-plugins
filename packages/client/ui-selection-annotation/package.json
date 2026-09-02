@@ -1,6 +1,6 @@
 {
   "name": "@yeisme/dsh-client-ui-selection-annotation",
-  "version": "0.1.0-rc.1",
+  "version": "0.2.0-rc.1",
   "description": "DSH Web selection & annotation client: floating selection toolbar, compact agent composer seam, screenshot annotation canvas and per-position approval",
   "main": "lib/index.js",
   "scripts": {
@@ -56,6 +56,7 @@
     }
   },
   "dependencies": {
+    "@yeisme/dsh-client-ui-interaction-space": "workspace:*",
     "@yeisme/dsh-plugin-contracts": "workspace:^",
     "@yeisme/dsh-selection-host": "workspace:*"
   },

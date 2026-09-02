@@ -6,7 +6,7 @@
 import { fireEvent } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import { apply, SELECTION_ANNOTATION_SUBMIT_EVENT } from '../../src/client/index.ts'
+import { apply, SELECTION_ANNOTATION_POLICY_KEY, SELECTION_ANNOTATION_SUBMIT_EVENT, SELECTION_INTERACTION_EVIDENCE_EVENT } from '../../src/client/index.ts'
 import { ApprovalPanelController, type ApprovalServiceAdapter } from '../../src/client/approval.ts'
 import { createInMemoryVersionedFileStore, createSelectionAnnotationService } from '@yeisme/dsh-selection-host/node'
 import { computeQuoteDigest } from '@yeisme/dsh-selection-host'
@@ -22,18 +22,39 @@ function makeCtx(): { ctx: ClientContext; dispose: () => void } {
   return { ctx, dispose: () => disposers.forEach(fn => fn()) }
 }
 
+// jsdom 不内置 localStorage：按 mermaid-render 集成测试的既存桩模式补内存实现。
+if (window.localStorage === undefined) {
+  const store = new Map<string, string>()
+  const stub = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => { store.set(key, value) },
+    removeItem: (key: string) => { store.delete(key) },
+    clear: () => { store.clear() },
+  }
+  // jsdom 单 realm：window 即 globalThis，同一引用防 getter 自递归。
+  Object.defineProperty(window, 'localStorage', { configurable: true, value: stub })
+  if (globalThis !== window) {
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: stub })
+  }
+}
+
 afterEach(() => {
   document.body.innerHTML = ''
+  window.localStorage.clear()
 })
 
 describe('selection annotation end-to-end flow', () => {
-  it('runs selection -> toolbar -> composer -> submit event with a host adapter', async () => {
+  it('runs selection -> stable Actions -> explicit ask -> composer -> v2 submit event', async () => {
     vi.useFakeTimers()
     try {
       const sends: { intent: string; text: string; approvalPolicy: string }[] = []
       const { ctx, dispose } = makeCtx()
       const disposer = await apply(ctx, { composerAdapter: { send: async input => { sends.push(input) } } })
-      expect(document.querySelector('.dsh-selection-toolbar')).not.toBeNull()
+      // V2 默认：不再有 V1 私有工具条，Actions 由全局交互层渲染。
+      expect(document.querySelector('.dsh-selection-toolbar')).toBeNull()
+      const actions = document.querySelector('[data-dsh-selection-actions]') as HTMLElement
+      expect(actions).not.toBeNull()
+      expect(actions.style.display).toBe('none')
 
       const block = document.createElement('p')
       block.textContent = 'Agent 回复中的可选中段落'
@@ -48,15 +69,21 @@ describe('selection annotation end-to-end flow', () => {
         window.addEventListener(SELECTION_ANNOTATION_SUBMIT_EVENT, event => resolve(event as CustomEvent), { once: true })
       })
 
+      // 未稳定前不渲染 Actions。
+      vi.advanceTimersByTime(50)
+      expect(actions.style.display).toBe('none')
       vi.advanceTimersByTime(200)
       await vi.advanceTimersByTimeAsync(50)
+      expect(actions.style.display).toBe('block')
 
       const composerOverlay = document.querySelector('.dsh-selection-composer') as HTMLElement
       expect(composerOverlay).not.toBeNull()
-      // 问 Agent 一次交互内打开紧凑 Composer。
-      const askButton = document.querySelector('.dsh-selection-toolbar button[data-action="ask"]') as HTMLButtonElement
+      // 只有显式动作才打开 Composer；ask 是 primary。
+      const askButton = actions.querySelector('button[data-action-id="dsh:ask"]') as HTMLButtonElement
+      expect(askButton).not.toBeNull()
       fireEvent.click(askButton)
       expect(composerOverlay.style.display).toBe('block')
+      expect(document.activeElement).toBe(composerOverlay.querySelector('textarea'))
 
       const textarea = composerOverlay.querySelector('textarea') as HTMLTextAreaElement
       fireEvent.input(textarea, { target: { value: '这一段在说什么？' } })
@@ -64,20 +91,21 @@ describe('selection annotation end-to-end flow', () => {
       await vi.advanceTimersByTimeAsync(50)
 
       const event = await submitted
-      const detail = event.detail as { intent: string; text: string; approvalPolicy: string }
+      const detail = event.detail as { intent: string; text: string; approvalPolicy: string; policyVersion?: string; canonicalActionId?: string; contextKind?: string }
       expect(detail.intent).toBe('ask')
       expect(detail.text).toBe('这一段在说什么？')
       expect(detail.approvalPolicy).toBe('preview-first')
+      expect(detail.policyVersion).toBe('v2')
+      expect(detail.canonicalActionId).toBe('dsh:ask')
+      expect(detail.contextKind).toBe('text')
       expect(sends).toHaveLength(1)
       expect(sends[0].approvalPolicy).toBe('preview-first')
 
-      // Esc 依次关闭 Composer 与操作条。
+      // Esc 依次关闭 Composer（回 Actions）与 Actions。
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
       expect(composerOverlay.style.display).toBe('none')
-      const toolbar = document.querySelector('.dsh-selection-toolbar') as HTMLElement
-      expect(toolbar.style.display).toBe('flex')
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
-      expect(toolbar.style.display).toBe('none')
+      expect(actions.style.display).toBe('none')
       disposer()
       dispose()
     } finally {
@@ -85,20 +113,82 @@ describe('selection annotation end-to-end flow', () => {
     }
   })
 
-  it('closes the composer with Escape from the textarea', async () => {
+  it('closes the composer with Escape from the textarea (v2: layer returns to actions)', async () => {
     vi.useFakeTimers()
     try {
       const { ctx, dispose } = makeCtx()
-      const disposer = await apply(ctx)
+      const disposer = await apply(ctx, { composerAdapter: { send: async () => {} } })
+      const block = document.createElement('p')
+      block.textContent = 'keyboard flow paragraph'
+      document.body.append(block)
+      const selection = window.getSelection()
+      selection?.removeAllRanges()
+      const range = document.createRange()
+      range.selectNodeContents(block)
+      selection?.addRange(range)
+      vi.advanceTimersByTime(250)
+      const actions = document.querySelector('[data-dsh-selection-actions]') as HTMLElement
       const composerOverlay = document.querySelector('.dsh-selection-composer') as HTMLElement
-      const askButton = document.querySelector('.dsh-selection-toolbar button[data-action="ask"]') as HTMLButtonElement
-      fireEvent.click(askButton)
+      fireEvent.click(actions.querySelector('button[data-action-id="dsh:ask"]') as HTMLButtonElement)
       expect(composerOverlay.style.display).toBe('block')
       const textarea = composerOverlay.querySelector('textarea') as HTMLTextAreaElement
       fireEvent.keyDown(textarea, { key: 'Escape', bubbles: true, cancelable: true })
       expect(composerOverlay.style.display).toBe('none')
+      // Composer 关闭后 Actions 仍可恢复（逐层退出），再一次 Esc 才收起。
+      expect(actions.style.display).toBe('block')
       disposer()
       dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('v1 adapter renders the legacy toolbar with a deprecated evidence marker and rolls back cleanly', async () => {
+    vi.useFakeTimers()
+    try {
+      window.localStorage.setItem(SELECTION_ANNOTATION_POLICY_KEY, 'v1')
+      const evidences: unknown[] = []
+      const collect = (event: Event): void => { evidences.push((event as CustomEvent).detail) }
+      window.addEventListener(SELECTION_INTERACTION_EVIDENCE_EVENT, collect)
+      const { ctx, dispose } = makeCtx()
+      const disposer = await apply(ctx)
+      try {
+        // V1 adapter：旧工具条回归 + deprecated 脱敏标记。
+        const toolbar = document.querySelector('.dsh-selection-toolbar') as HTMLElement
+        expect(toolbar).not.toBeNull()
+        expect(document.querySelector('[data-dsh-selection-actions]')).toBeNull()
+        expect(evidences).toContainEqual({ policyVersion: 'v1', capability: 'selection.interaction.v2', result: 'v1-adapter-active', deprecated: true })
+
+        // 回滚验证：移除策略后重新 apply，V2 回归且切回不丢当前选区。
+        window.localStorage.removeItem(SELECTION_ANNOTATION_POLICY_KEY)
+        disposer()
+        const { ctx: ctx2, dispose: dispose2 } = makeCtx()
+        const disposer2 = await apply(ctx2)
+        try {
+          expect(document.querySelector('.dsh-selection-toolbar')).toBeNull()
+          const actions = document.querySelector('[data-dsh-selection-actions]') as HTMLElement
+          expect(actions).not.toBeNull()
+          expect(evidences).toContainEqual({ policyVersion: 'v2', capability: 'selection.interaction.v2', result: 'v2-layer-attached', deprecated: false })
+          const block = document.createElement('p')
+          block.textContent = 'rollback keeps selection context'
+          document.body.append(block)
+          const selection = window.getSelection()
+          selection?.removeAllRanges()
+          const range = document.createRange()
+          range.selectNodeContents(block)
+          selection?.addRange(range)
+          vi.advanceTimersByTime(250)
+          expect(actions.style.display).toBe('block')
+        } finally {
+          disposer2()
+          dispose2()
+        }
+      } finally {
+        window.removeEventListener(SELECTION_INTERACTION_EVIDENCE_EVENT, collect)
+        window.localStorage.removeItem(SELECTION_ANNOTATION_POLICY_KEY)
+        disposer()
+        dispose()
+      }
     } finally {
       vi.useRealTimers()
     }

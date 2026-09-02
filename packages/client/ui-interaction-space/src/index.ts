@@ -46,3 +46,60 @@ export type {
   TimelineEntryKind,
 } from './controller.ts'
 export { InteractionSpaceView } from './view.tsx'
+// --- Selection interaction V2（统一选区交互层） -----------------------------
+export {
+  SELECTION_INTERACTION_CAPABILITY_V2,
+  SELECTION_CONTEXT_KINDS_V2,
+  SELECTION_CONTEXT_SOURCES_V2,
+  SELECTION_STABLE_DEBOUNCE_MS,
+  V1_ACTION_ALIASES,
+  resolveV1ActionAlias,
+  validateSelectionActionDescriptor,
+  validateSelectionContextV2,
+} from './selection/contracts.ts'
+export type {
+  LocalizedLabelV2,
+  SelectionActionDescriptorV2,
+  SelectionActionIntentV2,
+  SelectionActionOwner,
+  SelectionContextKindV2,
+  SelectionContextSourceV2,
+  SelectionContextV2,
+  SelectionDangerLevel,
+  SelectionDefaultSlot,
+  SelectionDescriptorRejection,
+  SelectionVisibility,
+  ShortcutDescriptorV2,
+} from './selection/contracts.ts'
+export {
+  BUILTIN_CONTEXT_ORDERS,
+  BUILTIN_SELECTION_ACTIONS,
+  SELECTION_CAPABILITY_BATCH,
+  SELECTION_CAPABILITY_CONVERSATION,
+  SELECTION_CAPABILITY_EDIT,
+  registerBuiltinSelectionActions,
+} from './selection/builtin-actions.ts'
+export {
+  normalizeSelection,
+  selectionStillValid,
+  SELECTION_OPT_OUT_ATTRIBUTE,
+} from './selection/normalizer.ts'
+export type { NormalizedSelection, SelectionExclusionReason, SelectionObservation } from './selection/normalizer.ts'
+export { SelectionActionRegistryV2 } from './selection/registry.ts'
+export type { RegistrationResult, ResolvedActionView, ResolvedActions, ResolveOptions } from './selection/registry.ts'
+export { selectionInteractionReducer } from './selection/reducer.ts'
+export type { SelectionInteractionEvent, SelectionInteractionState, SelectionSurfaceKind } from './selection/reducer.ts'
+export {
+  attachSharedSelectionInteraction,
+  getSharedSelectionInteraction,
+  SelectionInteractionLayer,
+  SELECTION_ACTIONS_STYLE_ID,
+  SELECTION_NARROW_VIEWPORT_PX,
+} from './selection/layer.ts'
+export type {
+  ExternalContextFacts,
+  IntentHandlerResult,
+  IntentSurface,
+  LayerContextPublisher,
+  SelectionInteractionLayerOptions,
+} from './selection/layer.ts'

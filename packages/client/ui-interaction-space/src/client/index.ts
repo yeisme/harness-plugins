@@ -17,6 +17,7 @@ import {
   type SpaceSessionsFace,
 } from '../controller.ts'
 import { InteractionSpaceView } from '../view.tsx'
+import { attachSharedSelectionInteraction, getSharedSelectionInteraction } from '../selection/layer.ts'
 
 export const name = 'client-ui-interaction-space'
 export const inject = ['sessions', 'locale'] as const
@@ -91,6 +92,20 @@ export function apply(ctx: Context, options?: ApplyInteractionSpaceOptions): () 
         void props
         return createElement(InteractionSpaceView, { controller })
       },
+    }))
+  }
+
+  // Selection Interaction V2：本 pane 作为 context publisher 接入 singleton
+  // 交互层（锚点/提案/时间线表面共享全局 Actions）；关闭 pane 只 detach，
+  // 不清理主会话、anchor 或 owner 状态（singleton refcount 管理）。
+  disposers.push(attachSharedSelectionInteraction(
+    (typeof document !== 'undefined' ? document : undefined) as Document,
+  ))
+  const sharedLayer = getSharedSelectionInteraction()
+  if (sharedLayer !== undefined) {
+    disposers.push(sharedLayer.registerContextPublisher({
+      id: 'interaction-space',
+      capabilities: ['annotation.batch'],
     }))
   }
 

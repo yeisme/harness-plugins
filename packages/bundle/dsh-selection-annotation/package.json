@@ -1,6 +1,6 @@
 {
   "name": "@yeisme/dsh-selection-annotation",
-  "version": "0.1.0-rc.1",
+  "version": "0.2.0-rc.1",
   "description": "DSH Web selection & annotation bundle: floating selection toolbar, compact agent composer overlay and per-position approval",
   "main": "lib/index.js",
   "scripts": {
@@ -62,6 +62,7 @@
     }
   },
   "dependencies": {
+    "@yeisme/dsh-client-ui-interaction-space": "workspace:*",
     "@yeisme/dsh-client-ui-selection-annotation": "workspace:*"
   },
   "peerDependencies": {

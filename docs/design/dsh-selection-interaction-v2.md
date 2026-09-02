@@ -174,3 +174,43 @@ V2 连续一个正式 release 通过浏览器、键盘、触控、HMR/dispose �
 实现任务、依赖和退出条件以
 [`openspec/changes/dsh-selection-interaction-v2/tasks.md`](../../openspec/changes/dsh-selection-interaction-v2/tasks.md)
 为准。
+
+## 10. Gate A 基线与迁移冻结（2026-09-02）
+
+### 10.1 V1→V2 对照表（代码事实）
+
+| 面 | V1 现状（代码事实） | V2 目标 |
+| --- | --- | --- |
+| 选区入口 | `ui-selection-annotation/src/client/index.ts` `handleSelectionChange`：`selectionchange` → 120ms debounce → `captureFromSelection` → toolbar.show | 同一入口改为发布 `SelectionContextV2` 给全局 singleton；Pane 不再 mount 私有 toolbar |
+| 操作条 | `toolbar.ts` `SelectionToolbarController`：7 动作全量平铺（ask/comment/edit/agent-edit/copy-quote/add-to-batch/open-full）、role=toolbar、Esc 关闭、左右箭头/Tab 导航、窄面板图标化、滚出视口收缩为边缘锚点 | singleton Actions：1 primary + ≤2 secondary + More；缺 capability 动作只进 More disabled+reason；触控走 Bottom Sheet |
+| Composer | `composer.ts` `CompactComposerController` + DOM overlay：仅动作激活后打开（`openComposer`），draft/anchor/preview-first 语义完整 | 保持"仅显式动作打开"；由交互层 action dispatch bridge 升级，焦点进入输入区 |
+| 自动打开 Composer | V1 代码无选中即自动打开路径（防回归项） | 正式禁止（MODIFIED requirement） |
+| 快捷键 | 无全局快捷键注册面；toolbar 内箭头/Esc 导航 | `Alt+Enter` 聚焦 Actions（可配置，冲突 fail-safe 原生优先） |
+| 视觉 | `styles.ts` 注入 `--dsh-*` GitHub 白 fallback（`#ffffff`/`#d0d7de` 字面量）、未 scoped reset | `buildPanelStyles({ scope: 'dsh-selection-actions' })` + vk token 唯一 canonical fallback |
+| dispose | index.ts 显式 dispose（timer/overlay 监听/selectionchange/keydown/toolbar/overlay.remove）+ G21 事件委托收口 | singleton effect-scoped disposer + HMR/重复 mount 对称释放测试 |
+| pane-workbench | 无私有 selection toolbar（`selection` 命中均为 pane 项选择状态/quick-pick），不迁移面 | 保持不拥有；仅提供 Workspace Designer 配置区与 context handoff |
+| 事件 | `dsh-selection-annotation:submit`、`dsh-selection-annotation:add-to-batch`（window CustomEvent） | 语义/字段不变，新增 `policyVersion`/`canonicalActionId`/`contextKind` 仅 optional additive |
+| kill-switch | `browserPreferenceStorage` `'dsh-selection-annotation' === 'off'`（经 `probeCapability` 三态 seam） | 保留；新增 `policyVersion` workspace/user 策略层 |
+
+### 10.2 capability/owner/receipt 对齐
+
+- 新 capability：`selection.interaction.v2`（bundle probe；旧宿主缺席走 V1 adapter，不 client polyfill）。
+- typed intent owner：`ask`/`comment`/`edit` → 宿主 Composer/会话 owner（V1 `dsh-selection-annotation:submit` 语义保持）；`copy-quote` 本地完成；`add-to-batch` → 批注组 owner 事件；`open-full` → 展开主输入。owner 缺席 = disabled + reason，不伪造 receipt。
+- receipt seam：复用 `@yeisme/dsh-selection-host` `ApplyReceiptV1`/`preview-first`/`baseVersion` 合同；V2 intent 不另造第二 receipt。
+- Workspace Designer 注册点：`ui-pane-workbench/src/workspace-designer(-ui).ts(x)`（pane 布局设计师）；仓内无通用设置区 registry——“Selection & Interaction” 区按 5.3 在 designer UI 本地新增（bounded canonical id 偏好），不伪造上游设置面。
+- DSH host 侧缺位 seam：conversation user-actions slot 固化于 `upstream-prs/user-actions-slot/`（2026-08-20 Agent Note 草案）；未合入前 V2 Actions 层自渲染 scoped surface，不依赖官方 slot，也不声称官方合入。
+
+### 10.3 V1 兼容窗口冻结
+
+- Release 标识：`@yeisme/dsh-selection-annotation` 当前 `0.1.0-rc.1`（V1）；V2 以 `0.2.0-rc.1` canary 起、默认 V2 之后的 release 结束窗口。
+- 默认 policy：canary 期新安装默认 V2（probe 到 capability 或 bundle 自带 runtime）；已安装用户可经 workspace/user `policyVersion=v1` 回退。
+- kill-switch/rollback：复用 `'dsh-selection-annotation' === 'off'`（整体禁用）+ 新增 `policyVersion` 策略（v1/v2 切换不丢 context）；rollback 负责人 = harness-plugins maintainer。
+- deprecation marker：V1 adapter 运行时打 `deprecated=true` 脱敏 evidence 标记（版本、capability、结果；无选区原文/prompt/payload）。
+- removal 条件：V2 连续一个 release 通过浏览器/键盘/触控/HMR/owner 验收且 rollback window 关闭后，下一 removal release 删除 V1 runtime/adapter；安装包名与旧 action id alias 保持不变。
+
+### 10.4 包/事件/快捷键消费者清单
+
+- 包：`@yeisme/dsh-client-ui-selection-annotation`（deps：`dsh-plugin-contracts`、`dsh-selection-host`）、`@yeisme/dsh-client-ui-interaction-space`（deps：`ui-surface`、`dsh-selection-host`、zod）；bundle：`@yeisme/dsh-selection-annotation`、`@yeisme/dsh-interaction-space`。
+- 事件消费者：`dsh-selection-annotation:submit` 与 `add-to-batch` 在本仓内仅 `ui-selection-annotation` 自身 dispatch；外部消费者为宿主桥接（不在本仓），字段兼容由 optional additive 保证。
+- 快捷键消费者：全仓无 `Alt+Enter` 既有占用（仅本 V2 合同定义）；编辑器原生快捷键优先原则落地于 conflict 检测 fail-safe（不注册 Actions shortcut）。
+
