@@ -83,6 +83,13 @@ minimumReleaseAgeExclude:
   - vscode-languageserver-protocol@3.18.3
   - vscode-languageserver-types@3.18.3
 
+# monaco-editor@0.56.0 pins a vulnerable dompurify (3.4.8; GHSA-cmwh-pvxp-8882,
+# GHSA-55q2-fjhq-7xh7, GHSA-vxr8-fq34-vvx9, GHSA-c2j3-45gr-mqc4). 3.4.14 is the
+# version this workspace already resolves for direct dompurify consumers, so
+# the override only lifts the transitive copy and keeps one version in the tree.
+overrides:
+  dompurify: 3.4.14
+
 patchedDependencies:
   jszip: patches/jszip.patch
   mammoth: patches/mammoth.patch

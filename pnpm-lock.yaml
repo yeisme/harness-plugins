@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  dompurify: 3.4.14
+
 patchedDependencies:
   jszip: 6a88d22663437aef124219ecaf76e7fd85d481eef32de46af5a724e23c4215cb
   mammoth: eae9aa809dcf9f05301bc77169e7181eb1570dcf3bb09542fa4a125e781162db
@@ -586,7 +589,7 @@ importers:
         specifier: workspace:*
         version: link:../dsh-workbench-core
       dompurify:
-        specifier: ^3.4.14
+        specifier: 3.4.14
         version: 3.4.14
       mammoth:
         specifier: ^1.12.1
@@ -5217,9 +5220,6 @@ packages:
   dompurify@3.4.14:
     resolution: {integrity: sha512-dVoH9z+MY+C9IilgGCk3YfFqjLi3fChm2OiKJMzh6axrJ5qwxqWaZamgmHrpv22CN/KdbZJuGEGgfQoL00LTdg==}
 
-  dompurify@3.4.8:
-    resolution: {integrity: sha512-yb1cEmaOum7wFvOCSQxyfgVlv5D47Rc30iZWoMpbDIWTnJ6grDDQyu2KFJzB2k7u0pMuJcQ1zphH//fFnw2tjQ==}
-
   dts-resolver@3.0.0:
     resolution: {integrity: sha512-1T1f+z+4tl9XD+m+0HBgWoL/nm0bOIffyWaUuUSBlFg/86IWvfx+wjNaO/ybU0AJzG9/Mi5hBUgGV6zCmWEN7Q==}
     engines: {node: ^22.18.0 || >=24.0.0}
@@ -8589,10 +8589,6 @@ snapshots:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
-  dompurify@3.4.8:
-    optionalDependencies:
-      '@types/trusted-types': 2.0.7
-
   dts-resolver@3.0.0: {}
 
   duck@0.1.12:
@@ -9324,7 +9320,7 @@ snapshots:
 
   monaco-editor@0.56.0:
     dependencies:
-      dompurify: 3.4.8
+      dompurify: 3.4.14
       marked: 14.0.0
 
   ms@2.1.3: {}
