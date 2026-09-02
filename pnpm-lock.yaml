@@ -543,6 +543,33 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jsdom@30.0.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(tsx@4.23.12)(yaml@2.9.0)
 
+  packages/bundle/dsh-personal-coding-base:
+    dependencies:
+      '@yeisme/dsh-command-experience':
+        specifier: workspace:*
+        version: link:../dsh-command-experience
+      '@yeisme/dsh-desktop-workbench':
+        specifier: workspace:*
+        version: link:../dsh-desktop-workbench
+      '@yeisme/dsh-devtools':
+        specifier: workspace:*
+        version: link:../dsh-devtools
+      '@yeisme/dsh-ordo-agent-ops':
+        specifier: workspace:*
+        version: link:../ordo-agent-ops
+      '@yeisme/dsh-plugin-contracts':
+        specifier: workspace:*
+        version: link:../../sdk/dsh-plugin-contracts
+      '@yeisme/dsh-semantic-file-editor':
+        specifier: workspace:*
+        version: link:../dsh-semantic-file-editor
+      '@yeisme/dsh-terminal':
+        specifier: workspace:*
+        version: link:../dsh-terminal
+      '@yeisme/dsh-workbench-core':
+        specifier: workspace:*
+        version: link:../dsh-workbench-core
+
   packages/bundle/dsh-personal-radar:
     dependencies:
       '@yeisme/dsh-client-ui-personal-radar':
@@ -1230,6 +1257,18 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jsdom@30.0.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(tsx@4.23.12)(yaml@2.9.0)
 
+  packages/client/conversation-rewrite-core:
+    devDependencies:
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(tsx@4.23.12)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jsdom@30.0.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(tsx@4.23.12)(yaml@2.9.0)
+
   packages/client/ui-agent-preset:
     dependencies:
       '@deepseek-ai/dsh-client-ui-primitives':
@@ -1404,6 +1443,9 @@ importers:
       '@yeisme/dsh-client-ui-visual-kit':
         specifier: workspace:^
         version: link:../ui-visual-kit
+      '@yeisme/dsh-plugin-contracts':
+        specifier: workspace:^
+        version: link:../../sdk/dsh-plugin-contracts
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.1
@@ -1465,6 +1507,9 @@ importers:
 
   packages/client/ui-conversation-rewrite:
     dependencies:
+      '@yeisme/dsh-client-ui-conversation-rewrite-core':
+        specifier: workspace:^
+        version: link:../conversation-rewrite-core
       '@yeisme/dsh-client-ui-surface':
         specifier: workspace:^
         version: link:../ui-surface
@@ -2988,6 +3033,12 @@ importers:
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.1
+      '@yeisme/dsh-plugin-catalog':
+        specifier: workspace:*
+        version: link:../../catalog/dsh-plugin-catalog
+      '@yeisme/dsh-plugin-contracts':
+        specifier: workspace:*
+        version: link:../../sdk/dsh-plugin-contracts
       tsdown:
         specifier: ^0.22.14
         version: 0.22.14(tsx@4.23.12)(typescript@5.9.3)

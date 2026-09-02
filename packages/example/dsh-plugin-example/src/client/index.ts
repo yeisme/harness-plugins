@@ -19,6 +19,9 @@ import { createElement, type ReactNode } from 'react'
 import { degradeReason, probeCapability, type ProbeResult } from '../probe.js'
 import type { ExampleWireSnapshot } from '../wire.js'
 
+export { applyExampleActionV1, createExampleStructuredSurfaceV1, previewExampleActionV1 } from '../structured-surface.js'
+export type { ExampleActionPreviewV1 } from '../structured-surface.js'
+
 export const name = 'dsh-plugin-example'
 export const inject = ['slots'] as const
 

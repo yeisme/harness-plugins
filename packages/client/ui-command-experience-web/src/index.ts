@@ -56,6 +56,8 @@ export {
 } from './client';
 
 export { createOwnerActionTransport } from './transport';
+export { consumePersonalCodingWebSurfaceV1 } from './personal-coding';
+export type { PersonalCodingWebSurfaceV1 } from './personal-coding';
 
 export {
   ACTIVITY_VIEW_ID,

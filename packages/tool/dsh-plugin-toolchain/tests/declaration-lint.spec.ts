@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { dirname, join } from 'node:path'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { runDeclarationLint } from '../src/checkers/declaration-lint.js'
 import { bundlePackageJson, cleanupWorkspace, makeWorkspace } from './helpers.js'
 
@@ -23,6 +25,27 @@ const GOOD_PATCH = [
 ].join('\n')
 
 describe('declaration-lint', () => {
+  it('accepts an explicitly declared composition bundle with sibling targets', async () => {
+    const root = workspace({
+      'packages/bundle/dsh-command-experience/package.json': bundlePackageJson({ name: '@yeisme/dsh-command-experience' }),
+      'packages/bundle/dsh-command-experience/cordis.patch.yml': "- insert:\n  - id: dsh-command-experience\n    name: '@yeisme/dsh-command-experience'\n",
+    })
+    const manifestPath = join(root, 'packages/bundle/dsh-composition/package.json')
+    const patchPath = join(root, 'packages/bundle/dsh-composition/cordis.patch.yml')
+    await mkdir(dirname(manifestPath), { recursive: true })
+    await writeFile(manifestPath, JSON.stringify({
+      name: '@yeisme/dsh-composition',
+      version: '0.1.0',
+      exports: { './cordis.patch.yml': './cordis.patch.yml', './package.json': './package.json' },
+      dsh: { bundle: { patch: './cordis.patch.yml', composition: true } },
+      dependencies: { '@yeisme/dsh-command-experience': 'workspace:*' },
+    }))
+    await writeFile(patchPath, '- insert:\n    - id: dsh-command-experience\n      name: \'@yeisme/dsh-command-experience\'\n')
+    const result = runDeclarationLint(root)
+    expect(result.findings.some(finding => finding.code === 'DECL/ID_DUPLICATE')).toBe(false)
+    expect(result.findings.some(finding => finding.code === 'DECL/NAME_NOT_EXPORTED')).toBe(false)
+    expect(result.findings.some(finding => finding.code === 'DECL/UNKNOWN_COMPOSITION_TARGET')).toBe(false)
+  })
   it('passes a consistent bundle declaration', () => {
     const root = workspace({
       'packages/bundle/fixture/package.json': bundlePackageJson({}),

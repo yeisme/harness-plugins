@@ -4,6 +4,11 @@ DSH 参考插件（G21 `dsh-plugin-consistency-coverage-v1` §3）：以**单个
 host+client+bundle 三层最小结构与 probe-first 降级写法。不接管 core state、
 零运行时依赖（`dependencies` 为空；react/cordis 等均为宿主提供的 optional peer）。
 
+同时提供 `DshPluginSurfaceContributionV1` 双表面参考：`/example` command、
+`list|detail|diff` 宿主渲染 view、owner-previewed `example.refresh` action、
+revision fence、receipt 与 contribution health。Web/TUI 消费同一纯数据 fixture，
+不传 React/DOM/ANSI renderer，也不建立 canonical state。
+
 ## 三层最小结构（同一包内演示）
 
 | 层 | 本包位置 | 真实仓对应 |
@@ -58,3 +63,13 @@ pnpm --filter @yeisme/dsh-plugin-example run smoke:bundle   # 真实 lib/client.
 - 不实现 AppFrame 几何 / PTY / host 职责；官方 seam 未合入时继续 probe。
 - 面板探测结果在 apply 时定格（无 hooks）；动态刷新的 controller +
   `useSyncExternalStore` 参照 `packages/client/ui-token-usage`。
+# Structured personal-coding surface example
+
+本 example 现在同时展示 command、`list/detail/diff` view、previewed typed action、health 与 dispose。它只注册 projection，不持有 canonical state，也不跨 Web/TUI 传递 renderer。
+
+验证：
+
+```bash
+pnpm --filter @yeisme/dsh-plugin-example test
+pnpm run test:personal-coding-integration
+```

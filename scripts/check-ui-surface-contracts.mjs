@@ -14,7 +14,7 @@ const clientCatalog = {
   'ui-command-experience-web': 'adopted',
   'ui-conversation-rewrite': 'adopted',
   'ui-creator-studio': 'adopted',
-  'ui-interaction-space': 'pending', // neighbor lane: adopting shared Surface/token contract
+  'ui-interaction-space': 'adopted',
   'ui-desktop-workbench': 'adopted',
   'ui-devtools': 'adopted',
   'ui-mcp-inspector': 'adopted',
@@ -23,13 +23,13 @@ const clientCatalog = {
   'ui-ordo-agent-ops': 'adopted',
   'ui-pane-agent-context': 'adopted',
   'ui-pane-domain': 'adopted',
-  'ui-pane-side-chat': 'pending', // neighbor lane: adopting shared Surface/token contract
+  'ui-pane-side-chat': 'adopted',
   'ui-pane-subagent': 'adopted',
   'ui-pane-workbench': 'adopted',
-  'ui-personal-radar': 'pending', // neighbor lane: adopting shared Surface/token contract
+  'ui-personal-radar': 'excluded', // view-model/controller face; pane rendering is owned by the host workbench
   'ui-semantic-file-editor': 'adopted',
   'ui-session-cookie-manager': 'adopted',
-  'ui-selection-annotation': 'pending', // neighbor lane: adopting shared Surface/token contract
+  'ui-selection-annotation': 'adopted',
   'ui-session-tags': 'adopted',
   'ui-session-status': 'excluded', // pure view-model/state logic; Web rendering is owned by ui-command-experience-web (SESSION_STATUS_VIEW_ID)
   'ui-structured-content': 'embed',
@@ -73,6 +73,7 @@ const dynamicStyleAllowlist = new Map([
   ['packages/bundle/dsh-file-document/src/client/file-document-panel.tsx', 'tree depth indentation and owner-authorized preview media sizing'],
   ['packages/client/ui-desktop-workbench/src/client/git-pane.tsx', 'diff and measured workbench state'],
   ['packages/bundle/dsh-rich-media/src/client/media-library.tsx', 'virtual media row geometry'],
+  ['packages/client/ui-selection-annotation/src/client/AnnotationCanvas.tsx', 'normalized marker geometry over an image surface'],
 ])
 
 function sourceFiles(dir) {

@@ -10,7 +10,7 @@
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
-import type { CatalogBundleEntry, CatalogInstallRow } from './schema.js'
+import type { CatalogBundleEntry, CatalogInstallRow, CatalogPersonalCodingPackV1 } from './schema.js'
 
 /** 从任一起点向上找 pnpm-workspace.yaml 所在的仓库根（与 toolchain 同语义）。 */
 export function findWorkspaceRoot(startDir: string): string {
@@ -33,6 +33,15 @@ function readString(value: unknown): string | undefined {
 
 function readRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+}
+
+function readBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined
+}
+
+function readStringArray(value: unknown): readonly string[] | undefined {
+  if (!Array.isArray(value) || value.some(item => typeof item !== 'string' || item.trim() === '')) return undefined
+  return value as string[]
 }
 
 function toPosix(path: string): string {
@@ -121,16 +130,33 @@ function readBundleEntry(root: string, dirName: string, dir: string, manifestPat
     .sort()
 
   const platform = readString(dshClient.platform)
+  const sourcePath = toPosix(relative(root, dir))
+  const personalCoding = readPersonalCodingPack(readRecord(readRecord(manifest.dsh).personalCoding), sourcePath, manifest)
   return {
     id: dirName,
     name,
     description,
-    path: toPosix(relative(root, dir)),
+    path: sourcePath,
     installable,
     preset: !hasBuild,
     ...(platform !== undefined ? { platform } : {}),
     ...(installable ? { patchFile: toPosix(relative(root, patchPath)) } : {}),
     pluginDependencies,
     installRows: patchExists ? parseInstallRows(readFileSync(patchPath, 'utf8')) : [],
+    ...(personalCoding !== undefined ? { personalCoding } : {}),
   }
+}
+
+function readPersonalCodingPack(input: Record<string, unknown>, sourcePath: string, manifest: Record<string, unknown>): CatalogPersonalCodingPackV1 | undefined {
+  if (Object.keys(input).length === 0) return undefined
+  const packId = readString(input.packId)
+  const tier = readString(input.tier)
+  const critical = readBoolean(input.critical)
+  const dependencies = readStringArray(input.dependencies)
+  const criticalContributions = readStringArray(input.criticalContributions)
+  const optionalContributions = readStringArray(input.optionalContributions)
+  if (packId === undefined || !/^[a-z0-9][a-z0-9-]*$/.test(packId) || (tier !== 'base' && tier !== 'optional') || critical === undefined || dependencies === undefined || criticalContributions === undefined || optionalContributions === undefined) {
+    throw new Error(`invalid dsh.personalCoding metadata in ${readString(manifest.name) ?? sourcePath}`)
+  }
+  return { packId, tier, critical, dependencies, criticalContributions, optionalContributions, sourcePath }
 }

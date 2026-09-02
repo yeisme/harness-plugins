@@ -54,6 +54,7 @@
     }
   },
   "dependencies": {
+    "@yeisme/dsh-client-ui-conversation-rewrite-core": "workspace:^",
     "@yeisme/dsh-client-ui-surface": "workspace:^"
   },
   "peerDependencies": {

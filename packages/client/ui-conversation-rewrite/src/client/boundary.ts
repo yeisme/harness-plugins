@@ -1,14 +1,27 @@
 /**
- * Branch/Edit/Retry 统一边界计算。
+ * Branch/Edit/Retry 统一边界计算（V2 core facade）。
  *
- * 这些纯函数只做“在哪个稳定边界派生 child”的决策，不发起任何 mutation。
- * 未知/partial/stale/运行中状态一律返回 typed disabled reason，绝不自动重试。
+ * DSH-specific addressing（messageId/turn-tail single-tail 启发式）留在本
+ * adapter；稳定边界、fail-closed reason 与 target 推导委托给 host-neutral 的
+ * `@yeisme/dsh-client-ui-conversation-rewrite-core`。V1 的签名、返回形状与
+ * 五个 legacy reason 保持不变；V2 新增 reason 按语义折回最近的 legacy 值。
  *
  * @module @yeisme/dsh-client-ui-conversation-rewrite/boundary
  */
 
 import type { ConversationSnapshot, ConversationNode, SteeringMessageNode, UserMessageNode } from '@deepseek-ai/dsh-client-runtime/client'
 import type { MessageId } from '@deepseek-ai/dsh-client-connection/client'
+import {
+  computeRetryTargetV2,
+  computeUserTurnTargetV2,
+} from '@yeisme/dsh-client-ui-conversation-rewrite-core'
+import type {
+  RewriteCapabilitiesV2,
+  RewriteConversationSnapshotV2,
+  RewriteDecisionV2,
+  RewriteDisableReasonV2,
+  RewriteMessageV2,
+} from '@yeisme/dsh-client-ui-conversation-rewrite-core'
 
 /** 禁用原因；组件据此显示可理解的文案，不吞失败。 */
 export type RewriteDisableReason =
@@ -22,7 +35,7 @@ export type RewriteDisableReason =
 export interface RewriteTarget {
   readonly kind: 'edit' | 'retry'
   readonly key: string
-  /** 目标消息的会话事件 seq。 */
+  /** 目标消息的会话事件 seq（retry 为 assistant seq，edit 为 user seq）。 */
   readonly seq: number
   /** 目标消息之前的最近 turn/end；null 表示首轮（依赖 forkBeforeMessage）。 */
   readonly boundarySeq: number | null
@@ -46,10 +59,6 @@ export function textOfContent(content: MessageContent): string | null {
   return text.length === 0 ? null : text
 }
 
-function isTextOnly(content: MessageContent): boolean {
-  return textOfContent(content) !== null
-}
-
 /** 返回小于 beforeSeq 的最近 turn/end seq；没有则 null。 */
 export function previousTurnEndSeq(snapshot: ConversationSnapshot, beforeSeq: number): number | null {
   let best: number | null = null
@@ -57,14 +66,6 @@ export function previousTurnEndSeq(snapshot: ConversationSnapshot, beforeSeq: nu
     if (seq < beforeSeq && (best === null || seq > best)) best = seq
   }
   return best
-}
-
-/** 是否存在位于 seq 之后的已完成 turn/end。 */
-function hasTurnEndAfter(snapshot: ConversationSnapshot, seq: number): boolean {
-  for (const endSeq of snapshot.turnEnds.values()) {
-    if (endSeq > seq) return true
-  }
-  return false
 }
 
 /** 从 assistant 节点向前找最近一条已发送 user/steering 消息作为该轮次的用户输入。 */
@@ -127,17 +128,73 @@ export interface RewriteBoundaryOptions {
   readonly firstRound?: boolean
 }
 
-function firstRoundDecision(
-  kind: RewriteTarget['kind'],
-  key: string,
-  seq: number,
-  text: string,
-  firstRound: boolean | undefined,
-): RewriteDecision {
-  if (firstRound === true) {
-    return { ok: true, target: { kind, key, seq, boundarySeq: null, text } }
+// ─── V2 core delegation ──────────────────────────────────────────────────────
+
+function nodeKey(node: ConversationNode): string {
+  return `${node.kind}:seq:${node.seq}`
+}
+
+/** DSH snapshot → host-neutral V2 snapshot（最小投影；generation Web 侧未知恒为 0）。 */
+function toV2Snapshot(snapshot: ConversationSnapshot): RewriteConversationSnapshotV2 {
+  // 只投影 boundary 关心的三类节点；assistant 节点无 content（durable identity only）。
+  const messages: RewriteMessageV2[] = []
+  for (const node of snapshot.nodes) {
+    if (node.kind !== 'user' && node.kind !== 'steering' && node.kind !== 'assistant') continue
+    const content: readonly { readonly type: string; readonly [key: string]: unknown }[] =
+      node.kind === 'assistant'
+        ? []
+        : (node.content as unknown as readonly { readonly type: string; readonly [key: string]: unknown }[])
+    messages.push({
+      key: nodeKey(node),
+      kind: node.kind,
+      seq: node.seq,
+      ...(node.kind === 'assistant' && node.messageId !== undefined ? { messageId: String(node.messageId) } : {}),
+      content,
+      completed: true,
+    })
   }
-  return disabled('first-round')
+  return {
+    sessionId: String(snapshot.sessionId),
+    generation: 0,
+    running: snapshot.running,
+    removed: snapshot.removed,
+    messages,
+    turnEnds: [...snapshot.turnEnds.values()],
+  }
+}
+
+/**
+ * V2 reason → legacy reason：新增的 settlement/stable-boundary/stale 折回
+ * 语义最近的 V1 值（running / first-round / not-found）。
+ */
+function toV1Reason(reason: RewriteDisableReasonV2): RewriteDisableReason {
+  switch (reason) {
+    case 'not-found':
+    case 'not-text':
+    case 'running':
+    case 'first-round':
+    case 'removed':
+      return reason
+    case 'settlement-pending':
+      return 'running'
+    case 'stable-boundary-unavailable':
+      return 'first-round'
+    case 'stale':
+      return 'not-found'
+  }
+}
+
+function toV1Decision(decision: RewriteDecisionV2, assistantSeq: number | null, messageId?: MessageId): RewriteDecision {
+  if (!decision.ok) return disabled(toV1Reason(decision.reason))
+  const target = decision.target
+  // V1 target：edit 的 key/seq 用 user seq；retry 的 key 用 messageId、seq 用 assistant seq。
+  const seq = target.kind === 'retry' && assistantSeq !== null ? assistantSeq : target.messageSeq
+  const key = target.kind === 'retry' ? `retry:${messageId}` : `edit:${seq}`
+  return { ok: true, target: { kind: target.kind, key, seq, boundarySeq: target.boundarySeq, text: target.text } }
+}
+
+function capabilitiesOf(options?: RewriteBoundaryOptions): RewriteCapabilitiesV2 {
+  return { forkBeforeMessage: options?.firstRound === true }
 }
 
 /** 计算 Retry 的派生目标：定位 assistant 对应 prompt，再取 prompt 之前的 turn/end。 */
@@ -152,33 +209,23 @@ export function computeRetryTarget(
   if (addressed === undefined) return disabled('not-found')
   const assistant = addressed.node
 
-  // Only the heuristic single-tail match may fall back to the newest prompt:
-  // its seq is not comparable with the legacy window. An exact match must find
-  // its own prompt — falling back here would silently retry a later turn.
-  const prompt = findPromptBefore(snapshot.nodes, assistant.seq)
-    ?? (addressed.exact ? null : findPromptBefore(snapshot.nodes, Number.POSITIVE_INFINITY))
-  if (prompt === null) return disabled('not-found')
-  if (!isTextOnly(prompt.content)) return disabled('not-text')
-
-  const text = textOfContent(prompt.content)
-  if (text === null) return disabled('not-text')
-
-  const boundarySeq = previousTurnEndSeq(snapshot, prompt.seq)
-  if (boundarySeq === null) {
-    return firstRoundDecision('retry', `retry:${messageId}`, assistant.seq, text, options?.firstRound)
+  // single-tail 启发式且窗口内没有更早 prompt 时，V1 回退到最新 prompt；
+  // 用超过全部 seq 的合成 assistant seq 在 V2 snapshot 中表达该 addressing
+  // 决策（决策属于 adapter，core 不做 fallback）。
+  const base = toV2Snapshot(snapshot)
+  const assistantKey = nodeKey(assistant)
+  const messages = [...base.messages]
+  let syntheticSeq = assistant.seq
+  if (!addressed.exact && findPromptBefore(snapshot.nodes, assistant.seq) === null) {
+    syntheticSeq = snapshot.nodes.reduce((max, node) => Math.max(max, node.seq), 0) + 1
   }
-  if (!hasTurnEndAfter(snapshot, prompt.seq) && snapshot.running) return disabled('running')
-
-  return {
-    ok: true,
-    target: {
-      kind: 'retry',
-      key: `retry:${messageId}`,
-      seq: assistant.seq,
-      boundarySeq,
-      text,
-    },
+  if (!messages.some((message) => message.key === assistantKey)) {
+    messages.push({ key: assistantKey, kind: 'assistant', seq: syntheticSeq, content: [], completed: true })
   }
+  const v2: RewriteConversationSnapshotV2 = { ...base, messages }
+
+  const decision = computeRetryTargetV2(v2, assistantKey, capabilitiesOf(options))
+  return toV1Decision(decision, assistant.seq, messageId)
 }
 
 /** 计算 Edit 的派生目标：仅接受已发送且纯文本的用户消息。 */
@@ -189,29 +236,12 @@ export function computeEditTarget(
 ): RewriteDecision {
   if (snapshot.removed) return disabled('removed')
 
+  // V1 语义：Edit 只寻址 user 节点（steering 不经此 API）。
   const node = snapshot.nodes.find((candidate): candidate is UserMessageNode => candidate.kind === 'user' && candidate.seq === seq)
   if (node === undefined) return disabled('not-found')
-  if (!isTextOnly(node.content)) return disabled('not-text')
 
-  const text = textOfContent(node.content)
-  if (text === null) return disabled('not-text')
-
-  const boundarySeq = previousTurnEndSeq(snapshot, seq)
-  if (boundarySeq === null) {
-    return firstRoundDecision('edit', `edit:${seq}`, seq, text, options?.firstRound)
-  }
-  if (!hasTurnEndAfter(snapshot, seq) && snapshot.running) return disabled('running')
-
-  return {
-    ok: true,
-    target: {
-      kind: 'edit',
-      key: `edit:${seq}`,
-      seq,
-      boundarySeq,
-      text,
-    },
-  }
+  const decision = computeUserTurnTargetV2(toV2Snapshot(snapshot), seq, 'edit', capabilitiesOf(options))
+  return toV1Decision(decision, null)
 }
 
 /** 将禁用原因映射为稳定的 UI 文案 key。 */

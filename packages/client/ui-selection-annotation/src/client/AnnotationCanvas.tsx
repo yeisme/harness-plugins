@@ -127,7 +127,7 @@ export function AnnotationCanvas(props: AnnotationCanvasProps) {
   }
 
   return (
-    <div className="dsh-annotation-canvas" data-testid="dsh-annotation-canvas" role="group" aria-label={labels['canvas.imageAnnotation']}>
+    <div className="dsh-annotation-canvas" data-yeisme-surface data-testid="dsh-annotation-canvas" role="group" aria-label={labels['canvas.imageAnnotation']}>
       <div className="dsh-annotation-canvas__toolbar">
         <button
           type="button"

@@ -6,6 +6,7 @@ export type CheckerId =
   | 'safe-projection-audit'
   | 'dispose-hmr-conformance'
   | 'visual-token-conformance'
+  | 'personal-coding-contract'
 
 export type CheckerStatus = 'pass' | 'red' | 'error'
 

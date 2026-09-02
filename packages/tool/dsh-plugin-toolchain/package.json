@@ -27,6 +27,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@yeisme/dsh-plugin-catalog": "workspace:*",
+    "@yeisme/dsh-plugin-contracts": "workspace:*",
     "tsdown": "^0.22.14",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"

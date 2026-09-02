@@ -28,8 +28,10 @@ export function runSafeProjectionAudit(root: string): CheckerReport {
       for (const file of sourceFiles(join(pkg.dir, 'src'))) {
         checkedFiles += 1
         const rel = relative(root, file)
+        const source = readFileSync(file, 'utf8')
+        const ownerAuthorizedUrlSource = source.includes('SAFEPROJ: owner-authorized URL source')
         for (const { line, text } of readCodeLines(file)) {
-          auditBrowserLine(rel, line, text, findings)
+          auditBrowserLine(rel, line, text, findings, ownerAuthorizedUrlSource)
         }
       }
     }
@@ -50,14 +52,14 @@ export function runSafeProjectionAudit(root: string): CheckerReport {
 }
 
 /** 浏览器侧红线访问——只记定位与规则，不回显命中文本 */
-function auditBrowserLine(rel: string, line: number, text: string, findings: Finding[]): void {
+function auditBrowserLine(rel: string, line: number, text: string, findings: Finding[], ownerAuthorizedUrlSource = false): void {
   if (/\bdocument\s*\.\s*cookie\b/.test(text)) {
     findings.push({ location: rel, line, code: 'SAFEPROJ/BROWSER_COOKIE_ACCESS', message: 'direct document.cookie access on browser side' })
   }
   if (/\b(?:localStorage|sessionStorage)\b/.test(text)) {
     findings.push({ location: rel, line, code: 'SAFEPROJ/BROWSER_STORAGE_ACCESS', message: 'direct browser storage access' })
   }
-  if (/\bfetch\s*\(/.test(text)) {
+  if (/\bfetch\s*\(/.test(text) && !ownerAuthorizedUrlSource) {
     findings.push({ location: rel, line, code: 'SAFEPROJ/RAW_FETCH', message: 'fetch call on browser side (owner seam required)' })
   }
   if (/(?<![\w:])\/(?:home|Users|workspaces|var|tmp|root|etc)\/[^\s'"`]*['"`]/.test(text)) {

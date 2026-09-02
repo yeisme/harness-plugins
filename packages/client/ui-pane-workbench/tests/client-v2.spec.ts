@@ -38,7 +38,7 @@ describe('Pane Workbench V2 DSH assembly', () => {
   })
 
   it('attaches one layout owner and registers only the official Right/Bottom slots', () => {
-    expect(inject).toEqual(['slots', 'workspaceLayout', 'sessions'])
+    expect(inject).toEqual(['slots', 'sessions'])
     const registered: Array<{ name: string; dispose: ReturnType<typeof vi.fn> }> = []
     const injected: string[] = []
     const slots = {

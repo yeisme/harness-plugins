@@ -23,6 +23,7 @@ function writeBundleFixture(root: string, dirName: string, options: {
   deps?: Record<string, string>
   description?: string
   platform?: string
+  personalCoding?: Record<string, unknown>
 } = {}): void {
   const dir = join(root, 'packages/bundle', dirName)
   mkdirSync(dir, { recursive: true })
@@ -38,6 +39,7 @@ function writeBundleFixture(root: string, dirName: string, options: {
   const dsh: Record<string, unknown> = {}
   if (options.dshPatchDeclared !== false) dsh.bundle = { patch: './cordis.patch.yml' }
   if (options.platform !== undefined) dsh.client = { platform: options.platform }
+  if (options.personalCoding !== undefined) dsh.personalCoding = options.personalCoding
   if (Object.keys(dsh).length > 0) manifest.dsh = dsh
   writeFileSync(join(dir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
   if (options.patch !== undefined) {
@@ -53,6 +55,10 @@ beforeAll(() => {
     patch: '# demo\n- insert:\n    - id: dsh-demo-notes\n      name: \'@yeisme/dsh-demo-notes\'\n',
     deps: { '@yeisme/dsh-demo-notes-host': 'workspace:*', '@yeisme/dsh-client-ui-demo-notes': 'workspace:*', 'react': '^18.3.1' },
     platform: 'web',
+    personalCoding: {
+      packId: 'base', tier: 'base', critical: true, dependencies: [],
+      criticalContributions: ['dsh-demo-notes'], optionalContributions: [],
+    },
   })
   writeBundleFixture(sandbox, 'dsh-demo-preset', {
     patch: '- insert:\n    - id: dsh-demo-preset\n      name: \'@yeisme/dsh-demo-preset\'\n',
@@ -90,6 +96,11 @@ describe('discoverBundles (fixture sandbox)', () => {
     expect(notes?.patchFile).toBe('packages/bundle/dsh-demo-notes/cordis.patch.yml')
     expect(notes?.pluginDependencies).toEqual(['@yeisme/dsh-client-ui-demo-notes', '@yeisme/dsh-demo-notes-host'])
     expect(notes?.installRows).toEqual([{ id: 'dsh-demo-notes', name: '@yeisme/dsh-demo-notes' }])
+    expect(notes?.personalCoding).toEqual({
+      packId: 'base', tier: 'base', critical: true, dependencies: [],
+      criticalContributions: ['dsh-demo-notes'], optionalContributions: [],
+      sourcePath: 'packages/bundle/dsh-demo-notes',
+    })
   })
 
   it('marks preset bundles (no build script) but keeps them cataloged', () => {

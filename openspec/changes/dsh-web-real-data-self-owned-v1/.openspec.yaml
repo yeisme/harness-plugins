@@ -1,3 +1,0 @@
-schema: spec-driven
-created: 2026-08-31
-goal: 让 dogfood 常用面板显示真实数据（ordo/team-hub 本地 CLI 链 + 官方已有 seam），常用面板真数据率 ≥80%。

@@ -1,0 +1,56 @@
+{
+  "name": "@yeisme/dsh-personal-coding-base",
+  "version": "0.1.0-rc.1",
+  "description": "Minimal DSH personal coding profile bundle: commands, workbench files/Git, semantic editor, terminal, diagnostics, structured plugin contracts, and optional Ordo projection",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "scripts": {
+    "generate:assets": "node ../../../scripts/generate-personal-coding-base.mjs",
+    "test": "node ../../../scripts/generate-personal-coding-base.mjs --check && node --test tests/base-contract.test.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml",
+      "composition": true
+    },
+    "personalCoding": {
+      "packId": "base",
+      "tier": "base",
+      "critical": true,
+      "dependencies": [],
+      "criticalContributions": [
+        "dsh-command-experience",
+        "dsh-workbench-core",
+        "dsh-desktop-workbench",
+        "dsh-semantic-file-editor",
+        "dsh-terminal",
+        "dsh-devtools"
+      ],
+      "optionalContributions": [
+        "ordo-agent-ops"
+      ]
+    }
+  },
+  "dependencies": {
+    "@yeisme/dsh-command-experience": "workspace:*",
+    "@yeisme/dsh-desktop-workbench": "workspace:*",
+    "@yeisme/dsh-devtools": "workspace:*",
+    "@yeisme/dsh-ordo-agent-ops": "workspace:*",
+    "@yeisme/dsh-plugin-contracts": "workspace:*",
+    "@yeisme/dsh-semantic-file-editor": "workspace:*",
+    "@yeisme/dsh-terminal": "workspace:*",
+    "@yeisme/dsh-workbench-core": "workspace:*"
+  }
+}

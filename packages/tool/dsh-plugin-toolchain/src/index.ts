@@ -3,12 +3,13 @@ import { runDeclarationLint } from './checkers/declaration-lint.js'
 import { runDisposeConformance } from './checkers/dispose-conformance.js'
 import { runSafeProjectionAudit } from './checkers/safe-projection-audit.js'
 import { runVisualTokenConformance } from './checkers/visual-token.js'
+import { runPersonalCodingContractCheck } from './checkers/personal-coding-contract.js'
 import type { CheckerId, CheckerReport, ToolchainRunResult } from './types.js'
 
 export type { CheckerId, CheckerReport, Finding, ToolchainRunResult } from './types.js'
 export { findWorkspaceRoot, listWorkspacePackages } from './workspace.js'
 export { writeRunReport } from './report.js'
-export { runBundleContractCheck, runDeclarationLint, runDisposeConformance, runSafeProjectionAudit, runVisualTokenConformance }
+export { runBundleContractCheck, runDeclarationLint, runDisposeConformance, runPersonalCodingContractCheck, runSafeProjectionAudit, runVisualTokenConformance }
 
 const ALL_CHECKERS: CheckerId[] = [
   'bundle-contract',
@@ -16,6 +17,7 @@ const ALL_CHECKERS: CheckerId[] = [
   'safe-projection-audit',
   'dispose-hmr-conformance',
   'visual-token-conformance',
+  'personal-coding-contract',
 ]
 
 /** 顺序执行选定的检查器，逐包汇总（G18 §1.3 统一入口的后端） */
@@ -48,6 +50,9 @@ export async function runPluginChecks(options: {
           break
         case 'visual-token-conformance':
           reportItem = runVisualTokenConformance(options.root)
+          break
+        case 'personal-coding-contract':
+          reportItem = runPersonalCodingContractCheck(options.root)
           break
       }
     } catch (error) {

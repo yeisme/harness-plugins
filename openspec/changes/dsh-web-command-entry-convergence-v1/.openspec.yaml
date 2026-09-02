@@ -1,3 +1,0 @@
-schema: spec-driven
-created: 2026-08-31
-goal: 把 31 个 bundle 的散落 Modal/按钮入口 additive 收敛进统一 slash+Palette 命令目录，只消费 command-first 产物、不复制实现。

@@ -22,6 +22,8 @@
     "dsh:dev": "node scripts/dsh-dev.mjs",
     "test:dsh-dev": "node --test scripts/dsh-dev.spec.mjs",
     "test:dsh-dev:integration": "node scripts/run-dsh-dev-integration-tests.mjs",
+    "test:personal-coding-integration": "node scripts/run-personal-coding-integration.mjs",
+    "test:personal-coding-profile-integration": "node scripts/run-personal-coding-profile-integration.mjs",
     "check:plugins": "node scripts/check-plugins.mjs"
   },
   "devDependencies": {

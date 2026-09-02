@@ -113,16 +113,19 @@ export function SideChatView({ controller, sessions, currentSessionId, t }: {
     />
     <div className="sc-bar">
       <label className="sc-badge" htmlFor="sc-session-select">{t('picker.label')}</label>
-      <select
-        id="sc-session-select"
-        className="sc-session"
-        value={state.sessionId ?? ''}
-        onChange={event => { controller.attach(event.target.value) }}
-        data-side-chat-picker
-      >
-        <option value="">{t('picker.placeholder')}</option>
-        {sessions.map(option => <option key={option.sessionId} value={option.sessionId}>{option.displayTitle}</option>)}
-      </select>
+      <label className="ys-field sc-session-field" htmlFor="sc-session-select">
+        <span className="sr-only">{t('picker.label')}</span>
+        <select
+          id="sc-session-select"
+          className="sc-session"
+          value={state.sessionId ?? ''}
+          onChange={event => { controller.attach(event.target.value) }}
+          data-side-chat-picker
+        >
+          <option value="">{t('picker.placeholder')}</option>
+          {sessions.map(option => <option key={option.sessionId} value={option.sessionId}>{option.displayTitle}</option>)}
+        </select>
+      </label>
       <Button
         type="button"
         size="sm"
@@ -198,6 +201,8 @@ export function SideChatView({ controller, sessions, currentSessionId, t }: {
 const SIDE_CHAT_STYLES = `
 [data-dsh-side-chat]{display:flex;flex-direction:column;width:100%;min-height:0;height:100%}
 [data-dsh-side-chat] .sc-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;min-height:34px}
+[data-dsh-side-chat] .sc-session-field{display:block;min-width:0}
+[data-dsh-side-chat] .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 [data-dsh-side-chat] .sc-bar select,[data-dsh-side-chat] .sc-composer input{font:inherit;background:var(--vk-bg-base);color:inherit;border:1px solid var(--vk-border-l2);border-radius:8px;padding:4px 8px;min-width:0}
 [data-dsh-side-chat] .sc-session{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 [data-dsh-side-chat] .sc-badge{font-size:12px;color:var(--vk-text-tertiary)}

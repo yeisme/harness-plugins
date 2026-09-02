@@ -144,7 +144,7 @@ export interface PaneWorkbenchClientFace {
   readonly experienceTier: ExperienceTierTrackerV1
 }
 
-export const inject = ['slots', 'workspaceLayout', 'sessions']
+export const inject = ['slots', 'sessions']
 
 interface WorkspaceLayoutServiceLike {
   readonly corePaneVersion?: string

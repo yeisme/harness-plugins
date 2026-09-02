@@ -4,6 +4,8 @@
 
 ## 入口
 
+- design/dsh-conversation-rewrite-core-v2.md：Web/TUI 共用的 host-neutral rewrite boundary、typed mutation outcomes、partial-success recovery、V1 compatibility facade 与跨 surface fixtures；设计与规格已冻结，尚未实施。Owning change：`../openspec/changes/dsh-conversation-rewrite-core-v2/`。
+- design/dsh-personal-coding-plugin-platform.md：个人编码基础包、显式 packs、`dsh.plugin_surface.v1`、Web/TUI 语义 fixture 和 contribution 故障隔离；V1 local profile integration 与 full maintainer gate 已完成，根级 7 天 dogfood 前保持 experimental。Owning change：`../openspec/changes/dsh-personal-coding-plugin-platform-v1/`。
 - cookbook/adding-ordo-agent-ops-plugin.md：Ordo Agent Ops 插件的组装/安装方式。
 - cookbook/adding-ordo-agent-ops-plugin.md §8：Ordo、Workbench、pack 与 Control Plane handoff 字段账本。
 - design/dsh-web-ordo-team-hub-v1.md：Session Agents / Ordo Teams 统一 Hub、Task-Agent graph、Host safe projection、响应式与可访问性设计。
@@ -42,3 +44,7 @@
     pnpm publish --filter @yeisme/dsh-ordo-agent-ops --access public
 
 发布是 external action，需 npm 权限与远端仓库，按需执行。
+
+## CI/CD
+
+- [模块化、分级 CI/CD](delivery/ci-cd.md)：quick、full、integration、release 的触发场景、真实命令和权限边界。

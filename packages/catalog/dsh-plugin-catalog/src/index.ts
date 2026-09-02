@@ -7,7 +7,9 @@
  * 无网络服务、无遥测、不建第二 registry；清单数据由发现层只读扫描生成。
  */
 
-export { CATALOG_SCHEMA_VERSION, type CatalogBundleEntry, type CatalogInstallRow, type PluginCatalog } from './schema.js'
+export { CATALOG_SCHEMA_VERSION, type CatalogBundleEntry, type CatalogInstallRow, type CatalogPersonalCodingPackV1, type PluginCatalog } from './schema.js'
 export { discoverBundles, findWorkspaceRoot, parseInstallRows } from './discover.js'
 export { GENERATOR_NAME, buildCatalog, defaultManifestPath, serializeCatalog, writeCatalog, main as generateMain } from './generate.js'
 export { loadCatalog, findBundle, searchBundles, renderBundleTable, renderBundleDetail, main as runCli } from './cli.js'
+export { listPersonalCodingPacks, resolvePersonalCodingPacks } from './personal-coding.js'
+export type { PersonalCodingPackResolutionV1 } from './personal-coding.js'

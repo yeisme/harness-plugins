@@ -40,27 +40,36 @@ export function runDeclarationLint(root: string): CheckerReport {
     const rows = parsePatchYml(readFileSync(patchPath, 'utf8'), rel, findings)
     const name = packageName(bundle)
     const exports = packageExports(bundle)
+    const composition = isCompositionBundle(bundle)
     for (const row of rows) {
       if (row.id === undefined) {
         findings.push({ location: `${rel}/cordis.patch.yml`, line: row.lineNumber, code: 'DECL/ROW_ID_MISSING', message: 'insert row has no id' })
         continue
       }
-      if (seenIds.has(row.id) && seenIds.get(row.id) !== rel) {
+      if (!composition && seenIds.has(row.id) && seenIds.get(row.id) !== rel) {
         findings.push({
           location: `${rel}/cordis.patch.yml`,
           line: row.lineNumber,
           code: 'DECL/ID_DUPLICATE',
           message: `insert id also declared by ${seenIds.get(row.id)}`,
         })
-      } else {
+      } else if (!composition) {
         seenIds.set(row.id, rel)
       }
       if (row.name === undefined) {
         findings.push({ location: `${rel}/cordis.patch.yml`, line: row.lineNumber, code: 'DECL/ROW_NAME_MISSING', message: `row "${row.id}" has no name` })
         continue
       }
-      // 行名必须命中本包根导出或子路径导出（如 @yeisme/dsh-terminal/host → ./host）。
-      if (row.name !== name && !(row.name.startsWith(`${name}/`) && exports.includes(`.${row.name.slice(name.length)}`))) {
+      const rowName = row.name
+      // 普通 bundle 的行名必须命中自身导出；组合 bundle 明确声明其 patch
+      // 是对已安装 sibling bundle 的受控引用，因此校验目标存在于本仓依赖
+      // 与 package catalog，而不把 sibling 名误当作本包导出。
+      if (composition) {
+        if (rowName !== undefined) {
+          const target = packages.find(pkg => packageName(pkg) === rowName || (rowName.startsWith(`${packageName(pkg)}/`) && packageExports(pkg).includes(`.${rowName.slice(packageName(pkg).length)}`)))
+          if (target === undefined) findings.push({ location: `${rel}/cordis.patch.yml`, line: row.lineNumber, code: 'DECL/UNKNOWN_COMPOSITION_TARGET', message: `composition row target is not an installed workspace bundle: ${rowName}` })
+        }
+      } else if (rowName !== name && !(rowName.startsWith(`${name}/`) && exports.includes(`.${rowName.slice(name.length)}`))) {
         findings.push({
           location: `${rel}/cordis.patch.yml`,
           line: row.lineNumber,
@@ -87,6 +96,14 @@ export function runDeclarationLint(root: string): CheckerReport {
   }
   if (findings.length === 0) notes.push(`${bundles.length} bundles, ${seenIds.size} insert rows checked`)
   return report('declaration-lint', bundles.length, findings, notes)
+}
+
+function isCompositionBundle(bundle: WorkspacePackage): boolean {
+  const dsh = bundle.manifest.dsh
+  return Boolean(dsh && typeof dsh === 'object' && !Array.isArray(dsh)
+    && (dsh as Record<string, unknown>).bundle
+    && typeof (dsh as Record<string, unknown>).bundle === 'object'
+    && ((dsh as Record<string, unknown>).bundle as Record<string, unknown>).composition === true)
 }
 
 interface PatchRow { id?: string; name?: string; lineNumber: number }

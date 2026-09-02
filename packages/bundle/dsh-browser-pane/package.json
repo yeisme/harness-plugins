@@ -19,6 +19,18 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "personalCoding": {
+      "packId": "browser",
+      "tier": "optional",
+      "critical": false,
+      "dependencies": [
+        "base"
+      ],
+      "criticalContributions": [],
+      "optionalContributions": [
+        "dsh-browser-pane"
+      ]
     }
   },
   "files": [

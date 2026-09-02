@@ -99,13 +99,25 @@ describe('P0 catalog adapters', () => {
     expect(inspectCommandsMutateState('session')).toBe(true)
   })
 
+  it('enables /ordo run launch only for the typed preview-CAS capability', () => {
+    const withoutLaunch = buildP0Catalog({ availableActions: new Set(['run-start']) })
+    expect(withoutLaunch.find((item) => item.canonicalName === 'ordo run launch')).toMatchObject({
+      owner: 'host',
+      danger: 'confirm',
+      coverage: 'conditional',
+      availability: { state: 'disabled', reason: 'missing owner action ordo.run.launch.preview-cas' },
+    })
+    const ready = buildP0Catalog({ availableActions: new Set(['ordo.run.launch.preview-cas']) })
+    expect(ready.find((item) => item.canonicalName === 'ordo run launch')?.availability.state).toBe('available')
+  })
+
   it('projects every live P0 canonical with owner, danger, coverage, and availability reason', () => {
     const catalog = buildP0Catalog()
     const expected = [
       'help', 'commands', 'status', 'plugins', 'mcp', 'skills', 'pane', 'explorer', 'git',
       'agent', 'resume', 'session', 'archive', 'delete', 'new', 'fork', 'rename',
       'preset', 'model', 'reasoning', 'permissions',
-      'compact', 'plan', 'goal', 'diff', 'review', 'mention',
+      'compact', 'plan', 'goal', 'diff', 'review', 'ordo run launch', 'mention',
       'copy', 'feedback', 'init', 'logout', 'quit',
     ]
     expect(catalog.map((item) => item.canonicalName).sort()).toEqual([...expected].sort())

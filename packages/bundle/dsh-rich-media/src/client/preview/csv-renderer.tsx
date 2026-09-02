@@ -31,36 +31,40 @@ export interface MediaCsvRendererProps {
   readonly labels?: Partial<MediaCsvLabels> | undefined
 }
 
+type CsvPreviewState =
+  | { readonly phase: 'loading'; readonly rows: readonly (readonly string[])[]; readonly truncated: false }
+  | { readonly phase: 'ready'; readonly rows: readonly (readonly string[])[]; readonly truncated: boolean }
+  | { readonly phase: 'unsupported'; readonly rows: readonly (readonly string[])[]; readonly truncated: false }
+
+const LOADING_STATE: CsvPreviewState = { phase: 'loading', rows: [], truncated: false }
+const UNSUPPORTED_STATE: CsvPreviewState = { phase: 'unsupported', rows: [], truncated: false }
+
 /** Bounded CSV/TSV grid preview. */
 export function MediaCsvRenderer({ media, source, labels }: MediaCsvRendererProps) {
   const text = { ...DEFAULT_LABELS, ...labels }
-  const [state, setState] = useState<'loading' | 'ready' | 'unsupported'>('loading')
-  const [rows, setRows] = useState<readonly (readonly string[])[]>([])
-  const [truncated, setTruncated] = useState(false)
+  // Phase, rows and truncation form one parse receipt. Keeping them atomic
+  // prevents a transient `ready + empty rows` projection under a busy host.
+  const [state, setState] = useState<CsvPreviewState>(LOADING_STATE)
 
   useEffect(() => {
     const controller = new AbortController()
-    setState('loading')
-    setRows([])
-    setTruncated(false)
+    setState(LOADING_STATE)
     let cancelled = false
     void source.readText(CSV_PARSE_BUDGET.maxBytes, controller.signal).then(body => {
       if (cancelled || controller.signal.aborted) return
       if (body === undefined || body.length === 0) {
-        setState('unsupported')
+        setState(UNSUPPORTED_STATE)
         return
       }
       const parsed = parseDelimitedTable(body, delimiterOfMediaType(media.mediaType))
       if (parsed.rows.length === 0) {
-        setState('unsupported')
+        setState(UNSUPPORTED_STATE)
         return
       }
-      setRows(parsed.rows)
-      setTruncated(parsed.truncated)
-      setState('ready')
+      setState({ phase: 'ready', rows: parsed.rows, truncated: parsed.truncated })
     }).catch(caught => {
       if (cancelled || isAbortError(caught)) return
-      setState('unsupported')
+      setState(UNSUPPORTED_STATE)
     })
     return () => {
       cancelled = true
@@ -68,16 +72,16 @@ export function MediaCsvRenderer({ media, source, labels }: MediaCsvRendererProp
     }
   }, [media, source])
 
-  if (state === 'loading') return <p role="status" data-dsh-csv-preview-state="loading">{text.loading}</p>
-  if (state === 'unsupported') return <p role="alert" data-dsh-csv-preview-state="unsupported">{text.unavailable}</p>
+  if (state.phase === 'loading') return <p role="status" data-dsh-csv-preview-state="loading">{text.loading}</p>
+  if (state.phase === 'unsupported') return <p role="alert" data-dsh-csv-preview-state="unsupported">{text.unavailable}</p>
 
   return (
     <div data-dsh-csv-preview style={{ width: '100%', minHeight: 0, display: 'grid', gap: 8 }}>
       <LocalTableGrid
         media={media}
-        rows={rows.slice(1)}
-        columns={columnsFromHeaderRow(rows[0])}
-        note={truncated ? text.truncated : undefined}
+        rows={state.rows.slice(1)}
+        columns={columnsFromHeaderRow(state.rows[0])}
+        note={state.truncated ? text.truncated : undefined}
         sheetId="csv"
       />
     </div>

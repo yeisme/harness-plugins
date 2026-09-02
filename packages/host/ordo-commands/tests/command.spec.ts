@@ -176,7 +176,7 @@ describe('@yeisme/dsh-host-ordo-commands registration', () => {
     expect(OrdoCommands.hasOrdoCommandRegistration(test.ctx)).toBe(false)
   })
 
-  it('boots the actual Loader composition and returns the owner-gated summary', async () => {
+  it('boots the actual Loader composition and fails closed on owner context mismatch', async () => {
     loaderRoot = await mkdtemp(join(tmpdir(), 'dsh-ordo-command-loader-'))
     const configPath = join(loaderRoot, 'cordis.yml')
     await writeFile(configPath, [
@@ -211,7 +211,7 @@ describe('@yeisme/dsh-host-ordo-commands registration', () => {
     expect(ctx.commands.list(owner).map(command => command.name)).toContain('ordo')
     const execution = await ctx.commands.execute(owner, '/ordo status', new AbortController().signal)
     expect(execution?.result).toMatchObject({ kind: 'success' })
-    expect(execution?.result.text).toContain('needs_contract; owner_read_contract_unavailable.')
+    expect(execution?.result.text).toContain('stale; contract_mismatch; contract_mismatch.')
     noFacts(execution?.result.text ?? '')
   })
 })

@@ -62,6 +62,7 @@ const P0_SEEDS: readonly P0Seed[] = [
   { canonicalName: 'goal', description: 'Open the current goal', category: 'work', actionKind: 'inspect', owner: 'dsh', danger: 'safe', coverage: 'staged', requiredAction: 'open-goal' },
   { canonicalName: 'diff', description: 'Show a workspace or conversation diff', category: 'work', actionKind: 'inspect', owner: 'client', danger: 'safe', coverage: 'adapted' },
   { canonicalName: 'review', description: 'Open review mode', category: 'work', actionKind: 'owner-action', owner: 'dsh', danger: 'safe', coverage: 'staged', requiredAction: 'open-review' },
+  { canonicalName: 'ordo run launch', description: 'Preview and explicitly hand off the frozen candidate to Ordo', category: 'work', actionKind: 'owner-action', owner: 'host', danger: 'confirm', coverage: 'conditional', hint: '[codex|claude]', requiredAction: 'ordo.run.launch.preview-cas' },
   { canonicalName: 'mention', description: 'Insert an owner-safe mention', category: 'work', actionKind: 'owner-action', owner: 'dsh', danger: 'safe', coverage: 'staged', requiredAction: 'insert-mention' },
   { canonicalName: 'copy', description: 'Copy the current selection', category: 'lifecycle', actionKind: 'local', owner: 'client', danger: 'safe', coverage: 'equivalent' },
   { canonicalName: 'feedback', description: 'Send product feedback', category: 'lifecycle', actionKind: 'owner-action', owner: 'dsh', danger: 'safe', coverage: 'staged', requiredAction: 'send-feedback' },

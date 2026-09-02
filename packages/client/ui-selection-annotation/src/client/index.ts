@@ -101,6 +101,7 @@ export async function apply(ctx: ClientContext, runtimeOptions: RuntimeOptions =
   )
   const overlay = document.createElement('div')
   overlay.className = 'dsh-selection-composer'
+  overlay.dataset.yeismeSurface = 'true'
   overlay.setAttribute('role', 'dialog')
   overlay.setAttribute('aria-label', labels['composer.title'])
   overlay.style.display = 'none'
@@ -122,7 +123,10 @@ export async function apply(ctx: ClientContext, runtimeOptions: RuntimeOptions =
         <button type="button" data-action="close" aria-label="close">×</button>
       </div>
       <div class="dsh-selection-composer__intents" role="tablist">${intentButtons}</div>
-      <textarea rows="${state.rows}" aria-label="${labels['composer.title']}">${state.text.replace(/</g, '&lt;')}</textarea>
+      <label class="ys-field dsh-selection-composer__field">
+        <span class="sr-only">${labels['composer.title']}</span>
+        <textarea rows="${state.rows}" aria-label="${labels['composer.title']}">${state.text.replace(/</g, '&lt;')}</textarea>
+      </label>
       <div class="dsh-selection-composer__footer">
         <span class="dsh-selection-composer__cards">${cards}</span>
         <span>${labels['composer.reviewOnly']}</span>

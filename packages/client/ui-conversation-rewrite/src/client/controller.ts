@@ -1,13 +1,24 @@
 /**
- * ChatRewriteController：Edit/Retry 的 pending mutation 状态机。
+ * ChatRewriteController：Edit/Retry 的 pending mutation 状态机（V2 core facade）。
  *
- * 组件只提交 typed intent；fork/prompt/open 由注入的 host adapter 执行。
- * 未知/partial/stale 只进入 typed error，不自动重试。
+ * 分阶段执行、single-flight、dispose 收敛与 partial-success 安全不变量全部由
+ * `@yeisme/dsh-client-ui-conversation-rewrite-core` 的 V2 controller 拥有；本
+ * facade 只做两件事：把旧 `ChatRewriteHost` 适配为 V2 mutation host，并把
+ * V2 阶段投影回旧视图 `idle | submitting | opened | error`。旧 store 形状、
+ * Promise 汇合与 dispose 语义保持不变。
  *
  * @module @yeisme/dsh-client-ui-conversation-rewrite/controller
  */
 
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import {
+  ConversationRewriteControllerV2,
+  accepted,
+  rejected,
+  unknownOutcome,
+  type RewriteMutationHostV2,
+  type RewriteMutationOutcomeV2,
+} from '@yeisme/dsh-client-ui-conversation-rewrite-core'
 import type { RewriteTarget } from './boundary.ts'
 
 export type ChatRewritePhase = 'idle' | 'submitting' | 'opened' | 'error'
@@ -48,7 +59,7 @@ class SnapshotStoreImpl implements ChatRewriteSnapshotStore {
 
   readonly getSnapshot = (): ChatRewriteViewState => this.state
 
-  readonly subscribe = (fn: () => void): () => void => {
+  readonly subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn)
     return () => { this.listeners.delete(fn) }
   }
@@ -66,25 +77,62 @@ const INITIAL: ChatRewriteViewState = {
   errorMessage: null,
 }
 
-function errorDetails(error: unknown): { code: string; message: string } {
-  if (typeof error === 'object' && error !== null) {
-    const candidate = error as { code?: unknown; message?: unknown }
-    return {
-      code: typeof candidate.code === 'string' ? candidate.code : 'mutation_failed',
-      message: typeof candidate.message === 'string' ? candidate.message : 'Conversation rewrite mutation failed',
+/** V1 host throw 分类：携带稳定 code 的对象视为确定性拒绝，其余一律 unknown。 */
+async function classify<T>(code: string, call: () => Promise<T>): Promise<RewriteMutationOutcomeV2<T>> {
+  try {
+    const value = await call()
+    return accepted(value)
+  } catch (error) {
+    if (typeof error === 'object' && error !== null) {
+      const candidate = error as { code?: unknown; message?: unknown }
+      const errorCode = typeof candidate.code === 'string' ? candidate.code : null
+      const message = typeof candidate.message === 'string' ? candidate.message : undefined
+      // rejected/unknownOutcome 默认 T=never：这里显式断言回调用点的值类型。
+      if (errorCode !== null) return rejected(errorCode, message) as RewriteMutationOutcomeV2<T>
+      return unknownOutcome(code, undefined, message) as RewriteMutationOutcomeV2<T>
     }
+    return unknownOutcome(code) as RewriteMutationOutcomeV2<T>
   }
-  return { code: 'mutation_failed', message: 'Conversation rewrite mutation failed' }
+}
+
+/** 旧 host → V2 mutation host：open 映射 activate 阶段。 */
+function toV2Host(host: ChatRewriteHost): RewriteMutationHostV2 {
+  const forkBeforeMessage = host.forkBeforeMessage
+  return {
+    fork: (input) =>
+      classify('fork_error', async () => ({ childSessionId: String(await host.fork({ sessionId: input.sourceSessionId as SessionId, atSeq: input.boundarySeq, increaseTitle: true })) })),
+    ...(forkBeforeMessage !== undefined
+      ? {
+          forkBeforeMessage: (input: { operationId: string; sourceSessionId: string; messageSeq: number }) =>
+            classify('fork_error', async () => ({ childSessionId: String(await forkBeforeMessage({ sessionId: input.sourceSessionId as SessionId, atMessageSeq: input.messageSeq })) })),
+        }
+      : {}),
+    prompt: (input) =>
+      classify('prompt_error', async () => {
+        await host.prompt(input.childSessionId as SessionId, input.text)
+        return {} as Record<string, never>
+      }),
+    activate: (input) =>
+      classify('activate_error', async () => {
+        host.open(input.childSessionId as SessionId)
+        return {} as Record<string, never>
+      }),
+  }
 }
 
 /** 一个 effect-scoped 的轻量 mutation 控制器；dispose 后不再发布状态。 */
 export class ChatRewriteController {
   readonly store: ChatRewriteSnapshotStore = new SnapshotStoreImpl(INITIAL)
 
-  private active: Promise<void> | undefined
+  private readonly core: ConversationRewriteControllerV2
+  private pending: Promise<void> | undefined
   private disposed = false
+  private operationCounter = 0
 
-  constructor(private readonly host: ChatRewriteHost) {}
+  constructor(private readonly host: ChatRewriteHost) {
+    this.core = new ConversationRewriteControllerV2(toV2Host(host))
+    this.core.store.subscribe(() => this.project())
+  }
 
   /** True when the host bound `session.forkBeforeMessage`. */
   supportsFirstRound(): boolean {
@@ -94,63 +142,80 @@ export class ChatRewriteController {
   /** 发起一次 Edit/Retry 派生。同一时刻只允许一个 pending mutation。 */
   run(sessionId: SessionId, target: RewriteTarget): Promise<void> {
     if (this.disposed) return Promise.resolve()
-    if (this.store.getSnapshot().phase === 'submitting') return this.active ?? Promise.resolve()
+    if (this.pending !== undefined) return this.pending
 
-    this.store.set({ phase: 'submitting', activeKey: target.key, errorCode: null, errorMessage: null })
-    const operation = this.execute(sessionId, target).finally(() => {
-      if (this.active === operation) this.active = undefined
-    })
-    this.active = operation
+    // 首轮 fail closed：保持 V1 的错误码与消息，零 owner 调用。
+    if (target.boundarySeq === null && this.host.forkBeforeMessage === undefined) {
+      this.store.set({
+        phase: 'error',
+        activeKey: target.key,
+        errorCode: 'mutation_failed',
+        errorMessage: 'forkBeforeMessage is unavailable for first-round rewrite',
+      })
+      return Promise.resolve()
+    }
+
+    const operation = this.core
+      .run({
+        operationId: `web-rewrite:${target.key}:${(this.operationCounter += 1)}`,
+        target: {
+          kind: target.kind,
+          key: target.key,
+          sourceSessionId: String(sessionId),
+          sourceGeneration: 0,
+          messageKey: `web:${target.key}`,
+          messageSeq: target.seq,
+          boundarySeq: target.boundarySeq,
+          text: target.text,
+        },
+      })
+      .then(() => undefined)
+      .finally(() => {
+        if (this.pending === operation) this.pending = undefined
+      })
+    this.pending = operation
     return operation
   }
 
   /** 清除 error/opened 状态，回到 idle。 */
   reset(): void {
-    if (!this.disposed) this.store.set(INITIAL)
+    if (this.disposed) return
+    this.core.reset()
+    if (this.pending === undefined) this.store.set(INITIAL)
   }
 
   /** 插件卸载：若仍有 pending，则以 settled error 收敛，不留下幽灵 pending。 */
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
-    const current = this.store.getSnapshot()
-    if (current.phase === 'submitting') {
-      this.store.set({
-        phase: 'error',
-        activeKey: current.activeKey,
-        errorCode: 'disposed',
-        errorMessage: 'Plugin unloaded before the mutation settled',
-      })
-    } else {
-      this.store.set(INITIAL)
-    }
-    this.active = undefined
+    this.core.dispose()
+    this.pending = undefined
   }
 
-  private async execute(sessionId: SessionId, target: RewriteTarget): Promise<void> {
-    try {
-      const childId = await this.forkChild(sessionId, target)
-      await this.host.prompt(childId, target.text)
-      this.host.open(childId)
-      if (!this.disposed) {
-        this.store.set({ phase: 'opened', activeKey: target.key, errorCode: null, errorMessage: null })
-      }
-    } catch (error) {
-      if (!this.disposed) {
-        const details = errorDetails(error)
-        this.store.set({ phase: 'error', activeKey: target.key, errorCode: details.code, errorMessage: details.message })
-      }
+  /** V2 阶段 → 旧视图相位（forking…hydrating → submitting；succeeded → opened）。 */
+  private project(): void {
+    const state = this.core.store.getSnapshot()
+    switch (state.phase) {
+      case 'idle':
+        this.store.set(INITIAL)
+        return
+      case 'forking':
+      case 'prompting':
+      case 'activating':
+      case 'hydrating':
+        this.store.set({ phase: 'submitting', activeKey: state.targetKey, errorCode: null, errorMessage: null })
+        return
+      case 'succeeded':
+        this.store.set({ phase: 'opened', activeKey: state.targetKey, errorCode: null, errorMessage: null })
+        return
+      case 'recoverable_error':
+        this.store.set({
+          phase: 'error',
+          activeKey: state.targetKey,
+          errorCode: state.reasonCode,
+          errorMessage: state.safeSummary ?? 'Conversation rewrite mutation failed',
+        })
     }
-  }
-
-  private async forkChild(sessionId: SessionId, target: RewriteTarget): Promise<SessionId> {
-    if (target.boundarySeq !== null) {
-      return this.host.fork({ sessionId, atSeq: target.boundarySeq, increaseTitle: true })
-    }
-    if (this.host.forkBeforeMessage !== undefined) {
-      return this.host.forkBeforeMessage({ sessionId, atMessageSeq: target.seq })
-    }
-    throw new Error('forkBeforeMessage is unavailable for first-round rewrite')
   }
 }
 

@@ -16,6 +16,16 @@ export interface CatalogInstallRow {
   readonly name: string
 }
 
+export interface CatalogPersonalCodingPackV1 {
+  readonly packId: string
+  readonly tier: 'base' | 'optional'
+  readonly critical: boolean
+  readonly dependencies: readonly string[]
+  readonly criticalContributions: readonly string[]
+  readonly optionalContributions: readonly string[]
+  readonly sourcePath: string
+}
+
 /**
  * 一个可安装 bundle 的清单条目。覆盖 packages/bundle 目录下全部子目录
  * （含 preset/data 形态与暂不可独立安装的组装面），`installable=false` 的
@@ -42,6 +52,8 @@ export interface CatalogBundleEntry {
   readonly pluginDependencies: readonly string[]
   /** cordis.patch.yml 解析出的 insert 安装行 */
   readonly installRows: readonly CatalogInstallRow[]
+  /** 可选的个人编码 pack 元数据；来自 package.json，由 catalog 只读投影。 */
+  readonly personalCoding?: CatalogPersonalCodingPackV1
 }
 
 /** 生成的静态清单整体。 */

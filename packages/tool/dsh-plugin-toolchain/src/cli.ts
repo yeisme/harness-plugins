@@ -12,6 +12,7 @@ const VALID: CheckerId[] = [
   'safe-projection-audit',
   'dispose-hmr-conformance',
   'visual-token-conformance',
+  'personal-coding-contract',
 ]
 
 export async function main(argv: string[]): Promise<number> {

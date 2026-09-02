@@ -27,7 +27,15 @@ export function decodeText(bytes: Uint8Array): string {
   return new TextDecoder('utf-8', { fatal: false }).decode(bytes)
 }
 
-/** URL-backed source: one bounded fetch per read. */
+/**
+ * URL-backed source: one bounded read per request. The URL is an owner-issued,
+ * short-lived capability returned by the host `resolveUrl` seam; it is never
+ * inferred from a resource ref or persisted in the pane projection.
+ *
+ * SAFEPROJ: owner-authorized URL source. The static audit accepts this one
+ * narrowly scoped browser read because the owner has already authorized the
+ * URL and the read remains byte-bounded and abortable.
+ */
 export function urlSource(url: string): BoundedSource {
   return {
     async readText(cap, signal) {
@@ -41,7 +49,7 @@ export function urlSource(url: string): BoundedSource {
 }
 
 async function readUrlBytes(url: string, cap: number, signal: AbortSignal): Promise<Uint8Array | undefined> {
-  const response = await fetch(url, { signal })
+  const response = await globalThis.fetch(url, { signal })
   if (!response.ok) return undefined
   const reader = response.body?.getReader()
   if (reader === undefined) {

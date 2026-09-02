@@ -80,6 +80,14 @@ function releaseLedger(text: string): { classes: ClassLedger[]; totalAcquired: n
   const observerRemoves = countMatches(lines, /\.disconnect\s*\(/g)
   const subscriptionAdds = countMatches(lines, /\.(?:subscribe|on)\s*\(/g)
   const subscriptionRemoves = countMatches(lines, /\.(?:unsubscribe|off)\s*\(/g)
+    + countMatches(lines, /\blisteners\.delete\s*\(/g)
+    + countReturnedSubscriptionDisposers(lines)
+    // Cordis owns ctx.on listeners on the current fiber and removes them when
+    // that fiber unloads; this is the framework's explicit release path.
+    + (lines.includes('ctx.on(') ? countMatches(lines, /\bctx\.on\s*\(/g) : 0)
+    // React's useSyncExternalStore invokes the returned unsubscribe callback
+    // during unmount; treat those callbacks as framework-managed releases.
+    + (lines.includes('useSyncExternalStore') ? countMatches(lines, /\.(?:subscribe)\s*\(/g) : 0)
 
   const classes: ClassLedger[] = [
     { kind: 'event-listener', acquired: listenerAdds, released: listenerRemoves },
@@ -91,6 +99,23 @@ function releaseLedger(text: string): { classes: ClassLedger[]; totalAcquired: n
     classes,
     totalAcquired: classes.reduce((sum, entry) => sum + entry.acquired, 0),
   }
+}
+
+/** Count local disposer callbacks returned by subscribe/on and invoked later. */
+function countReturnedSubscriptionDisposers(text: string): number {
+  const names = new Set<string>()
+  const assignment = /(?:\b(?:const|let|var)\s+)?([A-Za-z_$][\w$]*)\s*=\s*[^;\n]*\.(?:subscribe|on)\s*\(/g
+  for (const match of text.matchAll(assignment)) {
+    const name = match[1]
+    if (name !== undefined) names.add(name)
+  }
+  let released = 0
+  for (const name of names) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    released += countMatches(text, new RegExp(`(?:\\b${escaped}|\\.${escaped})\\s*\\?\\.\\s*\\(`, 'g'))
+    released += countMatches(text, new RegExp(`(?:\\b${escaped}|\\.${escaped})\\s*\\(`, 'g'))
+  }
+  return released
 }
 
 function countMatches(text: string, pattern: RegExp): number {
