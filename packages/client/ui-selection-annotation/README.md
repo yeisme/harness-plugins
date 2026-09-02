@@ -1,13 +1,20 @@
 # @yeisme/dsh-client-ui-selection-annotation
 
 DSH Web selection & annotation client for the Selection & Annotation Agent
-Interaction V1 program.
+Interaction program. The current RC remains the V1 baseline; the planned V2
+contract is defined in `openspec/changes/dsh-selection-interaction-v2/` and
+uses the shared singleton interaction layer.
 
 The `./client` entry grafts onto the conversation DOM without slot
 registration or host shadowing; host contracts live in
 `@yeisme/dsh-selection-host` — the browser never sees patch text,
 credentials or screenshot bytes. Kill-switch:
 `localStorage['dsh-selection-annotation'] = 'off'`.
+
+V2 changes the selection trigger: a stable, safe selection exposes a short-lived
+Actions surface (1 primary + 2 secondary + More); Compact Composer opens only
+after an explicit ask/comment/edit action. V1 hosts may use the compatibility
+adapter for one release during migration.
 
 ## 入口（./client）
 
@@ -71,5 +78,7 @@ owner service，不需要 fork 本包。
 receipt；漂移协调）。正式安装走 bundle：
 `dsh plugin --profile web add @yeisme/dsh-selection-annotation`。
 
-Spec: `openspec/changes/dsh-selection-agent-review-v1/`；
+V1 archive: `openspec/changes/archive/2026-08-28-dsh-selection-agent-review-v1/`；
 仓库级摘要：`docs/design/dsh-selection-agent-review-v1.md`。
+V2 设计与任务：`docs/design/dsh-selection-interaction-v2.md`、
+`openspec/changes/dsh-selection-interaction-v2/`。

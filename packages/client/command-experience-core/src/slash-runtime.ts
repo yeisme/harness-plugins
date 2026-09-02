@@ -30,6 +30,7 @@ import {
 } from './pane-projection';
 import { buildP0Catalog, OFFICIAL_OWNED_INSPECT_NAMES, type OwnerCapabilitySnapshot } from './p0-catalog';
 import type { CommandExperienceEntryV1 } from './types';
+import { registerConvergedSource, unloadConvergedSource } from './entry-convergence';
 
 export interface SlashPaneViewRecord extends PaneSlashViewSnapshot {
   readonly resourceKey?: string;
@@ -208,6 +209,12 @@ export function createSlashRuntime(host: SlashRuntimeHost = {}): SlashRuntime {
       });
     } else {
       directory.removeSource(HOST_DIRECTORY_SOURCE);
+    }
+    const pluginIds = (host.plugins?.() ?? []).map(plugin => plugin.id)
+    if (pluginIds.length > 0) {
+      registerConvergedSource(directory, pluginIds)
+    } else {
+      unloadConvergedSource(directory)
     }
   };
 

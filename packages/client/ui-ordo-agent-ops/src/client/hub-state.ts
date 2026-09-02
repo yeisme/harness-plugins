@@ -73,6 +73,35 @@ export function agentsHubHeader(snapshot: OrdoTeamSnapshotV1 | undefined, matrix
   }
 }
 
+export interface AgentsHubProjectionV1 {
+  readonly header: AgentsHubHeaderV1
+  readonly rows: readonly { taskRef: string; title: string; state: string; criticality: string; blocked: boolean }[]
+  readonly offlineReason: string | undefined
+}
+
+/**
+ * Hub panel projection: live owner facts only. Fixtures, missing CLI, and
+ * offline snapshots yield an honest reason and zero demo rows.
+ */
+export function projectAgentsHub(
+  snapshot: OrdoTeamSnapshotV1 | undefined,
+  matrix: OrdoTeamCapabilityMatrixV1,
+  state: AgentsHubStateV1,
+): AgentsHubProjectionV1 {
+  const live = (matrix.team === 'live' || matrix.team === 'readonly') && snapshot !== undefined && snapshot.freshness !== 'offline'
+  return {
+    header: agentsHubHeader(live ? snapshot : undefined, matrix),
+    rows: live ? agentsHubTaskRows(snapshot, state) : [],
+    offlineReason: live
+      ? undefined
+      : snapshot?.freshness === 'offline'
+        ? snapshot.safeMessage
+        : matrix.team === 'fixtures'
+          ? 'fixtures_only'
+          : 'team_v1_unavailable',
+  }
+}
+
 /** Task rows for the Teams sub-view, honoring the delivery filter. */
 export function agentsHubTaskRows(
   snapshot: OrdoTeamSnapshotV1 | undefined,

@@ -2,6 +2,12 @@
 
 (merged from archived change 2026-08-31-dsh-browser-pane-v1)
 
+## Purpose
+
+定义 Browser Pane 的 Provider-gated 注册、typed automation authority、session/page 投影、viewport attachment 与安全边界，使浏览器能力可诊断、可降级且不泄露私密页面或凭据数据。
+
+## Requirements
+
 ### Requirement: Browser bundle SHALL 注册可诊断且受 Provider gate 控制的 Pane
 
 `@yeisme/dsh-browser-pane` SHALL 通过 DSH 公开 plugin/client seam 注册 plugin id `dsh-browser-pane`、命令 `browser.open`、slash name `browser` 和非 singleton Pane kind `dsh.browser`。bundle 安装后，基础诊断 view SHALL 保持可用；`browser.automation.*` 与 `browser.viewport.attachment.v0.1` SHALL 作为 optional capabilities。只有 exact compatible Provider probe 成功后，Pane 才能暴露 live controls 与 viewport attachment。

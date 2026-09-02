@@ -16,8 +16,8 @@ import { z } from 'zod'
 export const ORDO_TEAM_SNAPSHOT_SCHEMA = 'ordo.team.snapshot.v1alpha1' as const
 export const ORDO_TEAM_EVENT_SCHEMA = 'ordo.team.event.v1alpha1' as const
 
-/** Capability maturity: fake fixtures only until the Ordo owner publishes. */
-export type OrdoTeamMaturity = 'unavailable' | 'fixtures' | 'live'
+/** Capability maturity: fake fixtures only until the Ordo owner publishes. `readonly` is a live CLI projection with mutation still closed. */
+export type OrdoTeamMaturity = 'unavailable' | 'fixtures' | 'live' | 'readonly'
 
 export interface OrdoTeamCapabilityV1 {
   readonly capability: 'ordo.team.v1'
@@ -67,6 +67,8 @@ export interface OrdoTeamSnapshotV1 {
   readonly tasks: readonly OrdoTeamTaskV1[]
   readonly assignments: readonly OrdoTeamAssignmentV1[]
   readonly actions: readonly OrdoTeamActionDescriptorV1[]
+  /** Opaque owner evidence refs; absent when the CLI reported none. */
+  readonly evidenceRefs?: readonly string[]
 }
 
 export interface OrdoTeamEventV1 {
@@ -123,6 +125,7 @@ export const ordoTeamSnapshotSchema = z.object({
   tasks: z.array(taskSchema).max(2_000),
   assignments: z.array(assignmentSchema).max(4_000),
   actions: z.array(actionSchema).max(64),
+  evidenceRefs: z.array(opaqueRef).max(32).optional(),
 }).strict()
 
 export const ordoTeamEventSchema = z.object({

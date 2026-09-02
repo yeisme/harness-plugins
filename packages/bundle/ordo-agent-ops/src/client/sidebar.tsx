@@ -150,7 +150,14 @@ export function OrdoAgentOpsSidebar({ wide, useState: useAgentOpsState, refresh,
                   description={<span data-ordo-agent-ops-needs-contract><IconWarningOutline16 size={14} aria-hidden="true" /> {t('panel.needsContractDetail')}</span>}
                 />
               )}
-              {state.snapshot?.run === undefined && state.phase === 'ready' && (
+              {state.snapshot?.state === 'offline' && (
+                <SurfaceState
+                  phase="disabled"
+                  title={t('panel.offline')}
+                  description={<span data-ordo-agent-ops-offline><IconWarningOutline16 size={14} aria-hidden="true" /> {state.snapshot.safeMessage}</span>}
+                />
+              )}
+              {state.snapshot?.run === undefined && state.phase === 'ready' && state.snapshot?.state === 'ready' && (
                 <div className="oao-detail" role="note">{t('panel.noRun')}</div>
               )}
               {state.snapshot?.run !== undefined && (

@@ -137,6 +137,26 @@ describe('OrdoAgentOpsController', () => {
     expect(controller.store.getSnapshot().snapshot?.snapshotVersion).toBe(2)
   })
 
+  it('publishes a CLI-unavailable offline snapshot without synthesizing demo run rows', async () => {
+    const offline: OrdoAgentOpsSnapshot = {
+      schemaVersion: 'ordo.agent_ops.snapshot.v1alpha1',
+      snapshotRef: 'ordo-cli:offline' as OrdoAgentOpsSnapshot['snapshotRef'],
+      snapshotVersion: 0,
+      generatedAt: '2026-09-01T12:00:00.000Z',
+      state: 'offline',
+      freshness: 'offline',
+      reasonCode: 'owner_projection_unavailable',
+      source: 'owner-gated',
+      safeMessage: 'Local ordo CLI is not available.',
+    }
+    const controller = new OrdoAgentOpsController({
+      snapshot: async () => ({ ok: true, value: offline }),
+    })
+    await controller.refresh()
+    expect(controller.store.getSnapshot()).toEqual({ phase: 'ready', snapshot: offline, errorCode: null })
+    expect(controller.store.getSnapshot().snapshot?.run).toBeUndefined()
+  })
+
   it('maps a read disconnect to a safe error without synthesizing terminal run state', async () => {
     let fail = false
     const snapshotRead = vi.fn(async () => {

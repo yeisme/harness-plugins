@@ -41,7 +41,7 @@ interface PaneWorkbenchFace {
 
 interface LocaleFace {
   register?(ns: string, tables: unknown): () => void
-  bind?(ns: string, key: string): string
+  bind?(ns: string): (key: string) => string
 }
 
 /** controller 异步挂载 store（useSyncExternalStore 源；stable 引用）。 */
@@ -67,14 +67,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function optionalLookup(ctx: Context, key: string): Record<string, unknown> | undefined {
-  try {
-    const value = (ctx as unknown as { get?: (name: never) => unknown })?.get?.(key as never)
-    if (isRecord(value)) return value
-  } catch {
-    // guard facade without the service
+  const getter = (ctx as unknown as { get?: (name: never) => unknown }).get
+  if (typeof getter === 'function') {
+    try {
+      const value = getter.call(ctx, key as never)
+      return isRecord(value) ? value : undefined
+    } catch {
+      return undefined
+    }
   }
-  const prop = (ctx as unknown as Record<string, unknown>)[key]
-  return isRecord(prop) ? prop : undefined
+  try {
+    const prop = (ctx as unknown as Record<string, unknown>)[key]
+    return isRecord(prop) ? prop : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export function apply(ctx: Context): () => void {
@@ -87,7 +94,7 @@ export function apply(ctx: Context): () => void {
   const controllerListeners = new Set<(sessionId: string) => void>()
 
   const fallback = fallbackConsoleTranslator()
-  const localeBind = typeof locale?.bind === 'function' ? (key: string) => (locale.bind as (ns: string, key: string) => string)(CONSOLE_NS, key) : undefined
+  const localeBind = typeof locale?.bind === 'function' ? locale.bind(CONSOLE_NS) : undefined
   const t: ConsoleTranslator = (key, params) => {
     const translated = localeBind?.(key)
     const source = translated !== undefined && translated !== key ? translated : fallback(key)

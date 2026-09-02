@@ -31,6 +31,7 @@ export type {
 
 export {
   composeAccountProjections,
+  officialSessionsToSnapshot,
   providerSnapshotToAccounts,
   sessionSnapshotToAccounts,
   type ProviderGroupLike,

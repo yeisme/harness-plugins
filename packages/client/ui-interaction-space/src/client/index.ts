@@ -35,14 +35,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function optionalLookup(ctx: Context, key: string): Record<string, unknown> | undefined {
-  try {
-    const value = (ctx as unknown as { get?: (name: never) => unknown })?.get?.(key as never)
-    if (isRecord(value)) return value
-  } catch {
-    // guard facade without the service
+  const getter = (ctx as unknown as { get?: (name: never) => unknown }).get
+  if (typeof getter === 'function') {
+    try {
+      const value = getter.call(ctx, key as never)
+      return isRecord(value) ? value : undefined
+    } catch {
+      return undefined
+    }
   }
-  const prop = (ctx as unknown as Record<string, unknown>)[key]
-  return isRecord(prop) ? prop : undefined
+  try {
+    const prop = (ctx as unknown as Record<string, unknown>)[key]
+    return isRecord(prop) ? prop : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export interface ApplyInteractionSpaceOptions {
@@ -54,7 +61,8 @@ export interface ApplyInteractionSpaceOptions {
   readonly dispatch?: OwnerDispatchFace | undefined
 }
 
-export function apply(ctx: Context, options: ApplyInteractionSpaceOptions): () => void {
+export function apply(ctx: Context, options?: ApplyInteractionSpaceOptions): () => void {
+  if (options?.resource === undefined) return () => {}
   const disposers: Array<() => void> = []
   const sessions = (ctx as unknown as { sessions?: SpaceSessionsFace }).sessions
   const pane = optionalLookup(ctx, 'paneWorkbench') as PaneWorkbenchFace | undefined

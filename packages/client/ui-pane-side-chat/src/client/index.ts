@@ -32,7 +32,7 @@ interface PaneWorkbenchFace {
 
 interface LocaleFace {
   register?(ns: string, tables: unknown): () => void
-  bind?(ns: string, key: string): string
+  bind?(ns: string): (key: string) => string
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -40,14 +40,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function optionalLookup(ctx: Context, key: string): Record<string, unknown> | undefined {
-  try {
-    const value = (ctx as unknown as { get?: (name: never) => unknown })?.get?.(key as never)
-    if (isRecord(value)) return value
-  } catch {
-    // guard facade without the service
+  const getter = (ctx as unknown as { get?: (name: never) => unknown }).get
+  if (typeof getter === 'function') {
+    try {
+      const value = getter.call(ctx, key as never)
+      return isRecord(value) ? value : undefined
+    } catch {
+      return undefined
+    }
   }
-  const prop = (ctx as unknown as Record<string, unknown>)[key]
-  return isRecord(prop) ? prop : undefined
+  try {
+    const prop = (ctx as unknown as Record<string, unknown>)[key]
+    return isRecord(prop) ? prop : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export function apply(ctx: Context): () => void {
@@ -56,7 +63,7 @@ export function apply(ctx: Context): () => void {
   const locale = optionalLookup(ctx, 'locale') as LocaleFace | undefined
 
   const fallback = fallbackSideChatTranslator()
-  const localeBind = typeof locale?.bind === 'function' ? (key: string) => (locale.bind as (ns: string, key: string) => string)(SIDE_CHAT_NS, key) : undefined
+  const localeBind = typeof locale?.bind === 'function' ? locale.bind(SIDE_CHAT_NS) : undefined
   const t: SideChatTranslator = (key, params) => {
     const translated = localeBind?.(key)
     const source = translated !== undefined && translated !== key ? translated : fallback(key)
@@ -117,7 +124,7 @@ export function apply(ctx: Context): () => void {
           id: 'side-chat.open',
           label: t('title'),
           presentation: { launcher: true },
-          slash: { name: 'side-chat', hint: t('empty.body'), category: 'pane' },
+          slash: { name: 'side-chat', category: 'pane' },
         },
         execute: () => { openSideChat() },
       }))

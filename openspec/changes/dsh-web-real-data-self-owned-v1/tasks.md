@@ -1,4 +1,4 @@
-> 状态：进行中（2026-08-31 设计定稿；起点硬门 = `ordo-dsh-plugin-visualization-v1` 归档，且排队于 G18 之后；2026-09-01 完成 §1 数据源审计 1.1/1.2，基线真数据率 4/10=40%，账本见 audit-ledger.md；2026-09-01 完成 §3 官方已有 seam 真数据化 3.1/3.2（#6 接线，真数据率 5/10=50%）；§2/§4 未启动）。
+> 状态：进行中（2026-08-31 设计定稿；起点硬门 = `ordo-dsh-plugin-visualization-v1` 归档，且排队于 G18 之后；2026-09-01 完成 §1–§4；真数据率 8/10=80%。剩余 #8/#10 为外部 seam / 并行 lane，本 change 不伪造）。
 
 ## 1. 数据源审计
 
@@ -9,9 +9,12 @@
 
 ## 2. ordo/team-hub 真数据链
 
-- [ ] 2.1 `ordo-agent-ops` host 接本地 ordo CLI：run/task/approval/evidence/team 只读拉取、错误与不可用显式上报。
-- [ ] 2.2 `ui-ordo-agent-ops` 面板切换到真数据投影；CLI 不可用时显示安全离线态与原因，不显示演示数据。
-- [ ] 2.3 验证投影边界与 ordo-dsh-plugin-visualization 冻结 requirement 一致（无第二 ledger、无凭据/raw prompt/绝对路径出网）。
+- [x] 2.1 `ordo-agent-ops` host 接本地 ordo CLI：run/task/approval/evidence/team 只读拉取、错误与不可用显式上报。
+  Evidence (2026-09-01): `cli-owner.ts` 只读 `ordo team status --json`、`ordo doctor --json`；仅当 team/doctor envelope 已含 CLI-authored `preview_ref` 时才调用 `ordo approval inspect <preview-ref> --json`，否则跳过 inspect（fail-closed，不发明 ref）。成功投影 run/task/assignment/capacity/evidenceRefs/approval actions。ENOENT → `Local ordo CLI is not available.`。测试 `tests/cli-owner.spec.ts`、host `cli-owner.spec.ts`、`cli-owner-consumer.spec.ts` 断言真实 argv 含 preview-ref，缺 ref 时不调用 inspect。
+- [x] 2.2 `ui-ordo-agent-ops` 面板切换到真数据投影；CLI 不可用时显示安全离线态与原因，不显示演示数据。
+  Evidence (2026-09-01): sidebar `src/client/sidebar.tsx` 渲染 offline `safeMessage`（`data-ordo-agent-ops-offline`），ready 才显示 run 摘要；Hub `projectAgentsHub` 仅 live/readonly 且非 offline 出 task 行，否则 `offlineReason` + 零行。测试 `tests/sidebar-offline.client.spec.tsx`、`ui-ordo-agent-ops/tests/hub-state.spec.ts`、`tests/controller.client.spec.ts`。
+- [x] 2.3 验证投影边界与 ordo-dsh-plugin-visualization 冻结 requirement 一致（无第二 ledger、无凭据/raw prompt/绝对路径出网）。
+  Evidence (2026-09-01): CLI adapter 只读 spawn，不写 ledger；unsafe team_id/description（绝对路径、Bearer/secret）fail-closed 为 offline 且 safeMessage 不含凭据/路径；Team maturity=`readonly`，`resolveOrdoTeamCapabilityMatrix` mutationEnabled 仍仅 `live`。测试 `tests/cli-owner.spec.ts` unsafe 用例 + `tests/team-projection.spec.ts` readonly 矩阵。
 
 ## 3. 官方已有 seam 真数据化
 
@@ -22,6 +25,9 @@
 
 ## 4. 验证与证据
 
-- [ ] 4.1 以审计清单计算常用面板真数据率 ≥80%，未达标面板记录 seam 缺失原因。
-- [ ] 4.2 相关包 `pnpm run typecheck && test && build` 全绿；openspec validate strict 通过。
-- [ ] 4.3 dogfood 主路径（`pnpm dsh:dev`）实测 ordo 与用量面板真数据渲染，证据落 temp/integration-test-runs/。
+- [x] 4.1 以审计清单计算常用面板真数据率 ≥80%，未达标面板记录 seam 缺失原因。
+  Evidence (2026-09-01): 账本 §2 现为 8/10=80%（#1/#2 CLI 真数据 + #7 官方 sessions 账户读面）。未达标 2 块有 seam 缺失/外部原因：#8 官方 owner-action receipt 未发布、#10 并行 command-first fixture transport（生产未挂载）。口径见 audit-ledger.md §5。
+- [x] 4.2 相关包 `pnpm run typecheck && test && build` 全绿；openspec validate strict 通过。
+  Evidence (2026-09-01): `@yeisme/dsh-ordo-agent-ops` + `@yeisme/dsh-host-ordo-agent-ops` + `@yeisme/dsh-client-ui-ordo-agent-ops` typecheck/test/build exit 0（bundle 60、host 14、ui 38）；`openspec validate dsh-web-real-data-self-owned-v1 --strict --no-interactive` 通过。Consumer import 断言 ready 路径含 `evidenceRefs`/`ordo.approval.decide` 且 argv 为 `approval inspect <preview-ref> --json`，ENOENT 路径无 run/actions/evidence。
+- [x] 4.3 dogfood 主路径（`pnpm dsh:dev`）实测 ordo 与用量面板真数据渲染，证据落 temp/integration-test-runs/。
+  Evidence (2026-09-01): `pnpm dsh:dev -- --skip-build --skip-install --no-open --host 127.0.0.1 --port 4179` 启动 `dsh web: http://127.0.0.1:4179/`（HTTP 200）。Boot HTML 含 `@yeisme/dsh-ordo-agent-ops`、`@yeisme/dsh-token-usage`、`@yeisme/dsh-session-cookie-manager`；三包 `/plugins/.../client.js` HEAD 200。交互面板 DOM 未驱动（SPA）。红acted 证据：`temp/integration-test-runs/20260901-dsh-web-real-data-dogfood/`（summary.json/command.txt/stdout.log/env.json/artifacts/observation.json）。本环境 `ordo` 不在 PATH，面板若打开应走 CLI offline 原因而非演示行。

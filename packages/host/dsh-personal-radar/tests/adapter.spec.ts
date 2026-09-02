@@ -27,13 +27,18 @@ describe('radar fixed-command adapter', () => {
     expect(spawn!.argv).toEqual([...RADAR_FIXED_ARGV, '--lane', 'curator'])
     expect(spawn!.request.tool).toBe('radar.execute')
     expect(spawn!.request.args['action']).toBe('feedback_add')
-    expect(spawn!.request.args['feedback']).toBe('save')
+	expect(spawn!.request.args['input']).toEqual({
+	  opportunity_ref: 'opp:demo-1',
+	  kind: 'saved',
+	  idempotency_key: 'radar-save-opp:demo-1',
+	})
   })
 
   it('maps refresh to operator edition_build only', () => {
     const spawn = resolveRadarSpawn({ binary: 'radar' }, intent('refresh'))
     expect(spawn!.argv).toEqual([...RADAR_FIXED_ARGV, '--lane', 'operator'])
     expect(spawn!.request.args['action']).toBe('edition_build')
+	expect(spawn!.request.args['input']).toEqual({})
     expect(JSON.stringify(spawn!.request.args)).not.toMatch(/collect|daily_run/)
   })
 

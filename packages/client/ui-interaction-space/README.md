@@ -1,6 +1,7 @@
 # @yeisme/dsh-client-ui-interaction-space
 
-DSH Web 工件交互空间 client 包：以工件为中心的 agent 协作面。
+DSH Web 工件交互空间 client 包：以工件为中心的 agent 协作面，并作为 V2
+singleton selection interaction layer 的 context/owner handoff 参与方。
 
 ## 结构
 
@@ -37,4 +38,6 @@ pnpm --filter @yeisme/dsh-client-ui-interaction-space run build
 ```
 
 可安装形态见 bundle `packages/bundle/dsh-interaction-space/`；设计合同见
-`openspec/changes/dsh-agent-interaction-space-v1/`。
+`openspec/changes/dsh-agent-interaction-space-v1/`。统一选区交互的 V2 设计、
+扩展 descriptor、偏好和迁移合同见
+`openspec/changes/dsh-selection-interaction-v2/`。

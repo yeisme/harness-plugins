@@ -10,6 +10,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import {
+  officialSessionsToSnapshot,
   registerLoginProfilesPaneViews,
   type ProfilesPaneSurface,
 } from '@yeisme/dsh-client-ui-session-cookie-manager'
@@ -31,12 +32,32 @@ function resolvePaneSurface(ctx: Context): ProfilesPaneSurface | undefined {
   return undefined
 }
 
+function resolveOfficialSessions(ctx: Context): unknown {
+  try {
+    return (ctx as { get?(name: string): unknown }).get?.('sessions')
+  } catch {
+    return undefined
+  }
+}
+
+function sessionSnapshotFrom(ctx: Context): ReturnType<typeof officialSessionsToSnapshot> {
+  try {
+    return officialSessionsToSnapshot(resolveOfficialSessions(ctx))
+  } catch {
+    return undefined
+  }
+}
+
 /** Client lifecycle for ModuleLoader. Missing Pane Workbench is a no-op, not a throw. */
 export function apply(ctx: Context): () => void {
   const pane = resolvePaneSurface(ctx)
   if (pane === undefined) return () => {}
   try {
-    return registerLoginProfilesPaneViews(pane)
+    const sessionSnapshot = sessionSnapshotFrom(ctx)
+    return registerLoginProfilesPaneViews(pane, {
+      ...(sessionSnapshot === undefined ? {} : { sessionSnapshot }),
+      sessions: resolveOfficialSessions(ctx),
+    })
   } catch {
     return () => {}
   }

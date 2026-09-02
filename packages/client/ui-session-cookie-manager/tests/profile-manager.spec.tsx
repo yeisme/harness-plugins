@@ -10,6 +10,7 @@ import {
   bindCookieJars,
   clearCookieJar,
   composeAccountProjections,
+  officialSessionsToSnapshot,
   createLoginProfilesView,
   hasCookieJarsCapability,
   isSafeCookieJarProfile,
@@ -263,6 +264,25 @@ describe('provider adapter and pane view', () => {
     expect(html).toContain('data-profile-count="1"')
     expect(html).not.toContain('reason')
     expect(html).not.toContain('actionRefs')
+  })
+
+  it('folds official DSH sessions.list into account rows without demo data', () => {
+    const official = {
+      list: {
+        getSnapshot: () => ({
+          ids: ['sess-1', 'sess-2'],
+          byId: {
+            'sess-1': { displayTitle: 'Work chat', running: true, updatedAt: '2026-09-01T12:00:00.000Z' },
+            'sess-2': { displayTitle: 'Idle chat', completed: true },
+          },
+        }),
+      },
+    }
+    const snapshot = officialSessionsToSnapshot(official)
+    expect(snapshot?.state).toBe('ready')
+    expect(sessionSnapshotToAccounts(snapshot).map(row => row.accountSummary)).toEqual(['Work chat', 'Idle chat'])
+    expect(officialSessionsToSnapshot(undefined)).toBeUndefined()
+    expect(officialSessionsToSnapshot({ list: { getSnapshot: () => ({ ids: [], byId: {} }) } })?.sessions).toEqual([])
   })
 
   it('registers a singleton login-profiles pane view with a disposer', () => {

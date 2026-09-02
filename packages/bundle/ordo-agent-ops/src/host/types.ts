@@ -127,6 +127,8 @@ export interface OrdoAgentOpsSnapshot {
   readonly run?: OrdoAgentOpsRunSummary
   readonly capacity?: OrdoAgentOpsCapacity
   readonly actions?: readonly OrdoAgentOpsActionDescriptor[]
+  /** Opaque owner evidence refs from the local ordo CLI; never paths or payloads. */
+  readonly evidenceRefs?: readonly OrdoAgentOpsRef[]
 }
 
 /**

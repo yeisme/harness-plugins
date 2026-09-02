@@ -2,6 +2,12 @@
 
 (merged from archived change 2026-08-31-dsh-web-ordo-team-hub-v1)
 
+## Purpose
+
+定义 DSH Web 统一 Agents Hub 的入口、Session Agents 与 Ordo Teams owner 分离、Delivery 选择、legacy fallback 及控制状态展示合同。
+
+## Requirements
+
 ### Requirement: DSH Web SHALL expose one Agents Hub
 现有 Agents icon/entry SHALL 打开统一 Agents Hub，并提供 `Session Agents` 与 `Ordo Teams` 两个明确视图。Hub SHALL 使用 reviewed pane/client seams，不得创建独立 Web app、iframe bridge 或 DSH core fork。
 

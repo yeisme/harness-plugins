@@ -137,6 +137,20 @@ describe('client apply', () => {
     dispose()
   })
 
+  it('treats a missing optional service as absent on guarded Cordis contexts', () => {
+    const slots = new FakeSlots()
+    const guarded = new Proxy({
+      get: (key: string) => key === 'slots' ? slots : key === 'locale' ? {} : undefined,
+    }, {
+      get(target, key, receiver) {
+        if (key === 'paneWorkbench') throw new Error('cannot get property without inject')
+        return Reflect.get(target, key, receiver)
+      },
+    })
+
+    expect(() => apply(guarded as never)).not.toThrow()
+  })
+
   it('opens the overlay from the entry and closes it via Escape', async () => {
     const { ctx, slots } = fakeCtx({ pane: false, remote: readyRemote() })
     const dispose = apply(ctx as never)

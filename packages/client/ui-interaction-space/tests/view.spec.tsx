@@ -38,6 +38,10 @@ function controllerWith(overrides: Record<string, unknown> = {}): InteractionSpa
 }
 
 describe('InteractionSpaceView', () => {
+  it('keeps the profile-level entry inert until a resource is supplied', () => {
+    expect(() => apply({} as never)).not.toThrow()
+  })
+
   it('renders the resource header, anchor bar, and empty states', () => {
     const controller = controllerWith()
     controller.addAnchor(anchor)

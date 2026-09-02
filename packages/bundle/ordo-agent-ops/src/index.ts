@@ -4,16 +4,24 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import OrdoAgentOpsGateway from './host/bridge.ts'
+import OrdoAgentOpsGateway, {
+  ORDO_AGENT_OPS_EXPECTED_CONTEXT,
+  ORDO_AGENT_OPS_OWNER_SOURCE,
+  ORDO_TEAM_OWNER_SOURCE,
+} from './host/bridge.ts'
+import { createLocalOrdoCliOwner } from './host/cli-owner.ts'
 import OrdoCommandsPlugin, { hasOrdoCommandRegistration } from './host/commands.ts'
 
 export {
   ORDO_AGENT_OPS_EXPECTED_CONTEXT,
   ORDO_AGENT_OPS_ACTION_SOURCE,
   ORDO_AGENT_OPS_OWNER_SOURCE,
+  ORDO_TEAM_OWNER_SOURCE,
   OrdoAgentOpsGateway,
   OrdoAgentOpsEventCursor,
   needsContractSnapshot,
+  createLocalOrdoCliOwner,
+  spawnOrdoCli,
   ordoAgentOpsEventSchema,
   ordoAgentOpsExpectedContextSchema,
   ordoAgentOpsSnapshotSchema,
@@ -45,6 +53,11 @@ export type {
   OrdoAgentOpsRunSummary,
   OrdoAgentOpsSnapshot,
   OrdoAgentOpsState,
+  LocalOrdoCliOwner,
+  LocalOrdoCliOwnerOptions,
+  OrdoCliExec,
+  OrdoCliExecResult,
+  OrdoTeamOwnerSource,
 } from './host/bridge.ts'
 export {
   hasOrdoCommandRegistration,
@@ -66,6 +79,7 @@ type SharedHostMount = {
   tail: Promise<void>
   bridge?: FiberHandle | undefined
   commands?: FiberHandle | undefined
+  owner?: (() => void) | undefined
 }
 
 const HOST_MOUNTS = Symbol.for('yeisme.dsh-ordo-agent-ops.host-mounts.v1')
@@ -102,6 +116,7 @@ async function acquireHost(ctx: Context, requirement: HostRequirement): Promise<
   const setup = current.tail.then(async () => {
     // 允许一个还在兼容窗口中的外部 bridge 先挂载；统一 package 不抢占或复制它。
     if (requirement.bridge && current.bridge === undefined && root.get('ordoAgentOps') === undefined) {
+      if (current.owner === undefined) current.owner = bindLocalOrdoCliOwner(root)
       current.bridge = await root.plugin(OrdoAgentOpsGateway)
     }
     // command 本身有 fiber-scoped guard；这里同时避免不必要的第二个 child fiber。
@@ -135,15 +150,47 @@ async function releaseHost(root: Context, mount: SharedHostMount): Promise<void>
     // It is still safe to dispose the old generation because the next setup is queued after it.
     const commands = mount.commands
     const bridge = mount.bridge
+    const owner = mount.owner
     mount.commands = undefined
     mount.bridge = undefined
+    mount.owner = undefined
     await commands?.dispose()
     await bridge?.dispose()
+    owner?.()
     const mounts = hostMounts()
     if (mount.references === 0 && mounts.get(root) === mount) mounts.delete(root)
   })
   mount.tail = teardown.catch(() => undefined)
   await teardown
+}
+
+function peek(ctx: Context, key: string): unknown {
+  try {
+    return ctx.get(key)
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Bind the local ordo CLI as the owner read source when no owner is already
+ * mounted. Tests and future Ordo adapters may provide their own source first.
+ */
+function bindLocalOrdoCliOwner(root: Context): (() => void) | undefined {
+  if (peek(root, ORDO_AGENT_OPS_OWNER_SOURCE) !== undefined) return undefined
+  const owner = createLocalOrdoCliOwner()
+  const disposeContext = peek(root, ORDO_AGENT_OPS_EXPECTED_CONTEXT) === undefined
+    ? root.provide(ORDO_AGENT_OPS_EXPECTED_CONTEXT, owner.expectedContext)
+    : undefined
+  const disposeOwner = root.provide(ORDO_AGENT_OPS_OWNER_SOURCE, owner)
+  const disposeTeam = peek(root, ORDO_TEAM_OWNER_SOURCE) === undefined
+    ? root.provide(ORDO_TEAM_OWNER_SOURCE, owner)
+    : undefined
+  return () => {
+    if (typeof disposeTeam === 'function') disposeTeam()
+    if (typeof disposeOwner === 'function') disposeOwner()
+    if (typeof disposeContext === 'function') disposeContext()
+  }
 }
 
 /** 挂载完整的 unified Host 面：Remote 与只读 `/ordo`。 */

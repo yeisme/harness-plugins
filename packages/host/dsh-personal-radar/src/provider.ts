@@ -75,6 +75,9 @@ export function createFakeRadarProvider(options: FakeRadarOptionsV1 = {}): FakeR
       }
     }
     const action = typeof request.args['action'] === 'string' ? request.args['action'] : ''
+	const input = request.args['input'] !== null && typeof request.args['input'] === 'object'
+	  ? request.args['input'] as Readonly<Record<string, unknown>>
+	  : request.args
     const allowed = LANE_ACTIONS[request.lane]
     if (allowed === undefined || !allowed.includes(action)) {
       return {
@@ -82,7 +85,7 @@ export function createFakeRadarProvider(options: FakeRadarOptionsV1 = {}): FakeR
         receipt: { outcome: 'rejected', reason: `action ${action} is outside lane ${request.lane}` },
       }
     }
-    const key = typeof request.args['idempotency_key'] === 'string' ? request.args['idempotency_key'] : `anon-${requests.length}`
+	const key = typeof input['idempotency_key'] === 'string' ? input['idempotency_key'] : `anon-${requests.length}`
     const existing = settled.get(key)
     if (existing !== undefined) {
       // Idempotent re-dispatch returns the original receipt; the feedback is

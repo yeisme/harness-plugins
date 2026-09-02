@@ -44,3 +44,34 @@ export {
 } from './client';
 
 export { splitSessionHubInput } from './assist';
+export { TUI_FIRST_SUPPORT, runTuiJourney } from './journeys';
+
+export {
+  TUI_P0_NAMES,
+  appendSidecar,
+  createInitialTuiState,
+  debugRecord,
+  helpOrCommandsOpenCenter,
+  isOwnerSafeSelectorRef,
+  ownerSafeSelectorItems,
+  p1HiddenFromTui,
+  render,
+  renderStatusline,
+  tuiPluginLifecycleContract,
+  update,
+  validateRendererContribution,
+} from './shell';
+export type {
+  TuiCenterPage,
+  TuiCommandMode,
+  TuiCommandShellStateV1,
+  TuiDebugRecord,
+  TuiFrame,
+  TuiLogicalEvent,
+  TuiResultRendererContributionV1,
+  TuiSelectorItem,
+  TuiSelectorState,
+  TuiSideCommand,
+  TuiUpdateProjections,
+  TuiViewport,
+} from './shell';

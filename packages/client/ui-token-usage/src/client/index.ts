@@ -34,14 +34,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function optionalLookup(ctx: Context, key: string): Record<string, unknown> | undefined {
-  try {
-    const value = (ctx as unknown as { get?: (name: never) => unknown })?.get?.(key as never)
-    if (isRecord(value)) return value
-  } catch {
-    // Guard facade without the service; fall through to property access.
+  const getter = (ctx as unknown as { get?: (name: never) => unknown }).get
+  if (typeof getter === 'function') {
+    try {
+      const value = getter.call(ctx, key as never)
+      return isRecord(value) ? value : undefined
+    } catch {
+      return undefined
+    }
   }
-  const prop = (ctx as unknown as Record<string, unknown>)[key]
-  return isRecord(prop) ? prop : undefined
+  try {
+    const prop = (ctx as unknown as Record<string, unknown>)[key]
+    return isRecord(prop) ? prop : undefined
+  } catch {
+    return undefined
+  }
 }
 
 function unwrapNamespace(value: Record<string, unknown>): TokenUsageRemoteFace | undefined {
@@ -136,11 +143,13 @@ export function apply(ctx: Context): () => void {
   const binding = new ControllerBinding()
   const toggle = new OverlayToggle()
   const fallback = defaultTranslator()
-  const localeBind = typeof locale?.bind === 'function' ? (locale.bind as (ns: string, key: TokenUsageKey) => string) : undefined
+  const localeBind = typeof locale?.bind === 'function'
+    ? (locale.bind as (ns: string) => TokenUsageTranslator).call(locale, NS)
+    : undefined
   const boundTranslator: TokenUsageTranslator = localeBind === undefined
     ? fallback
     : (key: TokenUsageKey) => {
-      const translated = localeBind(NS, key)
+      const translated = localeBind(key)
       return translated === key ? fallback(key) : translated
     }
 

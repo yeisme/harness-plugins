@@ -7,6 +7,8 @@
 - cookbook/adding-ordo-agent-ops-plugin.md：Ordo Agent Ops 插件的组装/安装方式。
 - cookbook/adding-ordo-agent-ops-plugin.md §8：Ordo、Workbench、pack 与 Control Plane handoff 字段账本。
 - design/dsh-web-ordo-team-hub-v1.md：Session Agents / Ordo Teams 统一 Hub、Task-Agent graph、Host safe projection、响应式与可访问性设计。
+- design/dsh-web-command-first-interaction-v1.md：参考 Codex 交互语法的 DSH Web 命令优先混合壳；包含 Composer slash、全局 Palette、结构化命令、状态中枢、Activity、Pane handoff、线框、组件树与控制清单。实施见 ../openspec/changes/dsh-web-command-first-interaction-v1/。
+- design/dsh-tui-command-first-interaction-v1.md：与 Web 共用命令目录和状态事实的 DSH TUI 命令优先壳；包含完整 P0、Slash Assist、Command Center、结构化参数、确认、receipt、Activity、Inspector、statusline、尺寸退化与可重放调试。实施见 ../openspec/changes/dsh-tui-command-first-interaction-v1/。
 - cookbook/dsh-web-ordo-team-hub.md：Team Hub V1 的英文安装、使用、降级和回滚指南；中文版本为 `cookbook/dsh-web-ordo-team-hub.zh.md`。
 - ../openspec/changes/dsh-web-ordo-team-hub-v1/：DSH Web Ordo Team Hub 的 owning contract 与实施任务。
 - ../packages/bundle/pane-workbench/README.md：Pane Workbench overlay 的安装、快捷操作、排障与 canary handoff。
@@ -27,7 +29,8 @@
 - ../openspec/changes/dsh-slash-directory-hotplug-v1/：live `/` 目录、pane 热贡献、inspect 命令投影的合同与实现任务（design §D5 记录真实 runtime 集成加固）。
 - design/dsh-web-pane-terminal-sidechat.md：dsh web pane 终端（官方 ctx.terminals 行式投影）与侧边对话（附着/新建/fork，主选择不变量）设计，实施见 ../openspec/changes/dsh-web-pane-terminal-sidechat-v1/。
 - cookbook/dsh-web-pane-terminal-sidechat.md：面向用户的终端 console 与侧边对话安装/使用/排障（含 DSH ≥ 0.1.1-rc.2 锚点与降级原因对照）。
-- design/dsh-selection-agent-review-v1.md：选区/截图批注与逐位置审批的产品与设计摘要（split-owner、能力账本、桥接事件），实施见 ../openspec/changes/dsh-selection-agent-review-v1/。
+- design/dsh-selection-agent-review-v1.md：选区/截图批注与逐位置审批的 V1 产品与设计摘要（split-owner、能力账本、桥接事件），历史实施记录见 ../openspec/changes/archive/2026-08-28-dsh-selection-agent-review-v1/。
+- design/dsh-selection-interaction-v2.md：统一 singleton 选区交互层、1+2+More 动作密度、扩展 descriptor、偏好、编辑控件防护、触控退化与 V1→V2 迁移设计；实施见 ../openspec/changes/dsh-selection-interaction-v2/。
 - design/dsh-semantic-file-editor.md：基于 opaque ref、Host-side LSP/AST、Monaco 与 workspace edit receipt 的语义文件 Pane 设计，实施见 ../openspec/changes/dsh-semantic-file-editor-pane-v1/。
 - ../packages/bundle/dsh-semantic-file-editor/README.md：语义编辑 bundle 的安装顺序、降级、回滚与证据命令。
 - ../packages/bundle/dsh-selection-annotation/README.md：选区批注 bundle 的安装、kill-switch 与宿主桥接契约。

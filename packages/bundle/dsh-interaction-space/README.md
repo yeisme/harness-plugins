@@ -2,6 +2,8 @@
 
 DSH Web 工件交互空间 bundle：把预览面升级为 agent 原生协作面——锚点栏、
 附着会话、typed space directive、per-format 提案与 preview-before-mutate 应用。
+V2 规划中，本 bundle 只提交 selection context 和 owner handoff，统一 Actions 由页面级
+singleton interaction layer 渲染，不再创建 Pane 私有选区工具条。
 
 ## 安装
 
@@ -45,4 +47,5 @@ dsh plugin --profile web add ./packages/bundle/dsh-interaction-space
 version bump 后 digest 失配锚点标 `stale`、依赖提案 `reconcile_required`。
 
 实现包：`packages/client/ui-interaction-space/`；设计合同：
-`openspec/changes/dsh-agent-interaction-space-v1/`。
+`openspec/changes/dsh-agent-interaction-space-v1/`。统一选区交互 V2 的设计、扩展
+registry、偏好与 V1 迁移见 `openspec/changes/dsh-selection-interaction-v2/`。

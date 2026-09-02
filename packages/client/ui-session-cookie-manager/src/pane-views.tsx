@@ -9,7 +9,7 @@
 import { useMemo, useState } from 'react'
 import { CookieManagerPanel } from './panel.tsx'
 import { ProfileStore, ProfileStoreError } from './profile-store.ts'
-import { composeAccountProjections, type ProviderSnapshotLike, type SessionListSnapshotLike } from './provider-adapter.ts'
+import { composeAccountProjections, officialSessionsToSnapshot, type ProviderSnapshotLike, type SessionListSnapshotLike } from './provider-adapter.ts'
 import {
   applyCookieJar,
   bindCookieJars,
@@ -41,6 +41,8 @@ export interface ProfilesPaneDeps {
   providerSnapshot?: ProviderSnapshotLike | undefined
   /** Owner session-resume snapshot composed read-only into the accounts section. */
   sessionSnapshot?: SessionListSnapshotLike | undefined
+  /** Official DSH `sessions` host; folded into sessionSnapshot when that dep is absent. */
+  sessions?: unknown
   /**
    * Host cookie-jar face. Published DSH is absent; only a live
    * `WebCookieJarsV1` source enables apply/switch/clear.
@@ -56,7 +58,8 @@ export function createLoginProfilesView(deps: ProfilesPaneDeps = {}) {
     const [profiles, setProfiles] = useState(() => [...store.list()])
     const [error, setError] = useState<string | undefined>(undefined)
     const [activeProfileId, setActiveProfileId] = useState<string | undefined>(undefined)
-    const accounts = composeAccountProjections(deps.providerSnapshot, deps.sessionSnapshot)
+    const sessionSnapshot = deps.sessionSnapshot ?? officialSessionsToSnapshot(deps.sessions)
+    const accounts = composeAccountProjections(deps.providerSnapshot, sessionSnapshot)
     const refresh = (): void => { setProfiles([...store.list()]) }
     const fail = (caught: unknown): void => {
       setError(profileErrorMessage(caught))

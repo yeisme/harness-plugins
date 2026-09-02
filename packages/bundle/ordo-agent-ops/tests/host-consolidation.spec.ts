@@ -116,6 +116,25 @@ async function harness(
 }
 
 describe('@yeisme/dsh-ordo-agent-ops Host consolidation', () => {
+  it('binds the local ordo CLI owner when no owner source is mounted', async () => {
+    const previous = process.env.ORDO_BIN
+    process.env.ORDO_BIN = '/nonexistent/ordo-cli-missing'
+    try {
+      const ctx = new Context()
+      contexts.push(ctx)
+      await ctx.plugin(CommandRuntime)
+      await ctx.plugin(OrdoAgentOpsPlugin)
+      const snapshot = (ctx.get('ordoAgentOps') as { snapshot(): OrdoAgentOpsSnapshot }).snapshot()
+      expect(snapshot.state).toBe('offline')
+      expect(snapshot.reasonCode).toBe('owner_projection_unavailable')
+      expect(snapshot.safeMessage).toMatch(/ordo CLI/i)
+      expect(snapshot.run).toBeUndefined()
+    } finally {
+      if (previous === undefined) delete process.env.ORDO_BIN
+      else process.env.ORDO_BIN = previous
+    }
+  })
+
   it('mounts the Remote and one /ordo command from the single package', async () => {
     const ctx = await harness()
     const plugin = await ctx.plugin(OrdoAgentOpsPlugin)

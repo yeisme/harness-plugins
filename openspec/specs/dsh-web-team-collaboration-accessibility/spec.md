@@ -2,6 +2,12 @@
 
 (merged from archived change 2026-08-31-dsh-web-ordo-team-hub-v1)
 
+## Purpose
+
+定义 Ordo Team Web 协作面的键盘、语义替代、非颜色状态、异步降级与浏览器安全投影要求，确保图形工作区对辅助技术和受限环境仍可操作。
+
+## Requirements
+
 ### Requirement: Every graph fact SHALL have a semantic alternative
 Task、role slot、assignment、handoff、dependency、status、blocker、control 和 allowed action SHALL 可通过 keyboard-readable Task Queue、Inspector 或 semantic relation list访问。Graph canvas MUST 不成为唯一信息源。
 

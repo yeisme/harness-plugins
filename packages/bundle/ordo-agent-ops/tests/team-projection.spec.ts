@@ -88,6 +88,7 @@ describe('capability matrix (§2.3 honest fallback)', () => {
     expect(resolveOrdoTeamCapabilityMatrix(undefined, false).fallback).toBe('legacy-pane')
     expect(resolveOrdoTeamCapabilityMatrix({ capability: 'ordo.team.v1', maturity: 'live' }, true).mutationEnabled).toBe(true)
     expect(resolveOrdoTeamCapabilityMatrix({ capability: 'ordo.team.v1', maturity: 'fixtures' }, true).mutationEnabled).toBe(false)
+    expect(resolveOrdoTeamCapabilityMatrix({ capability: 'ordo.team.v1', maturity: 'readonly' }, true)).toMatchObject({ team: 'readonly', mutationEnabled: false })
   })
 })
 

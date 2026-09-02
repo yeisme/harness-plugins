@@ -56,3 +56,53 @@ export {
 } from './client';
 
 export { createOwnerActionTransport } from './transport';
+
+export {
+  ACTIVITY_VIEW_ID,
+  RECEIPT_SUCCESS_COLLAPSE_MS,
+  SESSION_STATUS_VIEW_ID,
+  SLASH_ASSIST_ROW_CAP,
+  TOKEN_USAGE_OPEN_ID,
+  TOKEN_USAGE_VIEW_ID,
+  applySuggestionChip,
+  compactComposerControls,
+  dropStaleDirectoryRows,
+  firstSupportCommands,
+  helpDetailFor,
+  openCommandResultView,
+  p1AbsentFromExecutable,
+  probeFirstCommandMenuFallback,
+  projectWebDirectory,
+  receiptLaneFromDraft,
+  restoreActivityFromEvents,
+  restoreComposerDraft,
+  sameCanonicalAcrossEntries,
+  selectWebCommand,
+  startWebDraft,
+  turnEndSuggestionChips,
+  webResponsiveMode,
+  coarsePointerMinPx,
+} from './shell';
+export type {
+  CommandActivityEventV1,
+  CommandActivityRowV1,
+  ComposerControlSnapshot,
+  PaneOpenViewRequest,
+  PaneWorkbenchFace,
+  ReceiptLaneV1,
+  SuggestionChipV1,
+  WebDirectoryRevision,
+  WebShellEntry,
+} from './shell';
+export { activityContainsForbidden, commandResultEntersTranscript } from './activity';
+export { COMMAND_SHELL_RADIUS, COMMAND_SHELL_SPACING, commandShellTokens, commandTone } from './visual';
+export {
+  FIRST_SUPPORT_NAMES,
+  runFirstSupportJourney,
+  runFirstSupportMatrix,
+} from './first-support';
+export type {
+  FirstSupportJourneyResult,
+  FirstSupportName,
+  FirstSupportOutcome,
+} from './first-support';

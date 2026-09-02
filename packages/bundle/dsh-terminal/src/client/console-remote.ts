@@ -150,14 +150,21 @@ interface RemoteResultLike<T> {
 }
 
 function optionalLookup(ctx: { get?: (name: never) => unknown } & Record<string, unknown>, key: string): Record<string, unknown> | undefined {
-  try {
-    const value = ctx.get?.(key as never)
-    if (isRecord(value)) return value
-  } catch {
-    // guard facade without the service
+  const getter = ctx.get
+  if (typeof getter === 'function') {
+    try {
+      const value = getter.call(ctx, key as never)
+      return isRecord(value) ? value : undefined
+    } catch {
+      return undefined
+    }
   }
-  const prop = ctx[key]
-  return isRecord(prop) ? prop : undefined
+  try {
+    const prop = ctx[key]
+    return isRecord(prop) ? prop : undefined
+  } catch {
+    return undefined
+  }
 }
 
 function isNamespaceFace(candidate: unknown): candidate is Record<string, (input?: unknown) => Promise<RemoteResultLike<unknown>>> {

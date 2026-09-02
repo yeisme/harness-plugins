@@ -1,6 +1,8 @@
 # @yeisme/dsh-selection-annotation
 
-Installable DSH Web bundle for Selection & Annotation Agent Interaction V1.
+Installable DSH Web bundle for Selection & Annotation Agent Interaction. The
+current `0.1.0-rc.1` line is the V1 baseline; V2 migration is specified in
+`openspec/changes/dsh-selection-interaction-v2/`.
 
 ```
 dsh plugin --profile web add @yeisme/dsh-selection-annotation
@@ -12,6 +14,11 @@ One profile row (`cordis.patch.yml`) grafts the selection toolbar and compact
 composer overlay from `@yeisme/dsh-client-ui-selection-annotation` onto the
 conversation DOM. Kill-switch:
 `localStorage['dsh-selection-annotation'] = 'off'`（`apply` 直接 no-op）。
+
+V2 default behavior is a short-lived singleton Actions surface after a stable
+safe selection. It uses 1 primary + 2 secondary + More and opens Composer only
+after an explicit action. A V1-only host may use the compatibility adapter for
+one release; the package name and install command stay unchanged.
 
 ## 桥接契约
 
@@ -32,5 +39,7 @@ Client owner，Web 侧入口不渲染（capability probe unavailable）。
 可见、overlay 挂载、kill-switch、dispose 干净）。仓库级
 `pnpm run check:bundles` 校验 client.js 无外部 workspace require。
 
-Spec: `openspec/changes/dsh-selection-agent-review-v1/`；仓库级摘要：
-`docs/design/dsh-selection-agent-review-v1.md`。
+V1 archive: `openspec/changes/archive/2026-08-28-dsh-selection-agent-review-v1/`；仓库级摘要：
+`docs/design/dsh-selection-agent-review-v1.md`。V2 设计与迁移：
+`docs/design/dsh-selection-interaction-v2.md`、
+`openspec/changes/dsh-selection-interaction-v2/`。

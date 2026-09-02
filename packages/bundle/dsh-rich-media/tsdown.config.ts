@@ -47,6 +47,7 @@ export default defineConfig([
     format: 'cjs',
     platform: 'browser',
     target: 'es2024',
+    define: { 'process.env.NODE_ENV': JSON.stringify('production') },
     // mammoth 经 package.json browser 字段声明浏览器替换（lib/unzip.js →
     // browser/unzip.js、lib/docx/files.js → browser/docx/files.js）；不启用
     // aliasFields 时 rolldown 会打进 Node 分支的 require("fs")，在 DSH

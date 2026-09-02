@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { apply, clientInject, clientName } from '../src/client/index.ts'
 import DshSessionCookieManagerClientPlugin from '../src/client/index.ts'
 
@@ -24,5 +26,24 @@ describe('bundle smoke', () => {
     expect(registerView).toHaveBeenCalledTimes(1)
     expect(registerView.mock.calls[0]?.[0]?.descriptor?.kind).toBe('workspace.login-profiles')
     dispose()
+  })
+
+  it('passes official sessions.list as the login-account snapshot when present', () => {
+    const registerView = vi.fn(() => vi.fn())
+    const sessions = {
+      list: {
+        getSnapshot: () => ({
+          ids: ['sess-1'],
+          byId: { 'sess-1': { displayTitle: 'Work chat', running: true } },
+        }),
+      },
+    }
+    apply({
+      get: (name: string) => name === 'paneWorkbench' ? { registerView } : name === 'sessions' ? sessions : undefined,
+    } as never)
+    const input = registerView.mock.calls[0]?.[0] as { component: () => unknown }
+    const html = renderToStaticMarkup(createElement(input.component as never))
+    expect(html).toContain('Work chat')
+    expect(html).not.toContain('demo')
   })
 })

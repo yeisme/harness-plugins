@@ -219,5 +219,51 @@ export {
   actions,
 } from './reducer';
 
+export {
+  type CommandPresentationScope,
+  type CommandExpectedPresentation,
+  type CommandDetailProjectionV1,
+  type RankContext,
+  type RankedCommand,
+  P1_CANDIDATE_NAMES,
+  expectedPresentationFor,
+  projectCommandDetail,
+  rankCommandsForScope,
+  slashAssistLimitForViewport,
+  projectSlashAssistRows,
+  projectPaletteGroups,
+  resolveCanonicalIdentity,
+  isP1CandidateWithoutHandler,
+  executableResults,
+} from './presentation';
+
+export {
+  type CommandDraftStep,
+  type CommandDraftV1,
+  type CommandDraftEvent,
+  createInitialDraft,
+  commandDraftReducer,
+  draftCanDispatch,
+  draftAllowsBareEnter,
+} from './draft';
+
+export {
+  type BundleEntryLedgerRow,
+  type ConvergenceCommandSeed,
+  type ConvergenceDisposition,
+  CONVERGENCE_SOURCE,
+  CONVERGENCE_SOURCE_PRIORITY,
+  bundleEntryLedger,
+  createConvergenceDirectory,
+  ledgerIsClosed,
+  paletteExecuteRecord,
+  type PaletteExecuteRecord,
+  probeOldPathFallback,
+  projectConvergedCommands,
+  registerConvergedSource,
+  seedToEntry,
+  unloadConvergedSource,
+} from './entry-convergence';
+
 // Re-export types for convenience
 export type { CommandReducerState as State } from './types';

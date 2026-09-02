@@ -6,6 +6,7 @@ import {
   agentsHubHeader,
   agentsHubTaskRows,
   agentsHubTabs,
+  projectAgentsHub,
   resolveAgentsHubTab,
   type AgentsHubStateV1,
 } from '../src/client/hub-state.ts'
@@ -13,6 +14,7 @@ import type { OrdoTeamCapabilityMatrixV1, OrdoTeamSnapshotV1 } from '@yeisme/dsh
 
 const unavailableMatrix: OrdoTeamCapabilityMatrixV1 = { team: 'unavailable', sessionAgents: 'available', legacyOrdoPane: 'available', mutationEnabled: false, fallback: 'hub-session-agents' }
 const liveMatrix: OrdoTeamCapabilityMatrixV1 = { team: 'live', sessionAgents: 'available', legacyOrdoPane: 'available', mutationEnabled: true, fallback: 'hub-session-agents' }
+const readonlyMatrix: OrdoTeamCapabilityMatrixV1 = { team: 'readonly', sessionAgents: 'available', legacyOrdoPane: 'available', mutationEnabled: false, fallback: 'hub-session-agents' }
 
 function snapshot(overrides: Partial<OrdoTeamSnapshotV1> = {}): OrdoTeamSnapshotV1 {
   return {
@@ -77,5 +79,38 @@ describe('Task rows and delivery picker (§2.2)', () => {
       { deliveryRef: 'delivery:b', taskCount: 1 },
     ])
     expect(agentsHubDeliveryOptions(undefined)).toEqual([])
+  })
+})
+
+describe('Hub true-data projection (real-data-self-owned §2.2)', () => {
+  const state: AgentsHubStateV1 = { activeTab: 'ordo-teams', selectedTaskRef: undefined, deliveryFilter: undefined }
+
+  it('projects live owner tasks and never invents demo rows', () => {
+    const projected = projectAgentsHub(snapshot(), liveMatrix, state)
+    expect(projected.offlineReason).toBeUndefined()
+    expect(projected.rows.map(row => row.taskRef)).toEqual(['task:1', 'task:2'])
+    expect(projected.header.maturity).toBe('live')
+  })
+
+  it('projects read-only CLI facts without enabling mutation or demo rows', () => {
+    const projected = projectAgentsHub(snapshot(), readonlyMatrix, state)
+    expect(projected.offlineReason).toBeUndefined()
+    expect(projected.rows).toHaveLength(2)
+    expect(projected.header.mutationEnabled).toBe(false)
+    expect(projected.header.maturity).toBe('readonly')
+  })
+
+  it('shows the offline reason and zero rows when CLI/owner is unavailable', () => {
+    const projected = projectAgentsHub(undefined, unavailableMatrix, state)
+    expect(projected.rows).toEqual([])
+    expect(projected.offlineReason).toBe('team_v1_unavailable')
+    expect(projected.header.freshness).toBe('offline')
+  })
+
+  it('does not render fixture maturity as live owner data', () => {
+    const fixtures: OrdoTeamCapabilityMatrixV1 = { ...liveMatrix, team: 'fixtures', mutationEnabled: false }
+    const projected = projectAgentsHub(snapshot(), fixtures, state)
+    expect(projected.rows).toEqual([])
+    expect(projected.offlineReason).toBe('fixtures_only')
   })
 })

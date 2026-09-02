@@ -42,6 +42,8 @@ describe('fake radar provider conformance', () => {
     const dismissed = await dispatch('/drama radar dismiss opp:demo-2', fake)
     expect(dismissed.ok && dismissed.receipt.outcome === 'submitted').toBe(true)
     expect(fake.receiptLog.map(entry => entry.lane)).toEqual(['curator', 'curator'])
+	expect(fake.requests[0]?.args['input']).toMatchObject({ kind: 'saved' })
+	expect(fake.requests[1]?.args['input']).toMatchObject({ kind: 'dismissed' })
   })
 
   it('refresh reaches only edition_build on the operator lane', async () => {

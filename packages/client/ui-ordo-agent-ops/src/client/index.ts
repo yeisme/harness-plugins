@@ -6,6 +6,7 @@ export {
   agentsHubHeader,
   agentsHubTaskRows,
   agentsHubDeliveryOptions,
+  projectAgentsHub,
 } from './hub-state.ts'
 export {
   resolveOrdoTeamLayout,
@@ -19,7 +20,7 @@ export {
   shouldRefetchOnReceipt,
 } from './team-workspace.ts'
 export type { OrdoTeamPaletteStateV1, OrdoTeamPaletteEvent, OrdoTeamPendingActionV1, OrdoTeamLayoutMode, OrdoTeamTaskQueueRowV1, OrdoTeamGraphNodeV1, OrdoTeamGraphEdgeV1, OrdoTeamInspectorViewV1, OrdoTeamRoomEventV1, OrdoTeamRoomEntryV1 } from './team-workspace.ts'
-export type { AgentsHubTab, AgentsHubStateV1, AgentsHubSessionAgentRow, AgentsHubHeaderV1, AgentsHubLegacyFallbacks } from './hub-state.ts'
+export type { AgentsHubTab, AgentsHubStateV1, AgentsHubSessionAgentRow, AgentsHubHeaderV1, AgentsHubLegacyFallbacks, AgentsHubProjectionV1 } from './hub-state.ts'
 /** @deprecated 0.1.0-rc.7 compatibility browser entry. */
 
 export {

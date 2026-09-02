@@ -101,6 +101,33 @@ Complete coverage matrix tracking:
 - `conditional` - Platform-specific conditions
 - `not-applicable` - Does not apply to DSH
 
+## Command-first shell (Web + TUI)
+
+`/` Slash Assist and `Ctrl/Cmd+K` Palette (Web) / Command Center (TUI) consume
+one live revisioned directory. Canonical id, alias, owner, danger, coverage,
+and disabled reason are the same on both surfaces. First `/` or `:` discovery
+is local (no RPC). `:` is a migration hint, not a second identity.
+
+Structured draft covers command token, argument/selector, original-draft
+restore on Escape, and safe/confirm/destructive gates. Bare Enter does not
+confirm non-safe commands. Web confirm uses `Ctrl/Cmd+Enter`; TUI confirm
+defaults Cancel and needs `y` or an explicit Confirm focus; destructive
+needs the owner phrase.
+
+Composer receipt is the short-lived lane. Durable Activity is restored only
+from official `command/run|done`. Results do not enter the model transcript.
+`/status` uses `session.status.snapshot.v1alpha1` facts or honestly shows
+unavailable — never process-ledger quota math.
+
+P1 candidates (`/usage`, `/theme`, …) without a live handler are not
+executable. When the Composer/Palette seam is missing, the old Command Menu
+stays usable (probe-first fallback).
+
+```bash
+pnpm --filter @yeisme/dsh-command-experience test
+pnpm --filter @yeisme/dsh-command-experience test:integration
+```
+
 ## P0 Commands (First Release)
 
 ### Discovery & System

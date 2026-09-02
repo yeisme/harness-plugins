@@ -80,6 +80,7 @@ export function resolveRadarSpawn(config: RadarAdapterConfigV1, intent: RadarInt
   }
   if (operation.action === 'feedback_add') {
     const [ref] = intent.opportunityRefs
+	const kind = intent.kind === 'save' ? 'saved' : 'dismissed'
     return {
       binary: config.binary,
       argv,
@@ -88,9 +89,11 @@ export function resolveRadarSpawn(config: RadarAdapterConfigV1, intent: RadarInt
         lane: operation.lane,
         args: {
           action: 'feedback_add',
-          opportunity_ref: ref,
-          feedback: intent.kind === 'save' ? 'save' : 'dismiss',
-          idempotency_key: intent.idempotencyKey,
+		  input: {
+			opportunity_ref: ref,
+			kind,
+			idempotency_key: intent.idempotencyKey,
+		  },
         },
       },
     }
@@ -104,7 +107,7 @@ export function resolveRadarSpawn(config: RadarAdapterConfigV1, intent: RadarInt
       lane: 'operator',
       args: {
         action: 'edition_build',
-        idempotency_key: intent.idempotencyKey,
+		input: {},
       },
     },
   }

@@ -99,6 +99,31 @@ describe('P0 catalog adapters', () => {
     expect(inspectCommandsMutateState('session')).toBe(true)
   })
 
+  it('projects every live P0 canonical with owner, danger, coverage, and availability reason', () => {
+    const catalog = buildP0Catalog()
+    const expected = [
+      'help', 'commands', 'status', 'plugins', 'mcp', 'skills', 'pane', 'explorer', 'git',
+      'agent', 'resume', 'session', 'archive', 'delete', 'new', 'fork', 'rename',
+      'preset', 'model', 'reasoning', 'permissions',
+      'compact', 'plan', 'goal', 'diff', 'review', 'mention',
+      'copy', 'feedback', 'init', 'logout', 'quit',
+    ]
+    expect(catalog.map((item) => item.canonicalName).sort()).toEqual([...expected].sort())
+    for (const name of expected) {
+      const row = catalog.find((item) => item.canonicalName === name)
+      expect(row, name).toBeDefined()
+      expect(row!.owner).toMatch(/client|dsh|host/)
+      expect(row!.danger).toMatch(/safe|confirm|destructive/)
+      expect(row!.coverage).toMatch(/equivalent|adapted|staged|conditional|not-applicable/)
+      expect(row!.availability.state === 'available' || Boolean(row!.availability.reason)).toBe(true)
+    }
+    expect(catalog.find((item) => item.canonicalName === 'init')?.availability.reason).toMatch(/not applicable/i)
+    expect(catalog.find((item) => item.canonicalName === 'explorer')?.aliases).toContain('files')
+    expect(catalog.find((item) => item.canonicalName === 'quit')?.aliases).toContain('exit')
+    expect(catalog.some((item) => item.canonicalName === 'usage')).toBe(false)
+    expect(catalog.some((item) => item.canonicalName === 'theme')).toBe(false)
+  })
+
   it('rejects ledger rows that have no owner or verify command', () => {
     const issues = auditCoverageLedger([
       { command: '/help', coverage: 'adapted', owner: 'client', seam: 'local', verifyCommand: 'vitest' },

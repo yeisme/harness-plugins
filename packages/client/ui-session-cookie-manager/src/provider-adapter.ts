@@ -83,3 +83,58 @@ export function composeAccountProjections(
 ): readonly AccountProjectionV1[] {
   return [...providerSnapshotToAccounts(providerSnapshot), ...sessionSnapshotToAccounts(sessionSnapshot)]
 }
+
+interface OfficialSessionRowLike {
+  readonly displayTitle?: string
+  readonly running?: boolean
+  readonly pendingInteraction?: unknown
+  readonly completed?: boolean
+  readonly updatedAt?: string
+}
+
+interface OfficialSessionListLike {
+  readonly ids?: readonly string[]
+  readonly byId?: Record<string, OfficialSessionRowLike | undefined>
+  readonly current?: string
+}
+
+/**
+ * Fold the official DSH `sessions.list` snapshot into the login-account
+ * session projection. Missing or empty lists stay undefined (honest empty
+ * accounts), never demo rows.
+ */
+export function officialSessionsToSnapshot(sessions: unknown): SessionListSnapshotLike | undefined {
+  const list = asOfficialList(sessions)
+  if (list === undefined) return undefined
+  const ids = list.ids ?? Object.keys(list.byId ?? {})
+  const rows: SessionSummaryLike[] = []
+  for (const id of ids) {
+    if (typeof id !== 'string' || id.trim() === '') continue
+    const row = list.byId?.[id]
+    const title = typeof row?.displayTitle === 'string' && row.displayTitle.trim() !== '' ? row.displayTitle : id
+    const status: SessionSummaryLike['status'] = row?.running === true
+      ? 'running'
+      : row?.completed === true
+        ? 'archived'
+        : row?.pendingInteraction !== undefined
+          ? 'active'
+          : 'idle'
+    rows.push({
+      ref: id,
+      title,
+      status,
+      ...(typeof row?.updatedAt === 'string' ? { updatedAt: row.updatedAt } : {}),
+      enabled: true,
+    })
+  }
+  return { revision: 1, state: 'ready', sessions: rows }
+}
+
+function asOfficialList(sessions: unknown): OfficialSessionListLike | undefined {
+  if (sessions === null || typeof sessions !== 'object') return undefined
+  const root = sessions as { list?: { getSnapshot?: () => unknown } }
+  if (typeof root.list?.getSnapshot !== 'function') return undefined
+  const snapshot = root.list.getSnapshot()
+  if (snapshot === null || typeof snapshot !== 'object') return undefined
+  return snapshot as OfficialSessionListLike
+}

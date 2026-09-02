@@ -12,6 +12,11 @@ The adapter probes a public TUI contribution/registry seam, contributes P0 comma
 - **`/agent` thread picker** and **`/resume` session picker**
 - **Disabled owner actions stay visible** with a reason (no dead buttons)
 - **Zero RPC on first discovery**
+- **Pure `update(state, event)` / `render(state, width, height)`** for conversation, assist, Command Center, argument, selector, confirm, destructive, dispatch, receipt, inspector, and session reset
+- **Viewport-capped Slash Assist** (8/6/4/3) and `Ctrl+K` Command Center (Commands/Recent/Status)
+- **Confirm defaults Cancel**; destructive needs the owner phrase; bare Enter does not confirm non-safe
+- **Statusline `/status`** reuses `session.status.snapshot.v1alpha1` or shows unavailable
+- **Sidecar debug** (event/frame counters); plugin does not read stdin, enter raw/alternate screen, or capture signals
 
 ## Installation
 
@@ -53,7 +58,10 @@ const colon = resolveTuiAssistQuery(catalog, ':agent');
 pnpm --filter @yeisme/dsh-client-ui-command-experience-tui test
 pnpm --filter @yeisme/dsh-client-ui-command-experience-tui typecheck
 pnpm --filter @yeisme/dsh-client-ui-command-experience-tui build
+pnpm --filter @yeisme/dsh-command-experience test:integration
 ```
+
+Golden frames cover 120×36, 80×24, 60×20, and 50×12. Resize round-trips keep draft, selection, receipt, and scroll anchor.
 
 ## License
 

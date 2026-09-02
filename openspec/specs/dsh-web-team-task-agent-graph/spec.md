@@ -2,6 +2,12 @@
 
 (merged from archived change 2026-08-31-dsh-web-ordo-team-hub-v1)
 
+## Purpose
+
+定义 Ordo Teams Web 工作区的 Task-Agent graph、任务队列、响应式布局、聚合层级与 owner-fact 边界，使大规模 Delivery 关系可视化而不在客户端重建调度事实。
+
+## Requirements
+
 ### Requirement: Web workspace SHALL be graph-first and task-operable
 Ordo Teams Delivery view SHALL 同时提供 Task Queue、zoomable Task-Agent graph 与 `Inspector|Room|Activity` context region。Graph SHALL 是关系主视图，Task Queue SHALL 是主要 action/scan surface；二者 MUST 共享 stable selection 和 owner action availability。
 

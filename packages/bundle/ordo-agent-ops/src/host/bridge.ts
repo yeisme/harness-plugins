@@ -37,6 +37,9 @@ export interface OrdoAgentOpsOwnerSource {
 /** 未来 Ordo owner adapter 注入其只读来源所使用的稳定 key。 */
 export const ORDO_AGENT_OPS_OWNER_SOURCE = 'ordoAgentOpsOwner'
 
+/** Local Ordo CLI Team V1 owner; missing keeps Hub maturity unavailable. */
+export const ORDO_TEAM_OWNER_SOURCE = 'ordoTeamOwner'
+
 /** Ordo/BFF 写入 adapter 的稳定 Host key；缺失时所有 mutation 保持关闭。 */
 export const ORDO_AGENT_OPS_ACTION_SOURCE = 'ordoAgentOpsActionOwner'
 
@@ -154,6 +157,17 @@ function unknownDecision(
   return { kind: 'unknown', state, safeSummary }
 }
 
+export {
+  createLocalOrdoCliOwner,
+  spawnOrdoCli,
+} from './cli-owner.ts'
+export type {
+  LocalOrdoCliOwner,
+  LocalOrdoCliOwnerOptions,
+  OrdoCliExec,
+  OrdoCliExecResult,
+  OrdoTeamOwnerSource,
+} from './cli-owner.ts'
 export {
   ORDO_TEAM_SNAPSHOT_SCHEMA,
   ORDO_TEAM_EVENT_SCHEMA,

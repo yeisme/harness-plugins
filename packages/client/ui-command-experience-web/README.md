@@ -9,6 +9,10 @@ DSH Web command experience: unified command menu, selectors, and interactions th
 - **Full Accessibility**: ARIA attributes, keyboard navigation, screen reader support
 - **Type Safe**: Full TypeScript with shared core types
 - **React Integration**: Modern hooks-based API with Testing Library tests
+- **Dual entry**: Slash Assist (max 8 rows) and Palette share one directory
+- **Structured draft**: token, argument/selector, Escape restore, graded confirm
+- **Receipt + Activity**: pending dedup, 4s success collapse, official `command/run|done`
+- **Probe-first fallback**: old Command Menu remains when the new shell seam is missing
 
 ## Installation
 

@@ -30,6 +30,7 @@ describe.skipIf(!built)('dsh-rich-media client.js ModuleLoader runtime smoke', (
     // The bundle is one banner expression registering via window; indirect eval
     // keeps it off the ESM loader (jsdom rejects file: imports).
     const code = await readFile(clientPath, 'utf8')
+    expect(code).not.toContain('process.env.NODE_ENV')
     ;(0, eval)(code)
 
     expect(registration?.id).toBe('@yeisme/dsh-rich-media')

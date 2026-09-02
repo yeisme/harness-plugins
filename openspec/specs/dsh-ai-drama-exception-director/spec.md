@@ -2,6 +2,12 @@
 
 (merged from archived change 2026-08-30-dsh-ai-drama-exception-director-v1)
 
+## Purpose
+
+定义 DSH AI Drama 的异常优先导演投影、共享 decision token、Workbench/外编 typed handoff 与旧 operational panes 兼容边界，确保插件只组合 owner 事实和动作，不复制领域状态或批准真相。
+
+## Requirements
+
 ### Requirement: DSH `/drama` SHALL 默认呈现异常优先导演投影
 
 默认 `director` preset SHALL 只保留 Context、Review、Run，默认投影 SHALL 呈现当前 context、primary blocker、影响范围、owner reason、一个 owner-approved next action 与必要的 Review/Run/Delivery 深链。默认投影 MUST NOT 要求用户先浏览完整全剧控制台，MUST NOT 复制 Workbench 语义画布/scene graph、Scaena `EditRevision`/delivery bundle 或 Ordo run/task/lease/approval ledger。

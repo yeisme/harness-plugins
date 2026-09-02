@@ -70,6 +70,20 @@ describe('slash runtime', () => {
     runtime.dispose()
   })
 
+  it('registers converged plugin commands from the plugin inventory and drops them on unload', () => {
+    const runtime = createSlashRuntime({
+      plugins: () => [{ id: 'dsh-token-usage' }, { id: 'dsh-devtools' }],
+    })
+    const names = runtime.snapshot().commands.map(item => item.canonicalName)
+    expect(names).toContain('token-usage')
+    expect(names).toContain('devtools')
+    const token = runtime.snapshot().commands.find(item => item.canonicalName === 'token-usage')
+    expect(token?.owner).toBe('host')
+    expect(token?.danger).toBe('safe')
+    expect(token?.availability.state).toBe('available')
+    runtime.dispose()
+  })
+
   it('opens explorer through /pane explorer and lists plugins without RPC', () => {
     const opened: unknown[] = []
     const runtime = createSlashRuntime({

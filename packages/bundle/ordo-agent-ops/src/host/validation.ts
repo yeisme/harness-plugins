@@ -93,13 +93,14 @@ export const ordoAgentOpsSnapshotSchema = z.object({
   run: runSchema.optional(),
   capacity: capacitySchema.optional(),
   actions: z.array(actionDescriptorSchema).max(32).optional(),
+  evidenceRefs: z.array(opaqueRef).max(32).optional(),
 }).strict().superRefine((snapshot, ctx) => {
   const readable = snapshot.state === 'ready' || snapshot.state === 'stale'
   if (readable && snapshot.context === undefined) {
     ctx.addIssue({ code: 'custom', path: ['context'], message: 'ready and stale snapshots require context' })
   }
-  if (!readable && (snapshot.run !== undefined || snapshot.capacity !== undefined || snapshot.actions !== undefined)) {
-    ctx.addIssue({ code: 'custom', message: 'non-readable snapshots must not carry run, capacity, or action facts' })
+  if (!readable && (snapshot.run !== undefined || snapshot.capacity !== undefined || snapshot.actions !== undefined || snapshot.evidenceRefs !== undefined)) {
+    ctx.addIssue({ code: 'custom', message: 'non-readable snapshots must not carry run, capacity, action, or evidence facts' })
   }
 })
 
