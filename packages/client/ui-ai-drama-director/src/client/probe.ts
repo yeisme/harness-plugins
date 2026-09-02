@@ -130,6 +130,21 @@ function dependencyAvailability(
   return { disabled: false }
 }
 
+/**
+ * Typed availability for the opc-scene package surfaces (opc-scene 2.1).
+ * The /drama OPC scene package landing shares the Context lane: it needs the
+ * drama host transport — the only channel that returns the Scaena OPC
+ * summary — plus the Pane Workbench face. Anything else degrades to a
+ * disabled surface with the standard reason; nothing is faked.
+ */
+export function dramaOpcSceneSurfaceAvailability(
+  probe: DramaCapabilityProbeResultV1,
+): DramaAvailabilityV1 {
+  if (!probe.paneWorkbench.available) return { disabled: true, reason: probe.paneWorkbench.reason }
+  if (!probe.dramaHost.available) return { disabled: true, reason: probe.dramaHost.reason }
+  return { disabled: false }
+}
+
 /** Per-view disabled state derived from the probe; missing pane disables all. */
 export function dramaViewAvailability(
   probe: DramaCapabilityProbeResultV1,

@@ -116,6 +116,26 @@ export {
   type ExceptionFirstProjectionV1,
   type ExceptionProjectionState,
 } from './exception-projection.ts'
+export {
+  deriveDramaScenePackageExceptionView,
+  type OpcSceneViewInput,
+  type OpcSceneViewState,
+  type OpcSceneCardKind,
+  type OpcSceneProjectedActionV1,
+  type OpcSceneExceptionCardV1,
+  type OpcSceneProjectedReframeV1,
+  type OpcSceneRoleLabelV1,
+  type OpcSceneRoleDetailV1,
+  type OpcSceneContextSectionV1,
+  type DramaScenePackageExceptionView,
+} from './opc-scene-view.ts'
+export {
+  DramaScenePackageContextView,
+  OpcSceneExceptionCardsView,
+  OpcSceneReframeView,
+  OpcSceneDeliveryHandoffView,
+  type OpcSceneSurfaceProps,
+} from './opc-scene-views.tsx'
 export { DramaClientRegistry } from '@yeisme/dsh-ai-drama-director'
 export type {
   DramaClientRegistrationV1,
@@ -132,6 +152,7 @@ export {
   DRAMA_VIEW_DEPENDENCIES,
   DRAMA_COMMAND_DEPENDENCIES,
 } from './probe.js'
+export { dramaOpcSceneSurfaceAvailability } from './probe.js'
 export { createDramaContextStore } from './context.js'
 export * from './show-control-controller.js'
 export * from './show-control-views.js'

@@ -190,3 +190,29 @@ export type {
   BridgeFixtureManifest,
   BridgeIngressOwnerSnapshot,
 } from './bridge-conformance.js'
+
+export {
+  OPC_SCENE_PACKAGE_SUMMARY_SCHEMA,
+  OPC_SCENE_SUMMARY_FIXTURE_VERSION,
+  OPC_SCENE_SUMMARY_FIXTURE,
+  isSafeOpcSceneRef,
+  validateOpcScenePackageSummary,
+} from './opc-scene-summary.js'
+export type {
+  OpcScenePackageSummaryV1alpha1,
+  OpcSceneActionDescriptorV1,
+  OpcSceneExceptionFindingV1,
+  OpcSceneExceptionKindV1,
+  OpcSceneGateIdV1,
+  OpcSceneGateStateV1,
+  OpcSceneGateV1,
+  OpcSceneFreshnessV1,
+  OpcSceneSideEffectClassV1,
+  OpcSceneAspectV1,
+  OpcSceneDepthV1,
+  OpcSceneReframeVariantV1,
+  OpcSceneSkillRoleV1,
+  OpcSceneEvidenceBlockV1,
+  OpcSceneReceiptRefV1,
+  OpcSceneDeliveryV1,
+} from './opc-scene-summary.js'
