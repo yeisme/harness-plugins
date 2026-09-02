@@ -307,3 +307,10 @@ DSH image attachment → PreviewResourceV1 adapter
 **实施策略符合性**：✅ 符合通用工作台能力商品化决策 - 本地不重建商品能力，依赖 DSH upstream 官方 slot 或 better-sidebar 生态。
 
 2026-08-25 | lane-prod2 review | BLOCKED pending DSH official PreviewResourceV1 Agent Note | Evidence strengthened with detailed capability comparison and local delivery status
+## 2026-09-02 复核（上游 HEAD `4e84901e`，deepseek-ai/deepseek-harness master）
+
+- **系列 apply-check**：✅ `upstream-prs/preview-resource-v1/apply.sh` 对上游 master HEAD 干净 apply（depth-1 clone 实测，`git apply --check` + patch + new-files 全过）——「系列可干净 apply」验收腿当前成立。
+- **official PreviewResourceV1 Agent Note**：❌ 上游 `.agents/notes/`（proposed/implemented/archived，1702 篇）仍无 PreviewResourceV1 或等价资源预览 capability note；最接近的是 proposed bug-fix `attachment-read-quarantine`（2026-08-20，附件读取隔离，scope 不同）。
+- **结论**：阻塞根因不变（等上游官方 note/系列被接受），Task 2.4 维持 BLOCKED；apply-check 证据已刷新，无需改判。
+
+2026-09-02 | g21 session 复核 | BLOCKED 维持；apply-check 绿（上游 HEAD 4e84901e） | upstream-prs/preview-resource-v1 实测干净 apply；上游仍无 PreviewResourceV1 note

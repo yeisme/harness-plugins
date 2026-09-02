@@ -8,7 +8,7 @@
 
 **本地 TerminalHostV2 spec 完整性**：✅ 本地 spec 已完整定义所有必需能力，包括 owner identity、profile、attach、control、frame、resize、detach、kill、error handling 与 replay 语义。
 
-**上游通道状态**：⚠️ 本仓 `upstream-prs/` backlog 固化了 `TerminalInteractiveCapabilityV1` 系列草案（patch + 双语 note），但未向 deepseek-ai 上游提交官方 PR，fork-ready 分支存在但未启动审查。
+**上游通道状态**：⚠️ 本仓 `upstream-prs/` backlog 曾记录 `TerminalInteractiveCapabilityV1` 系列草案的存在（2026-08-25 复核口径）；**2026-09-02 复核更正：该系列实际未在 `upstream-prs/` 落盘**（目录中无 terminal 相关 slug），task 1.3 的固化通道尚未执行（commodity-parked，本轮不实施）。
 
 **V3 本地交付状态**：✅ `TerminalHostV2` 类型定义、fake adapter 与本地 capability detection 已完整实施；commodity-parked 真实 PTY 交互按计划不实施。
 
@@ -21,7 +21,7 @@
 ### DSH Agent Note 状态
 
 - **当前状态**：DSH upstream `deepseek-ai/deepseek-harness` 未发布 official PTY Agent Note
-- **上游通道**：本仓 `upstream-prs/` backlog 固化 `TerminalInteractiveCapabilityV1` 系列（patch + 双语 note 草案）
+- **上游通道**：本仓 `upstream-prs/` 曾记录 `TerminalInteractiveCapabilityV1` 系列草案（2026-09-02 复核更正：实际未落盘，见执行摘要）
 - **PR 状态**：不开官方 PR，也不在 fork master 上开审查 PR；fork-ready 分支存在
 
 ### TerminalHostV2 Spec 对照
@@ -158,11 +158,10 @@ interface TerminalAttachmentV1 {
 
 ### 上游通道状态
 
-6. ⚠️ **upstream-prs 通道已建立但未激活**
-   - `upstream-prs/` backlog 固化了 `TerminalInteractiveCapabilityV1` 系列草案
-   - 包含 patch + 双语 note 草案（英文/中文）
-   - fork-ready 分支存在，但未向 deepseek-ai 提交官方 PR
-   - 未启动 upstream 审查流程
+6. ⚠️ **upstream-prs 通道未落地（2026-09-02 复核更正）**
+   - `upstream-prs/` backlog **未固化** `TerminalInteractiveCapabilityV1` 系列（此前记录有误；目录中无 terminal 相关 slug，无 patch/双语 note 草案）
+   - task 1.3 的固化通道（patch + 双语 note + apply.sh/README）尚未执行，属 commodity-parked 本轮不实施范围
+   - 2026-09-02 上游复核（deepseek-ai/deepseek-harness HEAD `4e84901e`）：仍未发布 official interactive PTY Agent Note；已 implemented 的 `persistent-pty-sessions`（2026-07-16）是 agent 侧行式 PTY（`ctx.terminals`），明示 deferred 全屏应用/按键序列/会话恢复，不构成 TerminalHostV2 对照基准
 
 ### Acceptance Criteria 评估
 
