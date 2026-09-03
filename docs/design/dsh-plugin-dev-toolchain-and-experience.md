@@ -100,7 +100,7 @@
 
 ### 6.1 并行会话所有（本 lane 禁改）
 
-- `dsh-tui-command-first-interaction-v1`（0/33）、`dsh-web-command-first-interaction-v1`（0/32）：命令优先壳 lane 的产物，含新包 `ui-command-experience-tui/web`。冻结/归档后解锁 Wave 3（G20）。
+- `dsh-web-command-first-interaction-v1`（0/32）：命令优先壳 lane 的产物，含 `ui-command-experience-web`。冻结/归档后解锁 Wave 3（G20）。
 
 ### 6.2 外部停车区（无本地可派工，保持 active 不归档）
 
@@ -150,8 +150,8 @@ R8 要求 DX 实现排队于「在途 V3 系列收尾」之后，目的是避免
 | --- | --- | --- | --- |
 | W1/G18 | dsh-plugin-dev-toolchain-v1 | 已归档（2026-09-01） | 五检查器 + 基线报告落地；`pnpm check:plugins` 成为机械化门禁入口；基线 50 红（dispose 36、safeproj 12、decl 2、visual-token 0）。 |
 | W2/G19 | dsh-web-real-data-self-owned-v1 | 已归档（2026-09-02） | 审计账本 + SessionManagerHostV1 官方 seam 生产接线，真数据率 40%→50%；ordo 两面板按 DAG 等 ordo-viz 归档。 |
-| W3/G20 | dsh-web-command-entry-convergence-v1 | 已归档（2026-09-02） | 入口收敛消费 command-first 冻结产物；command-first 三 change（web/tui command-first、real-data）全归档，其包面随之解冻。 |
-| W4/G21 | dsh-plugin-consistency-coverage-v1 | 进行中（5/10） | catalog/example 两新包落地；红灯 50→16（2026-09-01）→9（2026-09-02，含 VT 回归清零）；余 9 项全部位于四个在途 lane 禁改包（dsh-terminal 3、ui-interaction-space 2、ordo-agent-ops 2、dsh-rich-media 2），清零条件 = 对应 lane 冻结（见 change tasks 1.2/1.3 归属记录）。 |
+| W3/G20 | dsh-web-command-entry-convergence-v1 | 已归档（2026-09-02） | 入口收敛消费 command-first 冻结产物；Web command-first 与 real-data change 已归档，其包面随之解冻。 |
+| W4/G21 | dsh-plugin-consistency-coverage-v1 | 进行中（9/10，仅余 4.3 dogfood 窗口） | catalog/example 两新包落地；红灯 50→16（2026-09-01）→9（2026-09-02）→0（2026-09-02 `pnpm check:plugins` 六检查器全 PASS 零 findings，报告 temp/toolchain-runs/2026-09-02T151007223Z-toolchain）；09-01 曾归属在途 lane 的余项已随各 lane 收口或观测语义修正清零，09-03 复跑维持零红灯（temp/toolchain-runs/2026-09-03T122937338Z-toolchain）。 |
 
 - 清零轨迹对照 G18 基线：dispose 36→8、safeproj 12→1、decl-lint 2→0、visual-token 0→0（09-02 曾因新增包 ui-session-status 未分类回红 1，当日补分类清零）；bundle-contract 全程 0。
-- 14 天 dogfood 观测（R11 主指标）：窗口 2026-09-01 起，观测记录以 `temp/toolchain-runs/<ts>-toolchain` 门禁报告序列为准（每日收口跑 `pnpm check:plugins` 落盘）；窗口未满，结论以窗口末报告为准。
+- 14 天 dogfood 观测（R11 主指标）：窗口 2026-09-01 起，观测记录以 `temp/toolchain-runs/<ts>-toolchain` 门禁报告序列为准（每日收口跑 `pnpm check:plugins` 落盘）；窗口未满，结论以窗口末报告为准。截至 2026-09-03（第 3/14 天）零阻断故障记录、六检查器零 findings（最新报告 temp/toolchain-runs/2026-09-03T122937338Z-toolchain）；观测序列 = 2026-09-01T014345901Z（基线）→ 2026-09-02T151007223Z（零红灯达成）→ 2026-09-03T122937338Z。
