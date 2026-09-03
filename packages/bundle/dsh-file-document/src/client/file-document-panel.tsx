@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Surface, SurfaceContextBar, SurfaceState } from '@yeisme/dsh-client-ui-surface'
-import type { FileEntryKind, FileEntryV1 } from '../types.ts'
+import type { ArchiveEntryListPreviewV1, FileEntryKind, FileEntryV1 } from '../types.ts'
 import { formatJsonTree } from './json-tree.ts'
 import { formatBinaryPreview, BINARY_PREVIEW_MAX_BYTES as BINARY_LABEL } from './binary-preview.ts'
 import { renderSafeMarkdown } from './markdown.ts'
@@ -64,6 +64,8 @@ export interface FileDocumentPanelProps {
   renderMarkdown?: ((text: string) => string) | undefined
   /** Owner-provided bounded bytes for binary preview (V3 4.8); absent keeps the honest unsupported state. */
   bytes?: Uint8Array | undefined
+  /** Owner-issued bounded archive entry list (V3 4.8); absent keeps the honest unsupported state. */
+  archiveEntries?: ArchiveEntryListPreviewV1 | undefined
   /**
    * V3 4.7 PDF renderer injected by the composition layer (pdfjs worker
    * path). The native iframe remains ONLY as the worker/CSP-failure
@@ -430,6 +432,53 @@ function Preview({ entry, previewUrl }: { entry: FileEntryV1; previewUrl: string
   return <div style={styles.meta}>{meta}{previewUrl !== undefined ? ' · 可预览' : ''}</div>
 }
 
+/** Archive media types the document view routes to the owner entry list (V3 4.8). */
+const ARCHIVE_PREVIEW_MEDIA_TYPES: ReadonlySet<string> = new Set([
+  'application/zip',
+  'application/x-zip-compressed',
+  'application/java-archive',
+])
+
+/** Display budget for the summed uncompressed size note; larger totals stay honest text. */
+const ARCHIVE_EXPANDED_DISPLAY_MAX = 1024 * 1024 * 1024
+
+function isArchiveEntry(entry: FileEntryV1): boolean {
+  return entry.kind === 'archive'
+    || (entry.mediaType !== undefined && ARCHIVE_PREVIEW_MEDIA_TYPES.has(entry.mediaType.toLowerCase()))
+}
+
+/**
+ * Owner-issued archive entry list (V3 4.8). Metadata only: names, sizes,
+ * counts, honest truncation. No client extraction, no entry-content preview
+ * without a new owner-issued safe ref.
+ */
+function ArchiveEntryListView({ list }: { readonly list: ArchiveEntryListPreviewV1 }): ReactNode {
+  const unlisted = Math.max(0, list.totalEntries - list.listedEntries)
+  const expanded = list.expandedBytesTotal
+  return (
+    <div data-dsh-file-preview-archive style={{ display: 'grid', gap: 6, minWidth: 0 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', color: 'var(--vk-text-secondary)', fontSize: 11 }}>
+        <strong>归档条目</strong>
+        <span style={{ color: 'var(--vk-text-tertiary)' }}>owner 提供 · 仅元数据 · 不解压</span>
+      </div>
+      <ul role="list" aria-label="归档条目列表" style={{ display: 'grid', gap: 2, margin: 0, padding: 0, listStyle: 'none', maxHeight: 320, overflowY: 'auto' }}>
+        {list.entries.map((entry, index) => (
+          <li key={`${index}:${entry.name}`} data-dsh-archive-entry={entry.isDirectory === true ? 'directory' : 'file'} style={{ display: 'flex', gap: 8, alignItems: 'baseline', minWidth: 0, fontSize: 12, color: 'var(--vk-text-secondary)' }}>
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={entry.name}>{entry.isDirectory === true ? '目录 · ' : ''}{entry.name}{entry.nameTruncated === true ? '…' : ''}</span>
+            <span style={{ marginLeft: 'auto', flex: '0 0 auto', color: 'var(--vk-text-tertiary)', fontVariantNumeric: 'tabular-nums' }}>{entry.isDirectory === true ? '目录' : formatBytes(entry.uncompressedSize) ?? '大小未知'}</span>
+          </li>
+        ))}
+      </ul>
+      <div role="status" style={{ display: 'grid', gap: 2, fontSize: 11, color: 'var(--vk-text-tertiary)' }}>
+        <span>共 {list.totalEntries} 条 · 列出 {list.listedEntries} 条{unlisted > 0 ? ` · ${unlisted} 条未列出（超出列表上限）` : ''}</span>
+        {expanded !== undefined && <span>解压后总量约 {formatBytes(expanded)}{expanded > ARCHIVE_EXPANDED_DISPLAY_MAX ? '（超出展示预算，仅计数）' : ''}</span>}
+        {list.malformed === true && <span>部分条目元数据损坏，列表可能不完整。</span>}
+        <span>条目内容预览需 owner 签发新的安全引用，暂不可用。</span>
+      </div>
+    </div>
+  )
+}
+
 type DocumentViewMode = 'preview' | 'source' | 'tree' | 'table' | 'compare'
 
 /** Context modes the document view offers; unavailable ones state why. */
@@ -445,7 +494,7 @@ export function documentViewModesOf(entry: FileEntryV1): readonly { mode: Docume
   ]
 }
 
-function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, onRetryText, renderTable, renderMarkdown, bytes, renderPdf }: {
+function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, onRetryText, renderTable, renderMarkdown, bytes, archiveEntries, renderPdf }: {
   entry: FileEntryV1 | undefined
   previewUrl: string | undefined
   onOpenEntry: ((entry: FileEntryV1) => void) | undefined
@@ -455,6 +504,7 @@ function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, on
   renderTable: ((entry: FileEntryV1, text: string) => ReactNode) | undefined
   renderMarkdown: ((text: string) => string) | undefined
   bytes: Uint8Array | undefined
+  archiveEntries: ArchiveEntryListPreviewV1 | undefined
   renderPdf: ((entry: FileEntryV1, previewUrl: string) => ReactNode) | undefined
 }) {
   const [mode, setMode] = useState<DocumentViewMode>('preview')
@@ -531,7 +581,9 @@ function ResourcePreview({ entry, previewUrl, onOpenEntry, text, textLoading, on
           </div>
         )}
         {renderState === 'unsupported' && entry.kind !== 'directory' && (
-          bytes === undefined
+          isArchiveEntry(entry) && archiveEntries !== undefined
+            ? <ArchiveEntryListView list={archiveEntries} />
+            : bytes === undefined
             ? <span>{previewUrl === undefined ? '等待文件服务提供预览授权。' : '此文件类型暂不支持内嵌预览。'}</span>
             : (() => {
               const preview = formatBinaryPreview(bytes)
@@ -698,7 +750,7 @@ function TreeRow({
 }
 
 /** File/Document panel backed by safe file-entry projections. */
-export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOpenEntry, onPinEntry, loadChildren, loading = false, error, onRetry, loadText, showPreviewPanel = true, compact = false, renderTable, renderMarkdown, bytes, renderPdf }: FileDocumentPanelProps) {
+export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOpenEntry, onPinEntry, loadChildren, loading = false, error, onRetry, loadText, showPreviewPanel = true, compact = false, renderTable, renderMarkdown, bytes, archiveEntries, renderPdf }: FileDocumentPanelProps) {
   const visible = useMemo(() => {
     if (tabId === 'documents') {
       return entries.filter(entry => entry.kind === 'document' || entry.kind === 'pdf' || entry.kind === 'text' || entry.kind === 'directory')
@@ -841,6 +893,7 @@ export function FileDocumentPanel({ tabId, entries = [], resolvePreviewUrl, onOp
                   renderTable={renderTable}
                   renderMarkdown={renderMarkdown ?? ((text: string) => renderSafeMarkdown(text))}
                   bytes={bytes}
+                  archiveEntries={archiveEntries}
                   renderPdf={renderPdf}
                 />
               )}

@@ -63,6 +63,8 @@ export type { LocalTableGridProps } from './preview/local-table.tsx'
 export { accessSource, isAbortError, urlSource } from './preview/sources.ts'
 export type { BoundedSource } from './preview/sources.ts'
 export { classifyFileEntry, documentPreviewKindOf, DOCX_MEDIA_TYPE, PPTX_MEDIA_TYPE, XLSSM_MEDIA_TYPE, XLSX_MEDIA_TYPE } from './preview/format-kinds.ts'
+export { ARCHIVE_ENTRY_LIST_MAX, ARCHIVE_ENTRY_NAME_MAX, ZIP_ARCHIVE_MEDIA_TYPES, isZipArchiveMediaType, parseZipEntryList } from './preview/archive-listing.ts'
+export type { ArchiveEntryListV1, ArchiveEntryV1 } from './preview/archive-listing.ts'
 export type { DocumentPreviewKind, FileEntryClassification } from './preview/format-kinds.ts'
 export {
   FILE_PREVIEW_DESCRIPTORS,

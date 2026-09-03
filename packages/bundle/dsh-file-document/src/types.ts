@@ -28,6 +28,25 @@ export interface FileEntryV1 {
   capabilities: readonly ('preview' | 'open' | 'download' | 'edit')[]
 }
 
+/** Owner-issued bounded archive entry metadata (V3 4.8); never extracted content. */
+export interface ArchiveEntryPreviewV1 {
+  readonly name: string
+  readonly uncompressedSize?: number | undefined
+  readonly isDirectory?: boolean | undefined
+  readonly nameTruncated?: boolean | undefined
+}
+
+/** Owner-issued bounded archive entry list (V3 4.8); absent keeps the honest unsupported state. */
+export interface ArchiveEntryListPreviewV1 {
+  readonly entries: readonly ArchiveEntryPreviewV1[]
+  /** Honest total entry count from archive metadata. */
+  readonly totalEntries: number
+  readonly listedEntries: number
+  readonly truncated: boolean
+  readonly malformed?: boolean | undefined
+  readonly expandedBytesTotal?: number | undefined
+}
+
 export type FileEntryValidation =
   | { ok: true; value: FileEntryV1 }
   | { ok: false; error: string }
