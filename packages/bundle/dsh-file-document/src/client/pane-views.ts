@@ -13,8 +13,8 @@
  *
  * @module @yeisme/dsh-file-document/client
  */
-import { createElement } from 'react'
-import { FileDocumentPanel, type FileDocumentPanelProps } from './file-document-panel.tsx'
+import { createElement, useEffect } from 'react'
+import type { FileDocumentPanelProps } from './file-document-panel.tsx'
 import { isFileEntry, type FileEntryV1 } from '../types.ts'
 import {
   documentOpenReducer,
@@ -78,6 +78,7 @@ export function applyFileDocumentPaneViews(
   pane: unknown,
   options: FileDocumentPaneOptions = {},
 ): FileDocumentPaneSurface {
+  void options.explorerPanel
   const candidate = pane as PaneWorkbenchFace | null | undefined
   const usable = candidate !== null && candidate !== undefined
     && typeof candidate.registerView === 'function' && typeof candidate.openView === 'function'
@@ -96,6 +97,13 @@ export function applyFileDocumentPaneViews(
   const workbench = candidate as PaneWorkbenchFace
   const disposers: Array<() => void> = []
   let openState: DocumentOpenStateV1 = EMPTY_DOCUMENT_OPEN_STATE
+  const openCanonicalExplorer = (): void => workbench.openView({
+    kind: 'dsh.explorer', resourceKey: 'navigator:dsh.explorer', role: 'navigator', preferredRegion: 'right', retention: 'keep-alive', singleton: true, title: 'Explorer',
+  })
+  const LegacyExplorerShim = () => {
+    useEffect(openCanonicalExplorer, [])
+    return createElement('p', { role: 'status', 'data-explorer-legacy-shim': WORKSPACE_EXPLORER_VIEW_KIND }, 'Explorer 已迁移到 dsh.explorer。')
+  }
 
   const dispatchOpen = (action: DocumentOpenAction): DocumentOpenRequest | undefined => {
     const next = documentOpenReducer(openState, action)
@@ -122,6 +130,7 @@ export function applyFileDocumentPaneViews(
       preferredRegion: 'right',
       retention: 'keep-alive',
       singleton: true,
+      deprecated: true,
     },
     presentation: {
       icon: 'folder',
@@ -129,11 +138,8 @@ export function applyFileDocumentPaneViews(
       defaultSize: 360,
       minWidth: 280,
     },
-    component: () => createElement(FileDocumentPanel, {
-      tabId: 'files',
-      showPreviewPanel: false,
-      ...(options.explorerPanel ?? {}),
-    }),
+    component: LegacyExplorerShim,
+    showInPicker: false,
   }))
 
   disposers.push(workbench.registerView({
@@ -153,15 +159,7 @@ export function applyFileDocumentPaneViews(
   return {
     registered: true,
     openExplorer: () => {
-      workbench.openView({
-        kind: WORKSPACE_EXPLORER_VIEW_KIND,
-        resourceKey: 'explorer:root',
-        role: 'navigator',
-        preferredRegion: 'right',
-        retention: 'keep-alive',
-        singleton: true,
-        title: 'Explorer',
-      })
+      openCanonicalExplorer()
     },
     openDocument: (entry: FileEntryV1) => {
       if (!isFileEntry(entry) || entry.kind === 'directory' || !isEntryIdOpaque(entry.id)) return

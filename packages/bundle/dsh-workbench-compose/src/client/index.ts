@@ -7,16 +7,9 @@
  * @module @yeisme/dsh-workbench-compose/client
  */
 
-import { createElement, type ReactNode } from 'react'
+import { createElement, useEffect, type ReactNode } from 'react'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import { Surface, SurfaceState } from '@yeisme/dsh-client-ui-surface'
-import {
-  createFileTreeHostAdapter,
-  FileDocumentPanel,
-  useFileTree,
-  type FileTreeHostAdapter,
-} from '@yeisme/dsh-file-document'
 export { ComposedWorkbench } from './composed-workbench.tsx'
 export type { ComposedWorkbenchExtraProps, ComposedWorkbenchProps } from './composed-workbench.tsx'
 export { NS, en, zh } from './composed-workbench.tsx'
@@ -30,30 +23,6 @@ interface PaneWorkbenchFace {
   openView(request: unknown): void
 }
 
-interface DirectoryListingLike {
-  readonly path: string
-  readonly entries: readonly { readonly name: string; readonly path: string; readonly hidden?: boolean }[]
-}
-
-function FileTreePaneView({ adapter }: { readonly adapter?: FileTreeHostAdapter }): ReactNode {
-  const fileTree = useFileTree(adapter, undefined, true)
-  const loadChildren = fileTree.status === 'ready' ? fileTree.loadChildren : undefined
-  const entries = fileTree.status === 'ready' ? fileTree.entries : []
-  const retry = fileTree.retry
-  return createElement(Surface, { kind: 'navigator', 'data-dsh-file-tree-pane': true },
-    fileTree.status === 'loading'
-      ? createElement(SurfaceState, { phase: 'loading', title: 'Loading file tree…' })
-      : fileTree.status === 'error'
-        ? createElement(SurfaceState, { phase: 'error', title: 'Failed to load file tree', description: fileTree.error ?? 'unknown error', action: createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: retry }, 'Retry') })
-        : createElement(FileDocumentPanel, {
-          tabId: 'files',
-          entries,
-          loadChildren,
-          onOpenEntry: () => undefined,
-        }),
-  )
-}
-
 function installPaneFileTree(ctx: ClientContext): () => void {
   let pane: PaneWorkbenchFace | undefined
   try {
@@ -62,37 +31,36 @@ function installPaneFileTree(ctx: ClientContext): () => void {
     pane = undefined
   }
   if (pane === undefined || typeof pane.registerView !== 'function') return () => {}
-  const workspaces = ctx.get('workspaces') as {
-    listDirectory(path?: string, signal?: AbortSignal): Promise<DirectoryListingLike>
-  } | undefined
-  const fileTreeAdapter = workspaces === undefined
-    ? undefined
-    : createFileTreeHostAdapter((path, signal) => workspaces.listDirectory(path, signal))
-
   const disposers: Array<() => void> = []
+  const LegacyFileTreeShim = (): ReactNode => {
+    useEffect(() => { pane?.openView({ kind: 'dsh.explorer', resourceKey: 'navigator:dsh.explorer', role: 'navigator', preferredRegion: 'right', retention: 'keep-alive', singleton: true, pinned: true, title: 'Explorer' }) }, [])
+    return createElement('p', { role: 'status', 'data-explorer-legacy-shim': 'file.tree' }, 'File Tree moved to dsh.explorer.')
+  }
   disposers.push(pane.registerView({
     descriptor: {
       kind: 'file.tree',
-      label: 'File Tree',
-      componentKey: 'file-tree',
+      label: 'File Tree (compatibility alias)',
+      componentKey: 'file-tree-alias',
       role: 'navigator',
       preferredRegion: 'right',
       retention: 'recreate',
       singleton: true,
+      deprecated: true,
     },
-    component: () => fileTreeAdapter === undefined ? createElement(FileTreePaneView) : createElement(FileTreePaneView, { adapter: fileTreeAdapter }),
+    component: LegacyFileTreeShim,
+    showInPicker: false,
   }))
 
   const openPane = (): void => {
     pane.openView({
-      kind: 'file.tree',
-      resourceKey: 'file-tree:root',
+      kind: 'dsh.explorer',
+      resourceKey: 'navigator:dsh.explorer',
       role: 'navigator',
       preferredRegion: 'right',
-      retention: 'recreate',
+      retention: 'keep-alive',
       singleton: true,
       pinned: true,
-      title: 'File Tree',
+      title: 'Explorer',
     })
   }
 

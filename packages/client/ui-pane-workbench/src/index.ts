@@ -8,6 +8,8 @@ export * from './event-runtime.js'
 export * from './explorer/file-lifecycle.js'
 export * from './explorer/git-decoration.js'
 export * from './explorer/provider.js'
+export * from './explorer/runtime.js'
+export * from './explorer/references.js'
 export * from './explorer/tree-state.js'
 export * from './explorer/tree-ui.js'
 export * from './git/branch-worktree.js'
@@ -40,3 +42,14 @@ export * from './workspace-designer-ui.js'
 export * from './workspace-draft.js'
 export * from './workspace-preset.js'
 export * from './workspace.js'
+export {
+  SELECTION_DESIGNER_BUILTIN_IDS,
+  SELECTION_DESIGNER_CONTEXTS,
+  SelectionInteractionDesignerSection,
+} from './selection-interaction-designer.js'
+export type {
+  SelectionDesignerContext,
+  SelectionDesignerContextPreference,
+  SelectionDesignerPreferences,
+  SelectionInteractionDesignerSectionProps,
+} from './selection-interaction-designer.js'

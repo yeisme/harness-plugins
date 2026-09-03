@@ -41,3 +41,13 @@ pnpm --filter @yeisme/dsh-client-ui-interaction-space run build
 `openspec/changes/dsh-agent-interaction-space-v1/`。统一选区交互的 V2 设计、
 扩展 descriptor、偏好和迁移合同见
 `openspec/changes/dsh-selection-interaction-v2/`。
+
+## Selection Interaction V2（已实施）
+
+`0.1.0-rc.1` 起本包承载统一选区交互层：`src/selection/` 导出 typed
+contracts（descriptor/context fail-closed 校验 + V1 alias 映射）、normalizer
+（五类 context 分类 + 敏感/opt-out/自表面排除）、`SelectionActionRegistryV2`
+（确定性 1+2+More 解析）、生命周期 reducer、singleton
+`attachSharedSelectionInteraction`（Actions/More/Bottom Sheet 表面、Alt+Enter、
+焦点还原、Pin、外部 context 发布）与三层偏好合并
+`mergeSelectionPreferences`。视觉只走 `buildPanelStyles` scoped vk token。

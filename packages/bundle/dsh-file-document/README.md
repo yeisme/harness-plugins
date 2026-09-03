@@ -1,6 +1,8 @@
 # @yeisme/dsh-file-document
 
-DSH Pane Workbench 的 File / Document 预览视图。
+DSH Pane Workbench 的 File / Document 预览视图。`workspace.explorer` 已成为隐藏
+兼容 shim，新的文件导航入口统一打开 `dsh.explorer`；`workspace.document` 仍由
+本包维护。
 
 ## 包边界
 

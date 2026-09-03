@@ -42,7 +42,7 @@ describe('workspace.explorer singleton (V3 4.1)', () => {
     const surface = applyFileDocumentPaneViews(pane)
     surface.openExplorer()
     expect(pane.opens).toHaveLength(1)
-    expect(pane.opens[0]).toMatchObject({ kind: WORKSPACE_EXPLORER_VIEW_KIND, resourceKey: 'explorer:root', singleton: true })
+    expect(pane.opens[0]).toMatchObject({ kind: 'dsh.explorer', resourceKey: 'navigator:dsh.explorer', singleton: true })
   })
 })
 

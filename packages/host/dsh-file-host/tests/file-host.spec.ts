@@ -6,6 +6,7 @@ import {
   createFileHostPlaceholder,
   FILE_OPAQUE_REF_CAPABILITY,
   FILE_TREE_PROJECTION_CAPABILITY,
+  FILE_TREE_PROJECTION_CAPABILITY_V2,
   FILE_WATCH_CAPABILITY,
   isFileHostV1,
   isSafeFileWatchEvent,
@@ -187,6 +188,23 @@ describe('@yeisme/dsh-file-host', () => {
     await expect(host.readText?.(entry!)).resolves.toMatchObject({ content: 'export {}', version: 'v1' })
     expect(requests.every(request => !('cwd' in request.body) && !('path' in request.body))).toBe(true)
     expect(requests.at(-1)?.body).toMatchObject({ sessionId: 'session-1', ref: 'file-safe123' })
+  })
+
+  it('loads and inspects paginated V2 nodes without sending cwd', async () => {
+    const requests: Array<{ input: string; body: Record<string, unknown> }> = []
+    const fetchImpl = async (input: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>
+      requests.push({ input, body })
+      if (input.endsWith('/fs.treePageV2')) return { json: async () => ({ ok: true, value: { workspaceRef: 'workspace:abcd', generation: 'g1', revision: 'r1', truncated: false, loaded: 1, total: 1, nodes: [{ ref: 'file-safe', name: '.env', kind: 'file', version: 'v1', hasChildren: false, hidden: true, ignored: false, sensitive: true, availability: { inspect: { state: 'available' }, preview: { state: 'available' }, download: { state: 'available' }, mutate: { state: 'disabled' } }, freshness: 'fresh' }] } }) } as unknown as Response
+      if (input.endsWith('/fs.inspectV2')) return { json: async () => ({ ok: true, value: { owner: 'dsh.local', ref: 'file-safe', version: 'v1', usable: false, state: 'unsupported', sensitive: true, reason: 'sensitive reveal confirmation required', resource: { name: '.env', kind: 'text' } } }) } as unknown as Response
+      throw new Error(`unexpected request ${input}`)
+    }
+    const host = createExplorerFileHost({ fetchImpl, sessionId: () => 's1', cwd: () => '/must-not-leak' })
+    const page = await host.treeV2?.roots()
+    expect(page?.nodes[0]).toMatchObject({ name: '.env', hidden: true, sensitive: true })
+    expect(host.capabilities).toContain(FILE_TREE_PROJECTION_CAPABILITY_V2)
+    await expect(host.inspect?.inspect('file-safe')).resolves.toMatchObject({ usable: false, sensitive: true })
+    expect(requests.every(item => item.body.sessionId === 's1' && !('cwd' in item.body) && !('path' in item.body))).toBe(true)
   })
 
   it('decodes owner-provided binary responses without exposing the path on entries', async () => {

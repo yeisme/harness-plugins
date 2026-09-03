@@ -7,6 +7,7 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { FileHostV1 } from '@yeisme/dsh-file-host'
 import type { TerminalHostV2 } from '@yeisme/dsh-terminal-host'
 import type { MediaHostV1 } from '@yeisme/dsh-rich-media'
+import { getComposerReferenceController, getExplorerRuntime } from '@yeisme/dsh-client-ui-pane-workbench/client'
 
 afterEach(cleanup)
 
@@ -110,10 +111,10 @@ describe('desktop workbench client apply', () => {
     const ctx = fakeClientContext({ workspaceLayout: { attach: vi.fn() } })
     apply(ctx)
     const pane = ctx.get('paneWorkbench' as never) as unknown as { openView: ReturnType<typeof vi.fn> }
-    expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({ kind: 'desktop.files', preferredRegion: 'right' }))
+    expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({ kind: 'dsh.explorer', preferredRegion: 'right' }))
   })
 
-  it('registers the file pane from the explorer host when dsh.fileHost is absent', async () => {
+  it('registers a hidden desktop.files shim and routes it to canonical Explorer', async () => {
     const fetchImpl = vi.fn(async () => ({
       ok: true,
       json: async () => ({
@@ -129,63 +130,63 @@ describe('desktop workbench client apply', () => {
     }))
     vi.stubGlobal('fetch', fetchImpl)
     const ctx = fakeClientContext({ workspaces: workspacesBrowse() })
-    apply(ctx)
-    const pane = ctx.get('paneWorkbench' as never) as unknown as { registerView: ReturnType<typeof vi.fn> }
+    const dispose = apply(ctx)
+    const pane = ctx.get('paneWorkbench' as never) as unknown as { registerView: ReturnType<typeof vi.fn>; openView: ReturnType<typeof vi.fn> }
     const files = pane.registerView.mock.calls.find(call => call[0].descriptor.kind === 'desktop.files')?.[0]
-    expect(files).toBeDefined()
-    const host = files?.component?.().props.host as FileHostV1
-    const entries = await host.listEntries()
-    expect(fetchImpl).toHaveBeenCalled()
-    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('/yeisme-files/api/fs.tree')
-    expect(entries.map(entry => entry.name).sort()).toEqual(['README.md', 'src'])
-    expect(entries.find(entry => entry.name === 'README.md')).toMatchObject({ kind: 'text' })
-    expect(JSON.stringify(entries)).not.toContain('/workspace')
+    expect(files).toMatchObject({ showInPicker: false, descriptor: { deprecated: true } })
+    render(createElement(files.component))
+    expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({ kind: 'dsh.explorer' }))
     expect(ctx.slots.inject).toHaveBeenCalledWith('sidebar.footer.action', expect.any(Function))
+    dispose()
     vi.unstubAllGlobals()
   })
 
-  it('prefers an owner-provided dsh.fileHost over the workspaces browse adapter', () => {
+  it('probes an owner-provided dsh.fileHost before the workspaces browse adapter', () => {
     const owner = fileHost()
-    const ctx = fakeClientContext({ fileHost: owner, workspaces: workspacesBrowse() })
-    apply(ctx)
-    const pane = ctx.get('paneWorkbench' as never) as unknown as { registerView: ReturnType<typeof vi.fn> }
-    const files = pane.registerView.mock.calls.find(call => call[0].descriptor.kind === 'desktop.files')?.[0]
-    expect(files?.component?.().props.host).toBe(owner)
+    const workspaces = workspacesBrowse()
+    const ctx = fakeClientContext({ fileHost: owner, workspaces })
+    const dispose = apply(ctx)
+    expect(ctx.get).toHaveBeenCalledWith('dsh.fileHost')
+    expect(workspaces.listDirectory).not.toHaveBeenCalled()
+    dispose()
   })
 
-  it('opens a content tab when a file is clicked in the explorer', () => {
+  it('does not let the desktop.files compatibility shim bypass strict preview admission', () => {
     const ctx = fakeClientContext({ fileHost: fileHost() })
     apply(ctx)
     const pane = ctx.get('paneWorkbench' as never) as unknown as { registerView: ReturnType<typeof vi.fn>; openView: ReturnType<typeof vi.fn> }
     const files = pane.registerView.mock.calls.find(call => call[0].descriptor.kind === 'desktop.files')?.[0]
-    files?.component?.().props.onOpenEntry({ id: 'file-readme', name: 'README.md', kind: 'text', capabilities: ['open', 'preview'] })
-    expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({
-      kind: 'desktop.file',
-      resourceKey: 'file-readme',
-      role: 'content',
-      preview: true,
-      title: 'README.md',
-    }))
-    files?.component?.().props.onPinEntry({ id: 'file-readme', name: 'README.md', kind: 'text', capabilities: ['open', 'preview'] })
-    expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({
-      kind: 'desktop.file',
-      resourceKey: 'file-readme',
-      preview: false,
-      pinned: true,
-    }))
+    render(createElement(files.component))
+    expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({ kind: 'dsh.explorer' }))
+    expect(pane.openView).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'desktop.file' }))
+    expect(pane.openView).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'desktop.media' }))
   })
 
-  it('opens image files in the media overlay instead of the text file view', () => {
-    const ctx = fakeClientContext({ fileHost: fileHost() })
-    apply(ctx)
-    const pane = ctx.get('paneWorkbench' as never) as unknown as { registerView: ReturnType<typeof vi.fn>; openView: ReturnType<typeof vi.fn> }
-    const files = pane.registerView.mock.calls.find(call => call[0].descriptor.kind === 'desktop.files')?.[0]
-    files?.component?.().props.onOpenEntry({ id: 'file-hero', name: 'hero.png', kind: 'image', mediaType: 'image/png', capabilities: ['open', 'preview'] })
-    expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({
-      kind: 'desktop.media',
-      resourceKey: 'file-hero',
-      title: 'hero.png',
-    }))
+  it('binds canonical Explorer to V2 and fails closed until owner inspect is usable', async () => {
+    let usable = false
+    const owner: FileHostV1 = {
+      version: '0.1.0-rc.1', capability: 'file-host', capabilities: ['FileTreeProjectionCapabilityV2', 'FileInspectCapabilityV1'], async listEntries() { return [] },
+      treeV2: {
+        capability: 'FileTreeProjectionCapabilityV2',
+        async roots() { return { workspaceRef: 'workspace:test', generation: 'g1', revision: 'r1', truncated: false, loaded: 1, total: 1, nodes: [{ ref: 'file-readme', name: 'README.md', kind: 'file', version: 'v1', hasChildren: false, hidden: false, ignored: false, sensitive: false, availability: { inspect: { state: 'available' }, preview: { state: 'available' }, download: { state: 'available' }, mutate: { state: 'disabled' } }, freshness: 'fresh' }] } },
+        async listChildren() { return { workspaceRef: 'workspace:test', generation: 'g1', revision: 'r1', truncated: false, loaded: 0, nodes: [] } },
+        async search() { return { workspaceRef: 'workspace:test', generation: 'g1', revision: 'r1', truncated: false, loaded: 0, nodes: [] } },
+        async reveal() { return { workspaceRef: 'workspace:test', generation: 'g1', revision: 'r1', breadcrumbs: [] } },
+      },
+      inspect: { capability: 'FileInspectCapabilityV1', async inspect(ref) { return { owner: 'dsh.local', ref, version: 'v1', usable, state: usable ? 'ready' : 'unsupported', sensitive: false, ...(usable ? {} : { reason: 'unsupported' }), resource: { name: 'README.md', kind: 'text' } } } },
+    }
+    getComposerReferenceController().dispatch({ type: 'clear' })
+    const ctx = fakeClientContext({ fileHost: owner })
+    const dispose = apply(ctx)
+    const runtime = getExplorerRuntime()!
+    const [node] = await runtime.roots()
+    expect(await runtime.openResource(node!, 'preview')).toMatchObject({ ok: false, reason: 'unsupported' })
+    usable = true
+    expect(await runtime.openResource(node!, 'preview')).toEqual({ ok: true })
+    expect(getComposerReferenceController().snapshot().active).toMatchObject({ ref: 'file-readme', version: 'v1', kind: 'file-preview' })
+    const pane = ctx.get('paneWorkbench' as never) as unknown as { openView: ReturnType<typeof vi.fn> }
+    expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({ kind: 'desktop.file', resourceKey: 'file-readme', preview: true }))
+    dispose()
   })
 
   it('opens files on the right and terminal at the bottom from additive actions', () => {
@@ -200,7 +201,7 @@ describe('desktop workbench client apply', () => {
     fireEvent.click(screen.getByRole('button', { name: '文件' }))
     fireEvent.click(screen.getByRole('button', { name: 'Git' }))
     fireEvent.click(screen.getByRole('button', { name: '终端' }))
-    expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({ kind: 'desktop.files', preferredRegion: 'right' }))
+    expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({ kind: 'dsh.explorer', preferredRegion: 'right' }))
     expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({ kind: 'desktop.git', preferredRegion: 'right' }))
     expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({ kind: 'desktop.terminal', preferredRegion: 'bottom' }))
   })

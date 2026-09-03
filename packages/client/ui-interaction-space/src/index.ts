@@ -90,6 +90,22 @@ export type { RegistrationResult, ResolvedActionView, ResolvedActions, ResolveOp
 export { selectionInteractionReducer } from './selection/reducer.ts'
 export type { SelectionInteractionEvent, SelectionInteractionState, SelectionSurfaceKind } from './selection/reducer.ts'
 export {
+  DEFAULT_SELECTION_DENSITY,
+  DEFAULT_SELECTION_PRESET,
+  DEFAULT_SELECTION_SHORTCUT,
+  mergeSelectionPreferences,
+} from './selection/preferences.ts'
+export type {
+  MergedContextPreference,
+  PreferenceMergeDiagnostics,
+  PreferenceMergeResult,
+  SelectionActionPreference,
+  SelectionContextPreference,
+  SelectionDensity,
+  SelectionInteractionPreferenceInput,
+  SelectionPreset,
+} from './selection/preferences.ts'
+export {
   attachSharedSelectionInteraction,
   getSharedSelectionInteraction,
   SelectionInteractionLayer,

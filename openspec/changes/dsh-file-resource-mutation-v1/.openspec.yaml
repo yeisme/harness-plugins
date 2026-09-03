@@ -1,0 +1,3 @@
+schema: spec-driven
+created: 2026-09-02
+goal: 为 DSH Web Explorer 增加 preview-first 文件资源管理、传输、trash/undo 和 owner lease/CAS 合同

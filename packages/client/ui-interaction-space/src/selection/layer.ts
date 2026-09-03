@@ -177,6 +177,37 @@ export class SelectionInteractionLayer {
     this.doc.defaultView?.addEventListener('resize', this.onResize)
     this.doc.addEventListener('keydown', this.onKeydown, true)
     this.doc.addEventListener('pointerdown', this.onPointerDown, true)
+    // G21 dispose 收口：按钮交互以事件委托挂在常驻 overlay 上（一次挂载、
+    // dispose 显式摘除）；innerHTML 重渲染不再累积元素监听。
+    this.overlayRoot.addEventListener('click', this.onOverlayClick)
+  }
+
+  /** 事件委托：按 data-action-id 激活动作，More/入口/Pin 走专用 data-role。 */
+  private readonly onOverlayClick = (event: MouseEvent): void => {
+    if (this.disposed) return
+    const target = event.target
+    if (!(target instanceof Element)) return
+    const button = target.closest('button')
+    if (button === null) return
+    const context = this.state.phase === 'actions-visible' ? this.state.context : undefined
+    if (button.dataset.actionId !== undefined && context !== undefined) {
+      this.activateAction(button.dataset.actionId, button.dataset.actionId, context)
+      return
+    }
+    if (button.dataset.role === 'more-toggle') {
+      this.moreOpen = !this.moreOpen
+      this.render()
+      return
+    }
+    if (button.dataset.role === 'sheet-entry') {
+      this.sheetOpen = true
+      this.render()
+      return
+    }
+    if (button.dataset.role === 'pin') {
+      this.transition({ type: 'pin' })
+      this.render()
+    }
   }
 
   // --- 生命周期 -----------------------------------------------------------
@@ -191,6 +222,7 @@ export class SelectionInteractionLayer {
     this.doc.defaultView?.removeEventListener('resize', this.onResize)
     this.doc.removeEventListener('keydown', this.onKeydown, true)
     this.doc.removeEventListener('pointerdown', this.onPointerDown, true)
+    this.overlayRoot.removeEventListener('click', this.onOverlayClick)
     this.registry.dispose()
     this.intentHandlers.clear()
     this.capabilityProviders.clear()
@@ -538,13 +570,10 @@ export class SelectionInteractionLayer {
       const entry = this.doc.createElement('button')
       entry.type = 'button'
       entry.className = 'sa-btn'
+      entry.dataset.role = 'sheet-entry'
       entry.textContent = 'Actions'
       entry.setAttribute('aria-haspopup', 'dialog')
       entry.setAttribute('aria-expanded', String(this.sheetOpen))
-      entry.addEventListener('click', () => {
-        this.sheetOpen = true
-        this.render()
-      })
       this.toolbar.append(entry)
       return
     }
@@ -558,10 +587,7 @@ export class SelectionInteractionLayer {
       more.setAttribute('aria-expanded', String(this.moreOpen))
       more.setAttribute('aria-controls', 'sa-more-panel')
       this.morePanel.id = 'sa-more-panel'
-      more.addEventListener('click', () => {
-        this.moreOpen = !this.moreOpen
-        this.render()
-      })
+      more.dataset.role = 'more-toggle'
       this.toolbar.append(more)
     }
     const pin = this.doc.createElement('button')
@@ -570,10 +596,7 @@ export class SelectionInteractionLayer {
     pin.textContent = '⌷'
     pin.title = 'Pin'
     pin.setAttribute('aria-label', 'Pin selection actions')
-    pin.addEventListener('click', () => {
-      this.transition({ type: 'pin' })
-      this.render()
-    })
+    pin.dataset.role = 'pin'
     this.toolbar.append(pin)
   }
 
@@ -602,11 +625,7 @@ export class SelectionInteractionLayer {
     button.textContent = label
     button.setAttribute('aria-label', label)
     button.disabled = view.disabled
-    const canonicalId = this.registry.resolveCanonical(view.descriptor.id)
-    button.dataset.actionId = canonicalId
-    button.addEventListener('click', () => {
-      this.activateAction(canonicalId, view.descriptor.id, this.state.phase === 'actions-visible' ? this.state.context : undefined)
-    })
+    button.dataset.actionId = this.registry.resolveCanonical(view.descriptor.id)
     return button
   }
 

@@ -24,7 +24,7 @@ import {
   type SessionSummaryV1,
 } from '@yeisme/dsh-session-manager'
 import { createFileHostPlaceholder, type FileHostV1 } from '@yeisme/dsh-file-host'
-import { createOpaqueFileRefRegistry, FILE_OPAQUE_REF_HOST_CONTEXT_KEY, handleYeismeFilesApi } from '@yeisme/dsh-file-host/node'
+import { createOpaqueFileRefRegistry, FILE_OPAQUE_REF_HOST_CONTEXT_KEY, handleYeismeFilesApi, NodeFileResourceMutationOwner, NodeFileTransferOwner } from '@yeisme/dsh-file-host/node'
 import { createTerminalHostPlaceholder, type TerminalHostV1, type TerminalHostV2 } from '@yeisme/dsh-terminal-host'
 import { createNotificationHostPlaceholder, type NotificationHostV1 } from '@yeisme/dsh-notify-host'
 
@@ -100,7 +100,7 @@ type DesktopWorkbenchNodeContext = {
   get?(name: string): unknown
 } & Partial<SessionManagerHostPluginContext>
 
-function sessionCwdOf(ctx: DesktopWorkbenchNodeContext, sessionId?: string, clientCwd?: string): string {
+function sessionCwdOf(ctx: DesktopWorkbenchNodeContext, sessionId?: string, clientCwd?: string): string | undefined {
   if (clientCwd !== undefined && clientCwd !== '') return clientCwd
   try {
     const sessions = (ctx.sessions ?? ctx.get?.('sessions')) as SessionStoreFace | undefined
@@ -109,9 +109,11 @@ function sessionCwdOf(ctx: DesktopWorkbenchNodeContext, sessionId?: string, clie
       if (headerCwd !== undefined && headerCwd !== '') return headerCwd
     }
   } catch {
-    // Missing session store falls through to process cwd.
+    // Missing session store is an unavailable owner for opaque requests.
   }
-  return process.cwd()
+  // Legacy path-backed calls may still explicitly provide client cwd. Opaque
+  // V2 callers must fail closed instead of reading process.cwd().
+  return sessionId === undefined ? process.cwd() : undefined
 }
 
 /**
@@ -134,6 +136,18 @@ export function apply(ctx: DesktopWorkbenchNodeContext): () => void {
     }
   }
   const opaqueRefs = createOpaqueFileRefRegistry()
+  const mutationOwners = new Map<string, NodeFileResourceMutationOwner>()
+  const transferOwners = new Map<string, NodeFileTransferOwner>()
+  const mutationOwner = (cwd: string): NodeFileResourceMutationOwner => {
+    let owner = mutationOwners.get(cwd)
+    if (owner === undefined) { owner = new NodeFileResourceMutationOwner(cwd, opaqueRefs); mutationOwners.set(cwd, owner) }
+    return owner
+  }
+  const transferOwner = (cwd: string): NodeFileTransferOwner => {
+    let owner = transferOwners.get(cwd)
+    if (owner === undefined) { owner = new NodeFileTransferOwner(cwd, opaqueRefs); transferOwners.set(cwd, owner) }
+    return owner
+  }
   const unprovide = ctx.provide?.(FILE_OPAQUE_REF_HOST_CONTEXT_KEY, opaqueRefs)
   const dispose = webServer.register({
     kind: 'prefix',
@@ -141,6 +155,8 @@ export function apply(ctx: DesktopWorkbenchNodeContext): () => void {
     handler: (req, res) => handleYeismeFilesApi(req as never, res as never, {
       sessionCwd: (sessionId, clientCwd) => sessionCwdOf(ctx, sessionId, clientCwd),
       opaqueRefs,
+      mutationOwner,
+      transferOwner,
     }),
   })
   return () => {

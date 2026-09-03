@@ -1,5 +1,11 @@
 # DSH AI Drama Director Pack
 
+## 2026-09-02 OPC 场景生产包同步
+
+个人 OPC 的 DSH 默认入口为 /drama 异常优先视图，消费 Scaena OPCScenePackageSummaryV1alpha1；Workbench 负责媒体优先的复杂审阅，DSH 负责快速回答“当前是什么、卡在哪里、为什么卡、下一步是什么”。两端共享 action id、target ref、expected version、side-effect class、confirmation/idempotency、receipt 与 reconcile identity。
+
+正常路径只呈现 direction_confirm、visual_foundation_accept、export_confirm 三个人类门；cost、rights、stale、unknown、partial、owner offline 和 plan amendment 仅在触发时进入异常卡。9:16/16:9、balanced/cinematic 与 role-first Skill 语义来自同一 Scaena projection。DSH 不重算 readiness/action、不自动 retry、不组装 package，并通过 Workbench handoff 进入复杂媒体审阅。
+
 ## 定位
 
 Director Pack 是 DSH 中的异常优先 Agent 导演台。它让用户在对话上下文中选择 Show/Episode，并默认只呈现当前 context、primary blocker、一个 owner-approved next action 和必要的 Review/Run/Delivery handoff。Workbench `/agent` AI Drama Director Workspace 是建剧、续作、媒体比较和跨集审阅的默认视觉入口；`show-control` preset 作为兼容/高级视图保留，不再承担产品默认入口。

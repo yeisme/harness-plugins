@@ -214,3 +214,37 @@ V2 连续一个正式 release 通过浏览器、键盘、触控、HMR/dispose �
 - 事件消费者：`dsh-selection-annotation:submit` 与 `add-to-batch` 在本仓内仅 `ui-selection-annotation` 自身 dispatch；外部消费者为宿主桥接（不在本仓），字段兼容由 optional additive 保证。
 - 快捷键消费者：全仓无 `Alt+Enter` 既有占用（仅本 V2 合同定义）；编辑器原生快捷键优先原则落地于 conflict 检测 fail-safe（不注册 Actions shortcut）。
 
+
+
+## 11. 实现回写（2026-09-02）
+
+实际交付与偏差决策：
+
+- capability 名称：宿主协商 capability 为 `selection.interaction.v2`；内置动作
+  依赖 `conversation.composer` / `selection.edit` / `annotation.batch` 三个
+  capability 名（由 selection-annotation 客户端按 Composer owner 在位与否提供）。
+- 偏差决策：桌面 More/触控 Bottom Sheet 由 DOM overlay + `buildPanelStyles`
+  scoped vk token 实现（非 React `Surface` 组件）——Actions 是页面级浮层，
+  不能假设宿主提供 React root；`ui-surface` 组件继续用于 pane 内表面
+  （Workspace Designer 区）。语义与视觉 token 与设计一致。
+- per-context 顺序经 built-in 偏好层（`BUILTIN_CONTEXT_ORDERS`）实现；
+  descriptor.priority 仅作未覆盖场景回退，自定义顺序只重排可用动作，
+  `danger=confirm` 永不进入 primary/secondary（registry 结构性承担）。
+- V1 adapter 由 `policyVersion=v1`（偏好键 `dsh-selection-annotation-policy`）
+  显式启用；运行时发出 `dsh-selection-interaction:evidence` 脱敏标记
+  （仅版本/capability/结果，无选区原文）。
+- 未实现项（如实）：4.4 组件截图基线与 7.3 Playwright journeys 属 V2 canary
+  浏览器门（360/560/960px、dark/reduced-motion 截图），按 plugin-host-protocol
+  不作为本仓插件完成条件，留待 canary 浏览器验证波次。
+
+- 集成证据：`temp/integration-test-runs/selection-interaction-v2-20260902160748Z-883078/`（六件套脱敏，status passed）。
+
+## 12. 三阶段发布清单（6.4）
+
+- [x] Canary（本 release，`0.2.0-rc.1`）：V2 默认 + `policyVersion=v1` 回退通道；
+  jsdom 集成/组件/registry/偏好证据齐备；安装命令不变
+  `dsh plugin --profile web add @yeisme/dsh-selection-annotation`。
+- [ ] Default V2：V2 canary 通过浏览器/键盘/触控/HMR/owner 验收后，下一 release
+  对新安装默认 V2、已安装保留显式回退；一个 release 无阻断回归。
+- [ ] Removal：rollback window 关闭且证据完整后，下一 removal release 删除
+  V1 toolbar runtime 与 adapter；安装包名与旧 action id alias 保持不变。

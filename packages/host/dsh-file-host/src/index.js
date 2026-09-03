@@ -9,6 +9,8 @@
  */
 export const FILE_WATCH_CAPABILITY = 'FileWatchCapabilityV1';
 export const FILE_TREE_PROJECTION_CAPABILITY = 'FileTreeProjectionCapabilityV1';
+export const FILE_TREE_PROJECTION_CAPABILITY_V2 = 'FileTreeProjectionCapabilityV2';
+export const FILE_INSPECT_CAPABILITY = 'FileInspectCapabilityV1';
 export const FILE_TEXT_WRITE_CAPABILITY = 'FileTextWriteCapabilityV1';
 export const FILE_OPAQUE_REF_CAPABILITY = 'FileOpaqueRefCapabilityV1';
 export const FILE_WORKSPACE_EDIT_CAPABILITY = 'FileWorkspaceEditCapabilityV1';
@@ -20,6 +22,35 @@ export function probeFileOpaqueRefs(host) {
         reason: available ? 'opaque file refs available' : `missing ${FILE_OPAQUE_REF_CAPABILITY}`,
     };
 }
+export function isSafeFileTreeNodeV2(node) {
+    if (!isSafeFileTreeRef(node.ref) || (node.parentRef !== undefined && !isSafeFileTreeRef(node.parentRef)))
+        return false;
+    if (!SAFE_NAME.test(node.name) || looksLikeAbsolutePath(node.name) || node.version.length === 0 || node.version.length > 120)
+        return false;
+    if (node.kind !== 'file' && node.kind !== 'directory' && node.kind !== 'symlink')
+        return false;
+    if (typeof node.hidden !== 'boolean' || typeof node.ignored !== 'boolean' || typeof node.sensitive !== 'boolean')
+        return false;
+    if (node.symlink !== undefined && node.kind !== 'symlink')
+        return false;
+    return !UNSAFE_TREE.test(`${node.ref}|${node.parentRef ?? ''}|${node.name}|${node.version}`);
+}
+export function validateFileTreePageV2(value) {
+    if (typeof value !== 'object' || value === null)
+        return { ok: false, reason: 'page must be an object' };
+    const candidate = value;
+    if (typeof candidate.workspaceRef !== 'string' || !isSafeFileTreeRef(candidate.workspaceRef.replace(/^workspace:/, 'w:')))
+        return { ok: false, reason: 'unsafe workspaceRef' };
+    if (typeof candidate.generation !== 'string' || candidate.generation.length === 0 || candidate.generation.length > 120)
+        return { ok: false, reason: 'invalid generation' };
+    if (typeof candidate.revision !== 'string' || candidate.revision.length === 0 || candidate.revision.length > 120)
+        return { ok: false, reason: 'invalid revision' };
+    if (typeof candidate.truncated !== 'boolean' || typeof candidate.loaded !== 'number' || !Array.isArray(candidate.nodes) || candidate.nodes.some(node => !isSafeFileTreeNodeV2(node)))
+        return { ok: false, reason: 'invalid nodes' };
+    return { ok: true, value: candidate };
+}
+export const FILE_RESOURCE_MUTATION_CAPABILITY_V1 = 'FileResourceMutationCapabilityV1';
+export const FILE_TRANSFER_CAPABILITY_V1 = 'FileTransferCapabilityV1';
 /** Optional Cordis context key used by Desktop Workbench when a real file owner is mounted. */
 export const FILE_HOST_CONTEXT_KEY = 'dsh.fileHost';
 /** Runtime guard for an owner-provided safe file projection service. */
@@ -124,6 +155,13 @@ export function probeFileTreeProjection(host) {
         };
     }
     return { available: true, freshness: 'fresh', reason: 'file tree projection available' };
+}
+export function probeFileTreeProjectionV2(host) {
+    if (host === undefined)
+        return { available: false, freshness: 'offline', reason: 'file owner is offline' };
+    if (!host.capabilities?.includes(FILE_TREE_PROJECTION_CAPABILITY_V2) || host.treeV2 === undefined)
+        return { available: false, freshness: 'contract_mismatch', missingCapability: FILE_TREE_PROJECTION_CAPABILITY_V2, reason: `missing ${FILE_TREE_PROJECTION_CAPABILITY_V2}` };
+    return { available: true, freshness: 'fresh', reason: 'file tree projection v2 available' };
 }
 /** Probe live watch. Missing capability is not live and must not be polled. */
 export function probeFileWatch(host) {
@@ -429,6 +467,8 @@ export function createExplorerFileHost(options = {}) {
         writeText: async (path, content, expectedVersion) => call('fs.write', { path, content, expectedVersion }),
     });
     let opaqueRefsAvailable = false;
+    let ownerCapabilities = new Set();
+    const revealTokens = new Map();
     const isOpaqueEntry = (entry) => {
         if (typeof entry !== 'object' || entry === null)
             return false;
@@ -455,7 +495,7 @@ export function createExplorerFileHost(options = {}) {
         get capabilities() {
             const legacy = legacyHost.capabilities ?? [];
             return opaqueRefsAvailable
-                ? [...new Set([...legacy, FILE_OPAQUE_REF_CAPABILITY])]
+                ? [...new Set([...legacy, FILE_OPAQUE_REF_CAPABILITY, FILE_TREE_PROJECTION_CAPABILITY_V2, ...ownerCapabilities])]
                 : legacy;
         },
         async listEntries(parentRef) {
@@ -474,13 +514,15 @@ export function createExplorerFileHost(options = {}) {
         },
         async readText(entry) {
             if (opaqueRefsAvailable) {
-                return callOpaque('fs.readV2', { ref: entry.id });
+                const reveal = revealTokens.get(entry.id);
+                return callOpaque('fs.readV2', { ref: entry.id, ...(reveal === undefined ? {} : { revealToken: reveal.token }) });
             }
             return legacyHost.readText?.(entry);
         },
         async readBinary(entry) {
             if (opaqueRefsAvailable) {
-                const value = await callOpaque('fs.binaryV2', { ref: entry.id });
+                const reveal = revealTokens.get(entry.id);
+                const value = await callOpaque('fs.binaryV2', { ref: entry.id, ...(reveal === undefined ? {} : { revealToken: reveal.token }) });
                 if (typeof value.base64 !== 'string' || typeof value.size !== 'number' || typeof value.truncated !== 'boolean') {
                     throw new Error('invalid opaque binary file response');
                 }
@@ -504,8 +546,126 @@ export function createExplorerFileHost(options = {}) {
             }
             return legacyHost.writeText?.(entry, content, expectedVersion) ?? { status: 'rejected', reason: 'file is read-only' };
         },
+        treeV2: {
+            capability: FILE_TREE_PROJECTION_CAPABILITY_V2,
+            async roots(request = {}) {
+                try {
+                    const value = await callOpaque('fs.treePageV2', { ...(request.cursor === undefined ? {} : { cursor: request.cursor }), ...(request.limit === undefined ? {} : { limit: request.limit }) });
+                    const page = parseTreePage(value);
+                    opaqueRefsAvailable = true;
+                    ownerCapabilities = new Set(page.ownerCapabilities ?? []);
+                    return page;
+                }
+                catch {
+                    opaqueRefsAvailable = false;
+                    return legacyTreePage(await legacyHost.listEntries());
+                }
+            },
+            async listChildren(parentRef, request = {}) {
+                try {
+                    const value = await callOpaque('fs.treePageV2', { parentRef, ...(request.cursor === undefined ? {} : { cursor: request.cursor }), ...(request.limit === undefined ? {} : { limit: request.limit }) });
+                    const page = parseTreePage(value);
+                    opaqueRefsAvailable = true;
+                    ownerCapabilities = new Set(page.ownerCapabilities ?? []);
+                    return page;
+                }
+                catch {
+                    opaqueRefsAvailable = false;
+                    return legacyTreePage(await legacyHost.listEntries(parentRef), parentRef);
+                }
+            },
+            async search(request) {
+                const value = await callOpaque('fs.treePageV2', { query: request.query, ...(request.cursor === undefined ? {} : { cursor: request.cursor }), ...(request.limit === undefined ? {} : { limit: request.limit }) });
+                return parseTreePage(value);
+            },
+            async reveal(ref) {
+                const value = await callOpaque('fs.revealV2', { ref });
+                return parseReveal(value);
+            },
+        },
+        inspect: {
+            capability: FILE_INSPECT_CAPABILITY,
+            async inspect(ref) {
+                const reveal = revealTokens.get(ref);
+                const value = await callOpaque('fs.inspectV2', { ref, ...(reveal === undefined ? {} : { revealToken: reveal.token }) });
+                return parseInspect(value);
+            },
+            async reveal(ref, version) {
+                const value = await callOpaque('fs.sensitiveRevealV1', { ref, version });
+                if (typeof value.token !== 'string' || typeof value.expiresAt !== 'string')
+                    throw new Error('invalid sensitive reveal response');
+                revealTokens.set(ref, { version, token: value.token });
+                return { token: value.token, expiresAt: value.expiresAt };
+            },
+        },
+        mutations: {
+            capability: FILE_RESOURCE_MUTATION_CAPABILITY_V1,
+            get enabled() { return opaqueRefsAvailable && ownerCapabilities.has(FILE_RESOURCE_MUTATION_CAPABILITY_V1); },
+            get disabledReason() { return this.enabled ? undefined : 'owner mutation capability has not been negotiated'; },
+            preflight: intent => callOpaque('fs.mutation.preflightV1', { intent }),
+            execute: (proposalRef, intent) => callOpaque('fs.mutation.executeV1', { proposalRef, intent }),
+            reconcile: idempotencyKey => callOpaque('fs.mutation.reconcileV1', { idempotencyKey }),
+            undo: receiptRef => callOpaque('fs.mutation.undoV1', { receiptRef }),
+        },
+        transfer: {
+            capability: FILE_TRANSFER_CAPABILITY_V1,
+            get enabled() { return opaqueRefsAvailable && ownerCapabilities.has(FILE_TRANSFER_CAPABILITY_V1); },
+            get disabledReason() { return this.enabled ? undefined : 'owner transfer capability has not been negotiated'; },
+            createUpload: input => callOpaque('fs.upload.createV1', { input }),
+            async uploadChunk(sessionRef, offset, chunk, digest) {
+                const sessionId = options.sessionId?.();
+                if (sessionId === undefined || sessionId === '')
+                    throw new Error('file transfer requires a session owner');
+                const query = new URLSearchParams({ sessionId, sessionRef, offset: String(offset), ...(digest === undefined ? {} : { digest }) });
+                const response = await fetchFn(`/yeisme-files/api/fs.upload.chunkV1?${query.toString()}`, { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: new Uint8Array(chunk) });
+                const parsed = await response.json();
+                if (parsed.ok !== true || typeof parsed.value?.received !== 'number' || typeof parsed.value.complete !== 'boolean')
+                    throw new Error(parsed.error?.message ?? 'invalid upload chunk response');
+                return { received: parsed.value.received, complete: parsed.value.complete };
+            },
+            cancelUpload: sessionRef => callOpaque('fs.upload.cancelV1', { sessionRef }).then(() => undefined),
+            commitUpload: sessionRef => callOpaque('fs.upload.commitV1', { sessionRef }),
+            issueDownloadTicket: (ref, version) => callOpaque('fs.download.ticketV1', { ref, version }),
+            async download(ticket) {
+                const sessionId = options.sessionId?.();
+                if (sessionId === undefined || sessionId === '')
+                    throw new Error('file transfer requires a session owner');
+                const response = await fetchFn('/yeisme-files/api/fs.download.consumeV1', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId, ticket }) });
+                if (!response.ok)
+                    throw new Error(`HTTP ${response.status}`);
+                return new Uint8Array(await response.arrayBuffer());
+            },
+        },
     };
     return opaqueHost;
+}
+function parseTreePage(value) {
+    const parsed = validateFileTreePageV2(value);
+    if (!parsed.ok)
+        throw new Error(`invalid file tree page: ${parsed.reason}`);
+    return parsed.value;
+}
+function legacyTreePage(entries, parentRef) {
+    return {
+        workspaceRef: 'workspace:legacy', generation: 'legacy', revision: 'legacy', truncated: false, loaded: entries.length, total: entries.length,
+        nodes: entries.map(entry => ({ ref: entry.id, ...(parentRef === undefined ? {} : { parentRef }), name: entry.name, kind: entry.kind === 'directory' ? 'directory' : 'file', version: 'legacy', hasChildren: entry.kind === 'directory', hidden: false, ignored: false, sensitive: false, availability: { inspect: { state: 'unavailable', reason: 'legacy owner has no inspect proof' }, preview: { state: 'unavailable', reason: 'legacy owner has no inspect proof' }, download: { state: entry.capabilities.includes('download') ? 'available' : 'unavailable' }, mutate: { state: 'disabled', reason: 'legacy owner has no mutation capability' } }, freshness: 'contract_mismatch' })),
+    };
+}
+function parseReveal(value) {
+    if (typeof value !== 'object' || value === null)
+        throw new Error('invalid file reveal');
+    const candidate = value;
+    if (typeof candidate.workspaceRef !== 'string' || typeof candidate.generation !== 'string' || typeof candidate.revision !== 'string' || !Array.isArray(candidate.breadcrumbs))
+        throw new Error('invalid file reveal');
+    return candidate;
+}
+function parseInspect(value) {
+    if (typeof value !== 'object' || value === null)
+        throw new Error('invalid file inspect proof');
+    const candidate = value;
+    if (typeof candidate.owner !== 'string' || typeof candidate.ref !== 'string' || typeof candidate.version !== 'string' || typeof candidate.usable !== 'boolean')
+        throw new Error('invalid file inspect proof');
+    return candidate;
 }
 /** Browser Git host over `/yeisme-files/api/git.*` typed methods. */
 export function createExplorerGitHost(options = {}) {

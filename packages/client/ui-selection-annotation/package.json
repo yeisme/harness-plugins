@@ -57,6 +57,7 @@
   },
   "dependencies": {
     "@yeisme/dsh-client-ui-interaction-space": "workspace:*",
+    "@yeisme/dsh-client-ui-visual-kit": "workspace:^",
     "@yeisme/dsh-plugin-contracts": "workspace:^",
     "@yeisme/dsh-selection-host": "workspace:*"
   },

@@ -1,9 +1,11 @@
 # @yeisme/dsh-client-ui-selection-annotation
 
 DSH Web selection & annotation client for the Selection & Annotation Agent
-Interaction program. The current RC remains the V1 baseline; the planned V2
-contract is defined in `openspec/changes/dsh-selection-interaction-v2/` and
-uses the shared singleton interaction layer.
+Interaction program. `0.2.0-rc.1` ships Selection Interaction V2 as the default
+path（spec：`openspec/changes/dsh-selection-interaction-v2/`；实现摘要：
+`docs/design/dsh-selection-interaction-v2.md` §11）——选区由
+`@yeisme/dsh-client-ui-interaction-space` 的全局 singleton 交互层归一化，
+本包只提交 context、计算 anchor 草稿并承接显式动作。
 
 The `./client` entry grafts onto the conversation DOM without slot
 registration or host shadowing; host contracts live in

@@ -24,6 +24,7 @@ import {
   undoDesigner,
 } from './workspace-designer.js'
 import type { WorkspaceApplyUxOptionsV1 } from './workspace-apply-ux.js'
+import { SelectionInteractionDesignerSection, type SelectionDesignerPreferences } from './selection-interaction-designer.js'
 
 export function WorkspaceDesignerInteraction(props: {
   readonly session: DesignerSessionV1
@@ -33,6 +34,9 @@ export function WorkspaceDesignerInteraction(props: {
   readonly registry?: PaneViewRegistryReader
   readonly onChange: (session: DesignerSessionV1) => void
   readonly onWorkspaceChange?: (workspace: PaneWorkspaceV1) => void
+  /** Selection & Interaction 区（V2）：workspace 层选区交互偏好。 */
+  readonly selectionPreferences?: SelectionDesignerPreferences
+  readonly onSelectionPreferencesChange?: (next: SelectionDesignerPreferences) => void
 }): ReactNode {
   const [, setRevision] = useState(0)
   useEffect(() => {
@@ -103,6 +107,12 @@ export function WorkspaceDesignerInteraction(props: {
     ),
     createElement(SurfaceSection, { className: 'pwr-designer-inspector', 'data-pane-designer-slot': 'inspector' },
       createElement('p', null, props.session.draft.scope),
+      props.selectionPreferences === undefined || props.onSelectionPreferencesChange === undefined
+        ? null
+        : createElement(SelectionInteractionDesignerSection, {
+          preferences: props.selectionPreferences,
+          onChange: props.onSelectionPreferencesChange,
+        }),
       createElement(SurfaceActionBar, null,
         createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: () => props.onChange(undoDesigner(props.session)) }, t('designer.undo')),
         createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: () => props.onChange(redoDesigner(props.session)) }, t('designer.redo')),

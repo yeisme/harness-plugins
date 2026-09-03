@@ -10,10 +10,10 @@
 import { execFile } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { promisify } from 'node:util';
-import { mkdir, opendir, open, readFile, readdir, realpath, stat, unlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { copyFile, mkdir, opendir, open, readFile, readdir, realpath, rename, rm, stat, lstat, unlink, writeFile } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
-import { FILE_WORKSPACE_EDIT_CAPABILITY, } from './index.js';
+import { FILE_WORKSPACE_EDIT_CAPABILITY, FILE_INSPECT_CAPABILITY, FILE_TREE_PROJECTION_CAPABILITY_V2, FILE_RESOURCE_MUTATION_CAPABILITY_V1, FILE_TRANSFER_CAPABILITY_V1, } from './index.js';
 const execFileAsync = promisify(execFile);
 const DEFAULT_LIST_LIMIT = 1000;
 const DEFAULT_READ_LIMIT = 256 * 1024;
@@ -58,11 +58,24 @@ function opaqueMediaType(name, kind) {
     };
     return exact[ext] ?? (kind === 'text' ? 'text/plain' : undefined);
 }
+async function workspaceIgnorePatterns(workspace) {
+    const text = await readFile(join(workspace, '.gitignore'), 'utf8').catch(() => '');
+    return text.split(/\r?\n/).map(line => line.trim()).filter(line => line !== '' && !line.startsWith('!') && !line.startsWith('#')).map(pattern => {
+        const directory = pattern.endsWith('/');
+        const normalized = pattern.replace(/^\//, '').replace(/\/$/, '');
+        const escaped = normalized.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '§§').replace(/\*/g, '[^/]*').replace(/§§/g, '.*');
+        return new RegExp(`(?:^|/)${escaped}${directory ? '(?:/|$)' : '$'}`);
+    });
+}
+function sensitiveName(name) {
+    return /^(?:\.env(?:\..*)?|id_(?:rsa|ed25519))$|(?:secret|password|token|credential|\.pem$|\.key$)/i.test(name);
+}
 /** Process-local registry. Refs are scoped to one canonical workspace and never encode paths. */
 export class OpaqueFileRefRegistry {
     secret = randomBytes(32);
     byRef = new Map();
     byTarget = new Map();
+    revealTokens = new Map();
     issue(workspace, target, directory) {
         const key = `${workspace}\0${target}`;
         const existing = this.byTarget.get(key);
@@ -101,6 +114,160 @@ export class OpaqueFileRefRegistry {
             return projected;
         }));
         return entries.filter((entry) => entry !== undefined);
+    }
+    async listV2(cwd, request = {}) {
+        const workspace = await realpath(requireAbsolute(cwd));
+        const parent = request.parentRef === undefined ? undefined : await this.resolve(cwd, request.parentRef, true);
+        const target = parent?.target ?? workspace;
+        const listing = await listWorkspaceTree(target, 20_000);
+        const ignorePatterns = await workspaceIgnorePatterns(workspace);
+        const rows = await Promise.all(listing.entries.map(async (entry) => ({ entry, info: await lstat(entry.path).catch(() => undefined) })));
+        const revision = createHash('sha256').update(JSON.stringify(rows.map(({ entry, info }) => ({ name: entry.name, dir: entry.isDir, symlink: entry.isSymlink, broken: entry.broken, size: info?.size, mtimeMs: info?.mtimeMs, mode: info?.mode })))).digest('hex').slice(0, 16);
+        const limit = Math.max(1, Math.min(500, request.limit ?? 100));
+        let offset = 0;
+        if (request.cursor !== undefined) {
+            const match = /^v2:(\d+):([a-f0-9]{16})$/.exec(request.cursor);
+            if (match === null || match[2] !== revision)
+                throw new YeismeFilesError('bad-request', 'file tree cursor is stale or invalid', 409);
+            offset = Number(match[1]);
+        }
+        const mapped = rows.map(({ entry, info }) => {
+            const rawPath = entry.path;
+            const symlink = entry.isSymlink === true;
+            const canonical = symlink ? realpath(rawPath).catch(() => undefined) : Promise.resolve(rawPath);
+            return canonical.then(async (resolved) => {
+                const inside = resolved !== undefined && isWithin(workspace, resolved);
+                const kind = entry.isDir ? 'directory' : 'file';
+                const record = this.issue(workspace, inside && resolved !== undefined ? resolved : rawPath, entry.isDir && !symlink);
+                const version = info === undefined ? 'missing' : `${info.size}:${info.mtimeMs}:${info.mode}`;
+                const mediaType = opaqueMediaType(entry.name, opaqueEntryKind(entry.name, entry.isDir));
+                const inspectable = !symlink && !entry.isDir && inside && !entry.broken;
+                const previewable = inspectable && (OPAQUE_TEXT_EXT.has(opaqueExtension(entry.name)) || mediaType !== undefined);
+                const symlinkInfo = symlink ? { kind: entry.isDir ? 'directory' : 'unknown', broken: entry.broken === true, outOfScope: !inside, ...(inside && resolved !== undefined ? { targetRef: this.issue(workspace, resolved, entry.isDir).ref } : {}) } : undefined;
+                const node = {
+                    ref: record.ref,
+                    ...(request.parentRef === undefined ? {} : { parentRef: request.parentRef }),
+                    name: entry.name,
+                    kind: symlink ? 'symlink' : kind,
+                    version,
+                    hasChildren: !symlink && entry.isDir && !entry.broken,
+                    hidden: entry.hidden === true,
+                    ignored: ignorePatterns.some(pattern => pattern.test(rawPath.slice(workspace.length + 1).replace(/\\/g, '/'))),
+                    sensitive: sensitiveName(entry.name),
+                    ...(symlinkInfo === undefined ? {} : { symlink: symlinkInfo }),
+                    availability: {
+                        inspect: { state: inspectable ? 'available' : 'unavailable', ...(inspectable ? {} : { reason: entry.broken ? 'broken link' : 'outside workspace' }) },
+                        preview: { state: previewable ? 'available' : 'unavailable', ...(previewable ? {} : { reason: entry.isDir ? 'directory' : 'owner rendition unavailable' }) },
+                        download: { state: inspectable ? 'available' : 'unavailable' },
+                        mutate: { state: inside && !entry.broken ? 'available' : 'disabled', ...(inside && !entry.broken ? {} : { reason: 'target is not mutable in this workspace' }) },
+                    },
+                    freshness: 'fresh',
+                };
+                return node;
+            });
+        });
+        const nodes = await Promise.all(mapped);
+        const page = nodes.slice(offset, offset + limit);
+        const nextOffset = offset + page.length;
+        return {
+            workspaceRef: `workspace:${createHash('sha256').update(workspace).digest('hex').slice(0, 16)}`,
+            rootRef: this.issue(workspace, workspace, true).ref,
+            ownerCapabilities: [FILE_TREE_PROJECTION_CAPABILITY_V2, FILE_INSPECT_CAPABILITY, FILE_RESOURCE_MUTATION_CAPABILITY_V1, FILE_TRANSFER_CAPABILITY_V1],
+            generation: 'local',
+            revision,
+            ...(request.cursor === undefined ? {} : { cursor: request.cursor }),
+            ...(nextOffset < nodes.length ? { nextCursor: `v2:${nextOffset}:${revision}` } : {}),
+            truncated: listing.truncated === true || nextOffset < nodes.length,
+            loaded: page.length,
+            total: nodes.length,
+            nodes: page,
+        };
+    }
+    async searchV2(cwd, request) {
+        if (request.query.length === 0 || request.query.length > 160)
+            throw new YeismeFilesError('bad-request', 'search query is invalid');
+        const workspace = await realpath(requireAbsolute(cwd));
+        const matches = [];
+        const visit = async (parentRef, depth = 0) => {
+            if (depth > 32 || matches.length >= 20_000)
+                return;
+            let cursor;
+            do {
+                const page = await this.listV2(cwd, { ...(parentRef === undefined ? {} : { parentRef }), ...(cursor === undefined ? {} : { cursor }), limit: 500 });
+                for (const node of page.nodes) {
+                    if (node.name.toLocaleLowerCase().includes(request.query.toLocaleLowerCase()))
+                        matches.push(node);
+                    if (node.kind === 'directory' && node.hasChildren)
+                        await visit(node.ref, depth + 1);
+                }
+                cursor = page.nextCursor;
+            } while (cursor !== undefined && matches.length < 20_000);
+        };
+        await visit();
+        const revision = createHash('sha256').update(JSON.stringify(matches.map(node => node.ref))).digest('hex').slice(0, 16);
+        const limit = Math.max(1, Math.min(500, request.limit ?? 100));
+        const offset = request.cursor === undefined ? 0 : Number(/^search:(\d+):/.exec(request.cursor)?.[1] ?? 0);
+        const nodes = matches.slice(offset, offset + limit);
+        return { workspaceRef: `workspace:${createHash('sha256').update(workspace).digest('hex').slice(0, 16)}`, generation: 'local', revision, ...(request.cursor === undefined ? {} : { cursor: request.cursor }), ...(offset + nodes.length < matches.length ? { nextCursor: `search:${offset + nodes.length}:${revision}` } : {}), truncated: offset + nodes.length < matches.length, loaded: nodes.length, total: matches.length, nodes };
+    }
+    async revealV2(cwd, ref) {
+        const record = await this.resolve(cwd, ref);
+        const workspace = await realpath(requireAbsolute(cwd));
+        const relative = record.target.slice(workspace.length).split(/[\\/]/).filter(Boolean);
+        const breadcrumbs = [{ ref: `workspace:${createHash('sha256').update(workspace).digest('hex').slice(0, 16)}`, name: basename(workspace) }];
+        let current = workspace;
+        for (const part of relative) {
+            current = join(current, part);
+            const currentRecord = await this.refForPath(cwd, current);
+            breadcrumbs.push({ ref: currentRecord.ref, name: part });
+        }
+        const page = await this.listV2(cwd, { parentRef: breadcrumbs.length > 1 ? breadcrumbs[breadcrumbs.length - 2].ref : undefined });
+        return { workspaceRef: page.workspaceRef, generation: page.generation, revision: page.revision, breadcrumbs, target: page.nodes.find(node => node.ref === ref) };
+    }
+    revealAllowed(workspace, ref, version, token) {
+        if (token === undefined)
+            return false;
+        const value = this.revealTokens.get(token);
+        return value !== undefined && value.workspace === workspace && value.ref === ref && value.version === version && value.expiresAtMs >= Date.now();
+    }
+    async inspectV2(cwd, ref, revealToken) {
+        const record = await this.resolve(cwd, ref);
+        const workspace = await realpath(requireAbsolute(cwd));
+        const info = await lstat(record.target).catch(() => undefined);
+        if (info === undefined || info.isDirectory())
+            return { owner: 'dsh.local', ref, version: 'missing', usable: false, state: 'unsupported', sensitive: false, reason: 'resource is unavailable or a directory' };
+        const read = await readWorkspaceText(record.target).catch(() => undefined);
+        const version = `${info.size}:${info.mtimeMs}:${info.mode}`;
+        const sensitive = sensitiveName(basename(record.target));
+        if (sensitive && !this.revealAllowed(workspace, ref, version, revealToken))
+            return { owner: 'dsh.local', ref, version, usable: false, state: 'unsupported', sensitive: true, reason: 'sensitive reveal confirmation required', resource: { name: basename(record.target), kind: read !== undefined && !read.binary ? 'text' : opaqueEntryKind(basename(record.target), false), size: info.size } };
+        if (read !== undefined && !read.binary)
+            return { owner: 'dsh.local', ref, version, usable: true, state: read.truncated ? 'partial' : 'ready', sensitive, ...(read.truncated ? { inspectedWindow: { start: 0, end: read.content.length, digest: createHash('sha256').update(read.content).digest('hex').slice(0, 16) } } : {}), resource: { name: basename(record.target), kind: 'text', size: info.size, mediaType: 'text/plain' } };
+        const kind = opaqueEntryKind(basename(record.target), false);
+        const mediaType = opaqueMediaType(basename(record.target), kind);
+        const usable = mediaType !== undefined;
+        return { owner: 'dsh.local', ref, version, usable, state: usable ? 'partial' : 'unsupported', sensitive, ...(usable ? {} : { reason: 'owner rendition unavailable' }), resource: { name: basename(record.target), kind, size: info.size, ...(mediaType === undefined ? {} : { mediaType }) } };
+    }
+    async issueSensitiveReveal(cwd, ref, version) {
+        const record = await this.resolve(cwd, ref);
+        if (!sensitiveName(basename(record.target)))
+            throw new YeismeFilesError('bad-request', 'resource does not require sensitive reveal');
+        const proof = await this.inspectV2(cwd, ref);
+        if (proof.version !== version)
+            throw new YeismeFilesError('bad-request', 'resource version changed', 409);
+        const workspace = await realpath(requireAbsolute(cwd));
+        const token = `reveal-${randomBytes(18).toString('base64url')}`;
+        const expiresAtMs = Date.now() + 5 * 60_000;
+        this.revealTokens.set(token, { workspace, ref, version, expiresAtMs });
+        return { token, expiresAt: new Date(expiresAtMs).toISOString() };
+    }
+    async assertSensitiveAccess(cwd, ref, token) {
+        const record = await this.resolve(cwd, ref);
+        if (!sensitiveName(basename(record.target)))
+            return;
+        const proof = await this.inspectV2(cwd, ref, token);
+        if (!proof.usable)
+            throw new YeismeFilesError('forbidden', 'sensitive reveal confirmation required', 403);
     }
     async resolve(cwd, ref, requireDirectory) {
         const workspace = await realpath(requireAbsolute(cwd));
@@ -264,6 +431,339 @@ export class NodeFileWorkspaceEditHost {
 }
 export function createFileWorkspaceEditHost(cwd, refs, ttlMs) {
     return new NodeFileWorkspaceEditHost(cwd, refs, ttlMs);
+}
+const stagedImports = new Map();
+function localWorkspaceRef(cwd) { return `workspace:${createHash('sha256').update(cwd).digest('hex').slice(0, 16)}`; }
+async function localWorkspaceRevision(cwd) {
+    const listing = await listWorkspaceTree(cwd);
+    const rows = await Promise.all(listing.entries.map(async (item) => {
+        const info = await lstat(item.path).catch(() => undefined);
+        return { name: item.name, dir: item.isDir, symlink: item.isSymlink, broken: item.broken, size: info?.size, mtimeMs: info?.mtimeMs };
+    }));
+    return createHash('sha256').update(JSON.stringify(rows)).digest('hex').slice(0, 16);
+}
+function conflictChoices() { return ['cancel', 'keep-both', 'replace']; }
+const RESOURCE_NAME = /^[^\\/\r\n]{1,200}$/;
+/** Local single-user resource owner. Hosted owners can expose the same contract with enabled=false. */
+export class NodeFileResourceMutationOwner {
+    cwd;
+    refs;
+    capability = FILE_RESOURCE_MUTATION_CAPABILITY_V1;
+    enabled = true;
+    workspaceRef;
+    proposals = new Map();
+    receipts = new Map();
+    undoOps = new Map();
+    serial = Promise.resolve();
+    trashRoot;
+    generation;
+    principalRef;
+    leaseRef;
+    constructor(cwd, refs, options = {}) {
+        this.cwd = cwd;
+        this.refs = refs;
+        this.workspaceRef = localWorkspaceRef(cwd);
+        this.trashRoot = options.trashRoot ?? join(homedir(), '.dsh', 'file-trash');
+        this.generation = options.generation ?? 'local';
+        this.principalRef = options.principalRef ?? 'local';
+        this.leaseRef = options.leaseRef ?? 'local';
+    }
+    fence(intent) {
+        if (intent.workspaceRef !== this.workspaceRef)
+            return 'workspace owner does not match';
+        if (intent.generation !== this.generation)
+            return 'workspace generation is stale';
+        if (intent.principalRef !== this.principalRef)
+            return 'principal is not authorized';
+        if (intent.leaseRef !== this.leaseRef)
+            return 'workspace lease is lost';
+        return undefined;
+    }
+    async targetPath(ref) {
+        const record = await this.refs.resolve(this.cwd, ref);
+        return { ref: record, path: record.target };
+    }
+    async preflight(intent) {
+        const expiresAtMs = Date.now() + 60_000;
+        const proposalRef = `proposal-${randomBytes(12).toString('base64url')}`;
+        const revision = await localWorkspaceRevision(this.cwd);
+        const fenceReason = this.fence(intent);
+        const targetSummary = [];
+        for (const ref of intent.targetRefs ?? []) {
+            const target = await this.targetPath(ref).catch(() => undefined);
+            if (target !== undefined)
+                targetSummary.push({ ref, name: basename(target.path), kind: target.ref.directory ? 'directory' : 'file' });
+        }
+        let destinationPath;
+        if (intent.destinationRef !== undefined)
+            destinationPath = (await this.targetPath(intent.destinationRef)).path;
+        if (intent.action === 'rename' && destinationPath === undefined && intent.targetRefs?.[0] !== undefined)
+            destinationPath = dirname((await this.targetPath(intent.targetRefs[0])).path);
+        if (intent.action === 'create-file' || intent.action === 'create-directory') {
+            if (destinationPath === undefined || intent.name === undefined || !RESOURCE_NAME.test(intent.name))
+                return { proposalRef, action: intent.action, workspaceRef: this.workspaceRef, generation: this.generation, revision, previewDigest: 'invalid', expiresAt: new Date(expiresAtMs).toISOString(), targetSummary, conflicts: [], risks: [], reversible: false, allowed: false, reason: 'create requires a destination directory and safe name' };
+            const candidate = join(destinationPath, intent.name);
+            if (!isWithin(this.cwd, candidate))
+                return { proposalRef, action: intent.action, workspaceRef: this.workspaceRef, generation: this.generation, revision, previewDigest: 'invalid', expiresAt: new Date(expiresAtMs).toISOString(), targetSummary, conflicts: [], risks: ['path_escape'], reversible: false, allowed: false, reason: 'target escapes workspace' };
+            const exists = await lstat(candidate).then(() => true).catch(() => false);
+            if (exists)
+                targetSummary.push({ ref: intent.destinationRef ?? 'destination', name: intent.name, kind: 'unknown' });
+            const digest = createHash('sha256').update(`${intent.action}\0${revision}\0${candidate}\0${intent.conflict ?? ''}`).digest('hex').slice(0, 24);
+            const result = { proposalRef, action: intent.action, workspaceRef: this.workspaceRef, generation: this.generation, revision, previewDigest: digest, expiresAt: new Date(expiresAtMs).toISOString(), targetSummary, conflicts: exists ? [{ name: intent.name, choices: conflictChoices() }] : [], risks: exists && intent.conflict === 'replace' ? ['replace_existing'] : [], reversible: true, allowed: fenceReason === undefined && revision === intent.expectedRevision && (!exists || intent.conflict !== undefined && intent.conflict !== 'cancel'), ...(fenceReason === undefined ? {} : { reason: fenceReason }), ...(revision !== intent.expectedRevision ? { reason: 'expected revision no longer matches owner projection' } : {}) };
+            this.proposals.set(proposalRef, { intent, expiresAtMs, preflight: result });
+            return result;
+        }
+        if (intent.action === 'import-commit' && (intent.importRef === undefined || stagedImports.get(intent.importRef)?.workspaceRef !== this.workspaceRef)) {
+            return { proposalRef, action: intent.action, workspaceRef: this.workspaceRef, generation: this.generation, revision, previewDigest: 'invalid', expiresAt: new Date(expiresAtMs).toISOString(), targetSummary, conflicts: [], risks: [], reversible: false, allowed: false, reason: 'import staging resource is unavailable' };
+        }
+        const digest = createHash('sha256').update(`${intent.action}\0${revision}\0${intent.targetRefs?.join(',') ?? ''}\0${intent.destinationRef ?? ''}\0${intent.name ?? ''}\0${intent.conflict ?? ''}\0${intent.importRef ?? ''}\0${intent.undoRef ?? ''}`).digest('hex').slice(0, 24);
+        const conflicts = [];
+        if ((intent.action === 'rename' || intent.action === 'move' || intent.action === 'copy') && intent.name !== undefined && destinationPath !== undefined) {
+            const candidate = join(destinationPath, intent.name);
+            if (await lstat(candidate).then(() => true).catch(() => false))
+                conflicts.push({ name: intent.name, choices: conflictChoices() });
+        }
+        const result = { proposalRef, action: intent.action, workspaceRef: this.workspaceRef, generation: this.generation, revision, previewDigest: digest, expiresAt: new Date(expiresAtMs).toISOString(), targetSummary, conflicts, risks: intent.action === 'trash' ? ['recoverable_until_expiry'] : [], reversible: intent.action !== 'import-commit' || intent.importRef !== undefined, allowed: fenceReason === undefined && revision === intent.expectedRevision && (conflicts.length === 0 || intent.conflict !== undefined && intent.conflict !== 'cancel'), ...(fenceReason === undefined ? {} : { reason: fenceReason }), ...(revision !== intent.expectedRevision ? { reason: 'expected revision no longer matches owner projection' } : {}) };
+        this.proposals.set(proposalRef, { intent, expiresAtMs, preflight: result });
+        return result;
+    }
+    async executeNow(proposalRef, intent) {
+        const existing = this.receipts.get(intent.idempotencyKey);
+        if (existing !== undefined)
+            return existing;
+        const proposal = this.proposals.get(proposalRef);
+        const receiptRef = `receipt-${randomBytes(12).toString('base64url')}`;
+        if (proposal === undefined || proposal.expiresAtMs < Date.now())
+            return { status: 'rejected', action: intent.action, idempotencyKey: intent.idempotencyKey, receiptRef, reason: 'proposal is unavailable or expired' };
+        const fenceReason = this.fence(intent);
+        const revision = await localWorkspaceRevision(this.cwd);
+        if (fenceReason !== undefined)
+            return { status: fenceReason === 'workspace lease is lost' ? 'lease_lost' : 'rejected', action: intent.action, idempotencyKey: intent.idempotencyKey, receiptRef, proposalRef, reason: fenceReason };
+        if (revision !== intent.expectedRevision || intent.previewDigest !== proposal.preflight.previewDigest)
+            return { status: 'revision_drift', action: intent.action, idempotencyKey: intent.idempotencyKey, receiptRef, proposalRef, reason: 'workspace revision or preview digest changed' };
+        if (!proposal.preflight.allowed)
+            return { status: 'rejected', action: intent.action, idempotencyKey: intent.idempotencyKey, receiptRef, proposalRef, reason: proposal.preflight.reason ?? 'proposal is not allowed' };
+        const undoSteps = [];
+        const completedItems = [];
+        let redirects = [];
+        try {
+            const targets = await Promise.all((intent.targetRefs ?? []).map(ref => this.targetPath(ref)));
+            const target = targets[0];
+            const destination = intent.destinationRef === undefined ? undefined : await this.targetPath(intent.destinationRef);
+            if (intent.action === 'create-file' || intent.action === 'create-directory') {
+                if (destination === undefined || intent.name === undefined)
+                    throw new YeismeFilesError('bad-request', 'create target is invalid');
+                let path = join(destination.path, intent.name);
+                if (intent.conflict === 'keep-both')
+                    path = await keepBothPath(path);
+                else if (intent.conflict === 'replace')
+                    await rm(path, { recursive: true, force: true });
+                else if (await lstat(path).then(() => true).catch(() => false))
+                    throw new YeismeFilesError('bad-request', 'target already exists', 409);
+                if (intent.action === 'create-directory')
+                    await mkdir(path, { recursive: false });
+                else
+                    await writeFile(path, '', { flag: 'wx' });
+                undoSteps.push(async () => { await rm(path, { recursive: true, force: true }); });
+            }
+            else if (intent.action === 'rename' || intent.action === 'move') {
+                if (target === undefined || (intent.action === 'move' && destination === undefined))
+                    throw new YeismeFilesError('bad-request', 'move target is invalid');
+                if (intent.action === 'rename' && targets.length !== 1 || intent.name !== undefined && targets.length > 1)
+                    throw new YeismeFilesError('bad-request', 'named move/rename requires one target');
+                for (const item of targets) {
+                    let nextPath = join(destination?.path ?? dirname(item.path), intent.name ?? basename(item.path));
+                    if (intent.conflict === 'keep-both')
+                        nextPath = await keepBothPath(nextPath);
+                    else if (intent.conflict === 'replace')
+                        await rm(nextPath, { recursive: true, force: true });
+                    else if (await lstat(nextPath).then(() => true).catch(() => false))
+                        throw new YeismeFilesError('bad-request', 'target already exists', 409);
+                    await rename(item.path, nextPath);
+                    const nextRef = await this.refs.refForPath(this.cwd, nextPath);
+                    redirects.push({ oldRef: item.ref.ref, newRef: nextRef.ref });
+                    completedItems.push({ ref: item.ref.ref, status: 'success' });
+                    undoSteps.push(async () => { await rename(nextPath, item.path); });
+                }
+            }
+            else if (intent.action === 'copy') {
+                if (target === undefined || destination === undefined)
+                    throw new YeismeFilesError('bad-request', 'copy target is invalid');
+                if (intent.name !== undefined && targets.length > 1)
+                    throw new YeismeFilesError('bad-request', 'named copy requires one target');
+                for (const item of targets) {
+                    let nextPath = join(destination.path, intent.name ?? basename(item.path));
+                    if (intent.conflict === 'keep-both')
+                        nextPath = await keepBothPath(nextPath);
+                    else if (intent.conflict === 'replace')
+                        await rm(nextPath, { recursive: true, force: true });
+                    else if (await lstat(nextPath).then(() => true).catch(() => false))
+                        throw new YeismeFilesError('bad-request', 'target already exists', 409);
+                    if (item.ref.directory)
+                        await copyDirectory(item.path, nextPath);
+                    else
+                        await copyFile(item.path, nextPath);
+                    completedItems.push({ ref: item.ref.ref, status: 'success' });
+                    undoSteps.push(async () => { await rm(nextPath, { recursive: true, force: true }); });
+                }
+            }
+            else if (intent.action === 'trash') {
+                if (target === undefined)
+                    throw new YeismeFilesError('bad-request', 'trash target is invalid');
+                await mkdir(this.trashRoot, { recursive: true, mode: 0o700 });
+                for (const item of targets) {
+                    const trashPath = join(this.trashRoot, `${Date.now()}-${randomBytes(8).toString('hex')}-${basename(item.path)}`);
+                    await rename(item.path, trashPath);
+                    const original = item.path;
+                    completedItems.push({ ref: item.ref.ref, status: 'success' });
+                    undoSteps.push(async () => { await mkdir(dirname(original), { recursive: true }); await rename(trashPath, original); });
+                }
+            }
+            else if (intent.action === 'restore') {
+                if (intent.undoRef === undefined)
+                    throw new YeismeFilesError('bad-request', 'restore requires undo ref');
+                const operation = this.undoOps.get(intent.undoRef);
+                if (operation === undefined)
+                    throw new YeismeFilesError('not-found', 'trash item is unavailable', 404);
+                await operation.run();
+                this.undoOps.delete(intent.undoRef);
+            }
+            else if (intent.action === 'import-commit') {
+                if (destination === undefined || intent.importRef === undefined)
+                    throw new YeismeFilesError('bad-request', 'import target is invalid');
+                const staged = stagedImports.get(intent.importRef);
+                if (staged === undefined || staged.workspaceRef !== this.workspaceRef)
+                    throw new YeismeFilesError('not-found', 'import staging resource is unavailable', 404);
+                let nextPath = join(destination.path, intent.name ?? staged.name);
+                if (intent.conflict === 'keep-both')
+                    nextPath = await keepBothPath(nextPath);
+                else if (intent.conflict === 'replace')
+                    await rm(nextPath, { recursive: true, force: true });
+                else if (await lstat(nextPath).then(() => true).catch(() => false))
+                    throw new YeismeFilesError('bad-request', 'target already exists', 409);
+                await rename(staged.path, nextPath);
+                stagedImports.delete(intent.importRef);
+                undoSteps.push(async () => { await rm(nextPath, { recursive: true, force: true }); });
+            }
+            const undo = undoSteps.length === 0 ? undefined : async () => { for (const step of [...undoSteps].reverse())
+                await step(); };
+            const receipt = { status: 'success', action: intent.action, idempotencyKey: intent.idempotencyKey, receiptRef, proposalRef, revision: await localWorkspaceRevision(this.cwd), ...(redirects.length === 0 ? {} : { redirects }), ...(completedItems.length === 0 ? {} : { items: completedItems }), ...(undo === undefined ? {} : { undoRef: `undo-${receiptRef}`, undoExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60_000).toISOString() }) };
+            if (undo !== undefined)
+                this.undoOps.set(`undo-${receiptRef}`, { receiptRef, expiresAtMs: Date.now() + 7 * 24 * 60 * 60_000, run: undo });
+            this.receipts.set(intent.idempotencyKey, receipt);
+            this.proposals.delete(proposalRef);
+            return receipt;
+        }
+        catch (error) {
+            let rollbackFailed = false;
+            for (const step of [...undoSteps].reverse())
+                await step().catch(() => { rollbackFailed = true; });
+            return { status: undoSteps.length === 0 ? 'rejected' : rollbackFailed ? 'degraded' : 'rolled_back', action: intent.action, idempotencyKey: intent.idempotencyKey, receiptRef, proposalRef, reason: messageOf(error), ...(completedItems.length === 0 ? {} : { items: completedItems.map(item => ({ ...item, status: rollbackFailed ? 'degraded' : 'rolled_back' })) }) };
+        }
+    }
+    execute(proposalRef, intent) {
+        const run = this.serial.then(() => this.executeNow(proposalRef, intent));
+        this.serial = run.then(() => undefined, () => undefined);
+        return run;
+    }
+    async reconcile(idempotencyKey) { return this.receipts.get(idempotencyKey); }
+    async undo(receiptRef) {
+        const operation = [...this.undoOps.values()].find(item => item.receiptRef === receiptRef);
+        if (operation === undefined || operation.expiresAtMs < Date.now())
+            return { status: 'rejected', action: 'restore', idempotencyKey: `undo:${receiptRef}`, receiptRef: `receipt-${randomBytes(8).toString('hex')}`, reason: 'undo is unavailable or expired' };
+        try {
+            await operation.run();
+            this.undoOps.delete(`undo-${receiptRef}`);
+            return { status: 'rolled_back', action: 'restore', idempotencyKey: `undo:${receiptRef}`, receiptRef: `receipt-${randomBytes(8).toString('hex')}` };
+        }
+        catch (error) {
+            return { status: 'degraded', action: 'restore', idempotencyKey: `undo:${receiptRef}`, receiptRef: `receipt-${randomBytes(8).toString('hex')}`, reason: messageOf(error) };
+        }
+    }
+}
+async function copyDirectory(source, target) {
+    await mkdir(target, { recursive: false });
+    const entries = await readdir(source, { withFileTypes: true });
+    for (const entry of entries) {
+        const from = join(source, entry.name);
+        const to = join(target, entry.name);
+        if (entry.isDirectory())
+            await copyDirectory(from, to);
+        else
+            await copyFile(from, to);
+    }
+}
+async function keepBothPath(path) {
+    const name = basename(path);
+    const dot = name.lastIndexOf('.');
+    const stem = dot > 0 ? name.slice(0, dot) : name;
+    const suffix = dot > 0 ? name.slice(dot) : '';
+    for (let index = 1; index <= 10_000; index += 1) {
+        const candidate = join(dirname(path), `${stem} copy${index === 1 ? '' : ` ${index}`}${suffix}`);
+        if (!await lstat(candidate).then(() => true).catch(() => false))
+            return candidate;
+    }
+    throw new YeismeFilesError('fs-error', 'cannot allocate a keep-both name');
+}
+export class NodeFileTransferOwner {
+    cwd;
+    refs;
+    stagingRoot;
+    capability = FILE_TRANSFER_CAPABILITY_V1;
+    enabled = true;
+    uploads = new Map();
+    tickets = new Map();
+    constructor(cwd, refs, stagingRoot = join(tmpdir(), 'yeisme-file-upload')) {
+        this.cwd = cwd;
+        this.refs = refs;
+        this.stagingRoot = stagingRoot;
+    }
+    async createUpload(input) {
+        if (input.workspaceRef !== localWorkspaceRef(await realpath(requireAbsolute(this.cwd))) || !RESOURCE_NAME.test(input.name) || !Number.isSafeInteger(input.size) || input.size < 0 || input.size > 512 * 1024 * 1024)
+            throw new YeismeFilesError('forbidden', 'upload owner or size is invalid', 403);
+        await mkdir(this.stagingRoot, { recursive: true, mode: 0o700 });
+        const sessionRef = `upload-${randomBytes(16).toString('base64url')}`;
+        const session = { sessionRef, workspaceRef: input.workspaceRef, generation: input.generation, expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(), chunkSize: 1024 * 1024, maxBytes: 512 * 1024 * 1024 };
+        this.uploads.set(sessionRef, { session, path: join(this.stagingRoot, sessionRef), name: input.name, size: input.size, ...(input.digest === undefined ? {} : { digest: input.digest }), received: 0, chunks: new Map() });
+        return session;
+    }
+    async uploadChunk(sessionRef, offset, chunk, digest) {
+        const state = this.uploads.get(sessionRef);
+        if (state === undefined || Date.parse(state.session.expiresAt) < Date.now())
+            throw new YeismeFilesError('not-found', 'upload session unavailable', 404);
+        if (!Number.isSafeInteger(offset) || offset < 0 || offset + chunk.byteLength > state.size || chunk.byteLength > state.session.chunkSize)
+            throw new YeismeFilesError('bad-request', 'upload chunk range is invalid');
+        const actualDigest = createHash('sha256').update(chunk).digest('hex');
+        const previous = state.chunks.get(offset);
+        if (previous !== undefined) {
+            if (previous.digest !== actualDigest || previous.length !== chunk.byteLength)
+                throw new YeismeFilesError('bad-request', 'repeated upload chunk differs');
+            return { received: state.received, complete: state.received === state.size };
+        }
+        if (offset !== state.received)
+            throw new YeismeFilesError('bad-request', 'upload chunks must be contiguous');
+        if (digest !== undefined && actualDigest !== digest)
+            throw new YeismeFilesError('bad-request', 'upload chunk digest mismatch');
+        const handle = await open(state.path, 'a+');
+        try {
+            await handle.write(Buffer.from(chunk), 0, chunk.byteLength, offset);
+        }
+        finally {
+            await handle.close();
+        }
+        state.chunks.set(offset, { digest: actualDigest, length: chunk.byteLength });
+        state.received += chunk.byteLength;
+        return { received: state.received, complete: state.received === state.size };
+    }
+    async cancelUpload(sessionRef) { const state = this.uploads.get(sessionRef); this.uploads.delete(sessionRef); if (state !== undefined)
+        await unlink(state.path).catch(() => undefined); }
+    async commitUpload(sessionRef) { const state = this.uploads.get(sessionRef); if (state === undefined || state.received < state.size)
+        throw new YeismeFilesError('bad-request', 'upload is incomplete'); const bytes = await readFile(state.path); const digest = createHash('sha256').update(bytes).digest('hex'); if (state.digest !== undefined && state.digest !== digest)
+        throw new YeismeFilesError('bad-request', 'upload digest mismatch'); const importRef = `import-${randomBytes(12).toString('base64url')}`; stagedImports.set(importRef, { workspaceRef: state.session.workspaceRef, path: state.path, name: state.name, size: state.size, digest }); this.uploads.delete(sessionRef); return { importRef, size: state.size, digest }; }
+    async issueDownloadTicket(ref, version) { await this.refs.resolve(this.cwd, ref); const expiresAtMs = Date.now() + 60_000; const ticket = `download-${randomBytes(18).toString('base64url')}`; this.tickets.set(ticket, { ref, version, expiresAtMs }); return { ticket, expiresAt: new Date(expiresAtMs).toISOString() }; }
+    async consumeDownloadTicket(ticket) { const value = this.tickets.get(ticket); this.tickets.delete(ticket); if (value === undefined || value.expiresAtMs < Date.now())
+        throw new YeismeFilesError('not-found', 'download ticket unavailable', 404); const proof = await this.refs.inspectV2(this.cwd, value.ref); if (proof.version !== value.version)
+        throw new YeismeFilesError('not-found', 'download ticket unavailable', 404); const target = await this.refs.resolve(this.cwd, value.ref); return new Uint8Array(await readFile(target.target)); }
 }
 function textVersion(size, mtimeMs, bytes) {
     const digest = createHash('sha256').update(bytes).digest('hex').slice(0, 16);
@@ -843,6 +1343,18 @@ async function readJsonBody(req) {
         throw new YeismeFilesError('bad-request', 'request body is not valid JSON');
     }
 }
+async function readBinaryBody(req, maxBytes = 2 * 1024 * 1024) {
+    const chunks = [];
+    let total = 0;
+    for await (const chunk of req) {
+        const buffer = Buffer.from(chunk);
+        total += buffer.length;
+        if (total > maxBytes)
+            throw new YeismeFilesError('bad-request', 'binary request body too large');
+        chunks.push(buffer);
+    }
+    return Buffer.concat(chunks);
+}
 function writeJson(res, status, body) {
     res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify(body));
@@ -864,28 +1376,138 @@ export async function handleYeismeFilesApi(req, res, options) {
         writeJson(res, 405, { ok: false, error: { code: 'method-error', message: 'method not allowed' } });
         return;
     }
-    const pathname = new URL(req.url ?? '/', 'http://dsh.internal').pathname;
+    const requestUrl = new URL(req.url ?? '/', 'http://dsh.internal');
+    const pathname = requestUrl.pathname;
     const method = pathname.startsWith('/yeisme-files/api/') ? pathname.slice('/yeisme-files/api/'.length) : undefined;
     if (method === undefined || method.includes('/')) {
         writeJson(res, 404, { ok: false, error: { code: 'not-found', message: 'unknown files API method' } });
         return;
     }
     try {
+        if (method === 'fs.upload.chunkV1') {
+            const sessionId = requestUrl.searchParams.get('sessionId') ?? undefined;
+            const resolvedCwd = sessionId === undefined ? undefined : options.sessionCwd(sessionId);
+            if (resolvedCwd === undefined)
+                throw new YeismeFilesError('forbidden', 'session workspace owner is unavailable', 403);
+            const owner = options.transferOwner?.(requireAbsolute(resolvedCwd));
+            if (owner === undefined)
+                throw new YeismeFilesError('not-found', 'file transfer capability is unavailable', 404);
+            const sessionRef = requestUrl.searchParams.get('sessionRef');
+            const offset = Number(requestUrl.searchParams.get('offset'));
+            if (sessionRef === null || !Number.isSafeInteger(offset))
+                throw new YeismeFilesError('bad-request', 'upload chunk metadata is invalid');
+            const digest = requestUrl.searchParams.get('digest') ?? undefined;
+            writeJson(res, 200, { ok: true, value: await owner.uploadChunk(sessionRef, offset, await readBinaryBody(req), digest) });
+            return;
+        }
         const payload = await readJsonBody(req);
         const record = payload;
         const sessionId = typeof record.sessionId === 'string' ? record.sessionId : undefined;
         const clientCwd = typeof record.cwd === 'string' && record.cwd !== '' ? record.cwd : undefined;
-        const opaqueMethod = method === 'fs.treeV2' || method === 'fs.readV2' || method === 'fs.binaryV2' || method === 'fs.writeV2';
+        const opaqueMethod = method === 'fs.treeV2' || method === 'fs.treePageV2' || method === 'fs.revealV2' || method === 'fs.inspectV2' || method === 'fs.sensitiveRevealV1' || method === 'fs.readV2' || method === 'fs.binaryV2' || method === 'fs.writeV2' || method.startsWith('fs.mutation.') || method.startsWith('fs.upload.') || method.startsWith('fs.download.');
         if (opaqueMethod && (sessionId === undefined || clientCwd !== undefined)) {
             throw new YeismeFilesError('forbidden', 'opaque file API requires a session owner and forbids client cwd', 403);
         }
-        const cwd = requireAbsolute(options.sessionCwd(sessionId, opaqueMethod ? undefined : clientCwd));
+        const resolvedCwd = options.sessionCwd(sessionId, opaqueMethod ? undefined : clientCwd);
+        if (resolvedCwd === undefined || resolvedCwd === '')
+            throw new YeismeFilesError('forbidden', 'session workspace owner is unavailable', 403);
+        const cwd = requireAbsolute(resolvedCwd);
         const opaqueRefs = options.opaqueRefs;
+        const mutationOwner = options.mutationOwner?.(cwd);
+        const transferOwner = options.transferOwner?.(cwd);
+        if (method === 'fs.mutation.preflightV1') {
+            if (mutationOwner === undefined)
+                throw new YeismeFilesError('not-found', 'file mutation capability is unavailable', 404);
+            writeJson(res, 200, { ok: true, value: await mutationOwner.preflight(record.intent) });
+            return;
+        }
+        if (method === 'fs.mutation.executeV1') {
+            if (mutationOwner === undefined)
+                throw new YeismeFilesError('not-found', 'file mutation capability is unavailable', 404);
+            writeJson(res, 200, { ok: true, value: await mutationOwner.execute(requireString(payload, 'proposalRef'), record.intent) });
+            return;
+        }
+        if (method === 'fs.mutation.reconcileV1') {
+            if (mutationOwner === undefined)
+                throw new YeismeFilesError('not-found', 'file mutation capability is unavailable', 404);
+            writeJson(res, 200, { ok: true, value: await mutationOwner.reconcile(requireString(payload, 'idempotencyKey')) });
+            return;
+        }
+        if (method === 'fs.mutation.undoV1') {
+            if (mutationOwner === undefined)
+                throw new YeismeFilesError('not-found', 'file mutation capability is unavailable', 404);
+            writeJson(res, 200, { ok: true, value: await mutationOwner.undo(requireString(payload, 'receiptRef')) });
+            return;
+        }
+        if (method === 'fs.upload.createV1') {
+            if (transferOwner === undefined)
+                throw new YeismeFilesError('not-found', 'file transfer capability is unavailable', 404);
+            writeJson(res, 200, { ok: true, value: await transferOwner.createUpload(record.input) });
+            return;
+        }
+        if (method === 'fs.upload.cancelV1') {
+            if (transferOwner === undefined)
+                throw new YeismeFilesError('not-found', 'file transfer capability is unavailable', 404);
+            await transferOwner.cancelUpload(requireString(payload, 'sessionRef'));
+            writeJson(res, 200, { ok: true, value: null });
+            return;
+        }
+        if (method === 'fs.upload.commitV1') {
+            if (transferOwner === undefined)
+                throw new YeismeFilesError('not-found', 'file transfer capability is unavailable', 404);
+            writeJson(res, 200, { ok: true, value: await transferOwner.commitUpload(requireString(payload, 'sessionRef')) });
+            return;
+        }
+        if (method === 'fs.download.ticketV1') {
+            if (transferOwner === undefined)
+                throw new YeismeFilesError('not-found', 'file transfer capability is unavailable', 404);
+            writeJson(res, 200, { ok: true, value: await transferOwner.issueDownloadTicket(requireString(payload, 'ref'), requireString(payload, 'version')) });
+            return;
+        }
+        if (method === 'fs.download.consumeV1') {
+            if (transferOwner === undefined)
+                throw new YeismeFilesError('not-found', 'file transfer capability is unavailable', 404);
+            const bytes = await transferOwner.consumeDownloadTicket(requireString(payload, 'ticket'));
+            res.writeHead(200, { 'content-type': 'application/octet-stream', 'cache-control': 'no-store' });
+            res.end(bytes);
+            return;
+        }
         if (method === 'fs.treeV2') {
             if (opaqueRefs === undefined)
                 throw new YeismeFilesError('not-found', 'opaque file capability is unavailable', 404);
             const parentRef = typeof record.parentRef === 'string' ? record.parentRef : undefined;
             writeJson(res, 200, { ok: true, value: await opaqueRefs.list(cwd, parentRef) });
+            return;
+        }
+        if (method === 'fs.treePageV2') {
+            if (opaqueRefs === undefined)
+                throw new YeismeFilesError('not-found', 'opaque file capability is unavailable', 404);
+            const parentRef = typeof record.parentRef === 'string' ? record.parentRef : undefined;
+            const cursor = typeof record.cursor === 'string' ? record.cursor : undefined;
+            const limit = typeof record.limit === 'number' ? record.limit : undefined;
+            const query = typeof record.query === 'string' ? record.query : undefined;
+            const value = query === undefined
+                ? await opaqueRefs.listV2(cwd, { ...(parentRef === undefined ? {} : { parentRef }), ...(cursor === undefined ? {} : { cursor }), ...(limit === undefined ? {} : { limit }) })
+                : await opaqueRefs.searchV2(cwd, { query, ...(cursor === undefined ? {} : { cursor }), ...(limit === undefined ? {} : { limit }) });
+            writeJson(res, 200, { ok: true, value });
+            return;
+        }
+        if (method === 'fs.inspectV2') {
+            if (opaqueRefs === undefined)
+                throw new YeismeFilesError('not-found', 'opaque file capability is unavailable', 404);
+            writeJson(res, 200, { ok: true, value: await opaqueRefs.inspectV2(cwd, requireString(payload, 'ref'), typeof record.revealToken === 'string' ? record.revealToken : undefined) });
+            return;
+        }
+        if (method === 'fs.sensitiveRevealV1') {
+            if (opaqueRefs === undefined)
+                throw new YeismeFilesError('not-found', 'opaque file capability is unavailable', 404);
+            writeJson(res, 200, { ok: true, value: await opaqueRefs.issueSensitiveReveal(cwd, requireString(payload, 'ref'), requireString(payload, 'version')) });
+            return;
+        }
+        if (method === 'fs.revealV2') {
+            if (opaqueRefs === undefined)
+                throw new YeismeFilesError('not-found', 'opaque file capability is unavailable', 404);
+            writeJson(res, 200, { ok: true, value: await opaqueRefs.revealV2(cwd, requireString(payload, 'ref')) });
             return;
         }
         if (method === 'fs.readV2') {
@@ -894,6 +1516,7 @@ export async function handleYeismeFilesApi(req, res, options) {
             const target = await opaqueRefs.resolve(cwd, requireString(payload, 'ref'));
             if (target.directory)
                 throw new YeismeFilesError('bad-request', 'directories are read-only');
+            await opaqueRefs.assertSensitiveAccess(cwd, target.ref, typeof record.revealToken === 'string' ? record.revealToken : undefined);
             writeJson(res, 200, { ok: true, value: await readWorkspaceText(target.target) });
             return;
         }
@@ -903,6 +1526,7 @@ export async function handleYeismeFilesApi(req, res, options) {
             const target = await opaqueRefs.resolve(cwd, requireString(payload, 'ref'));
             if (target.directory)
                 throw new YeismeFilesError('bad-request', 'directories are read-only');
+            await opaqueRefs.assertSensitiveAccess(cwd, target.ref, typeof record.revealToken === 'string' ? record.revealToken : undefined);
             const binary = await readWorkspaceBinary(target.target);
             writeJson(res, 200, {
                 ok: true,

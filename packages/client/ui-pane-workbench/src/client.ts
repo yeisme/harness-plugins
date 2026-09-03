@@ -44,6 +44,11 @@ import type { PaneViewSpecV1 } from './workspace.js'
 import type { PaneEventEnvelopeV1 } from '@yeisme/dsh-pane-protocol'
 
 export { PaneRegionChrome } from './region-chrome.js'
+export { bindExplorerRuntime, getExplorerRuntime, subscribeExplorerRuntime } from './explorer/runtime.js'
+export type { ExplorerMetadataV1, ExplorerRuntimeV2 } from './explorer/runtime.js'
+export type { ExplorerTreeNodeV1 } from './explorer/tree-state.js'
+export { ComposerReferenceDock, ComposerReferenceController, attachComposerReferenceController, getComposerReferenceController } from './explorer/references.js'
+export type { ComposerReferenceCapabilityV1, ComposerReferenceDispatchV1, ComposerReferenceSnapshotV1, ComposerReferenceV1 } from './explorer/references.js'
 export { PaneManagementCenter } from './management-center.js'
 export * from './management.js'
 export {

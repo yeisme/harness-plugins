@@ -34,10 +34,12 @@ The client discovers optional owner services through `dsh.fileHost`,
 `dsh.mediaHost`, and the interactive `dsh.terminalHost` V2 capability. File
 views register from `/yeisme-files/api` (`fs.tree` / `fs.read`) when
 `dsh.fileHost` is absent, so a stock Web profile shows workspace files and
-text preview without installing `dsh-better-sidebar`. The files pane opens on the right automatically. Click a file to open it
-as a content tab (Codex-style preview); double-click pins it. Header and
-sidebar-footer buttons reopen the tree. Git status is a read-only porcelain
-pane.
+text preview without installing `dsh-better-sidebar`. 所有文件入口现在打开
+canonical `dsh.explorer`；`desktop.files` 只作为隐藏兼容 shim。目录单击展开，
+文件单击在严格 owner inspect 通过后打开临时 preview，双击或 Enter 固定；
+无法预览的条目仍可见但不会被打开或引用。Explorer 同时挂载结构化引用 dock、
+proposal-first 文件操作、trash/undo、分块 import 与一次性 download。Git status
+仍是独立只读 porcelain pane。
 
 If `paneWorkbench` is already provided by `@yeisme/dsh-pane-workbench`, this
 bundle reuses it. If not, the client bootstraps the shell in-process. Do not

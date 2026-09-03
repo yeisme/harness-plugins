@@ -50,7 +50,7 @@ describe('dsh-workbench-compose client provider', () => {
     const renderAction = registration?.[1] as () => ReactNode
     render(createElement(renderAction))
     fireEvent.click(screen.getByRole('button', { name: 'File Tree' }))
-    expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({ kind: 'file.tree', preferredRegion: 'right' }))
+    expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({ kind: 'dsh.explorer', preferredRegion: 'right' }))
     expect(typeof dispose).toBe('function')
   })
 

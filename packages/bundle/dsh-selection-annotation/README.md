@@ -1,8 +1,11 @@
 # @yeisme/dsh-selection-annotation
 
-Installable DSH Web bundle for Selection & Annotation Agent Interaction. The
-current `0.1.0-rc.1` line is the V1 baseline; V2 migration is specified in
-`openspec/changes/dsh-selection-interaction-v2/`.
+Installable DSH Web bundle for Selection & Annotation Agent Interaction.
+`0.2.0-rc.1` ships Selection Interaction V2 by default（singleton Actions
+1+2+More、显式动作才开 Composer、`policyVersion=v1` 可整 release 回退 V1
+工具条，脱敏 evidence 事件 `dsh-selection-interaction:evidence`）；规格见
+`openspec/changes/dsh-selection-interaction-v2/` 与
+`docs/design/dsh-selection-interaction-v2.md`。
 
 ```
 dsh plugin --profile web add @yeisme/dsh-selection-annotation

@@ -1,8 +1,8 @@
 import { mkdtemp, writeFile, mkdir, readFile, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
-import { createFileWorkspaceEditHost, createGitCompareSession, createOpaqueFileRefRegistry, handleYeismeFilesApi, listWorkspaceTree, readGitDiffWindowV2, readGitHistoryWindow, readGitRepositoryContexts, readGitStatus, readGitStatusWindow, readWorkspaceBinary, readWorkspaceText, writeWorkspaceText } from '../src/node.ts'
+import { describe, expect, it, vi } from 'vitest'
+import { createFileWorkspaceEditHost, createGitCompareSession, createOpaqueFileRefRegistry, handleYeismeFilesApi, listWorkspaceTree, NodeFileResourceMutationOwner, NodeFileTransferOwner, readGitDiffWindowV2, readGitHistoryWindow, readGitRepositoryContexts, readGitStatus, readGitStatusWindow, readWorkspaceBinary, readWorkspaceText, writeWorkspaceText } from '../src/node.ts'
 
 describe('@yeisme/dsh-file-host/node', () => {
   it('lists files and directories in one workspace level', async () => {
@@ -183,6 +183,167 @@ describe('@yeisme/dsh-file-host/node', () => {
     expect(staleWrite).toMatchObject({ ok: true, value: { status: 'conflict' } })
     const rejected = await call('fs.readV2', { sessionId: 'session-1', cwd: root, ref: entry.id })
     expect(rejected).toMatchObject({ ok: false, error: { code: 'forbidden' } })
+  })
+
+  it('projects hidden and unsafe symlinks in paginated V2 without exposing paths', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-tree-v2-'))
+    const outside = await mkdtemp(join(tmpdir(), 'yeisme-tree-v2-outside-'))
+    await writeFile(join(root, '.env'), 'TOKEN=hidden')
+    await writeFile(join(root, 'README.md'), '# visible')
+    await writeFile(join(root, '.gitignore'), 'ignored.log\n')
+    await writeFile(join(root, 'ignored.log'), 'ignored')
+    await writeFile(join(outside, 'secret.txt'), 'outside')
+    await symlink(join(outside, 'secret.txt'), join(root, 'escape.txt'))
+    await symlink(join(root, 'missing.txt'), join(root, 'broken.txt'))
+    const refs = createOpaqueFileRefRegistry()
+    const first = await refs.listV2(root, { limit: 2 })
+    expect(first).toMatchObject({ generation: 'local', loaded: 2, truncated: true })
+    expect(first.nextCursor).toBeTruthy()
+    const second = await refs.listV2(root, { cursor: first.nextCursor, limit: 10 })
+    const nodes = [...first.nodes, ...second.nodes]
+    expect(nodes.find(node => node.name === '.env')).toMatchObject({ hidden: true, sensitive: true })
+    expect(nodes.find(node => node.name === 'ignored.log')).toMatchObject({ ignored: true })
+    expect(nodes.find(node => node.name === 'escape.txt')).toMatchObject({ kind: 'symlink', symlink: { outOfScope: true }, availability: { preview: { state: 'unavailable' } } })
+    expect(nodes.find(node => node.name === 'broken.txt')).toMatchObject({ kind: 'symlink', symlink: { broken: true } })
+    expect(JSON.stringify(nodes)).not.toContain(root)
+    expect(JSON.stringify(nodes)).not.toContain(outside)
+  })
+
+  it('rejects opaque V2 requests when the session owner cannot be resolved', async () => {
+    const req = { method: 'POST', url: '/yeisme-files/api/fs.treePageV2', async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ sessionId: 'missing' })) } }
+    let status = 0
+    let body = ''
+    await handleYeismeFilesApi(req, { writeHead(code: number) { status = code }, end(value: string | Uint8Array) { body = String(value) } }, { sessionCwd: () => undefined, opaqueRefs: createOpaqueFileRefRegistry() })
+    expect(status).toBe(403)
+    expect(body).toContain('session workspace owner is unavailable')
+    expect(body).not.toContain(process.cwd())
+  })
+
+  it('preflights, executes, redirects and undoes local resource mutations with CAS', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-mutation-v1-'))
+    const trash = await mkdtemp(join(tmpdir(), 'yeisme-trash-v1-'))
+    await writeFile(join(root, 'old.txt'), 'value')
+    const refs = createOpaqueFileRefRegistry()
+    const rootRef = await refs.refForPath(root, root)
+    const oldRef = (await refs.list(root)).find(entry => entry.name === 'old.txt')!.id
+    const owner = new NodeFileResourceMutationOwner(root, refs, { trashRoot: trash })
+    const base = { workspaceRef: owner.workspaceRef, principalRef: 'local', generation: 'local', leaseRef: 'local', expectedRevision: 'discover', destinationRef: rootRef.ref, idempotencyKey: 'rename-1' }
+    const discovery = await owner.preflight({ ...base, action: 'rename', targetRefs: [oldRef], name: 'new.txt' })
+    const prepared = await owner.preflight({ ...base, expectedRevision: discovery.revision, action: 'rename', targetRefs: [oldRef], name: 'new.txt' })
+    expect(prepared.allowed).toBe(true)
+    const receipt = await owner.execute(prepared.proposalRef, { ...base, expectedRevision: prepared.revision, previewDigest: prepared.previewDigest, action: 'rename', targetRefs: [oldRef], name: 'new.txt' })
+    expect(receipt).toMatchObject({ status: 'success', redirects: [{ oldRef }] })
+    await expect(readFile(join(root, 'new.txt'), 'utf8')).resolves.toBe('value')
+    expect(await owner.reconcile('rename-1')).toEqual(receipt)
+    await expect(owner.undo(receipt.receiptRef)).resolves.toMatchObject({ status: 'rolled_back' })
+    await expect(readFile(join(root, 'old.txt'), 'utf8')).resolves.toBe('value')
+
+    const createDiscovery = await owner.preflight({ ...base, action: 'create-file', name: 'created.txt', idempotencyKey: 'create-1' })
+    const createPrepared = await owner.preflight({ ...base, expectedRevision: createDiscovery.revision, action: 'create-file', name: 'created.txt', idempotencyKey: 'create-1' })
+    await writeFile(join(root, 'drift.txt'), 'drift')
+    await expect(owner.execute(createPrepared.proposalRef, { ...base, expectedRevision: createPrepared.revision, previewDigest: createPrepared.previewDigest, action: 'create-file', name: 'created.txt', idempotencyKey: 'create-1' })).resolves.toMatchObject({ status: 'revision_drift' })
+  })
+
+  it('requires an explicit sensitive reveal token bound to ref and version', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-sensitive-v1-'))
+    await writeFile(join(root, '.env'), 'TOKEN=secret')
+    const refs = createOpaqueFileRefRegistry()
+    const entry = (await refs.list(root))[0]!
+    const blocked = await refs.inspectV2(root, entry.id)
+    expect(blocked).toMatchObject({ sensitive: true, usable: false, reason: expect.stringContaining('confirmation') })
+    await expect(refs.assertSensitiveAccess(root, entry.id)).rejects.toThrow('confirmation')
+    const reveal = await refs.issueSensitiveReveal(root, entry.id, blocked.version)
+    await expect(refs.assertSensitiveAccess(root, entry.id, reveal.token)).resolves.toBeUndefined()
+    await expect(refs.inspectV2(root, entry.id, reveal.token)).resolves.toMatchObject({ sensitive: true, usable: true, state: 'ready' })
+  })
+
+  it('keeps both on an explicit name conflict without overwriting the original', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-keep-both-v1-'))
+    await writeFile(join(root, 'same.txt'), 'original')
+    const refs = createOpaqueFileRefRegistry()
+    const rootRef = await refs.refForPath(root, root)
+    const owner = new NodeFileResourceMutationOwner(root, refs)
+    const seed = { action: 'create-file' as const, workspaceRef: owner.workspaceRef, principalRef: 'local', generation: 'local', leaseRef: 'local', expectedRevision: 'discover', destinationRef: rootRef.ref, name: 'same.txt', conflict: 'keep-both' as const, idempotencyKey: 'keep-both-1' }
+    const discovery = await owner.preflight(seed)
+    const intent = { ...seed, expectedRevision: discovery.revision }
+    const prepared = await owner.preflight(intent)
+    const receipt = await owner.execute(prepared.proposalRef, { ...intent, previewDigest: prepared.previewDigest })
+    expect(receipt.status).toBe('success')
+    await expect(readFile(join(root, 'same.txt'), 'utf8')).resolves.toBe('original')
+    await expect(readFile(join(root, 'same copy.txt'), 'utf8')).resolves.toBe('')
+  })
+
+  it('covers create directory, copy, move, trash/restore and import commit', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-resource-actions-v1-'))
+    const trash = await mkdtemp(join(tmpdir(), 'yeisme-resource-trash-v1-'))
+    const staging = await mkdtemp(join(tmpdir(), 'yeisme-resource-upload-v1-'))
+    await writeFile(join(root, 'a.txt'), 'alpha')
+    await mkdir(join(root, 'dest'))
+    const refs = createOpaqueFileRefRegistry()
+    const rootRef = await refs.refForPath(root, root)
+    const owner = new NodeFileResourceMutationOwner(root, refs, { trashRoot: trash })
+    const execute = async (action: 'create-directory' | 'copy' | 'move' | 'trash' | 'import-commit', extra: Record<string, unknown>, key: string) => {
+      const seed = { action, workspaceRef: owner.workspaceRef, principalRef: 'local', generation: 'local', leaseRef: 'local', expectedRevision: 'discover', idempotencyKey: key, ...extra }
+      const discovery = await owner.preflight(seed as never)
+      const intent = { ...seed, expectedRevision: discovery.revision }
+      const prepared = await owner.preflight(intent as never)
+      return owner.execute(prepared.proposalRef, { ...intent, previewDigest: prepared.previewDigest } as never)
+    }
+    await expect(execute('create-directory', { destinationRef: rootRef.ref, name: 'created' }, 'mkdir')).resolves.toMatchObject({ status: 'success' })
+    const sourceRef = (await refs.refForPath(root, join(root, 'a.txt'))).ref
+    const destRef = (await refs.refForPath(root, join(root, 'dest'))).ref
+    await expect(execute('copy', { targetRefs: [sourceRef], destinationRef: destRef }, 'copy')).resolves.toMatchObject({ status: 'success' })
+    await expect(readFile(join(root, 'dest', 'a.txt'), 'utf8')).resolves.toBe('alpha')
+    const moveReceipt = await execute('move', { targetRefs: [sourceRef], destinationRef: destRef, name: 'moved.txt' }, 'move')
+    expect(moveReceipt).toMatchObject({ status: 'success', redirects: [{ oldRef: sourceRef }] })
+    const movedRef = (await refs.refForPath(root, join(root, 'dest', 'moved.txt'))).ref
+    const trashReceipt = await execute('trash', { targetRefs: [movedRef] }, 'trash')
+    expect(trashReceipt).toMatchObject({ status: 'success', undoRef: expect.stringMatching(/^undo-/) })
+    await expect(readFile(join(root, 'dest', 'moved.txt'))).rejects.toThrow()
+    await expect(owner.undo(trashReceipt.receiptRef)).resolves.toMatchObject({ status: 'rolled_back' })
+    await expect(readFile(join(root, 'dest', 'moved.txt'), 'utf8')).resolves.toBe('alpha')
+
+    const transfer = new NodeFileTransferOwner(root, refs, staging)
+    const upload = await transfer.createUpload({ workspaceRef: owner.workspaceRef, generation: 'local', name: 'imported.bin', size: 3 })
+    await transfer.uploadChunk(upload.sessionRef, 0, new Uint8Array([8, 9, 10]))
+    const committed = await transfer.commitUpload(upload.sessionRef)
+    await expect(execute('import-commit', { destinationRef: rootRef.ref, importRef: committed.importRef, name: 'imported.bin' }, 'import')).resolves.toMatchObject({ status: 'success' })
+    await expect(readFile(join(root, 'imported.bin'))).resolves.toEqual(Buffer.from([8, 9, 10]))
+  })
+
+  it('rejects transfer offset/digest errors, cancellation and expiry', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-transfer-negative-v1-'))
+    const refs = createOpaqueFileRefRegistry()
+    const transfer = new NodeFileTransferOwner(root, refs, await mkdtemp(join(tmpdir(), 'yeisme-transfer-negative-stage-v1-')))
+    const workspaceRef = (await refs.listV2(root)).workspaceRef
+    const first = await transfer.createUpload({ workspaceRef, generation: 'local', name: 'a.bin', size: 2 })
+    await expect(transfer.uploadChunk(first.sessionRef, 1, new Uint8Array([1]))).rejects.toThrow('contiguous')
+    await expect(transfer.uploadChunk(first.sessionRef, 0, new Uint8Array([1]), 'bad')).rejects.toThrow('digest')
+    await transfer.cancelUpload(first.sessionRef)
+    await expect(transfer.uploadChunk(first.sessionRef, 0, new Uint8Array([1]))).rejects.toThrow('unavailable')
+    const now = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+    const expired = await transfer.createUpload({ workspaceRef, generation: 'local', name: 'b.bin', size: 1 })
+    clock.mockReturnValue(now + 31 * 60_000)
+    await expect(transfer.uploadChunk(expired.sessionRef, 0, new Uint8Array([1]))).rejects.toThrow('unavailable')
+    clock.mockRestore()
+  })
+
+  it('uploads binary chunks and consumes a version-bound download ticket once', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-transfer-v1-'))
+    await writeFile(join(root, 'download.bin'), Buffer.from([1, 2, 3]))
+    const refs = createOpaqueFileRefRegistry()
+    const entry = (await refs.list(root)).find(item => item.name === 'download.bin')!
+    const transfer = new NodeFileTransferOwner(root, refs, await mkdtemp(join(tmpdir(), 'yeisme-upload-v1-')))
+    const workspaceRef = (await refs.listV2(root)).workspaceRef
+    const upload = await transfer.createUpload({ workspaceRef, generation: 'local', name: 'import.bin', size: 4 })
+    await expect(transfer.uploadChunk(upload.sessionRef, 0, new Uint8Array([4, 5]))).resolves.toEqual({ received: 2, complete: false })
+    await expect(transfer.uploadChunk(upload.sessionRef, 2, new Uint8Array([6, 7]))).resolves.toEqual({ received: 4, complete: true })
+    await expect(transfer.commitUpload(upload.sessionRef)).resolves.toMatchObject({ size: 4, digest: expect.stringMatching(/^[a-f0-9]{64}$/) })
+    const proof = await refs.inspectV2(root, entry.id)
+    const ticket = await transfer.issueDownloadTicket(entry.id, proof.version)
+    await expect(transfer.consumeDownloadTicket(ticket.ticket)).resolves.toEqual(new Uint8Array([1, 2, 3]))
+    await expect(transfer.consumeDownloadTicket(ticket.ticket)).rejects.toThrow('unavailable')
   })
 
   it('reads git porcelain status for the workspace', async () => {

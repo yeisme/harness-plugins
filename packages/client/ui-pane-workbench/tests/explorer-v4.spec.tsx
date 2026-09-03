@@ -11,6 +11,7 @@ import {
   createExplorerGitComposition,
   createExplorerOpenAdapter,
   createExplorerTreeState,
+  ComposerReferenceController,
   createFileOpenRequest,
   decideFileLifecycle,
   DSH_EXPLORER_VIEW_KIND,
@@ -144,6 +145,17 @@ describe('V4 Task 4.3 Tree State', () => {
     expect(state.roots).toEqual(['dir:src'])
     expect(state.freshness).toBe('contract_mismatch')
   })
+
+  it('keeps primary preview and checked resources independent', () => {
+    let state = hydrated()
+    state = reduceExplorerTree(state, { type: 'set_primary', ref: 'file:readme' })
+    state = reduceExplorerTree(state, { type: 'toggle_checked', ref: 'dir:src' })
+    expect(state.primaryRef).toBe('file:readme')
+    expect(state.checkedRefs).toEqual(['dir:src'])
+    state = reduceExplorerTree(state, { type: 'toggle_checked', ref: 'dir:src' })
+    expect(state.primaryRef).toBe('file:readme')
+    expect(state.checkedRefs).toEqual([])
+  })
 })
 
 describe('V4 Task 4.4 Tree UI', () => {
@@ -240,5 +252,34 @@ describe('Explorer focus movement', () => {
     const end = moveExplorerFocus(start, 'end')
     expect(end.focusedRef).toBe('file:readme')
     expect(end.expandedRefs).toEqual(start.expandedRefs)
+  })
+})
+
+describe('ComposerReferenceCapabilityV1', () => {
+  it('uses revision fencing, one active reference and an eight-pin limit', () => {
+    const controller = new ComposerReferenceController()
+    for (let index = 0; index < 9; index += 1) {
+      const current = controller.snapshot()
+      const reference = { id: `r${index}`, kind: 'file-preview' as const, owner: 'dsh.local', ref: `file:r${index}`, version: 'v1', label: `file-${index}`, scope: 'workspace', digest: `d${index}`, freshness: 'fresh' as const }
+      expect(controller.dispatch({ type: 'replace_active', reference, expectedRevision: current.revision }).ok).toBe(true)
+      const pinned = controller.dispatch({ type: 'pin', id: reference.id, expectedRevision: controller.snapshot().revision })
+      expect(pinned.ok).toBe(index < 8)
+    }
+    expect(controller.snapshot().pinned).toHaveLength(8)
+    expect(controller.dispatch({ type: 'clear', expectedRevision: 0 })).toMatchObject({ ok: false, reason: expect.stringContaining('stale') })
+  })
+
+  it('marks unsent references stale, redirects current refs and freezes sent snapshots', () => {
+    const controller = new ComposerReferenceController()
+    const reference = { id: 'r1', kind: 'file-preview' as const, owner: 'dsh.local', ref: 'file:old', version: 'v1', label: 'README.md', scope: 'workspace', digest: 'digest', freshness: 'fresh' as const }
+    controller.dispatch({ type: 'replace_active', reference })
+    controller.dispatch({ type: 'pin', id: 'r1' })
+    controller.dispatch({ type: 'redirect', oldRef: 'file:old', newRef: 'file:new' })
+    expect(controller.snapshot().active?.ref).toBe('file:new')
+    controller.dispatch({ type: 'freeze_sent', ids: ['r1'] })
+    controller.dispatch({ type: 'redirect', oldRef: 'file:new', newRef: 'file:newer' })
+    expect(controller.snapshot().sent[0]).toMatchObject({ ref: 'file:new', freshness: 'frozen' })
+    controller.dispatch({ type: 'mark_stale', ref: 'file:new', version: 'v2' })
+    expect(controller.snapshot().active).toMatchObject({ freshness: 'stale', version: 'v1', currentVersion: 'v2' })
   })
 })

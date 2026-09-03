@@ -233,6 +233,16 @@ export const REGION_STYLES = `.pwr-root{position:relative;width:100%;height:100%
 @media(prefers-reduced-motion:reduce){
   .pwr-root *{transition:none!important;animation:none!important;scroll-behavior:auto!important}
 }
+.pwr-explorer{position:relative;display:flex;flex-direction:column;height:100%;min-height:0;background:var(--vk-bg-base)}
+.pwr-explorer-resource-actions{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:6px 8px;border-bottom:1px solid var(--vk-border-l1);background:var(--vk-bg-layer-1)}
+.pwr-explorer-resource-actions button,.pwr-explorer-import{min-height:28px;padding:3px 7px;border-radius:7px;font-size:11px}.pwr-explorer-import{display:inline-flex;align-items:center;cursor:pointer;color:var(--vk-text-secondary);background:var(--vk-fill-hover)}
+.pwr-explorer-action-draft{width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:5px}.pwr-explorer-action-draft input{min-width:0}
+.pwr-explorer-proposal{display:grid;gap:7px;margin:7px;padding:9px;border:1px solid var(--vk-border-l2);border-radius:10px;background:var(--vk-bg-elevated);box-shadow:0 10px 28px rgba(0,0,0,.24)}
+.pwr-explorer-tree{flex:1;min-height:0}.pwr-explorer-row{border-radius:6px;color:var(--vk-text-secondary)}.pwr-explorer-row:hover,.pwr-explorer-row[aria-selected='true']{background:var(--vk-fill-hover);color:var(--vk-text-primary)}.pwr-explorer-row[aria-checked='true']{box-shadow:inset 2px 0 0 var(--vk-accent)}
+.pwr-explorer-name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis}.pwr-explorer-primary{color:var(--vk-accent)}.pwr-explorer-checked{color:var(--vk-state-positive)}
+.pwr-explorer-metadata-card{position:absolute;z-index:12;right:8px;top:88px;width:min(280px,calc(100% - 16px));display:grid;gap:4px;padding:10px;border:1px solid var(--vk-border-l2);border-radius:10px;background:var(--vk-bg-elevated);box-shadow:0 12px 34px rgba(0,0,0,.36);pointer-events:none}.pwr-explorer-metadata-card span{color:var(--vk-text-tertiary);font-size:11px;overflow-wrap:anywhere}
+.pwr-composer-reference-dock{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:5px 8px}.pwr-reference-chip{display:inline-flex;align-items:center;gap:4px;max-width:280px;padding:4px 6px;border:1px solid var(--vk-border-l1);border-radius:999px;background:var(--vk-bg-layer-1);font-size:11px}.pwr-reference-stale{border-color:var(--vk-state-warn)}.pwr-reference-send-blocked{color:var(--vk-text-tertiary);font-size:11px}
+@media(max-width:600px){.pwr-explorer-resource-actions{overflow-x:auto;flex-wrap:nowrap}.pwr-explorer-proposal{position:absolute;z-index:20;inset:auto 6px 6px}.pwr-explorer-metadata-card{position:absolute;top:auto;bottom:8px}}
 `
 
 /** 供 conformance 测试断言 chrome 样式串来自 token registry。 */

@@ -134,6 +134,7 @@ function mountComposerOverlay(input: {
   const { doc, labels, composer } = input
   const overlay = doc.createElement('div')
   overlay.className = 'dsh-selection-composer'
+  overlay.setAttribute('data-dsh-selection-composer', '')
   overlay.dataset.yeismeSurface = 'true'
   overlay.setAttribute('role', 'dialog')
   overlay.setAttribute('aria-label', labels['composer.title'])

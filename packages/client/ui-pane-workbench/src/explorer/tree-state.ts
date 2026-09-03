@@ -15,6 +15,17 @@ export interface ExplorerTreeNodeV1 {
   readonly capabilities: readonly string[]
   readonly freshness: ExplorerTreeFreshnessV1
   readonly gitDecoration?: string
+  readonly hidden?: boolean
+  readonly ignored?: boolean
+  readonly sensitive?: boolean
+  readonly availability?: {
+    readonly inspect?: 'available' | 'disabled' | 'unavailable' | 'stale'
+    readonly preview?: 'available' | 'disabled' | 'unavailable' | 'stale'
+    readonly download?: 'available' | 'disabled' | 'unavailable' | 'stale'
+    readonly mutate?: 'available' | 'disabled' | 'unavailable' | 'stale'
+    readonly reason?: string
+  }
+  readonly symlink?: { readonly broken: boolean; readonly outOfScope: boolean; readonly targetRef?: string }
 }
 
 export interface ExplorerTreeWatchEventV1 {
@@ -37,6 +48,8 @@ export interface ExplorerTreeStateV1 {
   readonly children: Readonly<Record<string, readonly string[]>>
   readonly expandedRefs: readonly string[]
   readonly selectedRef?: string
+  readonly primaryRef?: string
+  readonly checkedRefs: readonly string[]
   readonly focusedRef?: string
   readonly filter: string
   readonly loadingRefs: readonly string[]
@@ -55,6 +68,8 @@ export type ExplorerTreeIntentV1 =
   | { readonly type: 'expand'; readonly ref: string }
   | { readonly type: 'collapse'; readonly ref: string }
   | { readonly type: 'select'; readonly ref?: string }
+  | { readonly type: 'set_primary'; readonly ref?: string }
+  | { readonly type: 'toggle_checked'; readonly ref: string }
   | { readonly type: 'focus'; readonly ref?: string }
   | { readonly type: 'filter'; readonly query: string }
   | { readonly type: 'watch'; readonly event: ExplorerTreeWatchEventV1 }
@@ -66,6 +81,8 @@ export interface ExplorerTreeRowV1 {
   readonly depth: number
   readonly expanded: boolean
   readonly selected: boolean
+  readonly checked: boolean
+  readonly primary: boolean
   readonly focused: boolean
   readonly loading: boolean
   readonly error?: string
@@ -81,6 +98,8 @@ export function createExplorerTreeState(): ExplorerTreeStateV1 {
     children: {},
     expandedRefs: [],
     selectedRef: undefined,
+    primaryRef: undefined,
+    checkedRefs: [],
     focusedRef: undefined,
     filter: '',
     loadingRefs: [],
@@ -116,7 +135,7 @@ function acceptNodes(nodes: readonly ExplorerTreeNodeV1[]): {
 function evictCache(state: ExplorerTreeStateV1): ExplorerTreeStateV1 {
   const keys = Object.keys(state.nodes)
   if (keys.length <= EXPLORER_TREE_CACHE_LIMIT) return state
-  const keep = new Set<string>([...state.roots, ...state.expandedRefs, state.selectedRef ?? '', state.focusedRef ?? '', state.scrollAnchor?.ref ?? ''])
+  const keep = new Set<string>([...state.roots, ...state.expandedRefs, ...state.checkedRefs, state.primaryRef ?? '', state.selectedRef ?? '', state.focusedRef ?? '', state.scrollAnchor?.ref ?? ''])
   for (const ref of state.expandedRefs) {
     for (const child of state.children[ref] ?? []) keep.add(child)
   }
@@ -163,6 +182,8 @@ export function flattenExplorerTree(state: ExplorerTreeStateV1): readonly Explor
           depth,
           expanded,
           selected: state.selectedRef === ref,
+          checked: state.checkedRefs.includes(ref),
+          primary: state.primaryRef === ref,
           focused: state.focusedRef === ref,
           loading: state.loadingRefs.includes(ref),
           error: state.errors[ref],
@@ -221,6 +242,10 @@ export function reduceExplorerTree(state: ExplorerTreeStateV1, intent: ExplorerT
       return { ...state, expandedRefs: state.expandedRefs.filter(ref => ref !== intent.ref) }
     case 'select':
       return { ...state, selectedRef: intent.ref, focusedRef: intent.ref ?? state.focusedRef }
+    case 'set_primary':
+      return { ...state, primaryRef: intent.ref, selectedRef: intent.ref, focusedRef: intent.ref ?? state.focusedRef }
+    case 'toggle_checked':
+      return { ...state, checkedRefs: state.checkedRefs.includes(intent.ref) ? state.checkedRefs.filter(ref => ref !== intent.ref) : [...state.checkedRefs, intent.ref] }
     case 'focus':
       return { ...state, focusedRef: intent.ref }
     case 'filter':
@@ -267,6 +292,8 @@ function applyWatch(state: ExplorerTreeStateV1, event: ExplorerTreeWatchEventV1)
       sequence: event.sequence,
       cursor: event.cursor,
       selectedRef: state.selectedRef === event.entryRef ? undefined : state.selectedRef,
+      primaryRef: state.primaryRef === event.entryRef ? undefined : state.primaryRef,
+      checkedRefs: state.checkedRefs.filter(ref => ref !== event.entryRef),
       focusedRef: state.focusedRef === event.entryRef ? state.selectedRef : state.focusedRef,
       scrollAnchor: state.scrollAnchor?.ref === event.entryRef ? state.scrollAnchor : state.scrollAnchor,
     }

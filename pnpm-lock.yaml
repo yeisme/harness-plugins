@@ -2278,6 +2278,9 @@ importers:
       '@yeisme/dsh-client-ui-interaction-space':
         specifier: workspace:*
         version: link:../ui-interaction-space
+      '@yeisme/dsh-client-ui-visual-kit':
+        specifier: workspace:^
+        version: link:../ui-visual-kit
       '@yeisme/dsh-plugin-contracts':
         specifier: workspace:^
         version: link:../../sdk/dsh-plugin-contracts

@@ -19,6 +19,8 @@ import type {
 
 export const FILE_WATCH_CAPABILITY = 'FileWatchCapabilityV1'
 export const FILE_TREE_PROJECTION_CAPABILITY = 'FileTreeProjectionCapabilityV1'
+export const FILE_TREE_PROJECTION_CAPABILITY_V2 = 'FileTreeProjectionCapabilityV2'
+export const FILE_INSPECT_CAPABILITY = 'FileInspectCapabilityV1'
 export const FILE_TEXT_WRITE_CAPABILITY = 'FileTextWriteCapabilityV1'
 export const FILE_OPAQUE_REF_CAPABILITY = 'FileOpaqueRefCapabilityV1'
 export const FILE_WORKSPACE_EDIT_CAPABILITY = 'FileWorkspaceEditCapabilityV1'
@@ -135,6 +137,12 @@ export interface FileHostV1 {
   watch?(parentRef?: string): FileWatchHandle
   /** Optional owner-issued tree projection. Absent unless FileTreeProjectionCapabilityV1 is present. */
   tree?: FileTreeProjectionCapabilityV1
+  /** Additive paginated owner projection. */
+  treeV2?: FileTreeProjectionCapabilityV2
+  /** Additive metadata/preview admission proof. */
+  inspect?: FileInspectCapabilityV1
+  mutations?: FileResourceMutationCapabilityV1
+  transfer?: FileTransferCapabilityV1
 }
 
 export interface FileOpaqueRefProbeV1 {
@@ -180,6 +188,192 @@ export interface FileTreeProjectionCapabilityV1 {
   reveal?(ref: string): Promise<readonly FileTreeBreadcrumbSegmentV1[]>
   search?(query: string): Promise<readonly FileTreeNodeV1[]>
   subscribe?(listener: (nodes: readonly FileTreeNodeV1[]) => void): () => void
+}
+
+export type FileAvailabilityStateV1 = 'available' | 'disabled' | 'unavailable' | 'stale'
+
+export interface FileTypedAvailabilityV1 {
+  readonly state: FileAvailabilityStateV1
+  readonly reason?: string
+}
+
+export interface FileTreeNodeV2 {
+  readonly ref: string
+  readonly parentRef?: string
+  readonly name: string
+  readonly kind: FileTreeNodeKindV1
+  readonly version: string
+  readonly hasChildren: boolean
+  readonly hidden: boolean
+  readonly ignored: boolean
+  readonly sensitive: boolean
+  readonly symlink?: { readonly kind: 'file' | 'directory' | 'unknown'; readonly broken: boolean; readonly outOfScope: boolean; readonly targetRef?: string }
+  readonly availability: { readonly inspect: FileTypedAvailabilityV1; readonly preview: FileTypedAvailabilityV1; readonly download: FileTypedAvailabilityV1; readonly mutate: FileTypedAvailabilityV1 }
+  readonly freshness: FileTreeFreshnessV1
+}
+
+export interface FileTreePageV2 {
+  readonly workspaceRef: string
+  readonly rootRef?: string
+  readonly ownerCapabilities?: readonly string[]
+  readonly generation: string
+  readonly revision: string
+  readonly cursor?: string
+  readonly nextCursor?: string
+  readonly truncated: boolean
+  readonly loaded: number
+  readonly total?: number
+  readonly nodes: readonly FileTreeNodeV2[]
+}
+
+export interface FileTreePageRequestV2 {
+  readonly parentRef?: string
+  readonly cursor?: string
+  readonly limit?: number
+}
+
+export interface FileTreeSearchRequestV2 {
+  readonly query: string
+  readonly cursor?: string
+  readonly limit?: number
+}
+
+export interface FileTreeRevealV2 {
+  readonly workspaceRef: string
+  readonly generation: string
+  readonly revision: string
+  readonly breadcrumbs: readonly FileTreeBreadcrumbSegmentV1[]
+  readonly target?: FileTreeNodeV2
+}
+
+export interface FileTreeProjectionCapabilityV2 {
+  readonly capability: typeof FILE_TREE_PROJECTION_CAPABILITY_V2
+  roots(request?: Omit<FileTreePageRequestV2, 'parentRef'>): Promise<FileTreePageV2>
+  listChildren(parentRef: string, request?: Omit<FileTreePageRequestV2, 'parentRef'>): Promise<FileTreePageV2>
+  search(request: FileTreeSearchRequestV2): Promise<FileTreePageV2>
+  reveal(ref: string): Promise<FileTreeRevealV2>
+}
+
+export interface FileInspectProofV1 {
+  readonly owner: string
+  readonly ref: string
+  readonly version: string
+  readonly usable: boolean
+  readonly state: 'ready' | 'partial' | 'unsupported' | 'stale'
+  readonly sensitive: boolean
+  readonly reason?: string
+  readonly inspectedWindow?: { readonly start: number; readonly end: number; readonly digest: string }
+  readonly resource?: { readonly name: string; readonly kind: FileEntryV1['kind']; readonly mediaType?: string; readonly size?: number }
+}
+
+export interface FileInspectCapabilityV1 {
+  readonly capability: typeof FILE_INSPECT_CAPABILITY
+  inspect(ref: string): Promise<FileInspectProofV1>
+  reveal?(ref: string, version: string): Promise<{ readonly token: string; readonly expiresAt: string }>
+}
+
+export function isSafeFileTreeNodeV2(node: FileTreeNodeV2): boolean {
+  if (!isSafeFileTreeRef(node.ref) || (node.parentRef !== undefined && !isSafeFileTreeRef(node.parentRef))) return false
+  if (!SAFE_NAME.test(node.name) || looksLikeAbsolutePath(node.name) || node.version.length === 0 || node.version.length > 120) return false
+  if (node.kind !== 'file' && node.kind !== 'directory' && node.kind !== 'symlink') return false
+  if (typeof node.hidden !== 'boolean' || typeof node.ignored !== 'boolean' || typeof node.sensitive !== 'boolean') return false
+  if (node.symlink !== undefined && node.kind !== 'symlink') return false
+  return !UNSAFE_TREE.test(`${node.ref}|${node.parentRef ?? ''}|${node.name}|${node.version}`)
+}
+
+export function validateFileTreePageV2(value: unknown): { readonly ok: true; readonly value: FileTreePageV2 } | { readonly ok: false; readonly reason: string } {
+  if (typeof value !== 'object' || value === null) return { ok: false, reason: 'page must be an object' }
+  const candidate = value as Partial<FileTreePageV2>
+  if (typeof candidate.workspaceRef !== 'string' || !isSafeFileTreeRef(candidate.workspaceRef.replace(/^workspace:/, 'w:'))) return { ok: false, reason: 'unsafe workspaceRef' }
+  if (typeof candidate.generation !== 'string' || candidate.generation.length === 0 || candidate.generation.length > 120) return { ok: false, reason: 'invalid generation' }
+  if (typeof candidate.revision !== 'string' || candidate.revision.length === 0 || candidate.revision.length > 120) return { ok: false, reason: 'invalid revision' }
+  if (typeof candidate.truncated !== 'boolean' || typeof candidate.loaded !== 'number' || !Array.isArray(candidate.nodes) || candidate.nodes.some(node => !isSafeFileTreeNodeV2(node as FileTreeNodeV2))) return { ok: false, reason: 'invalid nodes' }
+  return { ok: true, value: candidate as FileTreePageV2 }
+}
+
+export const FILE_RESOURCE_MUTATION_CAPABILITY_V1 = 'FileResourceMutationCapabilityV1' as const
+export const FILE_TRANSFER_CAPABILITY_V1 = 'FileTransferCapabilityV1' as const
+
+export type FileResourceMutationActionV1 = 'create-file' | 'create-directory' | 'rename' | 'move' | 'copy' | 'trash' | 'restore' | 'import-commit'
+export type FileMutationReceiptStatusV1 = 'success' | 'rejected' | 'revision_drift' | 'lease_lost' | 'unknown' | 'reconcile_required' | 'rolled_back' | 'degraded'
+export type FileConflictDecisionV1 = 'cancel' | 'keep-both' | 'replace'
+
+export interface FileResourceMutationIntentV1 {
+  readonly action: FileResourceMutationActionV1
+  readonly workspaceRef: string
+  readonly principalRef: string
+  readonly generation: string
+  readonly leaseRef: string
+  readonly expectedRevision: string
+  readonly targetRefs?: readonly string[]
+  readonly destinationRef?: string
+  readonly name?: string
+  readonly conflict?: FileConflictDecisionV1
+  readonly importRef?: string
+  readonly undoRef?: string
+  readonly previewDigest?: string
+  readonly idempotencyKey: string
+}
+
+export interface FileResourceMutationPreflightV1 {
+  readonly proposalRef: string
+  readonly action: FileResourceMutationActionV1
+  readonly workspaceRef: string
+  readonly generation: string
+  readonly revision: string
+  readonly previewDigest: string
+  readonly expiresAt: string
+  readonly targetSummary: readonly { readonly ref: string; readonly name: string; readonly kind: 'file' | 'directory' | 'unknown' }[]
+  readonly conflicts: readonly { readonly ref?: string; readonly name: string; readonly choices: readonly FileConflictDecisionV1[] }[]
+  readonly risks: readonly string[]
+  readonly reversible: boolean
+  readonly allowed: boolean
+  readonly reason?: string
+}
+
+export interface FileResourceMutationReceiptV1 {
+  readonly status: FileMutationReceiptStatusV1
+  readonly action: FileResourceMutationActionV1
+  readonly idempotencyKey: string
+  readonly receiptRef: string
+  readonly revision?: string
+  readonly reason?: string
+  readonly proposalRef?: string
+  readonly redirects?: readonly { readonly oldRef: string; readonly newRef: string }[]
+  readonly items?: readonly { readonly ref: string; readonly status: FileMutationReceiptStatusV1; readonly reason?: string }[]
+  readonly undoRef?: string
+  readonly undoExpiresAt?: string
+}
+
+export interface FileResourceMutationCapabilityV1 {
+  readonly capability: typeof FILE_RESOURCE_MUTATION_CAPABILITY_V1
+  readonly enabled: boolean
+  readonly disabledReason?: string
+  preflight(intent: FileResourceMutationIntentV1): Promise<FileResourceMutationPreflightV1>
+  execute(proposalRef: string, intent: FileResourceMutationIntentV1): Promise<FileResourceMutationReceiptV1>
+  reconcile(idempotencyKey: string): Promise<FileResourceMutationReceiptV1 | undefined>
+  undo(receiptRef: string): Promise<FileResourceMutationReceiptV1>
+}
+
+export interface FileTransferUploadSessionV1 {
+  readonly sessionRef: string
+  readonly workspaceRef: string
+  readonly generation: string
+  readonly expiresAt: string
+  readonly chunkSize: number
+  readonly maxBytes: number
+}
+
+export interface FileTransferCapabilityV1 {
+  readonly capability: typeof FILE_TRANSFER_CAPABILITY_V1
+  readonly enabled: boolean
+  readonly disabledReason?: string
+  createUpload(input: { readonly workspaceRef: string; readonly generation: string; readonly name: string; readonly size: number; readonly digest?: string }): Promise<FileTransferUploadSessionV1>
+  uploadChunk(sessionRef: string, offset: number, chunk: Uint8Array, digest?: string): Promise<{ readonly received: number; readonly complete: boolean }>
+  cancelUpload(sessionRef: string): Promise<void>
+  commitUpload(sessionRef: string): Promise<{ readonly importRef: string; readonly size: number; readonly digest: string }>
+  issueDownloadTicket(ref: string, version: string, disposition?: 'inline' | 'attachment'): Promise<{ readonly ticket: string; readonly expiresAt: string }>
+  download?(ticket: string): Promise<Uint8Array>
 }
 
 export interface FileTreeProjectionProbe {
@@ -302,6 +496,12 @@ export function probeFileTreeProjection(host: FileHostV1 | undefined): FileTreeP
   return { available: true, freshness: 'fresh', reason: 'file tree projection available' }
 }
 
+export function probeFileTreeProjectionV2(host: FileHostV1 | undefined): FileTreeProjectionProbe {
+  if (host === undefined) return { available: false, freshness: 'offline', reason: 'file owner is offline' }
+  if (!host.capabilities?.includes(FILE_TREE_PROJECTION_CAPABILITY_V2) || host.treeV2 === undefined) return { available: false, freshness: 'contract_mismatch', missingCapability: FILE_TREE_PROJECTION_CAPABILITY_V2, reason: `missing ${FILE_TREE_PROJECTION_CAPABILITY_V2}` }
+  return { available: true, freshness: 'fresh', reason: 'file tree projection v2 available' }
+}
+
 /** Probe live watch. Missing capability is not live and must not be polled. */
 export function probeFileWatch(host: FileHostV1 | undefined): FileWatchProbe {
   if (host === undefined) {
@@ -354,6 +554,8 @@ export interface WorkspaceTreeEntryLike {
   readonly path: string
   readonly isDir: boolean
   readonly hidden?: boolean
+  readonly isSymlink?: boolean
+  readonly broken?: boolean
 }
 
 export interface WorkspaceTreeListingLike {
@@ -703,6 +905,8 @@ export function createExplorerFileHost(options: ExplorerFileHostOptions = {}): F
     },
   )
   let opaqueRefsAvailable = false
+  let ownerCapabilities = new Set<string>()
+  const revealTokens = new Map<string, { readonly version: string; readonly token: string }>()
 
   const isOpaqueEntry = (entry: unknown): entry is FileEntryV1 => {
     if (typeof entry !== 'object' || entry === null) return false
@@ -729,7 +933,7 @@ export function createExplorerFileHost(options: ExplorerFileHostOptions = {}): F
     get capabilities() {
       const legacy = legacyHost.capabilities ?? []
       return opaqueRefsAvailable
-        ? [...new Set([...legacy, FILE_OPAQUE_REF_CAPABILITY])]
+        ? [...new Set([...legacy, FILE_OPAQUE_REF_CAPABILITY, FILE_TREE_PROJECTION_CAPABILITY_V2, ...ownerCapabilities])]
         : legacy
     },
     async listEntries(parentRef) {
@@ -747,13 +951,15 @@ export function createExplorerFileHost(options: ExplorerFileHostOptions = {}): F
     },
     async readText(entry) {
       if (opaqueRefsAvailable) {
-        return callOpaque('fs.readV2', { ref: entry.id }) as Promise<FileTextReadV1 | undefined>
+        const reveal = revealTokens.get(entry.id)
+        return callOpaque('fs.readV2', { ref: entry.id, ...(reveal === undefined ? {} : { revealToken: reveal.token }) }) as Promise<FileTextReadV1 | undefined>
       }
       return legacyHost.readText?.(entry)
     },
     async readBinary(entry) {
       if (opaqueRefsAvailable) {
-        const value = await callOpaque('fs.binaryV2', { ref: entry.id }) as {
+        const reveal = revealTokens.get(entry.id)
+        const value = await callOpaque('fs.binaryV2', { ref: entry.id, ...(reveal === undefined ? {} : { revealToken: reveal.token }) }) as {
           base64?: unknown
           size?: unknown
           truncated?: unknown
@@ -782,8 +988,106 @@ export function createExplorerFileHost(options: ExplorerFileHostOptions = {}): F
       }
       return legacyHost.writeText?.(entry, content, expectedVersion) ?? { status: 'rejected', reason: 'file is read-only' }
     },
+    treeV2: {
+      capability: FILE_TREE_PROJECTION_CAPABILITY_V2,
+      async roots(request = {}) {
+        try {
+          const value = await callOpaque('fs.treePageV2', { ...(request.cursor === undefined ? {} : { cursor: request.cursor }), ...(request.limit === undefined ? {} : { limit: request.limit }) })
+          const page = parseTreePage(value); opaqueRefsAvailable = true; ownerCapabilities = new Set(page.ownerCapabilities ?? []); return page
+        } catch { opaqueRefsAvailable = false; return legacyTreePage(await legacyHost.listEntries()) }
+      },
+      async listChildren(parentRef, request = {}) {
+        try {
+          const value = await callOpaque('fs.treePageV2', { parentRef, ...(request.cursor === undefined ? {} : { cursor: request.cursor }), ...(request.limit === undefined ? {} : { limit: request.limit }) })
+          const page = parseTreePage(value); opaqueRefsAvailable = true; ownerCapabilities = new Set(page.ownerCapabilities ?? []); return page
+        } catch { opaqueRefsAvailable = false; return legacyTreePage(await legacyHost.listEntries(parentRef), parentRef) }
+      },
+      async search(request) {
+        const value = await callOpaque('fs.treePageV2', { query: request.query, ...(request.cursor === undefined ? {} : { cursor: request.cursor }), ...(request.limit === undefined ? {} : { limit: request.limit }) })
+        return parseTreePage(value)
+      },
+      async reveal(ref) {
+        const value = await callOpaque('fs.revealV2', { ref })
+        return parseReveal(value)
+      },
+    },
+    inspect: {
+      capability: FILE_INSPECT_CAPABILITY,
+      async inspect(ref) {
+        const reveal = revealTokens.get(ref)
+        const value = await callOpaque('fs.inspectV2', { ref, ...(reveal === undefined ? {} : { revealToken: reveal.token }) })
+        return parseInspect(value)
+      },
+      async reveal(ref, version) {
+        const value = await callOpaque('fs.sensitiveRevealV1', { ref, version }) as { token?: unknown; expiresAt?: unknown }
+        if (typeof value.token !== 'string' || typeof value.expiresAt !== 'string') throw new Error('invalid sensitive reveal response')
+        revealTokens.set(ref, { version, token: value.token })
+        return { token: value.token, expiresAt: value.expiresAt }
+      },
+    },
+    mutations: {
+      capability: FILE_RESOURCE_MUTATION_CAPABILITY_V1,
+      get enabled() { return opaqueRefsAvailable && ownerCapabilities.has(FILE_RESOURCE_MUTATION_CAPABILITY_V1) },
+      get disabledReason() { return this.enabled ? undefined : 'owner mutation capability has not been negotiated' },
+      preflight: intent => callOpaque('fs.mutation.preflightV1', { intent }) as Promise<FileResourceMutationPreflightV1>,
+      execute: (proposalRef, intent) => callOpaque('fs.mutation.executeV1', { proposalRef, intent }) as Promise<FileResourceMutationReceiptV1>,
+      reconcile: idempotencyKey => callOpaque('fs.mutation.reconcileV1', { idempotencyKey }) as Promise<FileResourceMutationReceiptV1 | undefined>,
+      undo: receiptRef => callOpaque('fs.mutation.undoV1', { receiptRef }) as Promise<FileResourceMutationReceiptV1>,
+    },
+    transfer: {
+      capability: FILE_TRANSFER_CAPABILITY_V1,
+      get enabled() { return opaqueRefsAvailable && ownerCapabilities.has(FILE_TRANSFER_CAPABILITY_V1) },
+      get disabledReason() { return this.enabled ? undefined : 'owner transfer capability has not been negotiated' },
+      createUpload: input => callOpaque('fs.upload.createV1', { input }) as Promise<FileTransferUploadSessionV1>,
+      async uploadChunk(sessionRef, offset, chunk, digest) {
+        const sessionId = options.sessionId?.()
+        if (sessionId === undefined || sessionId === '') throw new Error('file transfer requires a session owner')
+        const query = new URLSearchParams({ sessionId, sessionRef, offset: String(offset), ...(digest === undefined ? {} : { digest }) })
+        const response = await fetchFn(`/yeisme-files/api/fs.upload.chunkV1?${query.toString()}`, { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: new Uint8Array(chunk) })
+        const parsed = await response.json() as { ok?: boolean; value?: { received?: unknown; complete?: unknown }; error?: { message?: string } }
+        if (parsed.ok !== true || typeof parsed.value?.received !== 'number' || typeof parsed.value.complete !== 'boolean') throw new Error(parsed.error?.message ?? 'invalid upload chunk response')
+        return { received: parsed.value.received, complete: parsed.value.complete }
+      },
+      cancelUpload: sessionRef => callOpaque('fs.upload.cancelV1', { sessionRef }).then(() => undefined),
+      commitUpload: sessionRef => callOpaque('fs.upload.commitV1', { sessionRef }) as Promise<{ readonly importRef: string; readonly size: number; readonly digest: string }>,
+      issueDownloadTicket: (ref, version) => callOpaque('fs.download.ticketV1', { ref, version }) as Promise<{ readonly ticket: string; readonly expiresAt: string }>,
+      async download(ticket) {
+        const sessionId = options.sessionId?.()
+        if (sessionId === undefined || sessionId === '') throw new Error('file transfer requires a session owner')
+        const response = await fetchFn('/yeisme-files/api/fs.download.consumeV1', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId, ticket }) })
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        return new Uint8Array(await response.arrayBuffer())
+      },
+    },
   }
   return opaqueHost
+}
+
+function parseTreePage(value: unknown): FileTreePageV2 {
+  const parsed = validateFileTreePageV2(value)
+  if (!parsed.ok) throw new Error(`invalid file tree page: ${parsed.reason}`)
+  return parsed.value
+}
+
+function legacyTreePage(entries: readonly FileEntryV1[], parentRef?: string): FileTreePageV2 {
+  return {
+    workspaceRef: 'workspace:legacy', generation: 'legacy', revision: 'legacy', truncated: false, loaded: entries.length, total: entries.length,
+    nodes: entries.map(entry => ({ ref: entry.id, ...(parentRef === undefined ? {} : { parentRef }), name: entry.name, kind: entry.kind === 'directory' ? 'directory' : 'file', version: 'legacy', hasChildren: entry.kind === 'directory', hidden: false, ignored: false, sensitive: false, availability: { inspect: { state: 'unavailable', reason: 'legacy owner has no inspect proof' }, preview: { state: 'unavailable', reason: 'legacy owner has no inspect proof' }, download: { state: entry.capabilities.includes('download') ? 'available' : 'unavailable' }, mutate: { state: 'disabled', reason: 'legacy owner has no mutation capability' } }, freshness: 'contract_mismatch' })),
+  }
+}
+
+function parseReveal(value: unknown): FileTreeRevealV2 {
+  if (typeof value !== 'object' || value === null) throw new Error('invalid file reveal')
+  const candidate = value as Partial<FileTreeRevealV2>
+  if (typeof candidate.workspaceRef !== 'string' || typeof candidate.generation !== 'string' || typeof candidate.revision !== 'string' || !Array.isArray(candidate.breadcrumbs)) throw new Error('invalid file reveal')
+  return candidate as FileTreeRevealV2
+}
+
+function parseInspect(value: unknown): FileInspectProofV1 {
+  if (typeof value !== 'object' || value === null) throw new Error('invalid file inspect proof')
+  const candidate = value as Partial<FileInspectProofV1>
+  if (typeof candidate.owner !== 'string' || typeof candidate.ref !== 'string' || typeof candidate.version !== 'string' || typeof candidate.usable !== 'boolean') throw new Error('invalid file inspect proof')
+  return candidate as FileInspectProofV1
 }
 
 /** Browser Git host over `/yeisme-files/api/git.*` typed methods. */

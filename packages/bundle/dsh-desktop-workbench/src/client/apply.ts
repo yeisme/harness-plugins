@@ -20,9 +20,9 @@ import {
 } from '@yeisme/dsh-client-ui-session-tags/client'
 import type { FileEntryV1 } from '@yeisme/dsh-file-document'
 import { classifyFileEntry, MEDIA_HOST_CONTEXT_KEY, isMediaHostV1, listSeededMedia, MediaPreviewPane, subscribeSeededMedia, type MediaHostV1, type MediaRefV1 } from '@yeisme/dsh-rich-media/client'
-import { createExplorerFileHost, createExplorerGitHost, createFileHostFromWorkspaces, FILE_HOST_CONTEXT_KEY, isFileHostV1, type FileHostV1 } from '@yeisme/dsh-file-host'
+import { createExplorerFileHost, createExplorerGitHost, createFileHostFromWorkspaces, FILE_HOST_CONTEXT_KEY, isFileHostV1, type FileHostV1, type FileResourceMutationIntentV1, type FileTreeNodeV2, type FileTreePageV2 } from '@yeisme/dsh-file-host'
 import { isTerminalHostV2, TERMINAL_HOST_CONTEXT_KEY, type TerminalHostV2 } from '@yeisme/dsh-terminal-host'
-import { apply as applyPaneWorkbench } from '@yeisme/dsh-client-ui-pane-workbench/client'
+import { apply as applyPaneWorkbench, bindExplorerRuntime, ComposerReferenceDock, getComposerReferenceController, type ExplorerRuntimeV2 } from '@yeisme/dsh-client-ui-pane-workbench/client'
 import { apply as applySubagentMonitor } from '@yeisme/dsh-client-ui-pane-subagent/client'
 import { ComposedDesktopWorkbench } from './composed-workbench.tsx'
 
@@ -309,6 +309,40 @@ function resolveFileHost(ctx: ClientContext): FileHostV1 | undefined {
   )
 }
 
+function mapExplorerNode(node: FileTreeNodeV2): import('@yeisme/dsh-client-ui-pane-workbench/client').ExplorerTreeNodeV1 {
+  return {
+    ref: node.ref,
+    ...(node.parentRef === undefined ? {} : { parentRef: node.parentRef }),
+    name: node.name,
+    kind: node.kind,
+    version: node.version,
+    hasChildren: node.hasChildren,
+    capabilities: [
+      ...(node.availability.preview.state === 'available' ? ['preview', 'open'] : []),
+      ...(node.availability.download.state === 'available' ? ['download'] : []),
+      ...(node.availability.mutate.state === 'available' ? ['mutate'] : []),
+    ],
+    freshness: node.freshness,
+    hidden: node.hidden,
+    ignored: node.ignored,
+    sensitive: node.sensitive,
+    ...(node.symlink === undefined ? {} : { symlink: { broken: node.symlink.broken, outOfScope: node.symlink.outOfScope, ...(node.symlink.targetRef === undefined ? {} : { targetRef: node.symlink.targetRef }) } }),
+    availability: {
+      inspect: node.availability.inspect.state,
+      preview: node.availability.preview.state,
+      download: node.availability.download.state,
+      mutate: node.availability.mutate.state,
+      ...(node.availability.preview.reason === undefined ? {} : { reason: node.availability.preview.reason }),
+    },
+  }
+}
+
+function referenceId(prefix: string, ref: string, version: string): string {
+  let hash = 2166136261
+  for (const char of `${ref}\0${version}`) { hash ^= char.charCodeAt(0); hash = Math.imul(hash, 16777619) }
+  return `${prefix}:${(hash >>> 0).toString(36)}`
+}
+
 function resolveMediaHost(ctx: ClientContext): MediaHostV1 | undefined {
   try {
     const candidate = ctx.get(MEDIA_HOST_CONTEXT_KEY as never)
@@ -370,7 +404,7 @@ export function apply(ctx: ClientContext): () => void {
   const openFilesById = new Map<string, { readonly entry: FileEntryV1; readonly sessionId?: string }>()
   const seededMedia = new Map<string, MediaRefV1>()
   const seededMediaEntries = new Map<string, FileEntryV1>()
-  const views: Array<{ descriptor: Record<string, unknown>; component: (props?: { view?: { resourceKey?: string } }) => ReactNode }> = []
+  const views: Array<{ descriptor: Record<string, unknown>; component: (props?: { view?: { resourceKey?: string } }) => ReactNode; showInPicker?: boolean }> = []
   const resolveSeededUrl = async (media: MediaRefV1): Promise<string | undefined> => {
     const entry = seededMediaEntries.get(media.ref)
     if (entry === undefined || fileHost === undefined) return undefined
@@ -416,17 +450,119 @@ export function apply(ctx: ClientContext): () => void {
       title: entry.name,
     })
   }
+  const LegacyDesktopFilesShim = (): ReactNode => {
+    useEffect(() => { workbench.openView({ kind: 'dsh.explorer', resourceKey: 'navigator:dsh.explorer', role: 'navigator', preferredRegion: 'right', retention: 'keep-alive', singleton: true, pinned: true, title: 'Explorer' }) }, [])
+    return createElement('p', { role: 'status', 'data-explorer-legacy-shim': 'desktop.files' }, '文件导航已迁移到 dsh.explorer。')
+  }
+  if (fileHost?.treeV2 !== undefined) {
+    let ownerFence: Pick<FileTreePageV2, 'workspaceRef' | 'generation' | 'revision'> | undefined
+    let rootRef: string | undefined
+    const rememberPage = (page: FileTreePageV2): import('@yeisme/dsh-client-ui-pane-workbench/client').ExplorerTreeNodeV1[] => {
+      ownerFence = { workspaceRef: page.workspaceRef, generation: page.generation, revision: page.revision }
+      rootRef = page.rootRef ?? rootRef
+      return page.nodes.map(mapExplorerNode)
+    }
+    const openExplorerFile = async (node: import('@yeisme/dsh-client-ui-pane-workbench/client').ExplorerTreeNodeV1, mode: 'preview' | 'pin'): Promise<{ readonly ok: boolean; readonly reason?: string }> => {
+      if (node.kind === 'directory') return { ok: false, reason: 'directory is not a preview resource' }
+      if (node.availability?.preview !== undefined && node.availability.preview !== 'available') return { ok: false, reason: node.availability.reason ?? 'owner preview is unavailable' }
+      if (fileHost.inspect === undefined) return { ok: false, reason: 'owner inspect capability is unavailable' }
+      const entry: FileEntryV1 = {
+        id: node.ref,
+        ...(node.parentRef === undefined ? {} : { parentId: node.parentRef }),
+        name: node.name,
+        kind: node.kind === 'symlink' ? 'file' : node.kind,
+        capabilities: node.capabilities.filter((capability): capability is 'preview' | 'open' | 'download' | 'edit' => capability === 'preview' || capability === 'open' || capability === 'download' || capability === 'edit'),
+      }
+      const proof = await fileHost.inspect.inspect(node.ref)
+      if (!proof.usable || (proof.state !== 'ready' && proof.state !== 'partial')) return { ok: false, reason: proof.reason ?? 'owner preview proof is not usable' }
+      getComposerReferenceController().dispatch({ type: 'mark_stale', ref: proof.ref, version: proof.version })
+      getComposerReferenceController().dispatch({ type: 'replace_active', reference: {
+        id: referenceId('file', proof.ref, proof.version), kind: 'file-preview', owner: proof.owner, ref: proof.ref, version: proof.version,
+        label: proof.resource?.name ?? node.name, scope: 'workspace', digest: proof.inspectedWindow?.digest ?? referenceId('digest', proof.ref, proof.version), freshness: 'fresh',
+        ...(proof.inspectedWindow === undefined ? {} : { window: { start: proof.inspectedWindow.start, end: proof.inspectedWindow.end } }),
+      } })
+      openFile(entry, mode === 'preview')
+      return { ok: true }
+    }
+    const runtime: ExplorerRuntimeV2 = {
+      getRootRef: () => rootRef,
+      roots: async () => rememberPage(await fileHost.treeV2!.roots({ limit: 200 })),
+      listChildren: async ref => rememberPage(await fileHost.treeV2!.listChildren(ref, { limit: 200 })),
+      search: async query => rememberPage(await fileHost.treeV2!.search({ query, limit: 200 })),
+      inspectMetadata: async node => {
+        if (fileHost.inspect === undefined) return { ref: node.ref, version: node.version, state: 'unsupported', label: node.name, detail: 'owner inspect capability is unavailable' }
+        const proof = await fileHost.inspect.inspect(node.ref)
+        return { ref: node.ref, version: proof.version, state: proof.state, label: proof.resource?.name ?? node.name, ...(proof.reason === undefined ? {} : { detail: proof.reason }), sensitive: proof.sensitive }
+      },
+      revealSensitive: async node => {
+        if (fileHost.inspect?.reveal === undefined) return { ok: false, reason: 'owner sensitive reveal capability is unavailable' }
+        try { await fileHost.inspect.reveal(node.ref, node.version); return { ok: true } } catch (error) { return { ok: false, reason: error instanceof Error ? error.message : 'sensitive reveal failed' } }
+      },
+      openResource: openExplorerFile,
+      ...(fileHost.mutations === undefined ? {} : { mutation: {
+        get enabled() { return fileHost.mutations!.enabled },
+        get disabledReason() { return fileHost.mutations!.disabledReason },
+        propose: async input => {
+          if (ownerFence === undefined) throw new Error('Explorer owner fence is unavailable')
+          const idempotencyKey = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+          const base: FileResourceMutationIntentV1 = { action: input.action, workspaceRef: ownerFence.workspaceRef, principalRef: 'local', generation: ownerFence.generation, leaseRef: 'local', expectedRevision: ownerFence.revision, idempotencyKey, ...(input.targetRefs === undefined ? {} : { targetRefs: input.targetRefs }), ...(input.destinationRef === undefined ? {} : { destinationRef: input.destinationRef }), ...(input.name === undefined ? {} : { name: input.name }), ...(input.importRef === undefined ? {} : { importRef: input.importRef }), ...(input.undoRef === undefined ? {} : { undoRef: input.undoRef }) }
+          let preflight = await fileHost.mutations!.preflight(base)
+          return {
+            proposalRef: preflight.proposalRef, action: input.action,
+            summary: `${input.action}: ${preflight.targetSummary.map(item => item.name).join(', ') || input.name || 'workspace resource'}`,
+            risks: preflight.risks, conflicts: preflight.conflicts.map(item => item.name), reversible: preflight.reversible, expiresAt: preflight.expiresAt,
+            execute: async choice => {
+              let intent = base
+              if (preflight.conflicts.length > 0) {
+                if (choice === undefined || choice === 'cancel') return { ok: false, reason: 'conflict decision is required' }
+                intent = { ...base, conflict: choice }
+                preflight = await fileHost.mutations!.preflight(intent)
+              }
+              const receipt = await fileHost.mutations!.execute(preflight.proposalRef, { ...intent, previewDigest: preflight.previewDigest })
+              if (receipt.status !== 'success') return { ok: false, reason: receipt.reason ?? receipt.status }
+              for (const redirect of receipt.redirects ?? []) getComposerReferenceController().dispatch({ type: 'redirect', oldRef: redirect.oldRef, newRef: redirect.newRef })
+              if (receipt.revision !== undefined && ownerFence !== undefined) ownerFence = { ...ownerFence, revision: receipt.revision }
+              return { ok: true, ...(receipt.undoRef === undefined ? {} : { undo: async () => { const undone = await fileHost.mutations!.undo(receipt.receiptRef); return { ok: undone.status === 'rolled_back', ...(undone.reason === undefined ? {} : { reason: undone.reason }) } } }) }
+            },
+          }
+        },
+      } }),
+      ...(fileHost.transfer === undefined ? {} : { transfer: {
+        get enabled() { return fileHost.transfer!.enabled },
+        get disabledReason() { return fileHost.transfer!.disabledReason },
+        importFile: async file => {
+          if (ownerFence === undefined) throw new Error('Explorer owner fence is unavailable')
+          const upload = await fileHost.transfer!.createUpload({ workspaceRef: ownerFence.workspaceRef, generation: ownerFence.generation, name: file.name, size: file.size })
+          let offset = 0
+          while (offset < file.size) { const bytes = new Uint8Array(await file.slice(offset, offset + upload.chunkSize).arrayBuffer()); await fileHost.transfer!.uploadChunk(upload.sessionRef, offset, bytes); offset += bytes.byteLength }
+          const committed = await fileHost.transfer!.commitUpload(upload.sessionRef)
+          return { importRef: committed.importRef, name: file.name, size: committed.size }
+        },
+        download: async (ref, version) => { const ticket = await fileHost.transfer!.issueDownloadTicket(ref, version, 'attachment'); if (fileHost.transfer!.download === undefined) throw new Error('download stream is unavailable'); return fileHost.transfer!.download(ticket.ticket) },
+      } }),
+    }
+    disposers.push(bindExplorerRuntime(runtime))
+    try {
+      const sessions = ctx.get('sessions' as never) as SessionListFace | undefined
+      let ownerSession = currentSessionId(ctx)
+      const unsubscribe = sessions?.list?.subscribe?.(() => {
+        const nextSession = currentSessionId(ctx)
+        if (nextSession === ownerSession) return
+        ownerSession = nextSession
+        ownerFence = undefined
+        rootRef = undefined
+        getComposerReferenceController().dispatch({ type: 'mark_all_stale' })
+      })
+      if (unsubscribe !== undefined) disposers.push(unsubscribe)
+    } catch {
+      // Optional session subscription; request-time resolution remains authoritative.
+    }
+  }
   if (fileHost !== undefined) views.push(
     {
-      descriptor: { kind: 'desktop.files', label: '文件', componentKey: 'desktop-files', role: 'navigator', preferredRegion: 'right', retention: 'recreate', singleton: true, presentation: { description: '浏览与打开工作区文件，支持预览与固定到窗格。' } },
-      component: () => createElement(FilePane, {
-        host: fileHost,
-        tabId: 'files',
-        showPreviewPanel: false,
-        compact: true,
-        onOpenEntry: entry => openFile(entry, true),
-        onPinEntry: entry => openFile(entry, false),
-      }),
+      descriptor: { kind: 'desktop.files', label: '文件（兼容别名）', componentKey: 'desktop-files-alias', role: 'navigator', preferredRegion: 'right', retention: 'recreate', singleton: true, deprecated: true, presentation: { description: '已迁移到 dsh.explorer；保留用于旧布局恢复。' } },
+      showInPicker: false,
+      component: LegacyDesktopFilesShim,
     },
     {
       descriptor: { kind: 'desktop.file', label: '文件内容', componentKey: 'desktop-file', role: 'content', preferredRegion: 'right', retention: 'snapshot', singleton: false, presentation: { description: '在窗格中查看单个文件的内容。' } },
@@ -468,8 +604,8 @@ export function apply(ctx: ClientContext): () => void {
   for (const view of views) disposers.push(workbench.registerView(view))
 
   const openFiles = (): void => workbench.openView({
-    kind: 'desktop.files', resourceKey: 'desktop:files', role: 'navigator', preferredRegion: 'right',
-    retention: 'recreate', singleton: true, pinned: true, title: '文件',
+    kind: 'dsh.explorer', resourceKey: 'navigator:dsh.explorer', role: 'navigator', preferredRegion: 'right',
+    retention: 'keep-alive', singleton: true, pinned: true, title: 'Explorer',
   })
   const openGit = (): void => workbench.openView({
     kind: 'desktop.git', resourceKey: 'desktop:git', role: 'utility', preferredRegion: 'right',
@@ -494,12 +630,34 @@ export function apply(ctx: ClientContext): () => void {
     inject(name: string, setup: () => () => void): () => void
     register(input: unknown, component: (props?: { wide?: boolean }) => ReactNode): () => void
   }
+  if (typeof window !== 'undefined') {
+    const onSelectionReference = (event: Event): void => {
+      const detail = (event as CustomEvent<{ readonly anchor?: { readonly artifactRef?: string; readonly artifactVersion?: string; readonly quotePreview?: string; readonly quoteDigest?: string } }>).detail
+      const anchor = detail?.anchor
+      if (anchor?.artifactRef === undefined || anchor.artifactVersion === undefined || anchor.quoteDigest === undefined) return
+      getComposerReferenceController().dispatch({ type: 'replace_active', reference: {
+        id: referenceId('selection', anchor.artifactRef, anchor.artifactVersion), kind: 'selection-anchor', owner: 'dsh.selection', ref: anchor.artifactRef, version: anchor.artifactVersion,
+        label: '选区引用', scope: 'selection', digest: anchor.quoteDigest, freshness: 'fresh', quote: (anchor.quotePreview ?? '').slice(0, 500), anchor,
+      } })
+    }
+    window.addEventListener('dsh-selection-annotation:submit', onSelectionReference)
+    disposers.push(() => window.removeEventListener('dsh-selection-annotation:submit', onSelectionReference))
+  }
   if (fileHost !== undefined) {
     const filesButton = () => createElement(DesktopSidebarAction, { wide: false, label: '文件', title: '打开工作区文件', icon: 'files', onClick: openFiles })
     disposers.push(slots.inject('sidebar.footer.action', () => slots.register({
       name: 'sidebar.footer.action', id: 'desktop-workbench-sidebar-files', order: 40,
     }, filesButton)))
   }
+  disposers.push(slots.inject('conversation.input.dock', () => slots.register({
+    name: 'conversation.input.dock', id: 'desktop-workbench-composer-references', order: 35,
+  }, () => createElement(ComposerReferenceDock, {
+    controller: getComposerReferenceController(),
+    onCopy: reference => {
+      const text = reference.quote === undefined ? `@${reference.label}` : `@${reference.label}: ${reference.quote}`
+      if (typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function') void navigator.clipboard.writeText(text)
+    },
+  }))))
   const sessionsButton = () => createElement(DesktopSidebarAction, { wide: false, label: '对话', title: '打开对话管理', icon: 'sessions', onClick: openSessions })
   disposers.push(slots.inject('sidebar.footer.action', () => slots.register({
     name: 'sidebar.footer.action', id: 'desktop-workbench-sidebar-sessions', order: 39,
