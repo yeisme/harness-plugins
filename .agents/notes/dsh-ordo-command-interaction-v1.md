@@ -126,6 +126,15 @@ When external owner contracts are available:
 4. End-to-end verification (4.1) with owner fixtures
 5. Full Workbench parity testing (4.2 in visualization change)
 
+## Recheck 2026-09-03
+
+External blocker conditions re-verified, unchanged:
+- `@yeisme/dsh-agent-composition-preview` still returns 404 from the npm registry (`temp/integration-test-runs/dsh-ordo-official-cli-smoke-20260903T031410Z-47858/artifacts/blockers.json`); `packages/preset/` remains absent from this repo.
+- The DSH additive read seams required by the frozen composition design (standingFactsFor / compositionTextDigest / readPresetLineage / sources / sectionSources / attributions) are still absent from published `@deepseek-ai/dsh-api-remotes`, `dsh-agent`, and `dsh-session` tarballs through 0.1.2-alpha.5 (targz grep).
+- `ordo.agent_qualify.request` is not opened in agent/ordo (no qualify action contract in active or archived changes); `/ordo qualify` stays an owner-CLI handoff.
+
+New capability evidence (does not close any task): official `dsh` 0.1.1-rc.2 accepts the unified package via absolute-path local add, composes exactly one `ordo-agent-ops` profile row with no unresolved or legacy leaf rows, and boots the web profile without plugin load failures. Harness: `scripts/run-ordo-official-cli-smoke.mjs` (`pnpm run test:ordo-official-cli-smoke`), evidence run `dsh-ordo-official-cli-smoke-20260903T031410Z-47858` (11/11 checks). Local-path boot smoke is not e2e command-surface evidence; 2.1/4.1/4.2 remain open.
+
 ## Date: 2026-08-24
 ## Agent: Lane E (6th generation)
 ## Session: harness-plugins/Ordo dual change implementation

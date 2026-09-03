@@ -25,6 +25,7 @@
     "test:personal-coding-integration": "node scripts/run-personal-coding-integration.mjs",
     "test:personal-coding-profile-integration": "node scripts/run-personal-coding-profile-integration.mjs",
     "test:explorer-file-manager-integration": "node scripts/run-explorer-file-manager-integration.mjs",
+    "test:ordo-official-cli-smoke": "node scripts/run-ordo-official-cli-smoke.mjs",
     "check:plugins": "node scripts/check-plugins.mjs"
   },
   "devDependencies": {
