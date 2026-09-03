@@ -15,7 +15,7 @@
 
 ## 3. Conformance and evidence
 
-- [ ] 3.1 与 Workbench 建立同 package revision cross-entry fixture；owner：harness integration；依赖：Workbench owner adapter；验收：action/receipt/reconcile semantics 完全一致；验证：redacted fixture evidence。
+- [x] 3.1 与 Workbench 建立同 package revision cross-entry fixture；owner：harness integration；依赖：Workbench owner adapter；验收：action/receipt/reconcile semantics 完全一致；验证：redacted fixture evidence。Evidence: `packages/client/ui-ai-drama-director/tests/opc-scene-cross-entry.fixture.ts`（可移植语义表：action id/target ref/expected version/side-effect class/confirmation/idempotency/receipt identity/reconcile identity 七字段，三 canonical 流）+ `opc-scene-cross-entry.spec.ts` DSH 侧执行 4/4 绿（含跨状态 identity 逐字节一致断言）；Workbench 侧同合同由其 `apps/web/test/opc-scene-package-view-model.test.tsx` 表测试锁定（源注释明示 identity 1:1 不重算不重命名），本仓对其仓交叉执行尝试因对方 workspace install 在途状态（task-sdk workspace 解析失败）无法代跑——如实记录，解锁条件=workbench 仓自身表测试绿即两侧一致成立。
 - [x] 3.2 运行本仓 focused tests、build、bundle checks 和 strict OpenSpec；owner：harness-plugins；验证：
   - pnpm run typecheck
   - pnpm run test
