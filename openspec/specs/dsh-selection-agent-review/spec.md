@@ -37,15 +37,42 @@ Markdown 渲染内容 MUST 在宿主提供源码位置提示（如 `data-source-
 - **THEN** 锚点降级为 DomRegion 且明确标记 unmapped，不出现任何伪造的行号
 
 ### Requirement: 选区后必须一次交互内打开浮动操作条与迷你 Composer
-用户选中文本后系统 MUST 立即显示浮动操作条（问 Agent、评论、编辑、Agent 修改、更多），并 MUST 在一次交互内打开紧凑 Agent Composer；操作条 MUST 固定于选区上方 8px、空间不足时翻转、不遮挡选区、支持键盘导航与 Esc 关闭、窄面板降级为图标、选区滚出视口时收缩为边缘锚点。
+用户完成文本/源码、图片区域、表格范围或允许接管的编辑控件选择后，系统 MUST
+先等待选区稳定并通过 viewport、敏感区域和宿主 opt-out 检查，再由全局 singleton
+interaction layer 显示 Actions 入口；普通 selectionchange MUST NOT 自动打开
+Compact Agent Composer。Composer 只能在用户明确激活需要 Composer 的动作后打开。
+Actions MUST 使用 V2 的 1 个 primary、最多 2 个 secondary 与 More 密度，且保持
+键盘导航、Esc、窄面板与滚出视口降级。
+
+#### Scenario: 阅读时的普通选中
+- **WHEN** 用户在普通文本上短暂选中、复制后立即重新选择或选区未稳定
+- **THEN** 系统 MUST NOT 打开 Composer
+- **AND** 未通过稳定性检查前 MUST NOT 渲染完整 Actions 浮层
+
+#### Scenario: 稳定文本选区
+- **WHEN** 用户在可交互文本上保持选区稳定至少 120ms 且不在敏感/opt-out 区域
+- **THEN** 系统 SHALL 显示一个全局 Actions 表面
+- **AND** SHALL 只显示 context-aware primary、最多两个 secondary 和 More
+
+#### Scenario: 用户明确发起询问
+- **WHEN** 用户点击或用键盘激活 Actions 的“问 Agent”
+- **THEN** 系统 SHALL 打开 Compact Agent Composer 并把焦点移到输入区
+- **AND** MUST 保留 anchor context、preview-first 与原会话 owner 语义
+
+#### Scenario: 选区失效
+- **WHEN** 用户滚动、重新选择、按 Esc 或点击浮层外部
+- **THEN** 临时 Actions MUST 关闭或退化为短暂边缘入口
+- **AND** MUST NOT 自动 Pin 或保留可执行的陈旧 context
 
 #### Scenario: 顶部空间不足
-- **WHEN** 选区贴近视口顶部
-- **THEN** 操作条自动翻转到选区下方，不遮挡选区本身
+- **WHEN** 选区贴近视口顶部或两侧边缘，Actions 原位放置会越出视口
+- **THEN** Actions 位置 MUST 水平与垂直都收敛到视口内（≥8px 边距），不整条溢出或被裁剪
+- **AND** 选区滚出视口时 Actions MUST 关闭，仅保留短暂边缘锚点提示
 
 #### Scenario: 键盘用户发起询问
-- **WHEN** 键盘用户完成选择并用 Tab/Enter 激活"问 Agent"
-- **THEN** 紧凑 Composer 打开且焦点落在输入区，Esc 依次关闭 Composer 与操作条
+- **WHEN** 键盘用户完成稳定选择后用 Alt+Enter 聚焦 Actions，再激活“问 Agent”
+- **THEN** Compact Agent Composer 打开且焦点落在输入区
+- **AND** Esc SHALL 逐层退出（More→Actions）并把焦点还原到原编辑器节点
 
 ### Requirement: Compact Agent Composer 必须保留会话能力且修改强制 preview-first
 紧凑 Composer MUST 保留当前会话/Agent、模型状态、权限模式、附件与上下文卡片、输入历史、发送/停止/重试与流式状态，并 MUST 可展开到主输入框且不丢失草稿、附件与选区上下文；`Agent 修改` 意图 MUST 强制 `preview-first`，`评论` 意图默认不调用模型；布局 MUST 满足默认宽 360px（280–480px）、输入 1–6 行自增。
@@ -177,3 +204,42 @@ Selection owner SHALL additive 支持 `media-frame`、`media-time-point` 与 `me
 #### Scenario: Media region exceeds owner bounds
 - **WHEN** time region 反向、超过 24 小时上限或 frame 超过协议上限
 - **THEN** selection owner SHALL fail-closed，且该 anchor MUST NOT 进入 annotation batch
+
+### Requirement: 编辑控件接管必须有安全排除和宿主退出
+系统 SHALL 默认支持 input、textarea、contenteditable 和代码编辑器的选区接管，
+但 MUST 排除密码/敏感字段、interaction layer/Composer 自身以及带宿主 opt-out
+标记的区域。宿主/editor 可以显式禁用接管；禁用时原生编辑器选择、快捷键和焦点
+语义 MUST 保持不变。
+
+#### Scenario: 密码字段
+- **WHEN** 用户在 password input 中选择或聚焦
+- **THEN** selection interaction layer MUST NOT 读取、渲染或提交该内容
+- **AND** 原生编辑行为 MUST 保持可用
+
+#### Scenario: 宿主 opt-out
+- **WHEN** 选择位于带 `data-dsh-selection-optout` 的编辑器根节点
+- **THEN** 系统 MUST 不显示 Actions
+- **AND** 不得阻止宿主已有快捷键或选择事件
+
+### Requirement: 新合同必须允许 V2 行为替代并提供一个 release 的 V1 兼容窗口
+V2 MUST 通过 capability probe 协商；新 bundle 默认使用 V2。仅支持 V1 的旧宿主
+MAY 由 compatibility adapter 获得 V1 行为一个正式 release，但 adapter MUST 标记
+deprecated、不得伪造 V2 capability，且必须能通过 policy/kill-switch 回滚。V1
+兼容窗口结束后，移除 V1 runtime 前 MUST 完成浏览器、键盘、触控、HMR/dispose、
+宿主集成与回滚证据；安装包名和既有 action id alias MUST 保持不变。
+
+#### Scenario: V2 宿主
+- **WHEN** host capability 包含 `selection.interaction.v2`
+- **THEN** bundle SHALL 注册 singleton interaction layer
+- **AND** selectionchange SHALL 不再自动打开 Composer
+
+#### Scenario: 旧 V1 宿主
+- **WHEN** host 只提供 V1 selection capability 且仍处于 compatibility window
+- **THEN** bundle SHALL 使用 V1 adapter 并显示 deprecated evidence marker
+- **AND** 原 V1 submit/add-to-batch owner 事件语义 MUST 保持兼容
+
+#### Scenario: 兼容窗口结束
+- **WHEN** removal release 已满足 V2 完成门且 policy 不再允许 V1
+- **THEN** bundle SHALL 移除 V1 adapter/runtime
+- **AND** 不得通过 client polyfill 伪造 V1 行为
+

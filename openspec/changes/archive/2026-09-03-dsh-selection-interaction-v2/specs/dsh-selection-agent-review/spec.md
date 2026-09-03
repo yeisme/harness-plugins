@@ -1,6 +1,6 @@
 ## MODIFIED Requirements
 
-### Requirement: 选区触发必须以稳定且明确的上下文为前提
+### Requirement: 选区后必须一次交互内打开浮动操作条与迷你 Composer
 用户完成文本/源码、图片区域、表格范围或允许接管的编辑控件选择后，系统 MUST
 先等待选区稳定并通过 viewport、敏感区域和宿主 opt-out 检查，再由全局 singleton
 interaction layer 显示 Actions 入口；普通 selectionchange MUST NOT 自动打开
@@ -27,6 +27,18 @@ Actions MUST 使用 V2 的 1 个 primary、最多 2 个 secondary 与 More 密�
 - **WHEN** 用户滚动、重新选择、按 Esc 或点击浮层外部
 - **THEN** 临时 Actions MUST 关闭或退化为短暂边缘入口
 - **AND** MUST NOT 自动 Pin 或保留可执行的陈旧 context
+
+#### Scenario: 顶部空间不足
+- **WHEN** 选区贴近视口顶部或两侧边缘，Actions 原位放置会越出视口
+- **THEN** Actions 位置 MUST 水平与垂直都收敛到视口内（≥8px 边距），不整条溢出或被裁剪
+- **AND** 选区滚出视口时 Actions MUST 关闭，仅保留短暂边缘锚点提示
+
+#### Scenario: 键盘用户发起询问
+- **WHEN** 键盘用户完成稳定选择后用 Alt+Enter 聚焦 Actions，再激活“问 Agent”
+- **THEN** Compact Agent Composer 打开且焦点落在输入区
+- **AND** Esc SHALL 逐层退出（More→Actions）并把焦点还原到原编辑器节点
+
+## ADDED Requirements
 
 ### Requirement: 编辑控件接管必须有安全排除和宿主退出
 系统 SHALL 默认支持 input、textarea、contenteditable 和代码编辑器的选区接管，
