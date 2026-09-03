@@ -35,5 +35,6 @@
 
 - [x] 6.1 Add unit/component coverage for tree projection, interactions, preview gate, references and aliases
 - [x] 6.2 Add real temporary-directory integration coverage with redacted evidence output
-- [ ] 6.3 Verify browser flows at 1440/768/390, dark, reduced motion, fine/coarse pointer, keyboard and HMR/dispose（browser gate：真实浏览器矩阵属 canary 浏览器验证波次，plugin-host-protocol 明文不作为插件完成条件；jsdom 等价覆盖已交付——窄/宽流、coarse Info、键盘树导航、HMR/dispose 经 runtime refcount，如实未勾）
+- [ ] 6.3 Verify browser flows at 1440/768/390, dark, reduced motion, fine/coarse pointer, keyboard and HMR/dispose（browser gate：真实浏览器矩阵属 canary 浏览器验证波次，plugin-host-protocol 明文不作为插件完成条件；jsdom 等价覆盖已交付——窄/宽流、coarse Info、键盘树导航、HMR/dispose 经 runtime refcount，如实未勾）。
+  - 2026-09-03 [external-gate skipped]：真实浏览器矩阵在本环境跳过（canary 浏览器验证波次；`docs/plugin-host-protocol.md` 完成门明文不作为插件完成条件）。归档前复跑等价 jsdom 面全绿：`tests/explorer-v4.spec.tsx` 16/16（窄/宽流、coarse Info、键盘树导航、preview 准入）、`tests/chrome-tokens.spec.ts` 9/9、`@yeisme/dsh-file-host` test 40/40、`check:bundles` 27/27、`openspec validate dsh-web-explorer-reference-v1 --strict --no-interactive` PASS。HMR/dispose 归 runtime refcount 测试与 toolchain dispose-hmr-conformance 零 findings（2026-09-03T122937338Z 报告）。维持未勾，browser 矩阵留待 canary 波次真机补齐。
 - [x] 6.4 Run focused typecheck/tests/build, bundle checks and strict OpenSpec validation

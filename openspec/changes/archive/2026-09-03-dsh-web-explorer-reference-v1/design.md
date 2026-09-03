@@ -2,7 +2,7 @@
 
 DSH Web 目前同时存在 `dsh.explorer`、`file.tree`、`workspace.explorer` 与 `desktop.files`。它们的数据来源、打开规则和布局行为不同：canonical provider 没有绑定真实 File Host，部分旧 adapter 会过滤隐藏条目或把文件误投影为目录，文件打开又绕过 owner 预览证明。引用侧只有临时文本或 selection 事件，没有可以随资源版本演进、随消息冻结的统一合同。
 
-本 change 由 Harness Plugins 拥有 Web UI、本地 File Host adapter 与兼容迁移；DSH Conversation owner 后续接入结构化发送 seam；Hosted session 授权与租户隔离仍由 Harness Control Plane 拥有。TUI 只消费新增合同和 fixtures，不在本轮复制 Web 文件管理 UI。
+本 change 由 Harness Plugins 拥有 Web UI、本地 File Host adapter 与兼容迁移；DSH Conversation owner 后续接入结构化发送 seam；Hosted session 授权与租户隔离仍由 Harness Control Plane 拥有。
 
 ## Goals / Non-Goals
 
@@ -17,7 +17,6 @@ DSH Web 目前同时存在 `dsh.explorer`、`file.tree`、`workspace.explorer` �
 
 **Non-Goals:**
 
-- 不实现完整 TUI 文件管理 UI。
 - 不让浏览器获得绝对路径、任意 URL、凭据或 workspace authority。
 - 不以扩展名、MIME 或旧 `open` capability 单独证明资源可打开。
 - 不在本 change 删除公开旧 kind，也不建立第二套 Composer。
