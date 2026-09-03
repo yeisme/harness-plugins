@@ -8,9 +8,11 @@
  */
 
 import { createElement, useEffect, type ReactNode } from 'react'
+import { installOfficialWorkbenchHost } from './official-host.ts'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 export { ComposedWorkbench } from './composed-workbench.tsx'
+export { installOfficialWorkbenchHost, officialWorkspaceRightSlotDeclared, OFFICIAL_WORKSPACE_RIGHT_SLOT } from './official-host.ts'
 export type { ComposedWorkbenchExtraProps, ComposedWorkbenchProps } from './composed-workbench.tsx'
 export { NS, en, zh } from './composed-workbench.tsx'
 export type { ComposeKey } from './composed-workbench.tsx'
@@ -80,7 +82,20 @@ function installPaneFileTree(ctx: ClientContext): () => void {
   }
 }
 
-/** Mount the client face and return an exact disposer. */
+/**
+ * Mount the client face and return an exact disposer. The official
+ * Workbench/Pane host integration (compose 6.3) is additive: without an
+ * official workspace surface it degrades to a no-op.
+ */
 export async function apply(ctx: ClientContext): Promise<() => void> {
-  return installPaneFileTree(ctx)
+  const disposers: Array<() => void> = [installPaneFileTree(ctx), installOfficialWorkbenchHost(ctx)]
+  return () => {
+    for (const dispose of disposers.reverse()) {
+      try {
+        dispose()
+      } catch {
+        /* unload continues across individual contributions */
+      }
+    }
+  }
 }
