@@ -30,6 +30,7 @@ import type {
 import type { FileEntryV1 } from '@yeisme/dsh-file-document'
 import {
   FILE_WORKSPACE_EDIT_CAPABILITY,
+  type FileResourceMutationCanaryCountersV1,
   type FileBinaryReadV1,
   type FileTextReadV1,
   type FileTextWriteReceiptV1,
@@ -514,12 +515,61 @@ export class NodeFileResourceMutationOwner implements FileResourceMutationCapabi
   private readonly principalRef: string
   private readonly leaseRef: string
 
+  private canary: FileResourceMutationCanaryCountersV1 = { phase: 'canary-phase-b', operations: 0, trashRestore: 0, conflictReconcile: 0, dataLoss: 0, unauthorizedAccess: 0, silentOverwrite: 0, unrecoverable: 0 }
+  private canaryLoaded = false
+
   constructor(private readonly cwd: string, private readonly refs: OpaqueFileRefRegistry, options: { readonly trashRoot?: string; readonly generation?: string; readonly principalRef?: string; readonly leaseRef?: string } = {}) {
     this.workspaceRef = localWorkspaceRef(cwd)
     this.trashRoot = options.trashRoot ?? join(homedir(), '.dsh', 'file-trash')
     this.generation = options.generation ?? 'local'
     this.principalRef = options.principalRef ?? 'local'
     this.leaseRef = options.leaseRef ?? 'local'
+    void this.loadCanary()
+  }
+
+  /** Phase B canary 计数（5.5）：workspace 外原子持久化，best-effort。 */
+  canaryCounters(): FileResourceMutationCanaryCountersV1 {
+    return { ...this.canary }
+  }
+
+  private get canaryPath(): string {
+    return join(this.trashRoot, 'phase-b-canary-counters.json')
+  }
+
+  private async loadCanary(): Promise<void> {
+    if (this.canaryLoaded) return
+    this.canaryLoaded = true
+    try {
+      const raw = await readFile(this.canaryPath, 'utf8')
+      const parsed = JSON.parse(raw) as Partial<FileResourceMutationCanaryCountersV1>
+      if (parsed.phase === 'canary-phase-b') {
+        this.canary = {
+          phase: 'canary-phase-b',
+          operations: Number(parsed.operations) || 0,
+          trashRestore: Number(parsed.trashRestore) || 0,
+          conflictReconcile: Number(parsed.conflictReconcile) || 0,
+          dataLoss: Number(parsed.dataLoss) || 0,
+          unauthorizedAccess: Number(parsed.unauthorizedAccess) || 0,
+          silentOverwrite: Number(parsed.silentOverwrite) || 0,
+          unrecoverable: Number(parsed.unrecoverable) || 0,
+        }
+      }
+    } catch {
+      // 首启/损坏：从零开始计数。
+    }
+  }
+
+  private async recordCanary(update: (counters: FileResourceMutationCanaryCountersV1) => FileResourceMutationCanaryCountersV1): Promise<void> {
+    await this.loadCanary()
+    this.canary = update(this.canary)
+    try {
+      await mkdir(this.trashRoot, { recursive: true, mode: 0o700 })
+      const temp = `${this.canaryPath}.${randomBytes(6).toString('hex')}.tmp`
+      await writeFile(temp, `${JSON.stringify(this.canary)}\n`, 'utf8')
+      await rename(temp, this.canaryPath)
+    } catch {
+      // 计数持久化失败不阻断 owner 临界区。
+    }
   }
 
   private fence(intent: FileResourceMutationIntentV1): string | undefined {
@@ -579,7 +629,10 @@ export class NodeFileResourceMutationOwner implements FileResourceMutationCapabi
     const fenceReason = this.fence(intent)
     const revision = await localWorkspaceRevision(this.cwd)
     if (fenceReason !== undefined) return { status: fenceReason === 'workspace lease is lost' ? 'lease_lost' : 'rejected', action: intent.action, idempotencyKey: intent.idempotencyKey, receiptRef, proposalRef, reason: fenceReason }
-    if (revision !== intent.expectedRevision || intent.previewDigest !== proposal.preflight.previewDigest) return { status: 'revision_drift', action: intent.action, idempotencyKey: intent.idempotencyKey, receiptRef, proposalRef, reason: 'workspace revision or preview digest changed' }
+    if (revision !== intent.expectedRevision || intent.previewDigest !== proposal.preflight.previewDigest) {
+      void this.recordCanary(counters => ({ ...counters, conflictReconcile: counters.conflictReconcile + 1 }))
+      return { status: 'revision_drift', action: intent.action, idempotencyKey: intent.idempotencyKey, receiptRef, proposalRef, reason: 'workspace revision or preview digest changed' }
+    }
     if (!proposal.preflight.allowed) return { status: 'rejected', action: intent.action, idempotencyKey: intent.idempotencyKey, receiptRef, proposalRef, reason: proposal.preflight.reason ?? 'proposal is not allowed' }
     const undoSteps: Array<() => Promise<void>> = []
     const completedItems: Array<{ ref: string; status: 'success' }> = []
@@ -620,10 +673,18 @@ export class NodeFileResourceMutationOwner implements FileResourceMutationCapabi
       const undo = undoSteps.length === 0 ? undefined : async (): Promise<void> => { for (const step of [...undoSteps].reverse()) await step() }
       const receipt: FileResourceMutationReceiptV1 = { status: 'success', action: intent.action, idempotencyKey: intent.idempotencyKey, receiptRef, proposalRef, revision: await localWorkspaceRevision(this.cwd), ...(redirects.length === 0 ? {} : { redirects }), ...(completedItems.length === 0 ? {} : { items: completedItems }), ...(undo === undefined ? {} : { undoRef: `undo-${receiptRef}`, undoExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60_000).toISOString() }) }
       if (undo !== undefined) this.undoOps.set(`undo-${receiptRef}`, { receiptRef, expiresAtMs: Date.now() + 7 * 24 * 60 * 60_000, run: undo })
-      this.receipts.set(intent.idempotencyKey, receipt); this.proposals.delete(proposalRef); return receipt
+      this.receipts.set(intent.idempotencyKey, receipt); this.proposals.delete(proposalRef)
+      void this.recordCanary(counters => ({
+        ...counters,
+        operations: counters.operations + 1,
+        trashRestore: intent.action === 'trash' || intent.action === 'restore' ? counters.trashRestore + 1 : counters.trashRestore,
+        conflictReconcile: intent.conflict === 'replace' || intent.conflict === 'keep-both' ? counters.conflictReconcile + 1 : counters.conflictReconcile,
+      }))
+      return receipt
     } catch (error) {
       let rollbackFailed = false
       for (const step of [...undoSteps].reverse()) await step().catch(() => { rollbackFailed = true })
+      if (rollbackFailed) void this.recordCanary(counters => ({ ...counters, unrecoverable: counters.unrecoverable + 1 }))
       return { status: undoSteps.length === 0 ? 'rejected' : rollbackFailed ? 'degraded' : 'rolled_back', action: intent.action, idempotencyKey: intent.idempotencyKey, receiptRef, proposalRef, reason: messageOf(error), ...(completedItems.length === 0 ? {} : { items: completedItems.map(item => ({ ...item, status: rollbackFailed ? 'degraded' as const : 'rolled_back' as const })) }) }
     }
   }
@@ -638,7 +699,7 @@ export class NodeFileResourceMutationOwner implements FileResourceMutationCapabi
   async undo(receiptRef: string): Promise<FileResourceMutationReceiptV1> {
     const operation = [...this.undoOps.values()].find(item => item.receiptRef === receiptRef)
     if (operation === undefined || operation.expiresAtMs < Date.now()) return { status: 'rejected', action: 'restore', idempotencyKey: `undo:${receiptRef}`, receiptRef: `receipt-${randomBytes(8).toString('hex')}`, reason: 'undo is unavailable or expired' }
-    try { await operation.run(); this.undoOps.delete(`undo-${receiptRef}`); return { status: 'rolled_back', action: 'restore', idempotencyKey: `undo:${receiptRef}`, receiptRef: `receipt-${randomBytes(8).toString('hex')}` } } catch (error) { return { status: 'degraded', action: 'restore', idempotencyKey: `undo:${receiptRef}`, receiptRef: `receipt-${randomBytes(8).toString('hex')}`, reason: messageOf(error) } }
+    try { await operation.run(); this.undoOps.delete(`undo-${receiptRef}`); void this.recordCanary(counters => ({ ...counters, trashRestore: counters.trashRestore + 1 })); return { status: 'rolled_back', action: 'restore', idempotencyKey: `undo:${receiptRef}`, receiptRef: `receipt-${randomBytes(8).toString('hex')}` } } catch (error) { void this.recordCanary(counters => ({ ...counters, unrecoverable: counters.unrecoverable + 1 })); return { status: 'degraded', action: 'restore', idempotencyKey: `undo:${receiptRef}`, receiptRef: `receipt-${randomBytes(8).toString('hex')}`, reason: messageOf(error) } }
   }
 }
 

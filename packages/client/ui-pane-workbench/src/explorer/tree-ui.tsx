@@ -17,8 +17,27 @@ import {
   type ExplorerTreeStateV1,
 } from './tree-state.js'
 
+/** 3.4 窄屏判定：<560px 视口进入窄屏内容流（SSR/无 matchMedia 时按宽屏）。 */
+export const EXPLORER_NARROW_VIEWPORT_PX = 560
+
+export function useNarrowViewport(): boolean {
+  const [narrow, setNarrow] = useState(false)
+  useEffect(() => {
+    const view = typeof window === 'undefined' ? undefined : window
+    if (view?.matchMedia === undefined) return
+    const query = view.matchMedia(`(max-width: ${EXPLORER_NARROW_VIEWPORT_PX - 1}px)`)
+    setNarrow(query.matches)
+    const listener = (event: MediaQueryListEvent): void => { setNarrow(event.matches) }
+    query.addEventListener('change', listener)
+    return () => query.removeEventListener('change', listener)
+  }, [])
+  return narrow
+}
+
 export interface ExplorerTreeUiProps {
   readonly state: ExplorerTreeStateV1
+  /** 窄屏内容流：内容页替换 navigator，返回时恢复焦点（宽屏保持锁定 navigator）。 */
+  readonly narrow?: boolean
   readonly pointer?: 'fine' | 'coarse'
   readonly viewportHeight?: number
   readonly scrollTop?: number
@@ -60,6 +79,7 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
   const [dangerPhrase, setDangerPhrase] = useState('')
   const [draggedRefs, setDraggedRefs] = useState<readonly string[]>([])
   const hoverTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+  const treeRef = useRef<HTMLDivElement>(null)
   const open = (row: ExplorerTreeRowV1, mode: 'preview' | 'pin'): void => {
     if (row.node.kind === 'directory') return
     if (row.node.availability?.preview !== undefined && row.node.availability.preview !== 'available') return
@@ -67,6 +87,7 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
     if (action === undefined || typeof (action as Promise<unknown>).then !== 'function') return
     setPendingRefs(current => current.includes(row.ref) ? current : [...current, row.ref])
     void (action as Promise<{ readonly ok: boolean; readonly reason?: string }>).then(result => {
+      if (result.ok && props.narrow === true) emit(reduceExplorerTree(props.state, { type: 'narrow_content', ref: row.ref }))
       if (!result.ok) setMetadata(current => ({ ...current, [row.ref]: { ref: row.ref, version: row.node.version, state: 'unsupported', label: row.node.name, ...(result.reason === undefined ? {} : { detail: result.reason }) } }))
     }).finally(() => setPendingRefs(current => current.filter(ref => ref !== row.ref)))
   }
@@ -184,12 +205,27 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
         ),
       createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: () => setProposal(undefined) }, '取消'),
     ),
+    props.narrow === true && props.state.narrowReturnRef !== undefined
+      ? createElement('div', { className: 'pwr-explorer-narrow-back', 'data-explorer-narrow-back': props.state.narrowReturnRef, role: 'region', 'aria-label': t('rail.explorer') },
+        createElement(Button, {
+          type: 'button', size: 'sm', variant: 'toolbar',
+          onClick: () => {
+            emit(reduceExplorerTree(props.state, { type: 'narrow_return' }))
+            // 焦点恢复：回到树容器并聚焦来源行。
+            requestAnimationFrame(() => { treeRef.current?.focus() })
+          },
+        }, t('explorer.backToExplorer')),
+        createElement('span', { role: 'status' }, props.state.nodes[props.state.narrowReturnRef]?.name ?? ''),
+      )
+      : null,
     createElement('div', {
       className: 'pwr-explorer-tree ys-body',
       role: 'tree',
       tabIndex: 0,
       'aria-label': t('rail.explorer'),
       'aria-activedescendant': focused === undefined ? undefined : `explorer-row-${focused.ref}`,
+      ref: treeRef,
+      hidden: props.narrow === true && props.state.narrowReturnRef !== undefined,
       onKeyDown,
       onDragOver: (event: DragEvent<HTMLDivElement>) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault() },
       onDrop: (event: DragEvent<HTMLDivElement>) => {
@@ -301,6 +337,7 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
 export function ExplorerTreeView(_props: PaneLocalViewProps): ReactNode {
   const [state, setState] = useState(createExplorerTreeState)
   const runtime = useSyncExternalStore(subscribeExplorerRuntime, getExplorerRuntime, getExplorerRuntime)
+  const narrow = useNarrowViewport()
   useEffect(() => {
     if (runtime === undefined) return
     let live = true
@@ -315,5 +352,5 @@ export function ExplorerTreeView(_props: PaneLocalViewProps): ReactNode {
     }, 150)
     return () => { live = false; clearTimeout(timer) }
   }, [runtime, state.filter])
-  return createElement(ExplorerTree, { state, runtime, onIntent: setState })
+  return createElement(ExplorerTree, { state, runtime, narrow, onIntent: setState })
 }

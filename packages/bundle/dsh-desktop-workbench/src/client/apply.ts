@@ -288,7 +288,7 @@ function resolveWorkspacesBrowse(ctx: ClientContext): WorkspaceBrowseFace | unde
   return undefined
 }
 
-function resolveFileHost(ctx: ClientContext): FileHostV1 | undefined {
+function resolveFileHost(ctx: ClientContext, ownerSignal?: () => AbortSignal | undefined): FileHostV1 | undefined {
   try {
     const candidate = ctx.get(FILE_HOST_CONTEXT_KEY as never)
     if (isFileHostV1(candidate)) return candidate
@@ -299,6 +299,7 @@ function resolveFileHost(ctx: ClientContext): FileHostV1 | undefined {
     return createExplorerFileHost({
       sessionId: () => currentSessionId(ctx),
       cwd: () => currentWorkspacePath(ctx),
+      ...(ownerSignal === undefined ? {} : { signal: ownerSignal }),
     })
   }
   const workspaces = resolveWorkspacesBrowse(ctx)
@@ -377,6 +378,10 @@ function resolvePaneWorkbench(ctx: ClientContext): PaneWorkbenchFace | undefined
 
 export function apply(ctx: ClientContext): () => void {
   const disposers: Array<() => void> = []
+  // Owner-scope request cancellation（dsh-file-resource-mutation 4.5）：
+  // workspace owner（当前会话）切换时 abort 全部在途浏览器请求并换新 controller。
+  let ownerRequests = new AbortController()
+  const ownerSignal = (): AbortSignal => ownerRequests.signal
   let pane = resolvePaneWorkbench(ctx)
   if (pane === undefined) {
     try {
@@ -393,7 +398,7 @@ export function apply(ctx: ClientContext): () => void {
   }
   const workbench = pane
 
-  const fileHost = resolveFileHost(ctx)
+  const fileHost = resolveFileHost(ctx, ownerSignal)
   const gitHost = createExplorerGitHost({
     sessionId: () => currentSessionId(ctx),
     cwd: () => currentWorkspacePath(ctx),
@@ -518,7 +523,15 @@ export function apply(ctx: ClientContext): () => void {
                 intent = { ...base, conflict: choice }
                 preflight = await fileHost.mutations!.preflight(intent)
               }
-              const receipt = await fileHost.mutations!.execute(preflight.proposalRef, { ...intent, previewDigest: preflight.previewDigest })
+              let receipt
+              try {
+                receipt = await fileHost.mutations!.execute(preflight.proposalRef, { ...intent, previewDigest: preflight.previewDigest })
+              } catch (error) {
+                // owner 切换中止的在途 execute：结果未知，走 owner reconcile（幂等键），
+                // 不伪造成功也不静默重试。
+                if (error instanceof DOMException && error.name === 'AbortError') return { ok: false, reason: 'owner-switched' }
+                throw error
+              }
               if (receipt.status !== 'success') return { ok: false, reason: receipt.reason ?? receipt.status }
               for (const redirect of receipt.redirects ?? []) getComposerReferenceController().dispatch({ type: 'redirect', oldRef: redirect.oldRef, newRef: redirect.newRef })
               if (receipt.revision !== undefined && ownerFence !== undefined) ownerFence = { ...ownerFence, revision: receipt.revision }
@@ -534,7 +547,16 @@ export function apply(ctx: ClientContext): () => void {
           if (ownerFence === undefined) throw new Error('Explorer owner fence is unavailable')
           const upload = await fileHost.transfer!.createUpload({ workspaceRef: ownerFence.workspaceRef, generation: ownerFence.generation, name: file.name, size: file.size })
           let offset = 0
-          while (offset < file.size) { const bytes = new Uint8Array(await file.slice(offset, offset + upload.chunkSize).arrayBuffer()); await fileHost.transfer!.uploadChunk(upload.sessionRef, offset, bytes); offset += bytes.byteLength }
+          try {
+            while (offset < file.size) { const bytes = new Uint8Array(await file.slice(offset, offset + upload.chunkSize).arrayBuffer()); await fileHost.transfer!.uploadChunk(upload.sessionRef, offset, bytes); offset += bytes.byteLength }
+          } catch (error) {
+            // owner 切换中止上传：尽力取消 upload session 后如实失败。
+            if (error instanceof DOMException && error.name === 'AbortError') {
+              try { await fileHost.transfer!.cancelUpload(upload.sessionRef) } catch { /* owner 已失效，取消尽力而为 */ }
+              throw new Error('owner-switched')
+            }
+            throw error
+          }
           const committed = await fileHost.transfer!.commitUpload(upload.sessionRef)
           return { importRef: committed.importRef, name: file.name, size: committed.size }
         },
@@ -549,6 +571,9 @@ export function apply(ctx: ClientContext): () => void {
         const nextSession = currentSessionId(ctx)
         if (nextSession === ownerSession) return
         ownerSession = nextSession
+        // 4.5：owner 切换 → 立即取消在途浏览器请求，再作废本地 fence/引用。
+        ownerRequests.abort('workspace-owner-switched')
+        ownerRequests = new AbortController()
         ownerFence = undefined
         rootRef = undefined
         getComposerReferenceController().dispatch({ type: 'mark_all_stale' })
@@ -649,15 +674,41 @@ export function apply(ctx: ClientContext): () => void {
       name: 'sidebar.footer.action', id: 'desktop-workbench-sidebar-files', order: 40,
     }, filesButton)))
   }
-  disposers.push(slots.inject('conversation.input.dock', () => slots.register({
-    name: 'conversation.input.dock', id: 'desktop-workbench-composer-references', order: 35,
-  }, () => createElement(ComposerReferenceDock, {
+  // 4.5「查看当前版本」：owner inspect 重解析真值 + 打开刷新后的内容视图。
+  const viewCurrentReference = fileHost === undefined || fileHost.inspect === undefined
+    ? undefined
+    : async (reference: import('@yeisme/dsh-client-ui-pane-workbench/client').ComposerReferenceV1): Promise<import('@yeisme/dsh-client-ui-pane-workbench/client').ComposerReferenceV1 | undefined> => {
+      try {
+        const proof = await fileHost.inspect!.inspect(reference.ref)
+        if (!proof.usable || (proof.state !== 'ready' && proof.state !== 'partial')) return undefined
+        workbench.openView({ kind: 'desktop.file', resourceKey: proof.ref, role: 'content', preferredRegion: 'right', retention: 'snapshot', singleton: false, preview: true, title: proof.resource?.name ?? reference.label })
+        return {
+          id: referenceId('file', proof.ref, proof.version),
+          kind: reference.kind,
+          owner: proof.owner,
+          ref: proof.ref,
+          version: proof.version,
+          label: proof.resource?.name ?? reference.label,
+          scope: reference.scope,
+          digest: proof.inspectedWindow?.digest ?? referenceId('digest', proof.ref, proof.version),
+          freshness: 'fresh',
+          ...(proof.inspectedWindow === undefined ? {} : { window: { start: proof.inspectedWindow.start, end: proof.inspectedWindow.end } }),
+        }
+      } catch {
+        return undefined
+      }
+    }
+  const composerDock = (): ReactNode => createElement(ComposerReferenceDock, {
     controller: getComposerReferenceController(),
     onCopy: reference => {
       const text = reference.quote === undefined ? `@${reference.label}` : `@${reference.label}: ${reference.quote}`
       if (typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function') void navigator.clipboard.writeText(text)
     },
-  }))))
+    ...(viewCurrentReference === undefined ? {} : { onViewCurrent: viewCurrentReference }),
+  })
+  disposers.push(slots.inject('conversation.input.dock', () => slots.register({
+    name: 'conversation.input.dock', id: 'desktop-workbench-composer-references', order: 35,
+  }, composerDock)))
   const sessionsButton = () => createElement(DesktopSidebarAction, { wide: false, label: '对话', title: '打开对话管理', icon: 'sessions', onClick: openSessions })
   disposers.push(slots.inject('sidebar.footer.action', () => slots.register({
     name: 'sidebar.footer.action', id: 'desktop-workbench-sidebar-sessions', order: 39,

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { createElement } from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { setActiveLocale } from '../src/i18n/locale.js'
 import { PaneWorkbenchController } from '../src/controller.js'
 import {
@@ -12,6 +12,7 @@ import {
   createExplorerOpenAdapter,
   createExplorerTreeState,
   ComposerReferenceController,
+  ComposerReferenceDock,
   createFileOpenRequest,
   decideFileLifecycle,
   DSH_EXPLORER_VIEW_KIND,
@@ -197,6 +198,55 @@ describe('V4 Task 4.4 Tree UI', () => {
   })
 })
 
+describe('Explorer narrow content flow (3.4)', () => {
+  it('replaces the navigator with a back affordance on narrow open and restores focus on return', async () => {
+    const opened: Array<{ readonly ref: string; readonly mode: 'preview' | 'pin' }> = []
+    const runtime = {
+      getRootRef: () => 'root',
+      roots: async () => [node({ ref: 'readme.md', name: 'readme.md' })],
+      listChildren: async () => [],
+      search: async () => [],
+      inspectMetadata: async (input: ExplorerTreeNodeV1) => ({ ref: input.ref, version: input.version, state: 'ready' as const, label: input.name }),
+      openResource: async (input: ExplorerTreeNodeV1, mode: 'preview' | 'pin') => { opened.push({ ref: input.ref, mode }); return { ok: true } },
+    } as unknown as Parameters<typeof ExplorerTree>[0]['runtime']
+    const initial = reduceExplorerTree(createExplorerTreeState(), { type: 'hydrate_roots', nodes: [node({ ref: 'readme.md', name: 'readme.md' })] })
+    let state = initial
+    const view = render(createElement(ExplorerTree, { state: initial, runtime, narrow: true, onIntent: () => {} }))
+    const rerender = (next: Parameters<typeof ExplorerTree>[0]['state']): void => {
+      state = next
+      view.rerender(createElement(ExplorerTree, { state: next, runtime, narrow: true, onIntent: rerender }))
+    }
+    view.rerender(createElement(ExplorerTree, { state: initial, runtime, narrow: true, onIntent: rerender }))
+    // 窄屏打开文件：进入内容页（树隐藏 + 返回栏出现）。
+    fireEvent.click(document.querySelector('[data-explorer-ref="readme.md"]') as HTMLElement)
+    await vi.waitFor(() => { expect(document.querySelector('[data-explorer-narrow-back]')).not.toBeNull() })
+    expect(opened).toEqual([{ ref: 'readme.md', mode: 'preview' }])
+    const tree = document.querySelector('.pwr-explorer-tree') as HTMLElement
+    expect(tree.hidden).toBe(true)
+    // 返回 Explorer：树恢复、焦点回到树容器、focusedRef 恢复来源行。
+    fireEvent.click(screen.getByRole('button', { name: 'Back to Explorer' }) as HTMLButtonElement)
+    await vi.waitFor(() => { expect(document.querySelector('[data-explorer-narrow-back]')).toBeNull() })
+    expect(state.narrowReturnRef).toBeUndefined()
+    expect(state.focusedRef).toBe('readme.md')
+    expect((document.querySelector('.pwr-explorer-tree') as HTMLElement).hidden).toBe(false)
+  })
+
+  it('wide viewport keeps the locked navigator (no back flow, content opens adjacent)', async () => {
+    const runtime = {
+      getRootRef: () => 'root',
+      roots: async () => [node({ ref: 'wide.md', name: 'wide.md' })],
+      listChildren: async () => [],
+      search: async () => [],
+      openResource: async () => ({ ok: true }),
+    } as unknown as Parameters<typeof ExplorerTree>[0]['runtime']
+    const initial = reduceExplorerTree(createExplorerTreeState(), { type: 'hydrate_roots', nodes: [node({ ref: 'wide.md', name: 'wide.md' })] })
+    render(createElement(ExplorerTree, { state: initial, runtime, onIntent: () => {} }))
+    fireEvent.click(document.querySelector('[data-explorer-ref="wide.md"]') as HTMLElement)
+    await vi.waitFor(() => { expect((document.querySelector('.pwr-explorer-tree') as HTMLElement).hidden).toBe(false) })
+    expect(document.querySelector('[data-explorer-narrow-back]')).toBeNull()
+  })
+})
+
 describe('V4 Task 4.5 File Lifecycle', () => {
   it('surfaces owner actions on dirty external change and never auto-overwrites', () => {
     const decision = decideFileLifecycle(
@@ -281,5 +331,43 @@ describe('ComposerReferenceCapabilityV1', () => {
     expect(controller.snapshot().sent[0]).toMatchObject({ ref: 'file:new', freshness: 'frozen' })
     controller.dispatch({ type: 'mark_stale', ref: 'file:new', version: 'v2' })
     expect(controller.snapshot().active).toMatchObject({ freshness: 'stale', version: 'v1', currentVersion: 'v2' })
+  })
+
+  it('view-current refresh replaces the stale reference in place without touching frozen snapshots (4.5)', async () => {
+    const controller = new ComposerReferenceController()
+    const reference = { id: 'r1', kind: 'file-preview' as const, owner: 'dsh.local', ref: 'file:readme', version: 'v1', label: 'README.md', scope: 'workspace', digest: 'digest-1', freshness: 'fresh' as const }
+    controller.dispatch({ type: 'replace_active', reference })
+    controller.dispatch({ type: 'pin', id: 'r1' })
+    controller.dispatch({ type: 'mark_stale', ref: 'file:readme', version: 'v2' })
+    expect(controller.snapshot().active?.freshness).toBe('stale')
+
+    // host 重解析成功：active 与 pinned 中同 id 项原位替换为当前版本。
+    const refreshed = { ...reference, version: 'v2', digest: 'digest-2', freshness: 'fresh' as const }
+    const result = controller.dispatch({ type: 'refresh', id: 'r1', reference: refreshed, expectedRevision: controller.snapshot().revision })
+    expect(result.ok).toBe(true)
+    expect(controller.snapshot().active).toMatchObject({ version: 'v2', digest: 'digest-2', freshness: 'fresh' })
+    expect(controller.snapshot().pinned[0]).toMatchObject({ version: 'v2', freshness: 'fresh' })
+
+    // 未知 id 拒绝；frozen sent 快照不被 refresh 改写。
+    expect(controller.dispatch({ type: 'refresh', id: 'ghost', reference: refreshed })).toMatchObject({ ok: false, reason: 'reference is unavailable' })
+    controller.dispatch({ type: 'freeze_sent', ids: ['r1'] })
+    const sent = controller.snapshot().sent[0]
+    controller.dispatch({ type: 'refresh', id: 'r1', reference: { ...refreshed, version: 'v3' } })
+    expect(controller.snapshot().sent[0]).toBe(sent)
+
+    // dock：stale chip 提供查看当前版本动作；host 面缺席时如实禁用。
+    controller.dispatch({ type: 'mark_stale', ref: 'file:readme', version: 'v5' })
+    const { unmount } = render(createElement(ComposerReferenceDock, { controller, onViewCurrent: async item => ({ ...item, version: 'v5', freshness: 'fresh' }) }))
+    const action = document.querySelector('[data-reference-view-current="r1"] button') as HTMLButtonElement
+    expect(action).not.toBeNull()
+    expect(action.disabled).toBe(false)
+    await fireEvent.click(action)
+    expect(controller.snapshot().active).toMatchObject({ version: 'v5', freshness: 'fresh' })
+    unmount()
+    // 再次标旧（v6），host 面缺席时动作如实禁用。
+    controller.dispatch({ type: 'mark_stale', ref: 'file:readme', version: 'v6' })
+    render(createElement(ComposerReferenceDock, { controller }))
+    const disabled = document.querySelector('[data-reference-view-current="r1"] button') as HTMLButtonElement
+    expect(disabled.disabled).toBe(true)
   })
 })

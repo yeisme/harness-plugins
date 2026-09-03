@@ -345,6 +345,23 @@ export interface FileResourceMutationReceiptV1 {
   readonly undoExpiresAt?: string
 }
 
+/**
+ * Phase B 本地 canary counters（dsh-file-resource-mutation 5.5）：默认启用前的
+ * dogfood 观测口径。阈值（design §Migration）：≥50 次资源操作、≥10 次
+ * trash/restore、≥5 次 conflict/reconcile，且四个零容忍计数为 0。
+ */
+export interface FileResourceMutationCanaryCountersV1 {
+  readonly phase: 'canary-phase-b'
+  readonly operations: number
+  readonly trashRestore: number
+  readonly conflictReconcile: number
+  /** 零容忍：owner 检测到即不得默认启用。 */
+  readonly dataLoss: number
+  readonly unauthorizedAccess: number
+  readonly silentOverwrite: number
+  readonly unrecoverable: number
+}
+
 export interface FileResourceMutationCapabilityV1 {
   readonly capability: typeof FILE_RESOURCE_MUTATION_CAPABILITY_V1
   readonly enabled: boolean
@@ -353,6 +370,8 @@ export interface FileResourceMutationCapabilityV1 {
   execute(proposalRef: string, intent: FileResourceMutationIntentV1): Promise<FileResourceMutationReceiptV1>
   reconcile(idempotencyKey: string): Promise<FileResourceMutationReceiptV1 | undefined>
   undo(receiptRef: string): Promise<FileResourceMutationReceiptV1>
+  /** Additive：本地 owner 的 Phase B canary 计数快照（hosted owner 可缺席）。 */
+  canaryCounters?(): FileResourceMutationCanaryCountersV1
 }
 
 export interface FileTransferUploadSessionV1 {
@@ -808,6 +827,11 @@ export interface ExplorerFileHostOptions {
   sessionId?: () => string | undefined
   cwd?: () => string | undefined
   fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>
+  /**
+   * Per-request abort signal（dsh-file-resource-mutation 4.5）：workspace owner
+   * 切换时调用方 abort 当前 controller，浏览器侧在途请求立即取消。
+   */
+  signal?: () => AbortSignal | undefined
 }
 
 export interface GitStatusFileV1 {
@@ -859,6 +883,7 @@ export function createExplorerFileHost(options: ExplorerFileHostOptions = {}): F
   const request = async (method: string, extra: Record<string, unknown>, includeClientCwd: boolean): Promise<unknown> => {
     const sessionId = options.sessionId?.()
     const cwd = options.cwd?.()
+    const signal = options.signal?.()
     const response = await fetchFn(`/yeisme-files/api/${method}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -867,6 +892,7 @@ export function createExplorerFileHost(options: ExplorerFileHostOptions = {}): F
         ...(!includeClientCwd || cwd === undefined || cwd === '' ? {} : { cwd }),
         ...extra,
       }),
+      ...(signal === undefined ? {} : { signal }),
     })
     const parsed = await response.json() as { ok?: boolean; value?: unknown; error?: { message?: string } }
     if (parsed.ok !== true) {
@@ -994,13 +1020,20 @@ export function createExplorerFileHost(options: ExplorerFileHostOptions = {}): F
         try {
           const value = await callOpaque('fs.treePageV2', { ...(request.cursor === undefined ? {} : { cursor: request.cursor }), ...(request.limit === undefined ? {} : { limit: request.limit }) })
           const page = parseTreePage(value); opaqueRefsAvailable = true; ownerCapabilities = new Set(page.ownerCapabilities ?? []); return page
-        } catch { opaqueRefsAvailable = false; return legacyTreePage(await legacyHost.listEntries()) }
+        } catch (error) {
+          // owner 切换取消（AbortError）必须穿透：不得吞成 legacy 回退再发请求。
+          if (error instanceof DOMException && error.name === 'AbortError') throw error
+          opaqueRefsAvailable = false; return legacyTreePage(await legacyHost.listEntries())
+        }
       },
       async listChildren(parentRef, request = {}) {
         try {
           const value = await callOpaque('fs.treePageV2', { parentRef, ...(request.cursor === undefined ? {} : { cursor: request.cursor }), ...(request.limit === undefined ? {} : { limit: request.limit }) })
           const page = parseTreePage(value); opaqueRefsAvailable = true; ownerCapabilities = new Set(page.ownerCapabilities ?? []); return page
-        } catch { opaqueRefsAvailable = false; return legacyTreePage(await legacyHost.listEntries(parentRef), parentRef) }
+        } catch (error) {
+          if (error instanceof DOMException && error.name === 'AbortError') throw error
+          opaqueRefsAvailable = false; return legacyTreePage(await legacyHost.listEntries(parentRef), parentRef)
+        }
       },
       async search(request) {
         const value = await callOpaque('fs.treePageV2', { query: request.query, ...(request.cursor === undefined ? {} : { cursor: request.cursor }), ...(request.limit === undefined ? {} : { limit: request.limit }) })

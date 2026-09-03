@@ -189,6 +189,45 @@ describe('desktop workbench client apply', () => {
     dispose()
   })
 
+
+  it('aborts in-flight browser requests when the workspace owner switches (mutation 4.5)', async () => {
+    const EMPTY_PAGE = { workspaceRef: 'workspace:test', generation: 'g1', revision: 'r1', truncated: false, loaded: 0, nodes: [] }
+    const signals: AbortSignal[] = []
+    const listeners: Array<() => void> = []
+    let currentSession = 's-1'
+    const fetchImpl = vi.fn(async (_input: string, init?: RequestInit) => {
+      if (init?.signal !== undefined) signals.push(init.signal)
+      return new Response(JSON.stringify({ ok: true, value: EMPTY_PAGE }), { headers: { 'content-type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchImpl)
+    const ctx = fakeClientContext()
+    const sessions = ctx.get('sessions' as never) as { list: { getSnapshot: () => { current?: string }; subscribe?: (listener: () => void) => () => void } }
+    sessions.list.getSnapshot = () => ({ current: currentSession })
+    sessions.list.subscribe = (listener: () => void) => {
+      listeners.push(listener)
+      return () => { const index = listeners.indexOf(listener); if (index >= 0) listeners.splice(index, 1) }
+    }
+    const dispose = apply(ctx)
+    try {
+      const runtime = getExplorerRuntime()!
+      await runtime.roots()
+      const before = signals.at(-1)!
+      expect(before.aborted).toBe(false)
+      // workspace owner（当前会话）切换 → 在途请求的 signal 立即 abort。
+      currentSession = 's-2'
+      for (const listener of [...listeners]) listener()
+      expect(before.aborted).toBe(true)
+      // 切换后的请求拿到全新的、未中止的 signal。
+      await runtime.listChildren('any-ref')
+      const after = signals.at(-1)!
+      expect(after).not.toBe(before)
+      expect(after.aborted).toBe(false)
+    } finally {
+      dispose()
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('opens files on the right and terminal at the bottom from additive actions', () => {
     const ctx = fakeClientContext({ fileHost: fileHost(), terminalHost: terminalHost() })
     apply(ctx)

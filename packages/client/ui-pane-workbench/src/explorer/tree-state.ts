@@ -57,6 +57,8 @@ export interface ExplorerTreeStateV1 {
   readonly freshness: ExplorerTreeFreshnessV1
   readonly cursor?: string
   readonly sequence: number
+  /** 3.4 窄屏内容流：记录进入内容页时的来源行，返回 Explorer 时恢复焦点。 */
+  readonly narrowReturnRef?: string
   readonly scrollAnchor?: ExplorerScrollAnchorV1
 }
 
@@ -73,6 +75,9 @@ export type ExplorerTreeIntentV1 =
   | { readonly type: 'focus'; readonly ref?: string }
   | { readonly type: 'filter'; readonly query: string }
   | { readonly type: 'watch'; readonly event: ExplorerTreeWatchEventV1 }
+  /** 3.4 窄屏：进入内容页（记录返回焦点行）/ 返回 Explorer。 */
+  | { readonly type: 'narrow_content'; readonly ref: string }
+  | { readonly type: 'narrow_return' }
   | { readonly type: 'set_scroll_anchor'; readonly anchor: ExplorerScrollAnchorV1 }
   | { readonly type: 'retry'; readonly ref: string }
 
@@ -259,6 +264,13 @@ export function reduceExplorerTree(state: ExplorerTreeStateV1, intent: ExplorerT
         errors,
         loadingRefs: state.loadingRefs.includes(intent.ref) ? state.loadingRefs : [...state.loadingRefs, intent.ref],
       }
+    }
+    case 'narrow_content':
+      return { ...state, narrowReturnRef: intent.ref }
+    case 'narrow_return': {
+      const restore = state.narrowReturnRef
+      if (restore === undefined) return state
+      return { ...state, narrowReturnRef: undefined, focusedRef: state.nodes[restore] === undefined ? state.focusedRef : restore }
     }
     case 'watch':
       return applyWatch(state, intent.event)

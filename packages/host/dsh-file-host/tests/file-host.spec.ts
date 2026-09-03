@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   createExplorerFileHost,
   createFileHostFromWorkspaces,
@@ -272,5 +272,55 @@ describe('@yeisme/dsh-file-host', () => {
       },
     }
     expect(probeFileWatch(host)).toMatchObject({ live: true, freshness: 'fresh' })
+  })
+})
+
+describe('owner-switch request cancellation (dsh-file-resource-mutation 4.5)', () => {
+  const EMPTY_PAGE = { workspaceRef: 'workspace:abcd', generation: 'g1', revision: 'r1', truncated: false, loaded: 0, nodes: [] }
+
+  function jsonResponse(value: unknown, ok = true): Response {
+    return new Response(JSON.stringify({ ok, value }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }
+
+  it('threads the caller-provided signal into every browser request', async () => {
+    const controller = new AbortController()
+    const seenSignals: Array<AbortSignal | undefined> = []
+    const fetchImpl = vi.fn(async (_input: string, init?: RequestInit) => {
+      seenSignals.push(init?.signal as AbortSignal | undefined)
+      if (_input.endsWith('/fs.treeV2')) return jsonResponse([])
+      return jsonResponse(EMPTY_PAGE)
+    })
+    const host = createExplorerFileHost({ fetchImpl, signal: () => controller.signal })
+    await host.listEntries()
+    expect(host.treeV2).toBeDefined()
+    await host.treeV2!.roots({ limit: 5 })
+    await host.treeV2!.search({ query: 'x', limit: 5 })
+    expect(seenSignals.length).toBeGreaterThanOrEqual(3)
+    for (const signal of seenSignals) expect(signal).toBe(controller.signal)
+  })
+
+  it('aborting the signal surfaces AbortError to pending callers (no fake data)', async () => {
+    const controller = new AbortController()
+    const fetchImpl = vi.fn(async (_input: string, init?: RequestInit) => {
+      const signal = init?.signal as AbortSignal | undefined
+      if (signal !== undefined) {
+        // 模拟真实 fetch 语义：abort 时以 AbortError 拒绝。
+        return new Promise<Response>((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')), { once: true })
+        })
+      }
+      return jsonResponse({ entries: [] })
+    })
+    const host = createExplorerFileHost({ fetchImpl, signal: () => controller.signal })
+    // 先用一次成功的 fs.treeV2 调用打开 opaque ref 面，再让后续请求挂起。
+    const fetchOnce = vi.fn(async (input: string, init?: RequestInit) => {
+      if (fetchOnce.mock.calls.length === 1) return jsonResponse([])
+      return fetchImpl(input, init)
+    })
+    const host2 = createExplorerFileHost({ fetchImpl: fetchOnce, signal: () => controller.signal })
+    await host2.listEntries()
+    const pending = host2.treeV2!.roots({ limit: 5 })
+    controller.abort('workspace-owner-switched')
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
   })
 })

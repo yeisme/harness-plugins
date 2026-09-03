@@ -459,6 +459,8 @@ export class NodeFileResourceMutationOwner {
     generation;
     principalRef;
     leaseRef;
+    canary = { phase: 'canary-phase-b', operations: 0, trashRestore: 0, conflictReconcile: 0, dataLoss: 0, unauthorizedAccess: 0, silentOverwrite: 0, unrecoverable: 0 };
+    canaryLoaded = false;
     constructor(cwd, refs, options = {}) {
         this.cwd = cwd;
         this.refs = refs;
@@ -467,6 +469,51 @@ export class NodeFileResourceMutationOwner {
         this.generation = options.generation ?? 'local';
         this.principalRef = options.principalRef ?? 'local';
         this.leaseRef = options.leaseRef ?? 'local';
+        void this.loadCanary();
+    }
+    /** Phase B canary 计数（5.5）：workspace 外原子持久化，best-effort。 */
+    canaryCounters() {
+        return { ...this.canary };
+    }
+    get canaryPath() {
+        return join(this.trashRoot, 'phase-b-canary-counters.json');
+    }
+    async loadCanary() {
+        if (this.canaryLoaded)
+            return;
+        this.canaryLoaded = true;
+        try {
+            const raw = await readFile(this.canaryPath, 'utf8');
+            const parsed = JSON.parse(raw);
+            if (parsed.phase === 'canary-phase-b') {
+                this.canary = {
+                    phase: 'canary-phase-b',
+                    operations: Number(parsed.operations) || 0,
+                    trashRestore: Number(parsed.trashRestore) || 0,
+                    conflictReconcile: Number(parsed.conflictReconcile) || 0,
+                    dataLoss: Number(parsed.dataLoss) || 0,
+                    unauthorizedAccess: Number(parsed.unauthorizedAccess) || 0,
+                    silentOverwrite: Number(parsed.silentOverwrite) || 0,
+                    unrecoverable: Number(parsed.unrecoverable) || 0,
+                };
+            }
+        }
+        catch {
+            // 首启/损坏：从零开始计数。
+        }
+    }
+    async recordCanary(update) {
+        await this.loadCanary();
+        this.canary = update(this.canary);
+        try {
+            await mkdir(this.trashRoot, { recursive: true, mode: 0o700 });
+            const temp = `${this.canaryPath}.${randomBytes(6).toString('hex')}.tmp`;
+            await writeFile(temp, `${JSON.stringify(this.canary)}\n`, 'utf8');
+            await rename(temp, this.canaryPath);
+        }
+        catch {
+            // 计数持久化失败不阻断 owner 临界区。
+        }
     }
     fence(intent) {
         if (intent.workspaceRef !== this.workspaceRef)
@@ -539,8 +586,10 @@ export class NodeFileResourceMutationOwner {
         const revision = await localWorkspaceRevision(this.cwd);
         if (fenceReason !== undefined)
             return { status: fenceReason === 'workspace lease is lost' ? 'lease_lost' : 'rejected', action: intent.action, idempotencyKey: intent.idempotencyKey, receiptRef, proposalRef, reason: fenceReason };
-        if (revision !== intent.expectedRevision || intent.previewDigest !== proposal.preflight.previewDigest)
+        if (revision !== intent.expectedRevision || intent.previewDigest !== proposal.preflight.previewDigest) {
+            void this.recordCanary(counters => ({ ...counters, conflictReconcile: counters.conflictReconcile + 1 }));
             return { status: 'revision_drift', action: intent.action, idempotencyKey: intent.idempotencyKey, receiptRef, proposalRef, reason: 'workspace revision or preview digest changed' };
+        }
         if (!proposal.preflight.allowed)
             return { status: 'rejected', action: intent.action, idempotencyKey: intent.idempotencyKey, receiptRef, proposalRef, reason: proposal.preflight.reason ?? 'proposal is not allowed' };
         const undoSteps = [];
@@ -652,12 +701,20 @@ export class NodeFileResourceMutationOwner {
                 this.undoOps.set(`undo-${receiptRef}`, { receiptRef, expiresAtMs: Date.now() + 7 * 24 * 60 * 60_000, run: undo });
             this.receipts.set(intent.idempotencyKey, receipt);
             this.proposals.delete(proposalRef);
+            void this.recordCanary(counters => ({
+                ...counters,
+                operations: counters.operations + 1,
+                trashRestore: intent.action === 'trash' || intent.action === 'restore' ? counters.trashRestore + 1 : counters.trashRestore,
+                conflictReconcile: intent.conflict === 'replace' || intent.conflict === 'keep-both' ? counters.conflictReconcile + 1 : counters.conflictReconcile,
+            }));
             return receipt;
         }
         catch (error) {
             let rollbackFailed = false;
             for (const step of [...undoSteps].reverse())
                 await step().catch(() => { rollbackFailed = true; });
+            if (rollbackFailed)
+                void this.recordCanary(counters => ({ ...counters, unrecoverable: counters.unrecoverable + 1 }));
             return { status: undoSteps.length === 0 ? 'rejected' : rollbackFailed ? 'degraded' : 'rolled_back', action: intent.action, idempotencyKey: intent.idempotencyKey, receiptRef, proposalRef, reason: messageOf(error), ...(completedItems.length === 0 ? {} : { items: completedItems.map(item => ({ ...item, status: rollbackFailed ? 'degraded' : 'rolled_back' })) }) };
         }
     }
@@ -674,9 +731,11 @@ export class NodeFileResourceMutationOwner {
         try {
             await operation.run();
             this.undoOps.delete(`undo-${receiptRef}`);
+            void this.recordCanary(counters => ({ ...counters, trashRestore: counters.trashRestore + 1 }));
             return { status: 'rolled_back', action: 'restore', idempotencyKey: `undo:${receiptRef}`, receiptRef: `receipt-${randomBytes(8).toString('hex')}` };
         }
         catch (error) {
+            void this.recordCanary(counters => ({ ...counters, unrecoverable: counters.unrecoverable + 1 }));
             return { status: 'degraded', action: 'restore', idempotencyKey: `undo:${receiptRef}`, receiptRef: `receipt-${randomBytes(8).toString('hex')}`, reason: messageOf(error) };
         }
     }

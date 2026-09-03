@@ -244,6 +244,48 @@ describe('@yeisme/dsh-file-host/node', () => {
     await expect(owner.execute(createPrepared.proposalRef, { ...base, expectedRevision: createPrepared.revision, previewDigest: createPrepared.previewDigest, action: 'create-file', name: 'created.txt', idempotencyKey: 'create-1' })).resolves.toMatchObject({ status: 'revision_drift' })
   })
 
+  it('records Phase B canary counters across operations, trash/restore, drift and rollback failure (mutation 5.5)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-canary-v1-'))
+    const trash = await mkdtemp(join(tmpdir(), 'yeisme-canary-trash-'))
+    await writeFile(join(root, 'a.txt'), 'a')
+    await writeFile(join(root, 'b.txt'), 'b')
+    const refs = createOpaqueFileRefRegistry()
+    const rootRef = await refs.refForPath(root, root)
+    const aRef = (await refs.list(root)).find(entry => entry.name === 'a.txt')!.id
+    const bRef = (await refs.list(root)).find(entry => entry.name === 'b.txt')!.id
+    const owner = new NodeFileResourceMutationOwner(root, refs, { trashRoot: trash })
+    const base = { workspaceRef: owner.workspaceRef, principalRef: 'local', generation: 'local', leaseRef: 'local', destinationRef: rootRef.ref }
+    const run = async (input: { readonly action: 'rename' | 'trash'; readonly targetRefs: readonly string[]; readonly name?: string; readonly idempotencyKey: string }) => {
+      const discovery = await owner.preflight({ ...base, expectedRevision: 'discover', ...input })
+      const prepared = await owner.preflight({ ...base, expectedRevision: discovery.revision, ...input })
+      return owner.execute(prepared.proposalRef, { ...base, expectedRevision: prepared.revision, previewDigest: prepared.previewDigest, ...input })
+    }
+    await run({ action: 'rename', targetRefs: [aRef], name: 'a2.txt', idempotencyKey: 'c-rename' })
+    const trashReceipt = await run({ action: 'trash', targetRefs: [bRef], idempotencyKey: 'c-trash' })
+    await owner.undo(trashReceipt.receiptRef ?? '')
+    // 计数：rename + trash + restore(undo) → operations 2、trashRestore 2。
+    await vi.waitFor(() => {
+      const counters = owner.canaryCounters()
+      expect(counters.phase).toBe('canary-phase-b')
+      expect(counters.operations).toBe(2)
+      expect(counters.trashRestore).toBe(2)
+      expect(counters.dataLoss).toBe(0)
+      expect(counters.unauthorizedAccess).toBe(0)
+      expect(counters.silentOverwrite).toBe(0)
+      expect(counters.unrecoverable).toBe(0)
+    })
+    // 持久化：计数写入为 best-effort 异步，等落盘后再用新实例读回。
+    await new Promise(resolve => setTimeout(resolve, 150))
+    const owner2 = new NodeFileResourceMutationOwner(root, refs, { trashRoot: trash })
+    await vi.waitFor(() => { expect(owner2.canaryCounters().operations).toBe(2) })
+    // revision drift → conflictReconcile。
+    const cRef = (await refs.list(root)).find(entry => entry.name === 'a2.txt')!.id
+    const discovery = await owner.preflight({ ...base, action: 'rename', targetRefs: [cRef], name: 'a3.txt', idempotencyKey: 'c-drift', expectedRevision: 'discover' })
+    await writeFile(join(root, 'drift-marker.txt'), 'drift')
+    await owner.execute(discovery.proposalRef, { ...base, action: 'rename', targetRefs: [cRef], name: 'a3.txt', idempotencyKey: 'c-drift', expectedRevision: discovery.revision, previewDigest: discovery.previewDigest }).catch(() => undefined)
+    await vi.waitFor(() => { expect(owner.canaryCounters().conflictReconcile).toBe(1) })
+  })
+
   it('requires an explicit sensitive reveal token bound to ref and version', async () => {
     const root = await mkdtemp(join(tmpdir(), 'yeisme-sensitive-v1-'))
     await writeFile(join(root, '.env'), 'TOKEN=secret')

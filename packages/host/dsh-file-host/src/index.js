@@ -428,6 +428,7 @@ export function createExplorerFileHost(options = {}) {
     const request = async (method, extra, includeClientCwd) => {
         const sessionId = options.sessionId?.();
         const cwd = options.cwd?.();
+        const signal = options.signal?.();
         const response = await fetchFn(`/yeisme-files/api/${method}`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -436,6 +437,7 @@ export function createExplorerFileHost(options = {}) {
                 ...(!includeClientCwd || cwd === undefined || cwd === '' ? {} : { cwd }),
                 ...extra,
             }),
+            ...(signal === undefined ? {} : { signal }),
         });
         const parsed = await response.json();
         if (parsed.ok !== true) {
@@ -556,7 +558,10 @@ export function createExplorerFileHost(options = {}) {
                     ownerCapabilities = new Set(page.ownerCapabilities ?? []);
                     return page;
                 }
-                catch {
+                catch (error) {
+                    // owner 切换取消（AbortError）必须穿透：不得吞成 legacy 回退再发请求。
+                    if (error instanceof DOMException && error.name === 'AbortError')
+                        throw error;
                     opaqueRefsAvailable = false;
                     return legacyTreePage(await legacyHost.listEntries());
                 }
@@ -569,7 +574,9 @@ export function createExplorerFileHost(options = {}) {
                     ownerCapabilities = new Set(page.ownerCapabilities ?? []);
                     return page;
                 }
-                catch {
+                catch (error) {
+                    if (error instanceof DOMException && error.name === 'AbortError')
+                        throw error;
                     opaqueRefsAvailable = false;
                     return legacyTreePage(await legacyHost.listEntries(parentRef), parentRef);
                 }
