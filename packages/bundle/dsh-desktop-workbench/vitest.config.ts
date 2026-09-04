@@ -19,6 +19,7 @@ export default defineConfig({
       { find: /^@yeisme\/dsh-client-ui-session-tags$/, replacement: fileURLToPath(new URL('../../client/ui-session-tags/src/index.ts', import.meta.url)) },
       { find: /^@yeisme\/dsh-workbench-core\/client$/, replacement: fileURLToPath(new URL('../dsh-workbench-core/src/client/index.ts', import.meta.url)) },
       { find: /^@yeisme\/dsh-workbench-core$/, replacement: fileURLToPath(new URL('../dsh-workbench-core/src/index.ts', import.meta.url)) },
+      { find: /^@yeisme\/dsh-file-document\/client$/, replacement: fileURLToPath(new URL('../dsh-file-document/src/client/index.ts', import.meta.url)) },
       { find: /^@yeisme\/dsh-file-document$/, replacement: fileURLToPath(new URL('../dsh-file-document/src/index.ts', import.meta.url)) },
       { find: /^@yeisme\/dsh-rich-media$/, replacement: fileURLToPath(new URL('../dsh-rich-media/src/index.ts', import.meta.url)) },
       { find: /^@yeisme\/dsh-rich-media\/client$/, replacement: fileURLToPath(new URL('../dsh-rich-media/src/client/index.ts', import.meta.url)) },

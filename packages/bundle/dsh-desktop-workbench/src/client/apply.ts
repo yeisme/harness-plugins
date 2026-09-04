@@ -585,7 +585,7 @@ export function apply(ctx: ClientContext): () => void {
   }
   if (fileHost !== undefined) views.push(
     {
-      descriptor: { kind: 'desktop.files', label: '文件（兼容别名）', componentKey: 'desktop-files-alias', role: 'navigator', preferredRegion: 'right', retention: 'recreate', singleton: true, deprecated: true, presentation: { description: '已迁移到 dsh.explorer；保留用于旧布局恢复。' } },
+      descriptor: { kind: 'desktop.files', label: '文件（兼容别名）', componentKey: 'desktop-files-alias', role: 'navigator', preferredRegion: 'right', retention: 'recreate', singleton: true, presentation: { description: '已迁移到 dsh.explorer；保留用于旧布局恢复。' } },
       showInPicker: false,
       component: LegacyDesktopFilesShim,
     },

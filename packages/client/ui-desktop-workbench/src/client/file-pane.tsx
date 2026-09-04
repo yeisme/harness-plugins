@@ -10,7 +10,7 @@
 
 import { useCallback, useMemo } from 'react'
 import { Surface, SurfaceState } from '@yeisme/dsh-client-ui-surface'
-import { FileDocumentPanel, useFileTree, type FileEntryV1, type FileTreeHostAdapter } from '@yeisme/dsh-file-document'
+import { FileDocumentPanel, useFileTree, type FileEntryV1, type FileTreeHostAdapter } from '@yeisme/dsh-file-document/client'
 import { probeFileWatch, type FileHostV1 } from '@yeisme/dsh-file-host'
 
 export interface FilePaneProps {

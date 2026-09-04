@@ -47,7 +47,6 @@ function installPaneFileTree(ctx: ClientContext): () => void {
       preferredRegion: 'right',
       retention: 'recreate',
       singleton: true,
-      deprecated: true,
     },
     component: LegacyFileTreeShim,
     showInPicker: false,

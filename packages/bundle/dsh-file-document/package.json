@@ -22,7 +22,10 @@
     "./module": "./lib/module.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json",
-    "./client": "./lib/client.js"
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    }
   },
   "dsh": {
     "bundle": {

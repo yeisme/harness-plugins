@@ -133,7 +133,8 @@ describe('desktop workbench client apply', () => {
     const dispose = apply(ctx)
     const pane = ctx.get('paneWorkbench' as never) as unknown as { registerView: ReturnType<typeof vi.fn>; openView: ReturnType<typeof vi.fn> }
     const files = pane.registerView.mock.calls.find(call => call[0].descriptor.kind === 'desktop.files')?.[0]
-    expect(files).toMatchObject({ showInPicker: false, descriptor: { deprecated: true } })
+    expect(files).toMatchObject({ showInPicker: false })
+    expect(files.descriptor, 'safe contract: no unknown keys').not.toHaveProperty('deprecated')
     render(createElement(files.component))
     expect(pane.openView).toHaveBeenCalledWith(expect.objectContaining({ kind: 'dsh.explorer' }))
     expect(ctx.slots.inject).toHaveBeenCalledWith('sidebar.footer.action', expect.any(Function))

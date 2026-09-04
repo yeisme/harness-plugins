@@ -130,7 +130,6 @@ export function applyFileDocumentPaneViews(
       preferredRegion: 'right',
       retention: 'keep-alive',
       singleton: true,
-      deprecated: true,
     },
     presentation: {
       icon: 'folder',

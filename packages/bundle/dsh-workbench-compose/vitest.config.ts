@@ -13,6 +13,7 @@ export default defineConfig({
     alias: {
       '@yeisme/dsh-workbench-core/client': fileURLToPath(new URL('../dsh-workbench-core/src/client/index.ts', import.meta.url)),
       '@yeisme/dsh-rich-media/client': fileURLToPath(new URL('../dsh-rich-media/src/client/index.ts', import.meta.url)),
+      '@yeisme/dsh-file-document/client': fileURLToPath(new URL('../dsh-file-document/src/client/index.ts', import.meta.url)),
     },
   },
 })
