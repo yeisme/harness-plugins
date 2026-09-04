@@ -6,7 +6,7 @@ This guide defines the DeepSeek Harness side of an Ordo Agent Operations integra
 
 ## Prerequisites
 
-- Read [architecture.md](../architecture.md), [client-modules.md](../subsystems/client-modules.md), and [the package guide](adding-a-package.md).
+- Read the [docs index](../README.md) and [the package guide](adding-a-package.md).
 - Understand that Ordo owns run, task, session, runtime, lease, worktree, approval, verification, evidence, and closeout facts.
 - Have a tenant-bound control-plane adapter or a keyless fake for local tests. Do not put a provider token in the browser or in a profile patch.
 
@@ -169,4 +169,4 @@ The planned Team V1 surface extends the existing Ordo Agent Ops entry without re
 
 - Read the [Team Hub Web design](../design/dsh-web-ordo-team-hub-v1.md) for layout, graph, responsive, accessibility, and security boundaries.
 - Follow the [Team Hub cookbook](dsh-web-ordo-team-hub.md) for capability probes, degraded states, action receipts, and rollback.
-- Track implementation in the [owning OpenSpec](../../openspec/changes/dsh-web-ordo-team-hub-v1/); the documents describe a planned contract, not current runtime support.
+- Track implementation in the [owning OpenSpec](../../openspec/changes/archive/2026-08-31-dsh-web-ordo-team-hub-v1/); the documents describe a planned contract, not current runtime support.

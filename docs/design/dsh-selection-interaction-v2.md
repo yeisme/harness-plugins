@@ -1,6 +1,6 @@
 # DSH Web 统一选区交互 V2
 
-> 状态：设计完成，待按 `openspec/changes/dsh-selection-interaction-v2/` 实现。
+> 状态：设计完成，待按 `openspec/changes/archive/2026-09-03-dsh-selection-interaction-v2/` 实现。
 > 本文是产品/交互摘要；V1 的历史合同见
 > `dsh-selection-agent-review-v1.md`。
 
@@ -172,7 +172,7 @@ V2 连续一个正式 release 通过浏览器、键盘、触控、HMR/dispose �
 - evidence：每次运行写入 `temp/integration-test-runs/<run-id>/`，并包含 `summary.json`、`command.txt`、`stdout.log`、`stderr.log`、`env.json` 和 `artifacts/`。
 
 实现任务、依赖和退出条件以
-[`openspec/changes/dsh-selection-interaction-v2/tasks.md`](../../openspec/changes/dsh-selection-interaction-v2/tasks.md)
+[`openspec/changes/archive/2026-09-03-dsh-selection-interaction-v2/tasks.md`](../../openspec/changes/archive/2026-09-03-dsh-selection-interaction-v2/tasks.md)
 为准。
 
 ## 10. Gate A 基线与迁移冻结（2026-09-02）

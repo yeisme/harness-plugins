@@ -100,7 +100,7 @@ Bridge 只负责“上下文连续进入”，不负责搬运或复制 domain st
 - Workbench ingress 永远重新鉴权和 refetch，不信任 DSH 传来的标题、可写权限或终态。
 - replay 以 tenant + nonce + contract version 做有界幂等；相同 payload 返回原结果，不同 payload 拒绝。
 
-完整规范见 [OpenSpec design](../../openspec/changes/dsh-workbench-ai-drama-bridge-v2/design.md) 与 [capability spec](../../openspec/changes/dsh-workbench-ai-drama-bridge-v2/specs/dsh-workbench-ai-drama-bridge/spec.md)。
+完整规范见 [OpenSpec design](../../openspec/changes/archive/2026-08-29-dsh-workbench-ai-drama-bridge-v2/design.md) 与 [capability spec](../../openspec/changes/archive/2026-08-29-dsh-workbench-ai-drama-bridge-v2/specs/dsh-workbench-ai-drama-bridge/spec.md)。
 
 ## 6. 合同迁移策略
 
@@ -205,7 +205,7 @@ Bridge V2 只有同时满足以下条件才算“业务可用”：
 5. 回滚到 legacy/disabled 已演练，不改写 owner state。
 6. 产品文案和文档不再把 Show Control Room 描述为当前目标入口。
 
-实施清单见 [tasks.md](../../openspec/changes/dsh-workbench-ai-drama-bridge-v2/tasks.md)。
+实施清单见 [tasks.md](../../openspec/changes/archive/2026-08-29-dsh-workbench-ai-drama-bridge-v2/tasks.md)。
 
 ## 12. 发布门 checklist（四态门）
 

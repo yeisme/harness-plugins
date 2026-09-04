@@ -6,7 +6,7 @@
 
 ## 前置条件
 
-- 阅读[架构文档](../architecture.md)、[client 模块参考](../subsystems/client-modules.md)和[包开发指南](adding-a-package.md)。
+- 阅读[文档索引](../README.md)和[包开发指南](adding-a-package.md)。
 - 明确 Ordo 拥有 run、task、session、runtime、lease、worktree、approval、verification、evidence 和 closeout 事实。
 - 准备 tenant-bound control-plane adapter 或无密钥 fake 用于本地测试。不得把 provider token 放入浏览器或 profile patch。
 
@@ -157,4 +157,4 @@ Control Plane owner 负责 tenant database、OAuth issuer、secret store、BFF/a
 
 - 阅读 [Team Hub Web 设计](../design/dsh-web-ordo-team-hub-v1.md)，了解 layout、graph、响应式、可访问性与安全边界。
 - 按 [Team Hub cookbook](dsh-web-ordo-team-hub.zh.md) 检查 capability probe、降级状态、action receipt 与回滚。
-- 在 [owning OpenSpec](../../openspec/changes/dsh-web-ordo-team-hub-v1/) 跟踪实现；这些文档定义 planned contract，不代表当前 runtime 已支持。
+- 在 [owning OpenSpec](../../openspec/changes/archive/2026-08-31-dsh-web-ordo-team-hub-v1/) 跟踪实现；这些文档定义 planned contract，不代表当前 runtime 已支持。

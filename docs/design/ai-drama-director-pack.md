@@ -126,11 +126,11 @@ Director Pack 不实现 Scaena adapter、bundle、semantic diff 或 rebase。新
 
 [dsh-ai-drama-director-pack-v1（已归档）](../../openspec/changes/archive/2026-08-29-dsh-ai-drama-director-pack-v1/)
 
-[dsh-ai-drama-operational-panes-v1](../../openspec/changes/dsh-ai-drama-operational-panes-v1/)
+[dsh-ai-drama-operational-panes-v1](../../openspec/changes/archive/2026-08-29-dsh-ai-drama-operational-panes-v1/)
 
-[dsh-ai-drama-show-control-room-v1](../../openspec/changes/dsh-ai-drama-show-control-room-v1/)
+[dsh-ai-drama-show-control-room-v1](../../openspec/changes/archive/2026-08-29-dsh-ai-drama-show-control-room-v1/)
 
-[dsh-ai-drama-review-delivery-depth-v1](../../openspec/changes/dsh-ai-drama-review-delivery-depth-v1/)
+[dsh-ai-drama-review-delivery-depth-v1](../../openspec/changes/archive/2026-08-29-dsh-ai-drama-review-delivery-depth-v1/)
 
 [dsh-workbench-ai-drama-bridge-v2（已归档）](../../openspec/changes/archive/2026-08-29-dsh-workbench-ai-drama-bridge-v2/)
 
