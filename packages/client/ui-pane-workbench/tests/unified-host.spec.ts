@@ -79,4 +79,29 @@ describe('unified host compatibility adapter', () => {
     expect(isUnifiedWorkspaceHost({ attach: () => {} })).toBe(false)
     expect(isUnifiedWorkspaceHost(bench().host)).toBe(true)
   })
+  it('registers the picker-hidden search pane in the unified host catalog so host-opened panes resolve a renderer', () => {
+    const { host, registry, adapter } = bench()
+    const slots = {
+      register: vi.fn(() => vi.fn()),
+      inject: (_name: string, setup: () => () => void) => { const dispose = setup(); return () => dispose() },
+    }
+    registry.registerView({
+      descriptor: { kind: 'dsh.workspace-search', label: 'Search', componentKey: 'dsh-workspace-search', role: 'utility', preferredRegion: 'right', retention: 'recreate', singleton: true },
+      component: () => null,
+      showInPicker: false,
+    })
+    registry.registerView({
+      descriptor: { kind: 'dsh.file-preview', label: 'File', componentKey: 'dsh-file-preview', role: 'content', preferredRegion: 'right', retention: 'recreate', singleton: false },
+      component: () => null,
+      showInPicker: false,
+    })
+    adapter.mount(slots as never)
+    const registeredKinds = host.registerView.mock.calls.map(call => call[0]?.kind as string)
+    expect(registeredKinds).toContain('dsh.workspace-search')
+    expect(registeredKinds).toContain('test.editor')
+    expect(registeredKinds).not.toContain('dsh.file-preview')
+    const slotKeys = slots.register.mock.calls.map(call => call[0]?.key as string)
+    expect(slotKeys).toContain('yeisme:dsh.workspace-search')
+    adapter.dispose()
+  })
 })

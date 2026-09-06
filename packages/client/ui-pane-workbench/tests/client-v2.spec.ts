@@ -316,4 +316,33 @@ describe('Pane Workbench V2 DSH assembly', () => {
     }
     expect(face.views.get('dsh.tool-details')).toBeUndefined()
   })
+
+  it('exposes the workspace search launcher command and opens the pinned singleton pane', () => {
+    const slots = {
+      spec: () => undefined,
+      inject: vi.fn((_name: string, setup: () => () => void) => setup()),
+      register: vi.fn(() => vi.fn()),
+    }
+    const provide = vi.fn()
+    const ctx = {
+      get: (name: string) => name === 'slots' ? slots : undefined,
+      provide,
+    }
+    const dispose = apply(ctx as never)
+    const face = provide.mock.calls.find(call => call[0] === 'paneWorkbench')?.[1] as {
+      commands: { snapshot(): Array<{ descriptor: { id: string; slash?: { name: string } } }> }
+      executeCommand(id: string): void
+      controller: { getSnapshot(): { views: Record<string, { kind: string; pinned: boolean }> } }
+    }
+    const command = face.commands.snapshot().find(entry => entry.descriptor.id === 'workspace.search')
+    expect(command?.descriptor.slash?.name).toBe('search')
+    face.executeCommand('workspace.search')
+    const views = Object.values(face.controller.getSnapshot().views)
+    expect(views.filter(view => view.kind === 'dsh.workspace-search')).toHaveLength(1)
+    expect(views.every(view => view.kind !== 'dsh.workspace-search' || view.pinned)).toBe(true)
+    // Repeated launches reuse the singleton pane instead of stacking duplicates.
+    face.executeCommand('workspace.search')
+    expect(Object.values(face.controller.getSnapshot().views).filter(view => view.kind === 'dsh.workspace-search')).toHaveLength(1)
+    dispose()
+  })
 })

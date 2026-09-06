@@ -33,6 +33,7 @@ import {
 import { WorkspaceSearchPreferenceStore } from './search-preferences.js'
 import { probeWorkspaceSearchHistoryAdapter, WorkspaceSearchCoordinator } from './search-query.js'
 import type { PaneViewRegistry } from './view-registry.js'
+import { REGION_STYLES } from './chrome/shared.js'
 
 export interface WorkspaceSearchOverlayProps {
   readonly registry: PaneViewRegistry
@@ -402,8 +403,9 @@ export function WorkspaceSearchOverlay(props: WorkspaceSearchOverlayProps): Reac
     }, t('search.clearRecent'))),
   )
 
+  const chrome = createElement('style', { 'data-workspace-search-styles': true }, REGION_STYLES)
   if (mode === 'pane') {
-    return createElement(Surface, { kind: 'workspace', className: 'pwr-search-surface', 'aria-label': t('search.title') }, body)
+    return createElement(Surface, { kind: 'workspace', className: 'pwr-root pwr-search-surface', 'aria-label': t('search.title') }, chrome, body)
   }
   return createElement(Modal, {
     open: true,
@@ -411,7 +413,7 @@ export function WorkspaceSearchOverlay(props: WorkspaceSearchOverlayProps): Reac
     title: t('search.title'),
     closeLabel: t('chrome.closeViewSelector'),
     headless: true,
-  }, createElement(Surface, { kind: 'dialog', className: 'pwr-search-surface', 'aria-label': t('search.title') }, body))
+  }, createElement(Surface, { kind: 'dialog', className: 'pwr-root pwr-search-surface', 'aria-label': t('search.title') }, chrome, body))
 }
 
 export function WorkspaceSearchPaneView(props: {

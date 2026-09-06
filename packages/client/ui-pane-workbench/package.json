@@ -36,7 +36,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "build": "tsdown src/index.ts src/client.ts --out-dir lib --format esm --dts --clean",
-    "test:integration": "node scripts/run-integration-tests.mjs"
+    "test:integration": "node scripts/run-integration-tests.mjs",
+    "test:workspace-search-stage-a": "node scripts/run-workspace-search-stage-a-evidence.mjs",
+    "test:workspace-search-host-chain": "node scripts/run-workspace-search-host-chain.mjs"
   },
   "dependencies": {
     "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.6",

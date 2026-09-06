@@ -38,6 +38,7 @@ export {
   activateWorkspaceSearchCandidate,
   openWorkspaceSearchPane,
   parseWorkspaceSearchDragPayload,
+  WORKSPACE_SEARCH_COMMAND_ID,
   WORKSPACE_SEARCH_DRAG_MIME,
   workspaceSearchDragPayload,
   type WorkspaceSearchOpenPlacementV1,

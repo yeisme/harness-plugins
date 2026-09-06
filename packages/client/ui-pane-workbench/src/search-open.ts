@@ -5,6 +5,9 @@ import type { WorkspaceSearchCandidateV1, WorkspaceSearchOpenTargetV1 } from './
 import { DSH_WORKSPACE_SEARCH_RESOURCE_KEY, DSH_WORKSPACE_SEARCH_VIEW_KIND } from './core-pane.js'
 import type { PaneViewRegistry } from './view-registry.js'
 
+/** `/search` launcher id: opens the pinned search pane through the pane command projection. */
+export const WORKSPACE_SEARCH_COMMAND_ID = 'workspace.search' as const
+
 export type WorkspaceSearchOpenPlacementV1 = 'default' | 'right' | 'bottom' | 'float'
 
 export interface WorkspaceSearchOpenResultV1 {

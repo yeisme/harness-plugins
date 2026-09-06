@@ -245,4 +245,40 @@ describe('workspace search grouping', () => {
     expect(ranked[0]?.title).toBe('Exact Needle')
     expect(Date.now() - started).toBeLessThan(100)
   })
+
+  it('keeps local 5000-item input-to-result p95 at or under 100ms', () => {
+    const candidates = Array.from({ length: 5_000 }, (_, index) => ({
+      kind: 'pane' as const,
+      stableKey: workspaceSearchStableKey('pane', 'catalog', `tool.${index}`, `view:tool.${index}`),
+      title: index === 42 ? 'Exact Needle' : `Tool ${index}`,
+      semanticIcon: 'window' as const,
+      ownerRef: 'catalog',
+      openTarget: { type: 'pane' as const, owner: 'catalog', viewKind: `tool.${index}`, resourceKey: `view:tool.${index}` },
+      availability: 'available' as const,
+      aliases: [`tool.${index}`],
+      keywords: ['catalog'],
+      opened: false,
+      recent: false,
+      frequent: index < 8,
+      compatibility: false,
+      sideEffect: false,
+      openOnly: false,
+      mergedCommandIds: [],
+    }))
+    rankWorkspaceSearchCandidates(candidates, 'warmup')
+    const samples: number[] = []
+    const queries = ['Exact Needle', 'Tool 1999', 'tool.7', 'missing-target', '媒体']
+    for (let index = 0; index < 20; index += 1) {
+      const query = queries[index % queries.length]!
+      const started = performance.now()
+      const projection = projectWorkspaceSearch({ query, candidates })
+      samples.push(performance.now() - started)
+      if (query === 'Exact Needle') expect(projection.visibleItems[0]?.title).toBe('Exact Needle')
+    }
+    samples.sort((left, right) => left - right)
+    const p95 = samples[Math.ceil(samples.length * 0.95) - 1]!
+    // Evidence runner parses this line; keep the p95= token stable.
+    console.info(`workspace-search local catalog p95=${p95.toFixed(2)}ms n=${samples.length}`)
+    expect(p95, `p95=${p95.toFixed(2)}ms samples=${samples.map(value => value.toFixed(2)).join(',')}`).toBeLessThanOrEqual(100)
+  })
 })

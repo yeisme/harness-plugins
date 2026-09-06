@@ -6,6 +6,7 @@ import { PANE_WORKSPACE_STORAGE_NAMESPACE, restorePaneWorkspace } from './persis
 import type { PaneCommandRegistry } from './composition.js'
 import type { PaneWorkbenchController } from './controller.js'
 import { PaneViewContent } from './chrome/view-host.js'
+import { isUnifiedHostCatalogView } from './core-pane.js'
 import { probeWorkbenchStorage } from './browser-storage.js'
 
 interface PaneRef {
@@ -175,7 +176,7 @@ export function createUnifiedHostAdapter(host: UnifiedWorkspaceHost, registry: P
     } catch { /* Storage denial keeps the live host layout usable. */ }
     const registered = new Map<string, { registration: unknown; dispose: () => void }>()
     const sync = () => {
-      const current = registry.snapshot().filter(v => v.showInPicker !== false)
+      const current = registry.snapshot().filter(isUnifiedHostCatalogView)
       for (const [kind, record] of registered) {
         if (current.find(v => v.descriptor.kind === kind) === record.registration) continue
         record.dispose(); registered.delete(kind)

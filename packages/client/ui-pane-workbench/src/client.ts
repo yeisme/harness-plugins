@@ -46,6 +46,7 @@ import type { PaneViewSpecV1 } from './workspace.js'
 import type { PaneEventEnvelopeV1 } from '@yeisme/dsh-pane-protocol'
 import { createUnifiedHostAdapter, isUnifiedWorkspaceHost, type UnifiedWorkspaceHost } from './unified-host.js'
 import { bindExplorerRuntime, createExplorerRuntimeSource, type ExplorerRuntimeV2 } from './explorer/runtime.js'
+import { openWorkspaceSearchPane, WORKSPACE_SEARCH_COMMAND_ID } from './search-open.js'
 
 export { PaneRegionChrome } from './region-chrome.js'
 export { bindExplorerRuntime, getExplorerRuntime, subscribeExplorerRuntime } from './explorer/runtime.js'
@@ -377,11 +378,24 @@ function createPaneWorkbenchRuntime(tier: ExperienceTierTrackerV1, ctx: Pick<Cli
     showInPicker: false,
     i18n: { namespace: 'paneWorkbench', labelKey: 'search.title', descriptionKey: 'search.placeholder' },
   })
+  // Unified-host discovery: the host picker and slash projection list pane
+  // commands, so the search pane stays reachable when the region chrome (and
+  // its floating overlay entry) is owned by the unified workspace host.
+  const disposeSearchCommand = commands.register({
+    descriptor: {
+      id: WORKSPACE_SEARCH_COMMAND_ID,
+      label: 'Search and open',
+      presentation: { launcher: true, group: 'pane' },
+      slash: { name: 'search', category: 'pane', hint: 'open the workspace search pane' },
+    },
+    execute: () => { openWorkspaceSearchPane(controller) },
+  })
   const lifecycle: Array<() => void> = [
     disposeCoreViews,
     disposeCapabilitiesView,
     disposeCapabilitiesCommand,
     disposeSearchView,
+    disposeSearchCommand,
     bindPaneWorkbenchLocale(ctx),
     () => controller.dispose(),
     () => tier.dispose(),

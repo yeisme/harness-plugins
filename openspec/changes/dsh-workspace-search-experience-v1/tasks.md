@@ -13,7 +13,8 @@
 - [x] 2.4 P0 实现搜索框、分类筛选栏、分组标题、48px 结果行、语义图标、状态和底部提示，统一深浅／系统主题。依赖：2.2、2.3；验收：完整 UI Contract 截图，不单独交付未美化列表。
 - [x] 2.5 P0 接入 combobox/listbox 选择、IME、筛选和独立动作菜单；刷新保持 stableKey，关闭恢复焦点。依赖：2.4；验收：键盘全路径、读屏标签、触控不依赖 hover。
 - [x] 2.6 P1 接入本机最近使用引用（最多 20）和清空入口，仅确认打开成功后写入，存储失败降级。依赖：2.5；验收：无查询词／片段持久化，失败操作不记成功。
-- [ ] 2.7 P0 阶段 A 验收：360／560／960px、200% zoom、长标题、中英文、相邻 Pane 样式隔离、本地 5000 条 p95 性能。依赖：2.1–2.6；验收：真实输入和证据，不只检查截图。
+- [x] 2.7 P0 阶段 A 验收：360／560／960px、200% zoom、长标题、中英文、相邻 Pane 样式隔离、本地 5000 条 p95 性能。依赖：2.1–2.6；验收：真实输入和证据，不只检查截图。
+  - 证据（2026-09-06）：`pnpm --filter @yeisme/dsh-client-ui-pane-workbench run test:workspace-search-stage-a` exit 0；overlay 自注入 chrome 样式；360/560/960、200% zoom、中英 ident、长标题截断且不执行 HTML、邻 Pane 样式隔离、本地 5000 条目 p95=17.77ms（预算 100ms）。证据 `temp/integration-test-runs/workspace-search-stage-a-2026-09-06T10-05-35-478Z-1677358/`。
 
 ## 3. B. 历史来源、等待与缓存
 
@@ -24,6 +25,7 @@
 - [x] 3.5 P0 实现 32 页／1000 摘要 LRU、30s TTL／5min stale 和后台更新；缓存键包含权限与项目上下文。依赖：3.3、3.4；验收：过期淘汰、跨项目／profile／locale 不串用。
 - [x] 3.6 P0 补齐权限拒绝、provider 卸载、HMR、会话更新、搜索关闭的清理；无权限 generation 时缓存只保留当前打开周期。依赖：3.5；验收：撤权后旧片段不可见且无在途回写。
 - [ ] 3.7 P0 阶段 B 验收：真实 owner 能力可用时执行分页／命中打开；不可用时只验适配合同，保留对应功能任务未完成。依赖：3.1–3.6；验收：证据明确区分实际查询与 mock。
+  - 进展（2026-09-06）：真实历史 owner 仍缺失。适配合同复验 `probeWorkspaceSearchHistoryAdapter` available／unavailable／contract_mismatch；overlay 诚实显示 History search is unavailable，无 Load more／假分页。证据 `temp/integration-test-runs/workspace-search-stage-a-2026-09-06T10-05-35-478Z-1677358/artifacts/stage-matrix.json`（`live_query=not_verified`，`mock_query=verified`）。按任务条款保留本项未勾，不把 mock 当真实查询。
 
 ## 4. C. 打开行为、搜索 Pane 与常用筛选
 
@@ -35,7 +37,7 @@
 ## 5. D. 完整验收与本地交付
 
 - [x] 5.1 P0 在原有 Vitest 体系覆盖全部结果／查询／缓存／命令委托合同；仅在量测必要时复用已有虚拟列表。依赖：A/B/C；验收：稳定源码对应的关联测试通过。
-- [ ] 5.2 P0 扩展现有 Playwright 入口，证据统一落 temp/integration-test-runs/<run-id>/；对运行宿主做搜索、筛选、等待、打开、拖拽、恢复和主题全链验证。依赖：5.1；验收：检查结果身份与请求，不仅截图；失败证据同样保留且脱敏。
-- [ ] 5.3 P0 稳定后执行 pnpm run check:surfaces、pnpm run test:visual、pnpm run check:plugins；按实际影响执行 pnpm run typecheck、pnpm run build、pnpm run check:bundles。依赖：5.1、5.2；验收：记录 exit code，基线只在人工确认差异后更新。
-- [ ] 5.4 P0 更新所属 upstream-prs 补丁和 Agent Note，验证干净目标版本可应用／构建；保留旧入口与 profile 回退，不推送或发布。依赖：5.3；验收：插件协议门与宿主联合门分别记录。
-- [ ] 5.5 P0 交付前后截图、能力结果表、真实／mock 边界、性能证据、缓存说明、启动和回退；仅凭通过证据勾选任务。依赖：5.4；验收：历史服务阻塞时不将整个 change 标为完成。
+- [x] 5.2 P0 扩展现有 Playwright 入口，证据统一落 temp/integration-test-runs/<run-id>/；对运行宿主做搜索、筛选、等待、打开、拖拽、恢复和主题全链验证。依赖：5.1；验收：检查结果身份与请求，不仅截图；失败证据同样保留且脱敏。（done 2026-09-06: 新增 `scripts/run-workspace-search-host-chain.mjs`（`pnpm --filter @yeisme/dsh-client-ui-pane-workbench run test:workspace-search-host-chain`），自举官方 dsh web profile（32 本地 bundle）驱动真实宿主 13/13 检查：host picker `workspace.search` 命令直达、搜索 Pane 挂载、空查询分组、无 HTML 注入、查询结果身份 `pane:pane.workbench:desktop.git:view:desktop.git`、历史 unavailable 诚实态（零伪造会话行/零 Load more/零历史网络请求）、筛选切换身份保持、打开结果 pane 1→2、单例保持、重复启动复用、主题 token 继承（color-scheme dark + --vk 变量）、拖拽边界如实记录 no-drop-target-in-pane-mode（真实指针拖放已由 4.2 组件级验证）。证据 `temp/integration-test-runs/workspace-search-host-chain-2026-09-06T16-45-10-1717037/`（截图×5 + chain-checks.json + search-requests.json，token 脱敏）。）
+- [x] 5.3 P0 稳定后执行 pnpm run check:surfaces、pnpm run test:visual、pnpm run check:plugins；按实际影响执行 pnpm run typecheck、pnpm run build、pnpm run check:bundles。依赖：5.1、5.2；验收：记录 exit code，基线只在人工确认差异后更新。（done 2026-09-06: 六门全绿——check:surfaces exit 0；test:visual 92/92（`temp/integration-test-runs/ui-visual-2026-09-06T16-46-20-252Z-1737455/`，未更新基线）；check:plugins 六检查器 PASS 0 findings（`temp/toolchain-runs/2026-09-06T164607632Z-toolchain/`）；typecheck exit 0；build exit 0；check:bundles 27/27。）
+- [x] 5.4 P0 更新所属 upstream-prs 补丁和 Agent Note，验证干净目标版本可应用／构建；保留旧入口与 profile 回退，不推送或发布。依赖：5.3；验收：插件协议门与宿主联合门分别记录。（done 2026-09-06: `upstream-prs/unified-multi-pane-workbench/` 对干净基线 `a66e4702` fresh worktree apply-check 绿（搜索无需 host 侧补丁变更，系列已提供 registerView/registerCommand 面）；新增 Agent Note `.agents/notes/proposed/architecture/2026-09-06-workspace-search-experience.md` 分别记录插件协议门（383 tests + typecheck/build/check:bundles/surfaces/visual/plugins）与宿主联合门（13/13）；旧入口保留（region chrome picker 在 chrome 菜单后可用），回退=移除 `@yeisme/dsh-pane-workbench` profile 行；未推送未发布。）
+- [x] 5.5 P0 交付前后截图、能力结果表、真实／mock 边界、性能证据、缓存说明、启动和回退；仅凭通过证据勾选任务。依赖：5.4；验收：历史服务阻塞时不将整个 change 标为完成。（done 2026-09-06: 交付文档 `docs/delivery/dsh-workspace-search-experience-2026-09-06.md`——截图×5、能力结果表（真实/合同/mock 边界逐项）、性能（5000 条 p95=17.77ms）、缓存说明（32 页/1000 摘要 LRU、30s TTL/5min stale、键含权限/项目上下文）、启动（pnpm dsh:dev + /search）与回退命令；3.7 live history owner 缺失如实保持未勾，change 不因其余任务完成而整体标记完成。）

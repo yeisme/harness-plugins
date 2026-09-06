@@ -207,8 +207,8 @@ export const REGION_STYLES = `.pwr-root{position:relative;width:100%;height:100%
 @media(max-width:600px){.pwr-root[data-region='right'] .pwr-picker{top:52px;right:6px;width:min(340px,calc(100vw - 48px))}.pwr-menu{right:4px;width:min(232px,calc(100vw - 16px))}.pwr-management-center{inset:0;width:100vw;height:100vh;height:100dvh;max-height:none;margin:0;border:0;border-radius:0}.pwr-management-header{height:52px;padding-left:12px}.pwr-management-title strong{font-size:14px}.pwr-management-scope{max-width:132px;padding:4px 6px}.pwr-management-modes{margin:8px 10px 0}.pwr-management-modes button{flex:1}.pwr-management-search{margin:8px 10px}.pwr-management-filters{gap:4px;padding:0 10px 8px}.pwr-management-filters button{flex:1 1 auto;justify-content:center}.pwr-management-filter-toggle{margin-left:0}.pwr-management-advanced-filters.ys-field{margin:0 10px 8px}.pwr-management-filter-grid{grid-template-columns:1fr}.pwr-management-utility-actions{padding:0 10px 8px}.pwr-management-list{padding:4px 8px 8px}.pwr-management-create-area{padding-inline:10px}.pwr-management-footer{flex-wrap:wrap;padding-inline:10px}.pwr-management-target{position:fixed;inset:auto 8px 8px;max-height:55vh;overflow:auto}}
 @media(pointer:coarse){.pwr-tabs{min-height:48px;height:48px}.pwr-tab-item,.pwr-tab{height:44px}.pwr-tab-actions button,.pwr-management-row,.pwr-management-filters button,.pwr-management-target-trigger,.pwr-management-info,.pwr-management-star,.pwr-management-create-trigger{min-height:44px}}
 @media(prefers-reduced-motion:reduce){.pwr-management-spinner{animation:none}.pwr-management-filter-toggle>svg:last-child,.pwr-management-row,.pwr-management-modes button,.pwr-management-search,.pwr-management-filters button{transition:none}}
-.pwr-search-surface{background:transparent}
-.pwr-search{box-sizing:border-box;width:min(680px,calc(100vw - 32px));max-width:720px;max-height:min(640px,calc(100vh - 64px));display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--vk-border-l2);border-radius:12px;background:var(--vk-bg-elevated);color:var(--vk-text-primary);box-shadow:0 18px 48px color-mix(in srgb,var(--vk-bg-base) 72%,transparent)}
+.pwr-search-surface{background:transparent;container-type:inline-size;container-name:pwr-search}
+.pwr-search{box-sizing:border-box;width:min(680px,calc(100% - 32px));max-width:720px;max-height:min(640px,calc(100% - 64px));display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--vk-border-l2);border-radius:12px;background:var(--vk-bg-elevated);color:var(--vk-text-primary);box-shadow:0 18px 48px color-mix(in srgb,var(--vk-bg-base) 72%,transparent)}
 .pwr-search-pane{width:100%;max-width:none;max-height:none;height:100%;border:0;border-radius:0;box-shadow:none}
 .pwr-search-header{height:44px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 10px 0 14px;border-bottom:1px solid var(--vk-border-l1)}
 .pwr-search-title{display:flex;align-items:center;gap:8px}.pwr-search-title strong{font-size:14px;font-weight:650}
@@ -235,8 +235,10 @@ export const REGION_STYLES = `.pwr-root{position:relative;width:100%;height:100%
 .pwr-search-menu button{height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:inherit;text-align:left;cursor:pointer}.pwr-search-menu button:hover,.pwr-search-menu button:focus-visible{background:var(--vk-fill-hover)}
 .pwr-search-more-results,.pwr-search-footer button{height:32px;margin:6px 14px;padding:0 10px;border:1px solid var(--vk-border-l1);border-radius:8px;background:transparent;color:inherit;cursor:pointer}
 .pwr-search-footer{flex:none;display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid var(--vk-border-l1);color:var(--vk-text-tertiary);font-size:11px}
-@media(max-width:420px){.pwr-search{width:100vw;max-height:calc(100dvh - env(safe-area-inset-bottom));border-radius:0}}
-@media(min-width:421px) and (max-width:720px){.pwr-search{width:calc(100vw - 32px)}}
+@media(max-width:420px){.pwr-search{width:100%;max-height:100%;border-radius:0}}
+@media(min-width:421px) and (max-width:720px){.pwr-search{width:calc(100% - 32px)}}
+@container pwr-search (max-width:420px){.pwr-search{width:100%;max-height:100%;border-radius:0}.pwr-search-filters{gap:4px}.pwr-search-header,.pwr-search-input{flex:none}}
+@container pwr-search (min-width:421px) and (max-width:720px){.pwr-search{width:calc(100% - 32px)}}
 @media(pointer:coarse){.pwr-search-row,.pwr-search-filters button,.pwr-search-more{min-height:44px}}
 @media(prefers-reduced-motion:reduce){.pwr-search,.pwr-search-row,.pwr-search-input{transition:none}}
 

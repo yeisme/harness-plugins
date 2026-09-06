@@ -15,6 +15,17 @@ export const DSH_WORKSPACE_DESIGNER_RESOURCE_KEY = 'core:dsh.workspace-designer'
 export const DSH_WORKSPACE_SEARCH_VIEW_KIND = 'dsh.workspace-search' as const
 export const DSH_WORKSPACE_SEARCH_RESOURCE_KEY = 'core:dsh.workspace-search' as const
 
+/**
+ * Unified-host catalog membership: the unified workspace host resolves a pane's
+ * renderer through its view catalog, so runtime-openable singleton views stay
+ * registered there even when the region-chrome picker hides them (the search
+ * pane opens via the pinned overlay action, the `workspace.search` launcher,
+ * or the host picker row). Per-resource views such as file preview stay out.
+ */
+export function isUnifiedHostCatalogView(registration: { descriptor: { kind: string }; showInPicker?: boolean }): boolean {
+  return registration.showInPicker !== false || registration.descriptor.kind === DSH_WORKSPACE_SEARCH_VIEW_KIND
+}
+
 export type PaneCoreViewId = typeof DSH_TOOL_DETAILS_VIEW_KIND | typeof DSH_WORKSPACE_DESIGNER_VIEW_KIND | typeof DSH_WORKSPACE_SEARCH_VIEW_KIND
 
 export function isPaneCoreViewId(id: string): id is PaneCoreViewId {
