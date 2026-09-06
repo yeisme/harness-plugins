@@ -1,6 +1,6 @@
 ## Why
 
-Ordo 已经拥有多 runtime 调度、DAG、session、writer/worktree lease、approval、verification 和 evidence，但这些事实主要通过 CLI/TUI 消费；DSH Web 则拥有成熟的对话式 Harness 与 Cordis 插件体系，却没有 Ordo-backed 的团队运行观察与企业多租户产品界面。需要一个宿主中立的 Agent Ops 插件合同，把 Ordo 能力安全投影到 DSH 和 Workbench，同时避免在前端、控制面或插件仓库中创建第二 scheduler。
+Ordo 已经拥有多 runtime 调度、DAG、session、writer/worktree lease、approval、verification 和 evidence，但这些事实主要通过 CLI 消费；DSH Web 则拥有成熟的对话式 Harness 与 Cordis 插件体系，却没有 Ordo-backed 的团队运行观察与企业多租户产品界面。需要一个宿主中立的 Agent Ops 插件合同，把 Ordo 能力安全投影到 DSH 和 Workbench，同时避免在前端、控制面或插件仓库中创建第二 scheduler。
 
 当前 `ordo harness capacity inspect` 仍是只读、内存中的 fail-closed 投影，不会观察或启动真实 OS 进程，也不创建持久 reservation。因此本设计必须把“现在可交付的观察/审批/reconcile”与“后续持久 launch/control”明确分期。
 

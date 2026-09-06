@@ -50,7 +50,7 @@ The Hub does not expose target-branch merge, push, or deploy actions.
 - `qualified_live`: Ordo has current runtime and fanout evidence.
 - `unavailable`: the owner contract or Host seam is missing or incompatible.
 
-`Read only · TUI has control` means Web can inspect everything but cannot submit mutations. Surface control does not replace writer leases, approvals, verification, or runtime qualification.
+`Read only · another surface has control` means Web can inspect everything but cannot submit mutations. Surface control does not replace writer leases, approvals, verification, or runtime qualification.
 
 ## 5. Recover from degraded states
 
@@ -83,4 +83,3 @@ Integration evidence belongs in `temp/integration-test-runs/<run-id>/` and must 
 ## 7. Roll back
 
 Disable the Team V1 capability or view registration. Keep Session Agents and the legacy Ordo Agent Ops pane enabled. No browser-side domain migration or cleanup is required.
-

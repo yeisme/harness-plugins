@@ -31,7 +31,6 @@ Ordo Teams view SHALL 按 explicit deep-link ref、process-local selection、hos
 ### Requirement: Hub SHALL reveal owner, freshness and control state
 Ordo Teams header SHALL 显示 Delivery/source、projection freshness、surface control holder、本端 read/write state、maturity 与 simulation/qualification badges。Session Agents SHALL 使用 DSH owner/freshness，不复用 Ordo control 语义。
 
-#### Scenario: TUI holds control
-- **WHEN** Ordo snapshot 显示 active holder 为 TUI
-- **THEN** Web SHALL 保持完整可读并显示 `Read only · TUI has control` 与 server-authored `Take Control` action
-
+#### Scenario: Another surface holds control
+- **WHEN** Ordo snapshot 显示 active holder 为另一个 surface
+- **THEN** Web SHALL 保持完整可读并显示 `Read only · another surface has control` 与 server-authored `Take Control` action

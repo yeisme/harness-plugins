@@ -118,7 +118,7 @@ Client 不执行 arbitrary command/argv/URL，也不 optimistic 修改 owner tas
 
 Room 支持 Post/Reply/Promote，正文不会自动进入 agent context。Activity 只读，显示 owner facts和cross-links。
 
-TUI/Web 同时可读，一个 holder可写。Web read-only时显示 current holder和 Take Control。成功 receipt/event 前不切可写；lost control会使 pending confirmations失效。
+多个 surface 可同时读取，一个 holder 可写。Web read-only 时显示 current holder 和 Take Control。成功 receipt/event 前不切可写；lost control 会使 pending confirmations 失效。
 
 ## Accessibility
 

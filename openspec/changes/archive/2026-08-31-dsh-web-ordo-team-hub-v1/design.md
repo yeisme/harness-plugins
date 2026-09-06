@@ -2,7 +2,7 @@
 
 Harness Plugins 已拥有 Agents icon entry、Subagent Monitor、Ordo Agent Team Pane、pane/event runtime、bundle 与 safe Host/Client boundary。现有 Ordo pane 主要覆盖 run/DAG 只读观察；新 change 在同一插件 owner 内增加 Team V1 collaboration experience，但不能让 browser 直接调用 Ordo CLI/broker、持有 token 或创建 domain store。
 
-Ordo child change 提供 projection/events/actions，TUI child change提供终端 renderer。Web 负责 DSH Host adapter、safe projection、React/client view、graph/list、responsive/accessibility 和 lifecycle cleanup。
+Ordo child change 提供 projection/events/actions。Web 负责 DSH Host adapter、safe projection、React/client view、graph/list、responsive/accessibility 和 lifecycle cleanup。
 
 ## Goals / Non-Goals
 
@@ -11,7 +11,7 @@ Ordo child change 提供 projection/events/actions，TUI child change提供终�
 - 在现有 Agents 入口中组合 Session Agents 与 Ordo Teams。
 - 提供 task-flow + graph-first 的 Delivery collaboration workspace。
 - 让 Host 安全代理 snapshot/events/actions，browser 只持有 ephemeral view state。
-- 与 TUI 共享 Team V1 facts/actions/receipts fixtures。
+- 与 Ordo owner contract 共享 Team V1 facts/actions/receipts fixtures。
 - 覆盖 desktop/tablet、keyboard、semantic fallback 与 reduced-motion。
 
 **Non-Goals:**
@@ -95,7 +95,7 @@ Client 只渲染 server-authored action descriptors：
 4. 用户明确确认；Host recheck后 apply。
 5. Client 显示 receipt/pending，等待 owner event或 refreshed snapshot。
 
-Take Control 同样走该路径；成功后旧 TUI holder会由 Ordo event转只读。失去 control或revision变化会关闭/失效 pending confirmation。
+Take Control 同样走该路径；成功后旧 holder 会由 Ordo event 转只读。失去 control 或 revision 变化会关闭/失效 pending confirmation。
 
 ### 8. Security boundary
 
@@ -132,4 +132,3 @@ Take Control 同样走该路径；成功后旧 TUI holder会由 Ordo event转只
 ## Open Questions
 
 无阻塞问题。DSH 官方 seam 未提供的入口或布局能力继续 capability-probe并诚实禁用，不作为插件 change 的完成阻塞。
-

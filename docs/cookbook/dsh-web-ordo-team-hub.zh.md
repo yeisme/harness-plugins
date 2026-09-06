@@ -50,7 +50,7 @@ Hub 不提供 target-branch merge、push 或 deploy action。
 - `qualified_live`：Ordo 有当前 runtime 与 fanout evidence。
 - `unavailable`：owner contract 或 Host seam 缺失/不兼容。
 
-`Read only · TUI has control` 表示 Web 可完整 inspect，但不能提交 mutation。Surface control 不替代 writer lease、approval、verification 或 runtime qualification。
+`Read only · another surface has control` 表示 Web 可完整 inspect，但不能提交 mutation。Surface control 不替代 writer lease、approval、verification 或 runtime qualification。
 
 ## 5. 从降级状态恢复
 
@@ -83,4 +83,3 @@ pnpm run build
 ## 7. 回滚
 
 禁用 Team V1 capability 或 view registration。保留 Session Agents 与 legacy Ordo Agent Ops Pane。Browser 侧不需要 domain migration 或 cleanup。
-
