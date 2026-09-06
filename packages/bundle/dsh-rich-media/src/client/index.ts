@@ -78,4 +78,4 @@ export {
   registerFilePreviewRenderers,
 } from './preview/descriptors.tsx'
 export const name = 'dsh-rich-media'
-export const inject = ['slots', 'conversationEvents'] as const
+export const inject = ['slots', 'uiConversation'] as const

@@ -16,28 +16,29 @@ export interface MediaPreviewPaneProps {
   readonly title?: string | undefined
 }
 
+// Colors/sizes consume the canonical `--vk-*` vocabulary only; the token
+// fallback chain lives in the Surface/embed token declaration, never here.
 const styles = {
-  root: { display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', minHeight: '100%', color: 'var(--dsw-alias-text-primary, #ececf1)', background: 'var(--dsw-alias-bg-base, #171719)' },
-  toolbar: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, padding: '10px 12px', borderBottom: '1px solid var(--dsw-alias-border-l2, rgba(255,255,255,.12))', background: 'var(--dsw-alias-bg-layer-1, #1e1e20)' },
-  title: { minWidth: 0, margin: 0, overflow: 'hidden', fontSize: 13, fontWeight: 700, textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  search: { width: 150, minHeight: 30, marginLeft: 'auto', padding: '0 9px', color: 'inherit', background: 'var(--dsw-alias-bg-layer-2, #29292c)', border: '1px solid var(--dsw-alias-border-l2, rgba(255,255,255,.12))', borderRadius: 7 },
+  root: { display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', minHeight: '100%' },
+  toolbar: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, padding: '10px 12px', borderBottom: '1px solid var(--vk-border-l2)', background: 'var(--vk-bg-layer-1)' },
+  title: { minWidth: 0, margin: 0, overflow: 'hidden', fontSize: 'var(--vk-font-strong)', fontWeight: 650, textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  search: { width: 150, minHeight: 'var(--vk-ctrl-input)', marginLeft: 'auto', padding: '0 9px', color: 'inherit', background: 'var(--vk-bg-layer-2)', border: '1px solid var(--vk-border-l2)', borderRadius: 'var(--vk-radius-sm)' },
   body: { display: 'grid', gridTemplateColumns: 'minmax(150px, 0.32fr) minmax(0, 1fr)', minHeight: 0 },
-  list: { minWidth: 0, minHeight: 0, overflow: 'auto', padding: 8, borderRight: '1px solid var(--dsw-alias-border-l2, rgba(255,255,255,.12))' },
-  item: { display: 'grid', gap: 3, width: '100%', minHeight: 52, padding: '8px 9px', color: 'inherit', textAlign: 'left' as const, background: 'transparent', border: '1px solid transparent', borderRadius: 7, cursor: 'pointer' },
-  itemActive: { background: 'var(--dsw-alias-fill-active, #343438)', border: '1px solid var(--dsw-alias-border-l2, rgba(255,255,255,.14))' },
-  itemTitle: { overflow: 'hidden', fontSize: 12, fontWeight: 650, textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  itemMeta: { overflow: 'hidden', color: 'var(--dsw-alias-text-tertiary, #92929b)', fontSize: 10, textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  list: { minWidth: 0, minHeight: 0, overflow: 'auto', padding: 8, borderRight: '1px solid var(--vk-border-l2)' },
+  item: { display: 'grid', gap: 3, width: '100%', minHeight: 52, padding: '8px 9px', color: 'inherit', textAlign: 'left' as const, background: 'transparent', border: '1px solid transparent', borderRadius: 'var(--vk-radius-sm)', cursor: 'pointer' },
+  itemActive: { background: 'var(--vk-fill-active)', border: '1px solid var(--vk-border-l2)' },
+  itemTitle: { overflow: 'hidden', fontSize: 'var(--vk-font-body)', fontWeight: 650, textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  itemMeta: { overflow: 'hidden', color: 'var(--vk-text-tertiary)', fontSize: 'var(--vk-font-micro)', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   viewer: { minWidth: 0, minHeight: 0, overflow: 'auto', padding: 18 },
-  viewerToolbar: { display: 'flex', alignItems: 'center', gap: 8, minHeight: 30, marginBottom: 12 },
-  viewerTitle: { minWidth: 0, overflow: 'hidden', fontSize: 14, fontWeight: 700, textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  link: { marginLeft: 'auto', color: 'var(--dsw-alias-text-link, #8fc5ff)', fontSize: 11 },
-  stage: { display: 'grid', placeItems: 'center', minHeight: 280, padding: 14, background: 'var(--dsw-alias-bg-layer-1, #202022)', border: '1px solid var(--dsw-alias-border-l2, rgba(255,255,255,.12))', borderRadius: 10 },
+  viewerToolbar: { display: 'flex', alignItems: 'center', gap: 8, minHeight: 'var(--vk-ctrl-button)', marginBottom: 12 },
+  viewerTitle: { minWidth: 0, overflow: 'hidden', fontSize: 'var(--vk-font-heading)', fontWeight: 650, textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  link: { marginLeft: 'auto', color: 'var(--vk-text-link)', fontSize: 'var(--vk-font-small)' },
+  stage: { display: 'grid', placeItems: 'center', minHeight: 280, padding: 14, background: 'var(--vk-bg-layer-1)', border: '1px solid var(--vk-border-l2)', borderRadius: 'var(--vk-radius-lg)' },
   image: { display: 'block', maxWidth: '100%', maxHeight: 'min(64vh, 680px)', objectFit: 'contain' as const },
   frame: { width: '100%', height: 'min(68vh, 720px)', border: 0, background: '#101012' },
   audio: { width: '100%', maxWidth: 560 },
   video: { display: 'block', width: '100%', maxHeight: 'min(68vh, 720px)', background: '#09090a' },
-  meta: { display: 'flex', flexWrap: 'wrap' as const, gap: 8, marginTop: 10, color: 'var(--dsw-alias-text-tertiary, #92929b)', fontSize: 11 },
-  empty: { display: 'grid', placeItems: 'center', gap: 8, minHeight: 260, padding: 24, color: 'var(--dsw-alias-text-tertiary, #92929b)', textAlign: 'center' as const },
+  meta: { display: 'flex', flexWrap: 'wrap' as const, gap: 8, marginTop: 10, color: 'var(--vk-text-tertiary)', fontSize: 'var(--vk-font-small)' },
 } as const
 
 function mediaMeta(item: MediaRefV1): string {

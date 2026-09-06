@@ -17,6 +17,7 @@
 
 import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from 'react'
 import type { MediaRefV1 } from '../host/types.ts'
+import { RICH_MEDIA_EMBED_TOKENS } from './embed-tokens.ts'
 
 /** Owner-authorized subtitle track for audio/video playback. */
 export interface MediaSubtitleTrack {
@@ -251,7 +252,7 @@ function WaveformBars({ peaks, progress, label }: { peaks: readonly number[]; pr
             key={index}
             aria-hidden="true"
             data-played={played || undefined}
-            style={{ flex: 1, minWidth: 1, height: `${Math.round(clamped * 100)}%`, borderRadius: 1, background: played ? 'var(--dsh-color-accent, #4f8cff)' : 'rgba(127,127,127,0.45)' }}
+            style={{ flex: 1, minWidth: 1, height: `${Math.round(clamped * 100)}%`, borderRadius: 1, background: played ? 'var(--vk-accent)' : 'rgba(127,127,127,0.45)' }}
           />
         )
       })}
@@ -473,6 +474,8 @@ export function RichMediaCard({ media, src, resolveUrl, labels, subtitleTracks, 
       data-dsh-rich-media-owner={media.owner}
       style={{ display: 'grid', gap: 8 }}
     >
+      {/* Embed root: declares `--vk-*` once for card + descendants (visual system §2.2). */}
+      <style>{RICH_MEDIA_EMBED_TOKENS}</style>
       {url !== undefined && !failed && isPlayback && (
         <EnhancedMediaPlayer
           media={media}

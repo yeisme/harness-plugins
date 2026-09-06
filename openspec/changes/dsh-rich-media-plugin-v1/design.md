@@ -71,6 +71,42 @@ DSH Web 现有 `@deepseek-ai/dsh-client-ui-attachment` 已覆盖图片 Gallery/L
 | 生命周期 | 面板开关只影响本地 UI 状态；关闭时暂停/释放媒体资源 |
 | 官方 seam | 只使用已发布的 sidebar slot；未确认的聊天/ToolView/Pane slot 不抢跑 |
 
+## UI Contract
+
+Surface classification、kind 与状态矩阵遵循 `docs/design/dsh-unified-panel-visual-system.md`（dsh-unified-panel-visual-system-v1）。本包不复制局部 token 表；颜色、圆角、控件、字号一律消费 `--vk-*`，fallback 链只由 `@yeisme/dsh-client-ui-visual-kit` 与本包 `embed-tokens.ts` 的单点声明提供。
+
+- Surface classification: embed（RichMediaCard 在聊天/ToolView 内；MediaPreviewPane 为 adopted workspace Pane）
+- Surface kind: workspace（MediaPreviewPane）；embed renderer（media card、preview 渲染器、gallery/compare/zoom）
+- First / second / third visual priority: 当前媒体与安全预览 → 列表选择与元数据 → 打开/下载动作
+- Existing components reused: `Surface`/`SurfaceContextBar`/`SurfaceState`（Pane）；官方原语由 host 提供；卡片不重造 Button/Input/Modal
+- Cards that earn existence: 媒体卡片本身（可独立选择/预览/打开的媒体对象）；说明与空投影用 row/state
+- Primary scroll owner: MediaPreviewPane 的 viewer 列；列表列独立滚动仅限媒体库
+
+### State Matrix
+
+| Feature | Loading | Empty | Error | Success | Partial/Stale | Disabled |
+|---|---|---|---|---|---|---|
+| 资源解析 | `正在加载预览…`（role=status，保留上下文） | `等待资源授权后预览。` | `role=alert` 显示授权失败原因（不含 raw URL/token） | 渲染媒体 + 元数据 | capability 缺失时显示降级说明，不伪造预览 | 打开/下载仅在 owner 授予 capability 时渲染 |
+| 预览渲染 | 渲染器自带 loading | `暂无媒体资源`/`选择一个媒体`（SurfaceState） | 不支持的类型显示明确降级说明 | 文本/CSV/sheet/DOCX 正常呈现 | too-large 截断说明 | — |
+| 列表筛选 | 即时过滤，无独立 loading | `暂无媒体资源` | — | — | — | — |
+
+### Responsive
+
+| <=420px | 421–720px | >720px |
+|---|---|---|
+| 单栏；列表与 viewer 顺序堆叠；主操作不裁切 | 单栏为默认；预览表格工具行换行 | 列表 + viewer 双栏；最多两个主列 |
+
+### Accessibility
+
+- Keyboard path: 列表为 `role=listbox`（↑/↓/Home/End），筛选输入在 ContextBar field 内；zoom overlay Escape 关闭
+- Focus owner/return: focus ring 走 `--vk-border-focus`（Surface 与 embed 声明均含 focus-visible 规则）
+- Visible labels and accessible names: 媒体数量、筛选媒体、打开/下载均有可见文本或 aria-label
+- Reduced motion and coarse pointer: 本包无自建动画；媒体画布控件沿用 host 原语行为
+
+### Visual Exceptions
+
+- 媒体业务画布（iframe/视频底色 `#101012`/`#09090a`、图片 stage 浅色/棋盘格、waveform 中性轨道 `rgba(127,127,127,*)`、table 列菜单 overlay 阴影）按视觉系统 §4.1 使用独立数值；理由：媒体画布/overlay 阴影不属于面板 chrome 刻度。回滚：替换为对应 `--vk-*` token。
+
 ## Test Specification
 
 | 层 | 场景 | 命令 | 证据 |

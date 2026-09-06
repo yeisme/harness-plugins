@@ -11,6 +11,7 @@
 import type { CSSProperties } from 'react'
 import type { MediaRefV1 } from '../host/types.ts'
 import { RichMediaCard, type RichMediaCardLabels } from './media-card.tsx'
+import { RICH_MEDIA_EMBED_TOKENS } from './embed-tokens.ts'
 
 /** One selectable gallery item keyed by owner and opaque ref. */
 export interface MediaGalleryItem {
@@ -25,7 +26,7 @@ export function mediaGalleryKey(media: MediaRefV1): string {
 const compareStyles: Record<'wrap' | 'grid' | 'cell' | 'label' | 'hint', CSSProperties> = {
   wrap: { display: 'grid', gap: 6 },
   grid: { display: 'grid', gap: 8, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' },
-  cell: { display: 'grid', gap: 4, padding: 8, borderRadius: 8, border: '1px solid var(--dsh-color-border, #3d4550)' },
+  cell: { display: 'grid', gap: 4, padding: 8, borderRadius: 'var(--vk-radius-md)', border: '1px solid var(--vk-border-l2)' },
   label: { fontWeight: 600, fontSize: 12 },
   hint: { fontSize: 12, opacity: 0.72 },
 }
@@ -43,6 +44,7 @@ export function MediaCompareView(props: {
   }
   return (
     <section aria-label={texts.aria} data-dsh-rich-media-compare="ready" style={compareStyles.wrap}>
+      <style>{RICH_MEDIA_EMBED_TOKENS}</style>
       <div style={compareStyles.grid}>
         {items.map(item => (
           <div key={item.key} style={compareStyles.cell}>
@@ -76,8 +78,9 @@ export function MediaZoomOverlay(props: {
       data-dsh-rich-media-zoom
       data-zoom-scale={clamped}
       onKeyDown={(event) => { if (event.key === 'Escape') onClose() }}
-      style={{ display: 'grid', gap: 8, padding: 12, borderRadius: 8, border: '1px solid var(--dsh-color-border, #3d4550)', background: 'var(--dsh-color-layer, #18202b)' }}
+      style={{ display: 'grid', gap: 8, padding: 12, borderRadius: 'var(--vk-radius-md)', border: '1px solid var(--vk-border-l2)', background: 'var(--vk-bg-layer-1)' }}
     >
+      <style>{RICH_MEDIA_EMBED_TOKENS}</style>
       <div role="group" style={{ display: 'flex', gap: 8 }}>
         <button type="button" onClick={onZoomIn} aria-label={texts.zoomIn}>+</button>
         <button type="button" onClick={onZoomOut} aria-label={texts.zoomOut}>&#8722;</button>

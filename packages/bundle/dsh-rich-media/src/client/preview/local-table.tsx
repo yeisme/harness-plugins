@@ -104,7 +104,7 @@ export function LocalTableGrid({ media, rows, columns, note, sheetId }: LocalTab
   if (Grid === undefined) return <p role="status">正在加载表格渲染器…</p>
   return (
     <div data-dsh-local-table style={{ width: '100%', minHeight: 0, display: 'grid', gap: 8 }} {...sheetId === undefined ? {} : { 'data-source-sheet': sheetId }}>
-      {note !== undefined && <p role="status" style={{ margin: 0, color: 'var(--dsw-alias-text-tertiary, #92929b)', fontSize: 11 }}>{note}</p>}
+      {note !== undefined && <p role="status" style={{ margin: 0, color: 'var(--vk-text-tertiary)', fontSize: 'var(--vk-font-small)' }}>{note}</p>}
       <Grid resource={tableResourceOf(media)} access={pagedAccess} />
     </div>
   )

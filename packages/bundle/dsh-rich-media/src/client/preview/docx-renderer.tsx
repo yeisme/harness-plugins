@@ -130,7 +130,7 @@ export function MediaDocxRenderer({ media, source, labels }: MediaDocxRendererPr
       aria-label={media.title}
       style={{
         width: '100%', maxHeight: 'min(68vh, 720px)', overflow: 'auto', padding: '16px 18px',
-        background: 'var(--dsw-alias-bg-layer-1, #202022)', border: '1px solid var(--dsw-alias-border-l1, rgba(255,255,255,.08))',
+        background: 'var(--vk-bg-layer-1)', border: '1px solid var(--vk-border-l1)',
         borderRadius: 8, fontSize: 13, lineHeight: 1.65,
       }}
       // eslint-disable-next-line react/no-danger -- sanitized via DOMPurify before render

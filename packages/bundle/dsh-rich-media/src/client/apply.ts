@@ -20,6 +20,10 @@ interface ConversationEventsLike {
   register(definition: unknown): unknown
 }
 
+interface UiConversationLike {
+  events: ConversationEventsLike | undefined
+}
+
 interface SlotsLike {
   inject(name: string, setup: () => unknown): unknown
   register(input: unknown, component: unknown): unknown
@@ -47,9 +51,18 @@ function createMediaNodeView(openInPane: ((media: MediaRefV1) => void) | undefin
   }
 }
 
+/** Resolve the conversation Definition registry: `uiConversation.events` (0.1.2+) or the legacy `conversationEvents` service. */
+function resolveConversationEvents(ctx: ClientContext): ConversationEventsLike | undefined {
+  const uiConversation = readService<UiConversationLike>(ctx, 'uiConversation')
+  const events = uiConversation?.events
+  if (events !== undefined && typeof events.register === 'function') return events
+  const legacy = readService<ConversationEventsLike>(ctx, 'conversationEvents')
+  return legacy !== undefined && typeof legacy.register === 'function' ? legacy : undefined
+}
+
 /** Mount the client face and return an exact disposer. */
 export async function apply(ctx: ClientContext): Promise<() => void> {
-  const conversationEvents = readService<ConversationEventsLike>(ctx, 'conversationEvents')
+  const conversationEvents = resolveConversationEvents(ctx)
   const slots = readService<SlotsLike>(ctx, 'slots')
   if (conversationEvents === undefined || typeof conversationEvents.register !== 'function') return () => {}
   if (slots === undefined || typeof slots.inject !== 'function' || typeof slots.register !== 'function') return () => {}

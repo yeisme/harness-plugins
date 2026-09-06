@@ -96,7 +96,7 @@ export function MediaTextSourceRenderer({ media, source, labels }: MediaTextSour
         aria-label={media.title}
         style={{
           maxHeight: 'min(64vh, 640px)', overflow: 'auto', margin: 0, padding: '10px 12px',
-          background: 'var(--dsw-alias-bg-base, #141416)', border: '1px solid var(--dsw-alias-border-l1, rgba(255,255,255,.08))',
+          background: 'var(--vk-bg-base)', border: '1px solid var(--vk-border-l1)',
           borderRadius: 8, font: '12px/1.6 var(--ds-font-family-code, ui-monospace, monospace)', whiteSpace: 'pre', overflowWrap: 'anywhere',
         }}
       >
@@ -107,7 +107,7 @@ export function MediaTextSourceRenderer({ media, source, labels }: MediaTextSour
           </div>
         ))}
       </div>
-      <div role="status" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', color: 'var(--dsw-alias-text-tertiary, #92929b)', fontSize: 11 }}>
+      <div role="status" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', color: 'var(--vk-text-tertiary)', fontSize: 'var(--vk-font-small)' }}>
         <span>{rendered.length} {text.lines}</span>
         {(window < body.length || lineCapHit) && <span>{text.truncatedWindow}</span>}
         {sourceTruncated && <span>{text.truncatedSource}</span>}

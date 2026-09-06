@@ -11,7 +11,7 @@ afterEach(() => {
 describe('rich-media client apply', () => {
   it('declares slots so Cordis does not throw on ctx.slots', () => {
     const source = readFileSync(fileURLToPath(new URL('../src/client/index.ts', import.meta.url)), 'utf8')
-    expect(source).toContain("export const inject = ['slots', 'conversationEvents'] as const")
+    expect(source).toContain("export const inject = ['slots', 'uiConversation'] as const")
   })
 
   it('fails closed when slots or conversationEvents are absent', async () => {
@@ -28,7 +28,7 @@ describe('rich-media client apply', () => {
       return vi.fn()
     })
     const dispose = await apply({
-      conversationEvents: { register: registerEvent },
+      uiConversation: { events: { register: registerEvent } },
       slots: { inject: injectSlot, register: registerSlot },
     } as never)
     expect(registerEvent).toHaveBeenCalledTimes(1)
@@ -37,6 +37,22 @@ describe('rich-media client apply', () => {
       name: 'conversation.chat.node',
       key: 'media-ref',
     }), expect.anything())
+    dispose()
+  })
+
+  it('still registers via the legacy conversationEvents seam', async () => {
+    const registerEvent = vi.fn(() => vi.fn())
+    const registerSlot = vi.fn(() => vi.fn())
+    const injectSlot = vi.fn((_name: string, setup: () => unknown) => {
+      setup()
+      return vi.fn()
+    })
+    const dispose = await apply({
+      conversationEvents: { register: registerEvent },
+      slots: { inject: injectSlot, register: registerSlot },
+    } as never)
+    expect(registerEvent).toHaveBeenCalledTimes(1)
+    expect(injectSlot).toHaveBeenCalledWith('conversation.chat.node', expect.any(Function))
     dispose()
   })
 
@@ -49,7 +65,7 @@ describe('rich-media client apply', () => {
     })
     const openView = vi.fn()
     await apply({
-      conversationEvents: { register: registerEvent },
+      uiConversation: { events: { register: registerEvent } },
       slots: { inject: injectSlot, register: registerSlot },
       paneWorkbench: { openView },
     } as never)

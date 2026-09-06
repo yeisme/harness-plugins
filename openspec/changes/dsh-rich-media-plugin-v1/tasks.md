@@ -42,3 +42,9 @@
 - [x] 6.2 [Owner: Harness Plugins；Scope: `src/client/media-card.tsx`；Dependencies: 5.2] 增加音视频播放器增强：waveform、字幕、倍速、画中画。Acceptance: audio/video 播放器可交互；Validation: 组件测试 + demo。
 - [x] 6.3 [Owner: Harness Plugins；Scope: `src/client/media-node.tsx`；Dependencies: 5.6] 支持媒体节点更新/移除事件，而不仅是单次 start。Acceptance: `media/ref/update`、`media/ref/remove` 可折叠；Validation: media-node tests。
 - [x] 6.4 [Owner: Harness Plugins；Scope: `src/client/workbench.tsx`；Dependencies: 5.7] 将 Rich Media Workbench 作为独立模块继续完善 gallery/compare/zoom。Acceptance: gallery/compare/zoom 可测；Validation: component tests。
+
+## 2026-09-04 视觉系统归一注记（非任务进度）
+
+- client 面完成 `dsh-unified-panel-visual-system-v1` token 归一：废除包内漂移 `--dsw-alias-*` 字面量 fallback（`#1e1e20`/`#29292c`/`rgba(255,255,255,.14)`）与外来 `--dsh-color-*` 词表（`#3d4550`/`#18202b`/`#4f8cff`），全部消费 canonical `--vk-*`；Surface 外的根（media card、compare、zoom overlay、legacy workbench）经 `src/client/embed-tokens.ts` 单点声明，圆角/控件/字号回到 §4.1 刻度。toolchain token-rate 37% → 78%（余量全部为媒体业务画布独立数值，见 design.md Visual Exceptions）。
+- Validation: `pnpm --filter @yeisme/dsh-rich-media run test`（150/150，含新增 `tests/embed-tokens.spec.tsx` 6 项合同测试）、`run typecheck`、`run build`、`pnpm run check:surfaces`、`pnpm run check:plugins`（六检查器 PASS）。
+- `pnpm run test:visual` 26/27 失败为本环境 pre-existing/environmental 渲染漂移（改前 14:56 run 与改后 run 指纹逐字节一致：全部 fixture 同一 28–38px 高度差），未更新任何 snapshot 基线；证据 `temp/integration-test-runs/ui-visual-2026-09-04T14-56-49-611Z-2960786/` 与 `temp/integration-test-runs/ui-visual-2026-09-04T15-51-30-344Z-4177667/`。

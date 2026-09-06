@@ -19,6 +19,7 @@ import type { WorkbenchTabV1 } from '@yeisme/dsh-workbench-core'
 import type { MediaRefV1 } from '../host/types.ts'
 import { richMediaWorkbenchModule } from '../module.ts'
 import { RichMediaCard, type RichMediaCardLabels } from './media-card.tsx'
+import { RICH_MEDIA_EMBED_TOKENS } from './embed-tokens.ts'
 import {
   MediaCompareView,
   MediaZoomOverlay,
@@ -53,12 +54,12 @@ function createRichMediaRegistry(): WorkbenchRegistry {
 
 const styles: Record<'layer' | 'panel' | 'header' | 'body' | 'grid' | 'trigger' | 'placeholder' | 'placeholderTitle' | 'placeholderBody' | 'cardActions', CSSProperties> = {
   layer: { position: 'relative', display: 'grid', gap: 6, width: '100%', padding: 4 },
-  panel: { display: 'grid', gap: 8, padding: 10, borderRadius: 8, border: '1px solid var(--dsh-color-border, #3d4550)', background: 'var(--dsh-color-layer, #18202b)' },
+  panel: { display: 'grid', gap: 8, padding: 10, borderRadius: 'var(--vk-radius-md)', border: '1px solid var(--vk-border-l2)', background: 'var(--vk-bg-layer-1)' },
   header: { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 },
   body: { display: 'grid', gap: 8, minHeight: 80, fontSize: 12 },
   grid: { display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' },
   trigger: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', minHeight: 32 },
-  placeholder: { display: 'grid', gap: 4, padding: 12, borderRadius: 8, border: '1px dashed var(--dsh-color-border, #3d4550)' },
+  placeholder: { display: 'grid', gap: 4, padding: 12, borderRadius: 'var(--vk-radius-md)', border: '1px dashed var(--vk-border-l2)' },
   placeholderTitle: { fontWeight: 600 },
   placeholderBody: { opacity: 0.72 },
   cardActions: { display: 'flex', gap: 6, marginTop: 4 },
@@ -146,6 +147,7 @@ export function RichMediaWorkbench({ wide, t, media, resolveUrl }: RichMediaWork
 
   return (
     <div style={styles.layer} data-dsh-rich-media-workbench>
+      <style>{RICH_MEDIA_EMBED_TOKENS}</style>
       {open && (
         <section style={styles.panel} aria-label={t('workbench.aria')}>
           <header style={styles.header}>{t('workbench.aria')}</header>

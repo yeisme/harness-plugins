@@ -145,8 +145,8 @@ export function MediaSheetRenderer({ media, source, labels }: MediaSheetRenderer
               onClick={() => { setActive(index) }}
               style={{
                 padding: '3px 10px', fontSize: 12, borderRadius: 6, cursor: 'pointer',
-                border: index === active ? '1px solid var(--dsw-alias-border-focus, #79b8ff)' : '1px solid var(--dsw-alias-border-l2, rgba(255,255,255,.12))',
-                background: index === active ? 'var(--dsw-alias-fill-active, #343438)' : 'transparent', color: 'inherit',
+                border: index === active ? '1px solid var(--vk-border-focus)' : '1px solid var(--vk-border-l2)',
+                background: index === active ? 'var(--vk-fill-active)' : 'transparent', color: 'inherit',
               }}
             >
               {sheet.name}

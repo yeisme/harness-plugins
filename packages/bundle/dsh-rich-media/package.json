@@ -97,6 +97,7 @@
     "@tanstack/react-table": "^9.2.3",
     "@tanstack/react-virtual": "^3.14.10",
     "@yeisme/dsh-client-ui-structured-content": "workspace:*",
+    "@yeisme/dsh-client-ui-visual-kit": "workspace:^",
     "@yeisme/dsh-client-ui-surface": "workspace:^",
     "@yeisme/dsh-workbench-core": "workspace:*",
     "dompurify": "^3.4.14",
