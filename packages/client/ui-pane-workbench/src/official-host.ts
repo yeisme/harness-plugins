@@ -32,6 +32,8 @@ import {
 } from './region-chrome.js'
 import { PaneTabStrip } from './tabs.js'
 import { PaneCloseUndoToast, PaneManagementCenter } from './management-center.js'
+import type { PaneCommandRegistry } from './composition.js'
+import { WorkspaceSearchOverlay } from './search-overlay.js'
 import type { PaneViewRegistry } from './view-registry.js'
 import {
   resolvePaneManagementShortcut,
@@ -56,6 +58,7 @@ export interface OfficialOverlayPaneHostProps {
   readonly conversationSearch?: PaneConversationSearchHostV1
   readonly keymap?: Partial<PaneManagementKeymapV1>
   readonly workspaceContext?: PaneWorkspaceContextProviderV1
+  readonly commands?: PaneCommandRegistry
 }
 
 /** Synthetic group id used only to feed the shared tab strip; never written to canonical state. */
@@ -185,7 +188,7 @@ function overlayActiveTabId(state: PaneWorkspaceV1): string | undefined {
   return projectOverlayTabList(state).activeTabId
 }
 
-export function OfficialOverlayPaneHost({ registry, controller, handoff, conversationSearch, keymap, workspaceContext }: OfficialOverlayPaneHostProps): ReactNode {
+export function OfficialOverlayPaneHost({ registry, controller, handoff, conversationSearch, keymap, workspaceContext, commands }: OfficialOverlayPaneHostProps): ReactNode {
   useSyncExternalStore(subscribeLocale, getLocaleRevision, getLocaleRevision)
   const state = useSyncExternalStore(controller.subscribeWorkspace, controller.getSnapshot, controller.getSnapshot)
   const drag = useSyncExternalStore(controller.drag.subscribe, controller.drag.getSnapshot, controller.drag.getSnapshot)
@@ -465,7 +468,18 @@ export function OfficialOverlayPaneHost({ registry, controller, handoff, convers
     onClose: close,
   })),
   ),
-  managementMode === undefined ? null : createElement(PaneManagementCenter, {
+  managementMode === 'open' ? createElement(WorkspaceSearchOverlay, {
+    registry,
+    controller,
+    commands,
+    conversationSearch,
+    workspaceContext,
+    onClose: () => { setManagementMode(undefined); setReviewProtected([]) },
+    restoreFocus: () => {
+      const trigger = rootRef.current?.querySelector('[data-pane-open-view-trigger]')
+      if (trigger instanceof HTMLElement) trigger.focus()
+    },
+  }) : managementMode === undefined ? null : createElement(PaneManagementCenter, {
     mode: managementMode,
     registry,
     controller,

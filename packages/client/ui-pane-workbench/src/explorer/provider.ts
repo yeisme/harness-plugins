@@ -1,9 +1,11 @@
 import type { PaneWorkbenchController } from '../controller.js'
-import type { PaneViewRegistry } from '../view-registry.js'
+import type { PaneLocalViewProps, PaneViewRegistry } from '../view-registry.js'
 import { t } from '../i18n/locale.js'
 import { createFileOpenRequest } from './file-lifecycle.js'
 import type { ExplorerOpenAdapterV1 } from './open-adapter.js'
+import { createElement } from 'react'
 import { ExplorerTreeView } from './tree-ui.js'
+import type { ExplorerRuntimeSourceV1 } from './runtime.js'
 import type { ExplorerTreeNodeV1 } from './tree-state.js'
 
 export const DSH_EXPLORER_VIEW_KIND = 'dsh.explorer' as const
@@ -34,7 +36,7 @@ export function createExplorerOpenAdapter(controller: PaneWorkbenchController): 
   }
 }
 
-export function registerExplorerProvider(registry: PaneViewRegistry): () => void {
+export function registerExplorerProvider(registry: PaneViewRegistry, runtimeSource?: ExplorerRuntimeSourceV1): () => void {
   if (registry.has(DSH_EXPLORER_VIEW_KIND)) return () => {}
   return registry.registerView({
     descriptor: {
@@ -46,7 +48,7 @@ export function registerExplorerProvider(registry: PaneViewRegistry): () => void
       retention: 'keep-alive',
       singleton: true,
     },
-    component: ExplorerTreeView,
+    component: (props: PaneLocalViewProps) => createElement(ExplorerTreeView, { ...props, ...(runtimeSource === undefined ? {} : { runtimeSource }) }),
     showInPicker: true,
     i18n: { namespace: 'paneWorkbench', labelKey: 'rail.explorer' },
   })

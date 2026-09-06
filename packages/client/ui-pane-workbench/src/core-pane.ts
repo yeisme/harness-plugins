@@ -5,21 +5,24 @@ import { registerFilePreviewProvider } from './explorer/file-preview.js'
 import { registerSourceControlProvider } from './git/provider.js'
 import type { PaneLocalViewProps, PaneViewRegistry } from './view-registry.js'
 import { WorkspaceDesignerCoreView } from './workspace-designer-ui.js'
+import type { ExplorerRuntimeSourceV1 } from './explorer/runtime.js'
 
 export const PANE_CORE_HOST_CONTRACT = 'workspace.core-pane.v1' as const
 export const DSH_TOOL_DETAILS_VIEW_KIND = 'dsh.tool-details' as const
 export const DSH_TOOL_DETAILS_RESOURCE_KEY = 'core:dsh.tool-details' as const
 export const DSH_WORKSPACE_DESIGNER_VIEW_KIND = 'dsh.workspace-designer' as const
 export const DSH_WORKSPACE_DESIGNER_RESOURCE_KEY = 'core:dsh.workspace-designer' as const
+export const DSH_WORKSPACE_SEARCH_VIEW_KIND = 'dsh.workspace-search' as const
+export const DSH_WORKSPACE_SEARCH_RESOURCE_KEY = 'core:dsh.workspace-search' as const
 
-export type PaneCoreViewId = typeof DSH_TOOL_DETAILS_VIEW_KIND | typeof DSH_WORKSPACE_DESIGNER_VIEW_KIND
+export type PaneCoreViewId = typeof DSH_TOOL_DETAILS_VIEW_KIND | typeof DSH_WORKSPACE_DESIGNER_VIEW_KIND | typeof DSH_WORKSPACE_SEARCH_VIEW_KIND
 
 export function isPaneCoreViewId(id: string): id is PaneCoreViewId {
-  return id === DSH_TOOL_DETAILS_VIEW_KIND || id === DSH_WORKSPACE_DESIGNER_VIEW_KIND
+  return id === DSH_TOOL_DETAILS_VIEW_KIND || id === DSH_WORKSPACE_DESIGNER_VIEW_KIND || id === DSH_WORKSPACE_SEARCH_VIEW_KIND
 }
 
 /** Registers DSH-owned surfaces as local-only providers in the canonical Pane registry. */
-export function registerPaneWorkbenchCoreViews(registry: PaneViewRegistry): () => void {
+export function registerPaneWorkbenchCoreViews(registry: PaneViewRegistry, explorerRuntime?: ExplorerRuntimeSourceV1): () => void {
   const disposeDesigner = registry.registerView({
     descriptor: {
       kind: DSH_WORKSPACE_DESIGNER_VIEW_KIND,
@@ -34,7 +37,7 @@ export function registerPaneWorkbenchCoreViews(registry: PaneViewRegistry): () =
     showInPicker: false,
     i18n: { namespace: 'paneWorkbench', labelKey: 'designer.title', descriptionKey: 'designer.description' },
   })
-  const disposeExplorer = registerExplorerProvider(registry)
+  const disposeExplorer = registerExplorerProvider(registry, explorerRuntime)
   const disposeFiles = registerFilePreviewProvider(registry)
   const disposeSourceControl = registerSourceControlProvider(registry)
   return () => {
@@ -64,6 +67,19 @@ export function openPaneWorkbenchCoreView(controller: PaneWorkbenchController, i
       })
       const opened = Object.values(controller.getSnapshot().views).find(view => view.kind === DSH_WORKSPACE_DESIGNER_VIEW_KIND)
       if (opened !== undefined) controller.dispatch({ type: 'maximize_group', groupId: opened.groupId })
+      return
+    case DSH_WORKSPACE_SEARCH_VIEW_KIND:
+      controller.openView({
+        kind: DSH_WORKSPACE_SEARCH_VIEW_KIND,
+        resourceKey: DSH_WORKSPACE_SEARCH_RESOURCE_KEY,
+        role: 'utility',
+        preferredRegion: 'right',
+        retention: 'recreate',
+        singleton: true,
+        preview: false,
+        pinned: true,
+        title: 'Search',
+      })
   }
 }
 

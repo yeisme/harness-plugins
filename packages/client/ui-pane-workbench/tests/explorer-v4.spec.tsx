@@ -196,6 +196,19 @@ describe('V4 Task 4.4 Tree UI', () => {
     fireEvent.keyDown(screen.getByRole('tree'), { key: 'ArrowRight' })
     expect(state.expandedRefs).toContain('dir:src')
   })
+
+  it('offers an explicit owner-backed add-reference action without opening the file row', async () => {
+    const addReference = vi.fn(async () => ({ ok: true as const }))
+    const openResource = vi.fn(async () => ({ ok: true as const }))
+    const state = hydrated()
+    render(createElement(ExplorerTree, { state, runtime: {
+      roots: async () => [], listChildren: async () => [], openResource, addReference,
+    }, onIntent: () => {} }))
+    fireEvent.click(screen.getByRole('button', { name: '添加 README.md 到当前对话引用' }))
+    await vi.waitFor(() => { expect(addReference).toHaveBeenCalledWith(expect.objectContaining({ ref: 'file:readme' })) })
+    expect(openResource).not.toHaveBeenCalled()
+    expect(await screen.findByText('已添加引用：README.md')).toBeTruthy()
+  })
 })
 
 describe('Explorer narrow content flow (3.4)', () => {

@@ -36,6 +36,7 @@ const STATUS_KEY: Readonly<Record<WorkspaceProbeStateV1, string>> = {
 
 export interface WorkspaceCapabilitiesViewProps {
   readonly tracker: ExperienceTierTrackerV1
+  readonly unifiedHost?: boolean
   readonly onEvidence?: (record: CapabilityMatrixEvidenceRecordV1) => void
 }
 
@@ -99,13 +100,13 @@ export function WorkspaceCapabilitiesView(props: WorkspaceCapabilitiesViewProps)
     createElement(SurfaceContextBar, {
       className: 'pwr-capabilities-header',
       title: t('capabilities.title'),
-      context: `${t('capabilities.tier')}: ${t(`capabilities.tier.${matrix.tier}`)}`,
+      context: props.unifiedHost ? t('capabilities.unifiedHost') : `${t('capabilities.tier')}: ${t(`capabilities.tier.${matrix.tier}`)}`,
       'data-capabilities-tier-label': String(matrix.tier),
     }),
     createElement('div', { className: 'ys-body' },
       createElement(SurfaceSection, null,
         createElement('ul', { className: 'pwr-capabilities-rows ys-list', role: 'list' },
-          ...matrix.rows.map(row => createElement(CapabilityRow, { key: row.seam, row, onUnlock })),
+          ...matrix.rows.filter(row => !props.unifiedHost || !['workspace.core-pane.v1', 'shell.workspace.right', 'shell.workspace.bottom'].includes(row.seam)).map(row => createElement(CapabilityRow, { key: row.seam, row, onUnlock })),
         ),
       ),
     ),
@@ -116,7 +117,7 @@ export function WorkspaceCapabilitiesView(props: WorkspaceCapabilitiesViewProps)
 export function registerWorkspaceCapabilitiesView(
   registry: PaneViewRegistry,
   tracker: ExperienceTierTrackerV1,
-  options?: { readonly onEvidence?: (record: CapabilityMatrixEvidenceRecordV1) => void },
+  options?: { readonly onEvidence?: (record: CapabilityMatrixEvidenceRecordV1) => void; readonly unifiedHost?: boolean },
 ): () => void {
   return registry.registerView({
     descriptor: {
@@ -130,6 +131,7 @@ export function registerWorkspaceCapabilitiesView(
     },
     component: (_props: PaneLocalViewProps) => createElement(WorkspaceCapabilitiesView, {
       tracker,
+      ...(options?.unifiedHost === undefined ? {} : { unifiedHost: options.unifiedHost }),
       ...(options?.onEvidence === undefined ? {} : { onEvidence: options.onEvidence }),
     }),
     showInPicker: true,

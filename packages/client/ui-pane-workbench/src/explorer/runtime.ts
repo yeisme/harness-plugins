@@ -18,6 +18,8 @@ export interface ExplorerRuntimeV2 {
   inspectMetadata?(node: ExplorerTreeNodeV1): Promise<ExplorerMetadataV1>
   revealSensitive?(node: ExplorerTreeNodeV1): Promise<{ readonly ok: boolean; readonly reason?: string }>
   openResource(node: ExplorerTreeNodeV1, mode: 'preview' | 'pin'): Promise<{ readonly ok: boolean; readonly reason?: string }> | { readonly ok: boolean; readonly reason?: string }
+  /** Resolve and insert one owner-backed file/directory/image reference into the explicit main conversation. */
+  addReference?(node: ExplorerTreeNodeV1): Promise<{ readonly ok: boolean; readonly reason?: string }>
   readonly mutation?: ExplorerResourceMutationRuntimeV1
   readonly transfer?: ExplorerTransferRuntimeV1
 }
@@ -46,24 +48,43 @@ export interface ExplorerTransferRuntimeV1 {
   download(ref: string, version: string): Promise<Uint8Array>
 }
 
-let activeRuntime: ExplorerRuntimeV2 | undefined
-const listeners = new Set<() => void>()
+export interface ExplorerRuntimeSourceV1 {
+  getSnapshot(): ExplorerRuntimeV2 | undefined
+  subscribe(listener: () => void): () => void
+  bind(runtime: ExplorerRuntimeV2): () => void
+}
+
+export function createExplorerRuntimeSource(): ExplorerRuntimeSourceV1 {
+  let activeRuntime: ExplorerRuntimeV2 | undefined
+  const listeners = new Set<() => void>()
+  return {
+    getSnapshot: () => activeRuntime,
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+    bind(runtime) {
+      activeRuntime = runtime
+      for (const listener of listeners) listener()
+      return () => {
+        if (activeRuntime !== runtime) return
+        activeRuntime = undefined
+        for (const listener of listeners) listener()
+      }
+    },
+  }
+}
+
+const sharedRuntimeSource = createExplorerRuntimeSource()
 
 export function getExplorerRuntime(): ExplorerRuntimeV2 | undefined {
-  return activeRuntime
+  return sharedRuntimeSource.getSnapshot()
 }
 
 export function subscribeExplorerRuntime(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => { listeners.delete(listener) }
+  return sharedRuntimeSource.subscribe(listener)
 }
 
 export function bindExplorerRuntime(runtime: ExplorerRuntimeV2): () => void {
-  activeRuntime = runtime
-  for (const listener of listeners) listener()
-  return () => {
-    if (activeRuntime !== runtime) return
-    activeRuntime = undefined
-    for (const listener of listeners) listener()
-  }
+  return sharedRuntimeSource.bind(runtime)
 }

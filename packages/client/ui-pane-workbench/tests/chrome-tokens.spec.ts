@@ -7,18 +7,20 @@ import { REGION_STYLES } from '../src/region-chrome.js'
  * `.pwr-root` 单点声明；规则只消费 `--vk-*`，单文件多 fallback 清零。
  */
 describe('pane workbench chrome token adoption', () => {
-  it('每个 --dsw-alias-* token 只出现一次（.pwr-root 单点声明）', () => {
-    const names = new Set([...REGION_STYLES.matchAll(/--dsw-alias-([a-z0-9-]+)/g)].map(m => `--dsw-alias-${m[1]}`))
+  it('canonical token 只在根块声明一次，组件规则不直接依赖宿主 alias', () => {
+    const root = REGION_STYLES.slice(0, REGION_STYLES.indexOf('}') + 1)
+    const names = new Set([...root.matchAll(/(--vk-[a-z0-9-]+):/g)].map(m => m[1]!))
     expect(names.size).toBeGreaterThan(0)
     for (const name of names) {
-      expect(REGION_STYLES.split(name).length - 1, `${name} once`).toBe(1)
+      expect(root.split(`${name}:`).length - 1, `${name} once`).toBe(1)
     }
+    expect(REGION_STYLES.slice(REGION_STYLES.indexOf('}') + 1)).not.toContain('--dsw-alias-')
   })
 
   it('root 声明链到 registry canonical fallback', () => {
-    expect(REGION_STYLES).toContain('--vk-bg-elevated:var(--dsw-alias-bg-elevated,#2a2a2f)')
-    expect(REGION_STYLES).toContain('--vk-text-secondary:var(--dsw-alias-text-secondary,#c6c6cb)')
-    expect(REGION_STYLES).toContain('--vk-border-focus:var(--dsw-alias-border-focus,#79b8ff)')
+    expect(REGION_STYLES).toContain('--vk-bg-elevated:var(--dsw-alias-bg-elevated,var(--dsw-alias-bg-overlay,#2a2a2f))')
+    expect(REGION_STYLES).toContain('--vk-text-secondary:var(--dsw-alias-text-secondary,var(--dsw-alias-label-secondary,#c6c6cb))')
+    expect(REGION_STYLES).toContain('--vk-border-focus:var(--dsw-alias-border-focus,var(--dsw-alias-state-business-primary,#79b8ff))')
   })
 
   it('旧分歧 fallback 字面量清零；规则消费 --vk-*', () => {

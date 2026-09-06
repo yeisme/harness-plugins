@@ -43,6 +43,9 @@ import { DSH_SOURCE_CONTROL_VIEW_KIND } from './git/source-control.js'
 import { PaneTabActions, PaneTabStrip } from './tabs.js'
 import { PaneCloseUndoToast, PaneManagementCenter } from './management-center.js'
 import type { PaneManagementMode } from './management.js'
+import type { PaneCommandRegistry } from './composition.js'
+import { WorkspaceSearchOverlay } from './search-overlay.js'
+import { activateWorkspaceSearchCandidate, parseWorkspaceSearchDragPayload, WORKSPACE_SEARCH_DRAG_MIME } from './search-open.js'
 import type { PaneViewRegistry, PaneViewRegistrationV1 } from './view-registry.js'
 import { WorkbenchIcon } from './icon.js'
 import type { WorkbenchIconName } from './icon.js'
@@ -93,6 +96,7 @@ export interface PaneRegionChromeProps {
   /** Additive shared keymap override. */
   readonly keymap?: Partial<PaneManagementKeymapV1>
   readonly workspaceContext?: PaneWorkspaceContextProviderV1
+  readonly commands?: PaneCommandRegistry
 }
 
 /**
@@ -283,6 +287,42 @@ export function PaneRegionChrome(props: PaneRegionChromeProps): ReactNode {
       onPointerMove: !hasViews ? (event: PointerEvent<HTMLElement>) => { props.controller.drag.move(event.clientX, event.clientY, emptyDropTarget()) } : undefined,
       onPointerUp: !hasViews ? () => { props.controller.drag.drop() } : undefined,
       onPointerCancel: !hasViews ? () => props.controller.drag.cancel() : undefined,
+      onDragOver: (event: DragEvent<HTMLElement>) => {
+        if (!event.dataTransfer.types.includes(WORKSPACE_SEARCH_DRAG_MIME)) return
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'copy'
+      },
+      onDrop: (event: DragEvent<HTMLElement>) => {
+        const payload = parseWorkspaceSearchDragPayload(event.dataTransfer.getData(WORKSPACE_SEARCH_DRAG_MIME))
+        if (payload === undefined) return
+        event.preventDefault()
+        void activateWorkspaceSearchCandidate({
+          candidate: {
+            kind: payload.openTarget.type,
+            stableKey: payload.stableKey,
+            title: payload.title,
+            semanticIcon: 'window',
+            ownerRef: payload.openTarget.owner,
+            openTarget: payload.openTarget,
+            availability: 'available',
+            aliases: [],
+            keywords: [],
+            opened: false,
+            recent: false,
+            frequent: false,
+            compatibility: false,
+            sideEffect: false,
+            openOnly: payload.openTarget.type === 'pane',
+            mergedCommandIds: [],
+          },
+          controller: props.controller,
+          registry: props.registry,
+          commands: props.commands,
+          conversationSearch: props.conversationSearch,
+          workspaceContext: props.workspaceContext,
+          placement: props.region === 'bottom' ? 'bottom' : 'right',
+        })
+      },
     },
       emptyTarget === undefined ? null : createElement('div', { className: 'pwr-drop pwr-empty-drop', role: 'status', 'aria-label': paneDropTargetLabel(emptyTarget) },
         createElement('span', { className: 'pwr-drop-label' }, paneDropTargetLabel(emptyTarget))),
@@ -294,7 +334,15 @@ export function PaneRegionChrome(props: PaneRegionChromeProps): ReactNode {
           createElement('button', { type: 'button', onClick: () => props.controller.dispatch({ type: 'set_region_visibility', region: props.region, visible: false }) }, t(props.region === 'right' ? 'chrome.hideRight' : 'chrome.hideBottom'))),
     ),
   ),
-  managementMode === undefined ? null : createElement(PaneManagementCenter, {
+  managementMode === 'open' ? createElement(WorkspaceSearchOverlay, {
+    registry: props.registry,
+    controller: props.controller,
+    commands: props.commands,
+    conversationSearch: props.conversationSearch,
+    workspaceContext: props.workspaceContext,
+    onClose: () => { setManagementMode(undefined); setReviewProtected([]) },
+    restoreFocus: restorePickerFocus,
+  }) : managementMode === undefined ? null : createElement(PaneManagementCenter, {
     mode: managementMode,
     registry: props.registry,
     controller: props.controller,

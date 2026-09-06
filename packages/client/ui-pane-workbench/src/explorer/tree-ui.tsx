@@ -6,7 +6,7 @@ import { t } from '../i18n/locale.js'
 import type { PaneLocalViewProps } from '../view-registry.js'
 import { windowVirtualRows } from '../virtual-window.js'
 import type { ExplorerOpenAdapterV1 } from './open-adapter.js'
-import { getExplorerRuntime, subscribeExplorerRuntime, type ExplorerMetadataV1, type ExplorerMutationProposalV1, type ExplorerRuntimeV2 } from './runtime.js'
+import { getExplorerRuntime, subscribeExplorerRuntime, type ExplorerMetadataV1, type ExplorerMutationProposalV1, type ExplorerRuntimeSourceV1, type ExplorerRuntimeV2 } from './runtime.js'
 import {
   createExplorerTreeState,
   explorerRowHeight,
@@ -90,6 +90,14 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
       if (result.ok && props.narrow === true) emit(reduceExplorerTree(props.state, { type: 'narrow_content', ref: row.ref }))
       if (!result.ok) setMetadata(current => ({ ...current, [row.ref]: { ref: row.ref, version: row.node.version, state: 'unsupported', label: row.node.name, ...(result.reason === undefined ? {} : { detail: result.reason }) } }))
     }).finally(() => setPendingRefs(current => current.filter(ref => ref !== row.ref)))
+  }
+  const addReference = (row: ExplorerTreeRowV1): void => {
+    if (props.runtime?.addReference === undefined || row.node.sensitive === true) return
+    setPendingRefs(current => current.includes(row.ref) ? current : [...current, row.ref])
+    void props.runtime.addReference(row.node).then(result => {
+      setMutationStatus(result.ok ? `已添加引用：${row.node.name}` : result.reason ?? '引用不可用')
+    }).catch(error => setMutationStatus(error instanceof Error ? error.message : '引用不可用'))
+      .finally(() => setPendingRefs(current => current.filter(ref => ref !== row.ref)))
   }
   const inspect = (row: ExplorerTreeRowV1, delay = 350): void => {
     if (props.runtime?.inspectMetadata === undefined || row.node.kind === 'directory') return
@@ -190,8 +198,8 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
         createElement(Button, { type: 'button', size: 'sm', variant: 'primary', disabled: draftName.trim() === '', onClick: () => beginProposal(draftAction) }, '预检'),
         createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: () => { setDraftAction(undefined); setDraftName('') } }, '取消'),
       ),
-      mutationStatus === undefined ? null : createElement('span', { role: 'status' }, mutationStatus),
     ),
+    mutationStatus === undefined ? null : createElement('span', { role: 'status', className: 'pwr-explorer-action-status' }, mutationStatus),
     proposal === undefined ? null : createElement('div', { className: 'pwr-explorer-proposal', role: proposal.conflicts.length > 0 ? 'dialog' : 'region', 'aria-label': '文件操作预览' },
       createElement('strong', null, proposal.summary),
       proposal.risks.length === 0 ? null : createElement('span', null, `风险：${proposal.risks.join('、')}`),
@@ -321,6 +329,10 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
               type: 'button', size: 'sm', variant: 'toolbar', 'aria-label': `Reveal ${row.node.name}`,
               onClick: (event: { stopPropagation(): void }) => { event.stopPropagation(); setPendingRefs(current => [...new Set([...current, row.ref])]); void props.runtime?.revealSensitive?.(row.node).then(result => setMutationStatus(result.ok ? '敏感内容已临时授权' : result.reason ?? '授权失败')).finally(() => setPendingRefs(current => current.filter(ref => ref !== row.ref))) },
             }, '揭示') : null,
+            props.runtime?.addReference === undefined || row.node.sensitive === true ? null : createElement(Button, {
+              type: 'button', size: 'sm', variant: 'toolbar', 'aria-label': `添加 ${row.node.name} 到当前对话引用`,
+              onClick: (event: { stopPropagation(): void }) => { event.stopPropagation(); addReference(row) },
+            }, '引用'),
           )),
         ),
       ),
@@ -334,9 +346,13 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
   )
 }
 
-export function ExplorerTreeView(_props: PaneLocalViewProps): ReactNode {
+export function ExplorerTreeView(props: PaneLocalViewProps & { readonly runtimeSource?: ExplorerRuntimeSourceV1 }): ReactNode {
   const [state, setState] = useState(createExplorerTreeState)
-  const runtime = useSyncExternalStore(subscribeExplorerRuntime, getExplorerRuntime, getExplorerRuntime)
+  const runtime = useSyncExternalStore(
+    props.runtimeSource?.subscribe ?? subscribeExplorerRuntime,
+    props.runtimeSource?.getSnapshot ?? getExplorerRuntime,
+    props.runtimeSource?.getSnapshot ?? getExplorerRuntime,
+  )
   const narrow = useNarrowViewport()
   useEffect(() => {
     if (runtime === undefined) return
@@ -352,5 +368,15 @@ export function ExplorerTreeView(_props: PaneLocalViewProps): ReactNode {
     }, 150)
     return () => { live = false; clearTimeout(timer) }
   }, [runtime, state.filter])
+  if (runtime === undefined) {
+    return createElement(Surface, { kind: 'navigator', className: 'pwr-explorer', 'data-explorer-tree': 'true' },
+      createElement(SurfaceState, { phase: 'disabled', title: t('state.offline') }),
+    )
+  }
+  if (state.freshness === 'offline' && state.errors.root !== undefined) {
+    return createElement(Surface, { kind: 'navigator', className: 'pwr-explorer', 'data-explorer-tree': 'true' },
+      createElement(SurfaceState, { phase: 'error', title: state.errors.root }),
+    )
+  }
   return createElement(ExplorerTree, { state, runtime, narrow, onIntent: setState })
 }

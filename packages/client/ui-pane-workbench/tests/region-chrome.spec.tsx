@@ -58,9 +58,10 @@ describe('PaneRegionChrome shared dual-slot host', () => {
     const f = fixture()
     render(createElement(Regions, { ...f, rightMode: 'rail' }))
     fireEvent.click(screen.getAllByRole('button', { name: 'Open workspace view' })[0]!)
-    const picker = screen.getByRole('dialog', { name: 'Pane Center' })
-    expect(within(picker).getByRole('button', { name: /^Notifications/ })).toBeTruthy()
-    fireEvent.click(within(picker).getByRole('button', { name: /^Notifications/ }))
+    const picker = screen.getByRole('dialog', { name: 'Search and open' })
+    fireEvent.change(within(picker).getByRole('combobox'), { target: { value: 'Notifications' } })
+    expect(within(picker).getByRole('option', { name: /Notifications/ })).toBeTruthy()
+    fireEvent.click(within(picker).getByRole('option', { name: /Notifications/ }))
     expect(Object.values(f.controller.getSnapshot().views).some(view => view.kind === 'notifications.view')).toBe(true)
   })
 

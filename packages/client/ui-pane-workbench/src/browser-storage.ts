@@ -16,7 +16,7 @@ import { browserPreferenceStorage, probeCapability } from '@yeisme/dsh-plugin-co
 import type { PaneWorkspaceStorageV1 } from './persistence.js'
 
 /** 探测工作台持久化存储；不可用/受限环境一律返回 undefined（不抛错）。 */
-export function probeWorkbenchStorage(): PaneWorkspaceStorageV1 | undefined {
+export function probeWorkbenchStorage(): (PaneWorkspaceStorageV1 & { readonly length?: number; key?(index: number): string | null }) | undefined {
   if (typeof document !== 'undefined' && document.defaultView !== null
     && /jsdom/i.test(document.defaultView.navigator.userAgent)) return undefined
   const probed = probeCapability(browserPreferenceStorage)

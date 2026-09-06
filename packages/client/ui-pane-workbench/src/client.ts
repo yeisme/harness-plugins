@@ -9,12 +9,14 @@ import { PaneWorkbenchController } from './controller.js'
 import {
   closePaneWorkbenchCoreView,
   DSH_TOOL_DETAILS_VIEW_KIND,
+  DSH_WORKSPACE_SEARCH_VIEW_KIND,
   isPaneCoreViewId,
   openPaneWorkbenchCoreView,
   PANE_CORE_HOST_CONTRACT,
   registerPaneWorkbenchCoreViews,
   type PaneCoreViewId,
 } from './core-pane.js'
+import { WorkspaceSearchOverlay } from './search-overlay.js'
 import { PaneCommandRegistry, PaneIntentDispatcher, type PaneIntentHandlerRegistrationV1 } from './composition.js'
 import { registerWorkspaceCapabilitiesCommand, registerWorkspaceCapabilitiesView } from './capabilities-view.js'
 import {
@@ -42,6 +44,8 @@ import { PaneViewRegistry } from './view-registry.js'
 import { PANE_WORKBENCH_LOCALE_RESOURCES, setActiveLocale } from './i18n/locale.js'
 import type { PaneViewSpecV1 } from './workspace.js'
 import type { PaneEventEnvelopeV1 } from '@yeisme/dsh-pane-protocol'
+import { createUnifiedHostAdapter, isUnifiedWorkspaceHost, type UnifiedWorkspaceHost } from './unified-host.js'
+import { bindExplorerRuntime, createExplorerRuntimeSource, type ExplorerRuntimeV2 } from './explorer/runtime.js'
 
 export { PaneRegionChrome } from './region-chrome.js'
 export { bindExplorerRuntime, getExplorerRuntime, subscribeExplorerRuntime } from './explorer/runtime.js'
@@ -49,6 +53,48 @@ export type { ExplorerMetadataV1, ExplorerRuntimeV2 } from './explorer/runtime.j
 export type { ExplorerTreeNodeV1 } from './explorer/tree-state.js'
 export { ComposerReferenceDock, ComposerReferenceController, attachComposerReferenceController, getComposerReferenceController } from './explorer/references.js'
 export type { ComposerReferenceCapabilityV1, ComposerReferenceDispatchV1, ComposerReferenceSnapshotV1, ComposerReferenceV1 } from './explorer/references.js'
+export {
+  COMPOSER_REFERENCE_ADD_TO_MAIN_EVENT,
+  COMPOSER_REFERENCE_ADD_TO_MAIN_RESULT_EVENT,
+  COMPOSER_REFERENCE_BRIDGE_CONTEXT_KEY,
+  COMPOSER_REFERENCE_CATALOG_CONTEXT_KEY,
+  COMPOSER_REFERENCE_HOST_INSERT_EVENT,
+  COMPOSER_REFERENCE_HOST_INSERT_RESULT_EVENT,
+  COMPOSER_REFERENCE_HOST_REMOVE_EVENT,
+  COMPOSER_REFERENCE_HOST_REMOVE_RESULT_EVENT,
+  COMPOSER_REFERENCE_HOST_PROBE_EVENT,
+  COMPOSER_REFERENCE_REMOVE_FROM_MAIN_EVENT,
+  COMPOSER_REFERENCE_REMOVE_FROM_MAIN_RESULT_EVENT,
+  COMPOSER_REFERENCE_PROTOCOL_VERSION,
+  ComposerReferenceDraftControllerV2,
+  ComposerReferenceDraftDockV2,
+  getComposerReferenceDraftControllerV2,
+} from './explorer/references-v2.js'
+export type {
+  ComposerReferenceActivationV1,
+  ComposerReferenceAddToMainDetailV1,
+  ComposerReferenceAddToMainResultV1,
+  ComposerReferenceBridgeFeaturesV1,
+  ComposerReferenceBridgeSnapshotV1,
+  ComposerReferenceBridgeV1,
+  ComposerReferenceCatalogCandidateV1,
+  ComposerReferenceCatalogV1,
+  ComposerReferenceChooseTargetResultV1,
+  ComposerReferenceDraftSnapshotV2,
+  ComposerReferenceDraftV2,
+  ComposerReferenceFreshnessV2,
+  ComposerReferenceHostInsertDetailV1,
+  ComposerReferenceHostInsertResultV1,
+  ComposerReferenceHostRemoveDetailV1,
+  ComposerReferenceHostRemoveResultV1,
+  ComposerReferenceIntentV2,
+  ComposerReferenceKindV2,
+  ComposerReferenceSelectionSourceV1,
+  ComposerReferenceRemoveFromMainDetailV1,
+  ComposerReferenceRemoveFromMainResultV1,
+  ComposerReferenceTargetV2,
+  ComposerReferenceV2,
+} from './explorer/references-v2.js'
 export { PaneManagementCenter } from './management-center.js'
 export * from './management.js'
 export {
@@ -66,6 +112,8 @@ export {
   DSH_TOOL_DETAILS_VIEW_KIND,
   DSH_WORKSPACE_DESIGNER_RESOURCE_KEY,
   DSH_WORKSPACE_DESIGNER_VIEW_KIND,
+  DSH_WORKSPACE_SEARCH_RESOURCE_KEY,
+  DSH_WORKSPACE_SEARCH_VIEW_KIND,
   isPaneCoreViewId,
   openPaneWorkbenchCoreView,
   PANE_CORE_HOST_CONTRACT,
@@ -133,6 +181,7 @@ export {
 
 export interface PaneWorkbenchClientFace {
   registerView(input: unknown): () => void
+  registerExplorerRuntime(runtime: ExplorerRuntimeV2): () => void
   registerPlugin(input: PaneRuntimePluginV1): () => void
   registerCommand(input: unknown): () => void
   executeCommand(id: string): Promise<unknown>
@@ -149,7 +198,7 @@ export interface PaneWorkbenchClientFace {
   readonly experienceTier: ExperienceTierTrackerV1
 }
 
-export const inject = ['slots', 'sessions']
+export const inject = ['slots', 'sessions', 'layout']
 
 interface WorkspaceLayoutServiceLike {
   readonly corePaneVersion?: string
@@ -265,6 +314,7 @@ export function probePaneWorkbenchHost(ctx: Pick<ClientContext, 'get'>): PaneWor
 }
 
 interface PaneWorkbenchRuntime {
+  readonly unifiedAdapter?: ReturnType<typeof createUnifiedHostAdapter> | undefined
   readonly registry: PaneViewRegistry
   readonly controller: PaneWorkbenchController
   readonly face: PaneWorkbenchClientFace
@@ -276,9 +326,10 @@ interface PaneWorkbenchRuntime {
   readonly disposeLifecycle: () => void
 }
 
-function createPaneWorkbenchRuntime(tier: ExperienceTierTrackerV1, ctx: Pick<ClientContext, 'get'>): PaneWorkbenchRuntime {
+function createPaneWorkbenchRuntime(tier: ExperienceTierTrackerV1, ctx: Pick<ClientContext, 'get'>, unifiedHost?: UnifiedWorkspaceHost): PaneWorkbenchRuntime {
   const registry = new PaneViewRegistry({ capabilities: new Set(['pane.workbench.v1']) })
-  const disposeCoreViews = registerPaneWorkbenchCoreViews(registry)
+  const explorerRuntime = createExplorerRuntimeSource()
+  const disposeCoreViews = registerPaneWorkbenchCoreViews(registry, explorerRuntime)
   const plugins = new PanePluginRegistry({
     generation: 1,
     dshApiVersion: REQUIRED_LAYOUT_VERSION,
@@ -288,23 +339,53 @@ function createPaneWorkbenchRuntime(tier: ExperienceTierTrackerV1, ctx: Pick<Cli
   const commands = new PaneCommandRegistry()
   const intents = new PaneIntentDispatcher()
   const storage = probeWorkbenchStorage()
-  const persistence = storage === undefined ? undefined : new PaneWorkspacePersistenceAdapter(storage)
+  const persistence = storage === undefined || unifiedHost !== undefined ? undefined : new PaneWorkspacePersistenceAdapter(storage)
   const managementPersistence = storage === undefined ? undefined : new PaneManagementPersistenceAdapter(storage)
   const renditionRenderer = readContextService<PaneSafeRenditionRendererV1>(ctx, PANE_RENDITION_RENDERER_CONTEXT_KEY)
-  const controller = new PaneWorkbenchController({ registry, persistence, managementPersistence, experienceTier: tier, renditionRenderer })
+  const unifiedAdapter = unifiedHost === undefined ? undefined : createUnifiedHostAdapter(unifiedHost, registry, () => {
+    const sessions = readContextService<{ list: { getSnapshot(): { current?: string } } }>(ctx, 'sessions')
+    const workspaces = readContextService<{ list: { getSnapshot(): { items: Array<{ workspaceId: string; title: string; sessionIds: string[] }> } } }>(ctx, 'workspaces')
+    const sessionId = sessions?.list.getSnapshot().current
+    const workspace = workspaces?.list.getSnapshot().items.find(item => sessionId !== undefined && item.sessionIds.includes(sessionId))
+    return { sessionId, workspaceId: workspace?.workspaceId, workspaceTitle: workspace?.title }
+  }, commands)
+  const controller = new PaneWorkbenchController({ registry, persistence, managementPersistence, experienceTier: tier, renditionRenderer, ...(unifiedAdapter ? { layoutDelegate: unifiedAdapter.delegate } : {}) })
   const conversationSearch = readContextService<PaneConversationSearchHostV1>(ctx, PANE_CONVERSATION_SEARCH_CONTEXT_KEY)
   const keymap = readContextService<Partial<PaneManagementKeymapV1>>(ctx, PANE_MANAGEMENT_KEYMAP_CONTEXT_KEY)
   const workspaceContext = readContextService<PaneWorkspaceContextProviderV1>(ctx, PANE_WORKSPACE_CONTEXT_KEY)
   closePaneWorkbenchCoreView(controller, DSH_TOOL_DETAILS_VIEW_KIND)
-  const disposeCapabilitiesView = registerWorkspaceCapabilitiesView(registry, tier)
+  const disposeCapabilitiesView = registerWorkspaceCapabilitiesView(registry, tier, { unifiedHost: unifiedHost !== undefined })
   const disposeCapabilitiesCommand = registerWorkspaceCapabilitiesCommand(commands, controller)
+  const disposeSearchView = registry.registerView({
+    descriptor: {
+      kind: DSH_WORKSPACE_SEARCH_VIEW_KIND,
+      label: 'Search',
+      componentKey: 'dsh-workspace-search',
+      role: 'utility',
+      preferredRegion: 'right',
+      retention: 'recreate',
+      singleton: true,
+    },
+    component: () => createElement(WorkspaceSearchOverlay, {
+      registry,
+      controller,
+      commands,
+      conversationSearch,
+      workspaceContext,
+      mode: 'pane',
+    }),
+    showInPicker: false,
+    i18n: { namespace: 'paneWorkbench', labelKey: 'search.title', descriptionKey: 'search.placeholder' },
+  })
   const lifecycle: Array<() => void> = [
     disposeCoreViews,
     disposeCapabilitiesView,
     disposeCapabilitiesCommand,
+    disposeSearchView,
     bindPaneWorkbenchLocale(ctx),
     () => controller.dispose(),
     () => tier.dispose(),
+    () => unifiedAdapter?.dispose(),
   ]
   if (workspaceContext !== undefined) {
     const syncScope = (): void => {
@@ -365,6 +446,7 @@ function createPaneWorkbenchRuntime(tier: ExperienceTierTrackerV1, ctx: Pick<Cli
   }
   const face: PaneWorkbenchClientFace = {
     registerView: input => registry.registerView(input),
+    registerExplorerRuntime: runtime => explorerRuntime.bind(runtime),
     registerPlugin,
     registerCommand: input => commands.register(input),
     executeCommand: id => commands.execute(id),
@@ -390,7 +472,7 @@ function createPaneWorkbenchRuntime(tier: ExperienceTierTrackerV1, ctx: Pick<Cli
     controller,
     experienceTier: tier,
   }
-  return { registry, controller, face, handoff, conversationSearch, keymap, workspaceContext, lifecycle, disposeLifecycle }
+  return { registry, controller, face, handoff, conversationSearch, keymap, workspaceContext, lifecycle, disposeLifecycle, unifiedAdapter }
 }
 
 function bindSessionSync(ctx: ClientContext, controller: PaneWorkbenchController, lifecycle: Array<() => void>): void {
@@ -452,6 +534,7 @@ function attachCoreChrome(
       conversationSearch: runtime.conversationSearch,
       keymap: runtime.keymap,
       workspaceContext: runtime.workspaceContext,
+      commands: face.commands,
     })
     chromeLifecycle.push(slots.inject('shell.workspace.right', () => slots.register({
       name: 'shell.workspace.right',
@@ -503,7 +586,7 @@ function mountOverlayPaneHost(ctx: ClientContext, slots: SlotRegistryLike, tier:
   const { registry, controller, face, lifecycle, disposeLifecycle } = runtime
   try {
     ctx.provide('paneWorkbench', face)
-    let overlayChrome: (() => void) | undefined = slots.inject('shell.overlay', () => slots.register({ name: 'shell.overlay', id: 'yeisme-pane-workbench-overlay', order: 60, inject: () => face }, (() => createElement(OfficialOverlayPaneHost, { registry, controller, handoff: runtime.handoff, conversationSearch: runtime.conversationSearch, keymap: runtime.keymap, workspaceContext: runtime.workspaceContext })) as never))
+    let overlayChrome: (() => void) | undefined = slots.inject('shell.overlay', () => slots.register({ name: 'shell.overlay', id: 'yeisme-pane-workbench-overlay', order: 60, inject: () => face }, (() => createElement(OfficialOverlayPaneHost, { registry, controller, handoff: runtime.handoff, conversationSearch: runtime.conversationSearch, keymap: runtime.keymap, workspaceContext: runtime.workspaceContext, commands: face.commands })) as never))
     lifecycle.push(() => { overlayChrome?.(); overlayChrome = undefined })
     // Seam hot-plug watcher: a workspace slot announcement re-judges the tier.
     // Injectors that fire setup while the slot is still undeclared are guarded by spec().
@@ -566,6 +649,15 @@ export function apply(ctx: ClientContext): () => void {
   // Session-scoped tier judgement: probed once at apply, re-judged on hot-plug, never persisted.
   const tier = createExperienceTierTracker({ probe: () => probeWorkspaceSeams(ctx, probePaneWorkbenchHost(ctx)) })
   tier.getSnapshot()
+  const unifiedHost = readContextService<unknown>(ctx, 'workspaceLayout')
+  if (isUnifiedWorkspaceHost(unifiedHost)) {
+    const runtime = createPaneWorkbenchRuntime(tier, ctx, unifiedHost)
+    try {
+      ctx.provide('paneWorkbench', runtime.face)
+      runtime.lifecycle.push(runtime.unifiedAdapter!.mount(slots, runtime.controller))
+      return runtime.disposeLifecycle
+    } catch (error) { runtime.disposeLifecycle(); throw error }
+  }
   if (!coreProbe.available) {
     if (hasPartialWorkspaceHost(coreProbe)) return () => {}
     return mountOverlayPaneHost(ctx, slots, tier)

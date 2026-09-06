@@ -10,6 +10,7 @@ export * from './explorer/git-decoration.js'
 export * from './explorer/provider.js'
 export * from './explorer/runtime.js'
 export * from './explorer/references.js'
+export * from './explorer/references-v2.js'
 export * from './explorer/tree-state.js'
 export * from './explorer/tree-ui.js'
 export * from './git/branch-worktree.js'
@@ -26,6 +27,23 @@ export * from './font-scale.js'
 export * from './lifecycle.js'
 export * from './management.js'
 export * from './management-center.js'
+export * from './search-identity.js'
+export * from './search-match.js'
+export * from './search-group.js'
+export * from './search-query.js'
+export * from './search-cache.js'
+export * from './search-preferences.js'
+export * from './search-adapter.js'
+export {
+  activateWorkspaceSearchCandidate,
+  openWorkspaceSearchPane,
+  parseWorkspaceSearchDragPayload,
+  WORKSPACE_SEARCH_DRAG_MIME,
+  workspaceSearchDragPayload,
+  type WorkspaceSearchOpenPlacementV1,
+  type WorkspaceSearchOpenResultV1,
+} from './search-open.js'
+export { WorkspaceSearchOverlay, WorkspaceSearchPaneView, type WorkspaceSearchOverlayProps } from './search-overlay.js'
 export * from './persistence.js'
 export * from './projection.js'
 export * from './region-chrome.js'

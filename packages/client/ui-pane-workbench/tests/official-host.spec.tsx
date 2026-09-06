@@ -110,10 +110,10 @@ describe('OfficialOverlayPaneHost', () => {
     const openView = within(host).getByRole('button', { name: 'Open workspace view' })
 
     fireEvent.click(openView)
-    const picker = screen.getByRole('dialog', { name: 'Pane Center' })
+    const picker = screen.getByRole('dialog', { name: 'Search and open' })
     expect(picker).toBeTruthy()
     fireEvent.keyDown(picker, { key: 'Escape' })
-    expect(screen.queryByRole('dialog', { name: 'Pane Center' })).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Search and open' })).toBeNull()
     expect(document.activeElement).toBe(openView)
 
     const activeTab = within(host).getByRole('tab', { name: 'Utility' })

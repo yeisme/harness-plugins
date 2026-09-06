@@ -100,6 +100,12 @@ export interface PaneWorkspaceLayoutHandle {
 }
 
 export interface PaneWorkbenchControllerOptions {
+  /** Host-owned layout projection. In this mode no plugin reducer or layout persistence runs. */
+  readonly layoutDelegate?: {
+    getSnapshot(): PaneWorkspaceV1
+    subscribe(listener: () => void): () => void
+    dispatch(intent: PaneWorkspaceIntentV1Additive): PaneWorkspaceReducerResultV1
+  }
   readonly initialState?: PaneWorkspaceV1
   readonly registry?: PaneViewRegistry
   readonly persistence?: PaneWorkspacePersistenceAdapter
@@ -124,6 +130,7 @@ export class PaneWorkbenchController {
   private readonly managementListeners = new Set<() => void>()
   private managementSnapshotCache: PaneManagementSnapshotV1 | undefined
   private registryEvents: SubscriptionHandle | undefined
+  private delegateEvents: (() => void) | undefined
   private layoutHandle: PaneWorkspaceLayoutHandle | undefined
   private layoutEvents: SubscriptionHandle | undefined
   private syncingLayout = false
@@ -141,7 +148,7 @@ export class PaneWorkbenchController {
   readonly renditionRenderer: PaneSafeRenditionRendererV1 | undefined
 
   constructor(private readonly options: PaneWorkbenchControllerOptions = {}) {
-    const loaded = options.initialState ?? options.persistence?.load() ?? createPaneWorkspace()
+    const loaded = options.layoutDelegate?.getSnapshot() ?? options.initialState ?? options.persistence?.load() ?? createPaneWorkspace()
     this.experienceTier = options.experienceTier
     this.renditionRenderer = options.renditionRenderer
     this.managementProfile = options.managementPersistence?.loadProfile() ?? {
@@ -154,7 +161,14 @@ export class PaneWorkbenchController {
     this.state = options.registry === undefined ? loaded : markOrphanedPaneViews(loaded, options.registry)
     this.visible = this.state.regions.right.visible || this.state.regions.bottom.visible
     this.drag = new PaneDragCoordinator(() => this.state, intent => this.dispatch(intent))
-    if (options.registry !== undefined) {
+    if (options.layoutDelegate !== undefined) {
+      this.delegateEvents = options.layoutDelegate.subscribe(() => {
+        this.state = options.layoutDelegate!.getSnapshot()
+        this.visible = Object.keys(this.state.views).length > 0
+        this.emitWorkspace()
+        this.emitVisibility()
+      })
+    } else if (options.registry !== undefined) {
       this.registryEvents = subscriptionHandle(options.registry.subscribe(() => {
         const next = markOrphanedPaneViews(this.state, options.registry!)
         if (next === this.state) return
@@ -216,6 +230,7 @@ export class PaneWorkbenchController {
   }
 
   dispatch(intent: PaneWorkspaceIntentV1Additive): PaneWorkspaceReducerResultV1 {
+    if (this.options.layoutDelegate !== undefined) return this.options.layoutDelegate.dispatch(intent)
     const before = this.state
     const tier = this.experienceTier?.getSnapshot().tier
     const gated = tier === undefined ? undefined : gateTier0GeometryIntent(intent, this.state, tier)
@@ -289,6 +304,7 @@ export class PaneWorkbenchController {
   }
 
   switchSession(sessionId: string | undefined): void {
+    if (this.options.layoutDelegate !== undefined) return
     const nextSession = sessionId?.trim() || 'root'
     if (nextSession === this.currentSession || this.options.persistence === undefined) return
     const previousSession = this.currentSession
@@ -312,7 +328,8 @@ export class PaneWorkbenchController {
   }
 
   dispose(): void {
-    this.persist()
+    if (this.options.layoutDelegate === undefined) this.persist()
+    this.delegateEvents?.()
     this.registryEvents?.unsubscribe()
     this.registryEvents = undefined
     this.layoutEvents?.unsubscribe()
