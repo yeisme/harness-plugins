@@ -10,7 +10,6 @@ const clientCatalog = {
   'ui-agent-preset': 'adopted',
   'ui-browser-pane': 'excluded', // pure view-model/state logic; React rendering lands with the live factory slice
   'ui-ai-drama-director': 'adopted',
-  'ui-command-experience-tui': 'excluded',
   'ui-command-experience-web': 'adopted',
   'ui-conversation-rewrite': 'adopted',
   'ui-creator-studio': 'adopted',
@@ -70,6 +69,7 @@ const dynamicStyleAllowlist = new Map([
   ['packages/client/ui-creator-studio/src/views.tsx', 'progress and waveform values'],
   ['packages/client/ui-pane-subagent/src/view.ts', 'tree depth indentation'],
   ['packages/client/ui-mcp-inspector/src/client/McpInspectorView.tsx', 'coverage proportions and activity timeline geometry'],
+  ['packages/client/ui-token-usage/src/client/insights-panel.tsx', 'usage composition segment proportions'],
   ['packages/bundle/dsh-file-document/src/client/file-document-panel.tsx', 'tree depth indentation and owner-authorized preview media sizing'],
   ['packages/client/ui-desktop-workbench/src/client/git-pane.tsx', 'diff and measured workbench state'],
   ['packages/bundle/dsh-rich-media/src/client/media-library.tsx', 'virtual media row geometry'],
@@ -143,6 +143,8 @@ function checkPackage(base, name, classification) {
 
 for (const [name, classification] of Object.entries(clientCatalog)) checkPackage('client', name, classification)
 for (const [name, classification] of Object.entries(bundleCatalog)) checkPackage('bundle', name, classification)
+// The installable reference plugin participates in full-profile UI acceptance.
+checkPackage('example', 'dsh-plugin-example', 'adopted')
 
 for (const [file, reason] of dynamicStyleAllowlist) {
   if (!existsSync(resolve(root, file))) errors.push(`${file}: dynamic style allowlist target is missing (${reason})`)

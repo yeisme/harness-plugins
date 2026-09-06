@@ -2,10 +2,11 @@ import { defineConfig } from '@playwright/test'
 import { resolve } from 'node:path'
 
 const evidenceDir = process.env.UI_VISUAL_EVIDENCE_DIR ?? resolve('temp/ui-visual-playwright')
+const chromeExecutable = process.env.DSH_TEST_CHROME_EXECUTABLE
 
 export default defineConfig({
   testDir: '.',
-  testMatch: 'visual.spec.ts',
+  testMatch: 'visual*.spec.ts',
   timeout: 30_000,
   expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.005, animations: 'disabled' } },
   fullyParallel: false,
@@ -19,7 +20,9 @@ export default defineConfig({
     browserName: 'chromium',
     colorScheme: 'dark',
     locale: 'en-US',
+    ...(chromeExecutable === undefined ? {} : { launchOptions: { executablePath: chromeExecutable } }),
     reducedMotion: 'reduce',
+    deviceScaleFactor: 1,
     viewport: { width: 1200, height: 900 },
   },
   webServer: {

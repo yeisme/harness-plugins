@@ -1,7 +1,41 @@
 import { spawn } from 'node:child_process'
 import { mkdir, writeFile } from 'node:fs/promises'
+import { readdirSync, readFileSync, readlinkSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
 import process from 'node:process'
+import { collectVisualProvenance, serializeProvenance } from './visual-provenance.mjs'
+
+// Playwright 经 `pnpm exec` 间接拉起 webServer 时信号无法穿透 pnpm 垫片，
+// server.mjs 会被遗留在 4178 端口并毒化下一次运行（"already used"）。
+// Linux 环境经 /proc 按监听端口反查 pid 清理；其它平台无泄漏场景则跳过。
+function killPortListeners(port) {
+  if (process.platform !== 'linux') return
+  const hex = port.toString(16).toUpperCase().padStart(4, '0')
+  const inodes = new Set()
+  for (const table of ['/proc/net/tcp', '/proc/net/tcp6']) {
+    let rows
+    try { rows = readFileSync(table, 'utf8').split('\n').slice(1) } catch { continue }
+    for (const row of rows) {
+      const cols = row.trim().split(/\s+/)
+      if (cols[3] !== '0A') continue // LISTEN
+      if (cols[1]?.endsWith(`:${hex}`)) inodes.add(cols[9])
+    }
+  }
+  if (inodes.size === 0) return
+  for (const pid of readdirSync('/proc')) {
+    if (!/^\d+$/.test(pid)) continue
+    let fds
+    try { fds = readdirSync(`/proc/${pid}/fd`) } catch { continue }
+    for (const fd of fds) {
+      let link
+      try { link = readlinkSync(`/proc/${pid}/fd/${fd}`) } catch { continue }
+      if (inodes.has(link.match(/^socket:\[(\d+)\]$/)?.[1])) {
+        try { process.kill(Number(pid), 'SIGKILL') } catch { /* 已退出 */ }
+        break
+      }
+    }
+  }
+}
 
 const projectRoot = resolve(import.meta.dirname, '..')
 const startedAt = new Date()
@@ -10,7 +44,7 @@ const runRoot = resolve(projectRoot, 'temp/integration-test-runs', runId)
 const artifacts = resolve(runRoot, 'artifacts')
 const update = process.argv.includes('--update-snapshots')
 const publicCommand = update ? 'pnpm run test:visual:update' : 'pnpm run test:visual'
-const args = ['exec', 'playwright', 'test', '--config', 'tests/ui-visual/playwright.config.ts', ...(update ? ['--update-snapshots=all'] : [])]
+const args = ['exec', 'playwright', 'test', '--config', 'tests/ui-visual/playwright.config.ts', update ? '--update-snapshots=all' : '--update-snapshots=none']
 
 function redact(value) {
   return value
@@ -19,6 +53,9 @@ function redact(value) {
 }
 
 await mkdir(artifacts, { recursive: true })
+killPortListeners(4178)
+const provenance = await collectVisualProvenance({ projectRoot })
+await writeFile(resolve(artifacts, 'visual-provenance.json'), `${JSON.stringify(serializeProvenance(provenance), null, 2)}\n`, 'utf8')
 await writeFile(resolve(runRoot, 'command.txt'), `${publicCommand}\n`, 'utf8')
 await writeFile(resolve(runRoot, 'env.json'), `${JSON.stringify({
   node: process.version,
@@ -29,22 +66,34 @@ await writeFile(resolve(runRoot, 'env.json'), `${JSON.stringify({
   reduced_motion: 'reduce',
   viewport: '1200x900',
   container_widths: [360, 560, 960],
+  device_scale_factor: 1,
+  browser_selection: provenance.browser.selection,
+  browser_available: provenance.browser.status === 'available',
+  overrides_set: provenance.overrides_set,
   redacted: true,
 }, null, 2)}\n`, 'utf8')
 
-const child = spawn('pnpm', args, {
-  cwd: projectRoot,
-  env: { ...process.env, UI_VISUAL_EVIDENCE_DIR: artifacts },
-  stdio: ['ignore', 'pipe', 'pipe'],
-})
 let stdout = ''
 let stderr = ''
-child.stdout.on('data', chunk => { stdout += String(chunk) })
-child.stderr.on('data', chunk => { stderr += String(chunk) })
-const exitCode = await new Promise((resolveExit, reject) => {
-  child.once('error', reject)
-  child.once('close', code => resolveExit(code ?? 1))
-})
+let exitCode = 1
+if (provenance.browser.status !== 'available' || provenance.browser.executable_path === undefined) {
+  stderr = `Visual browser unavailable: ${provenance.browser.reason ?? 'matching Playwright headless shell is unavailable'}\n`
+} else {
+  const child = spawn('pnpm', args, {
+    cwd: projectRoot,
+    // Explicit user overrides are retained by collectVisualProvenance; when
+    // absent, this pins the exact headless-shell revision from browsers.json.
+    env: { ...process.env, UI_VISUAL_EVIDENCE_DIR: artifacts, DSH_TEST_CHROME_EXECUTABLE: provenance.browser.executable_path },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  child.stdout.on('data', chunk => { stdout += String(chunk) })
+  child.stderr.on('data', chunk => { stderr += String(chunk) })
+  exitCode = await new Promise((resolveExit, reject) => {
+    child.once('error', reject)
+    child.once('close', code => resolveExit(code ?? 1))
+  })
+  killPortListeners(4178)
+}
 const finishedAt = new Date()
 stdout = redact(stdout)
 stderr = redact(stderr)
@@ -68,6 +117,7 @@ const summary = {
     stderr: relative(projectRoot, resolve(runRoot, 'stderr.log')),
     env: relative(projectRoot, resolve(runRoot, 'env.json')),
     artifacts: relative(projectRoot, artifacts),
+    visual_provenance: relative(projectRoot, resolve(artifacts, 'visual-provenance.json')),
   },
   redaction: { enabled: true, policy: 'harness-plugins-ui-visual-v1' },
   update_snapshots: update,
