@@ -7,6 +7,8 @@
 export const NS = 'mcpInspector' as const
 
 export const zh = {
+  'session.none': '选择会话以查看工具调用；工具目录仍可使用。',
+  'session.unavailable': '当前会话活动不可用；工具目录仍可使用。',
   'view.mcp': '工具',
   'view.tools': '工具',
   'header.subtitle': '工具目录与本会话运行情况',
@@ -101,6 +103,8 @@ export const zh = {
 } as const
 
 export const en = {
+  'session.none': 'Select a session to inspect tool calls. The catalog is still available.',
+  'session.unavailable': 'Session activity is unavailable. The catalog is still available.',
   'view.mcp': 'Tools',
   'view.tools': 'Tools',
   'header.subtitle': 'Tool catalog and session activity',

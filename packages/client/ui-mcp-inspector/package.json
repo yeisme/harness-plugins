@@ -8,7 +8,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsc -p tsconfig.json && tsdown",
     "bundle": "tsdown",
-    "ui:acceptance": "tsx scripts/ui-acceptance.ts"
+    "ui:acceptance": "tsx scripts/ui-acceptance.ts",
+    "test:integration": "node scripts/run-integration-tests.mjs"
   },
   "keywords": [],
   "author": "",

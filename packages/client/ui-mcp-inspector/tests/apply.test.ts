@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { apply, inject, name } from '../src/client/index.ts'
 import { deriveMcpActivity } from '../src/client/activity.ts'
@@ -24,40 +24,54 @@ function collect(node: unknown, into: { text: string[]; tags: string[]; handlers
   collect(element.props.children, into)
 }
 
-describe('apply conversation.view registration', () => {
-  test('registers a Tools tab on conversation.view', () => {
-    const registered: Array<{ meta: Record<string, unknown>; view: unknown }> = []
+describe('Tools pane registration', () => {
+  function harness(initial?: unknown) {
+    const disposeView = vi.fn()
+    const pane = { registerView: vi.fn(() => disposeView), openView: vi.fn() }
+    const disposeLocale = vi.fn()
+    const disposeEvents = vi.fn()
+    let serviceChanged = (_name: string, _value: unknown) => {}
     const ctx = {
-      effect: (fn: () => unknown) => {
-        fn()
-        return () => {}
-      },
-      locale: {
-        register: () => () => {},
-        bind: () => (key: string) => (key === 'view.tools' ? 'Tools' : key),
-      },
-      slots: {
-        inject: (slot: string, setup: () => unknown) => {
-          expect(slot).toBe('conversation.view')
-          setup()
-        },
-        register: (meta: Record<string, unknown>, view: unknown) => {
-          registered.push({ meta, view })
-          return () => {}
-        },
-      },
+      locale: { register: () => disposeLocale, bind: () => (key: string) => key === 'view.tools' ? 'Tools' : key },
+      get: (key: string) => key === 'paneWorkbench' ? initial === true ? pane : initial : {},
+      on: (_event: string, fn: typeof serviceChanged) => { serviceChanged = fn; return disposeEvents },
+      slots: { inject: vi.fn(), register: vi.fn() },
     }
-    apply(ctx as never)
+    return { ctx, pane, disposeView, disposeLocale, disposeEvents, change: (value: unknown) => serviceChanged('paneWorkbench', value) }
+  }
+
+  test('registers one picker-visible Tools pane without a conversation tab', () => {
+    const h = harness(true)
+    const dispose = apply(h.ctx as never)
     expect(name).toBe('client-ui-mcp-inspector')
-    expect(inject).toEqual(['slots', 'locale'])
-    expect(registered).toHaveLength(1)
-    expect(registered[0].meta).toMatchObject({
-      name: 'conversation.view',
-      id: 'mcp-inspector',
+    expect(inject).toEqual(['locale', 'sessions'])
+    expect(h.pane.registerView).toHaveBeenCalledOnce()
+    expect(h.pane.registerView.mock.calls[0]?.[0]).toMatchObject({
+      descriptor: { kind: 'mcp-inspector', label: 'Tools', preferredRegion: 'right', retention: 'recreate', singleton: true },
+      i18n: { namespace: 'mcpInspector', labelKey: 'view.tools' },
     })
-    expect(typeof registered[0].meta.label).toBe('function')
-    expect((registered[0].meta.label as () => string)()).toBe('Tools')
-    expect(typeof registered[0].view).toBe('function')
+    expect(h.ctx.slots.inject).not.toHaveBeenCalled()
+    expect(h.pane.openView).not.toHaveBeenCalled()
+    dispose()
+    expect(h.disposeView).toHaveBeenCalledOnce()
+    expect(h.disposeLocale).toHaveBeenCalledOnce()
+    expect(h.disposeEvents).toHaveBeenCalledOnce()
+  })
+
+  test('handles missing, late, replaced and unloaded pane services', () => {
+    const h = harness()
+    const dispose = apply(h.ctx as never)
+    expect(h.pane.registerView).not.toHaveBeenCalled()
+    h.change({ registerView: () => {} })
+    h.change(h.pane)
+    h.change(h.pane)
+    expect(h.pane.registerView).toHaveBeenCalledOnce()
+    h.change(undefined)
+    expect(h.disposeView).toHaveBeenCalledOnce()
+    h.change(h.pane)
+    expect(h.pane.registerView).toHaveBeenCalledTimes(2)
+    dispose()
+    expect(h.disposeView).toHaveBeenCalledTimes(2)
   })
 })
 

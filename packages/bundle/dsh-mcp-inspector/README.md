@@ -1,6 +1,6 @@
 # @yeisme/dsh-mcp-inspector
 
-DSH 官方 web ui 的 **Tools** 会话视图 bundle：管理 Skills / MCP / 内置工具，并显示本会话工具活动与可选 MCP health。
+DSH 官方 web ui 的 **Tools** Pane bundle：管理 Skills / MCP / 内置工具，并显示本会话工具活动与可选 MCP health。
 
 ```bash
 dsh plugin --profile web add @yeisme/dsh-mcp-inspector
@@ -8,7 +8,7 @@ dsh plugin --profile web add @yeisme/dsh-mcp-inspector
 dsh plugin --profile web add ./packages/bundle/dsh-mcp-inspector
 ```
 
-- 在会话视图环（`conversation.view`）注册 **Tools** tab（原 MCP tab）。
+- 在 Pane Workbench 的 `+` 选择器注册 **Tools**，`/mcp` 打开同一右侧单例，默认筛选 MCP；不再注册会话 tab。
 - 目录：skills（`ctx.skills`）、MCP server（`mcp__*` 工具与可选 plugin inventory）、内置工具。支持搜索、按类型/availability 筛选、详情与启用/关闭。
 - 启停是用户偏好 overlay，经 `toolHub.setEnabled` 写入 `yeisme_tool_hub_v1`，并由 `ctx.tools.guard` 拒绝已关闭项。不开关 Cordis Loader 行。
 - 本会话 MCP/native/聚合 Skill 调用活动从 ConversationSnapshot 派生（只读，无调用按钮），支持列表与耗时时间线。

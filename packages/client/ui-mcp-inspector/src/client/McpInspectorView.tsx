@@ -50,6 +50,7 @@ export interface ToolsInspectorTreeProps {
   /** Legacy MCP-only tree input retained for exported test/consumer compatibility. */
   readonly servers?: readonly McpServerActivity[]
   readonly activity?: ToolActivitySnapshot
+  readonly sessionNotice?: string | undefined
   readonly selectedId?: string
   readonly activeSection?: ToolsSection
   readonly activityMode?: ActivityMode
@@ -308,6 +309,7 @@ export function renderToolsInspectorTree(props: ToolsInspectorTreeProps): JSX.El
   return (
     <Surface kind="inspector" data-mcp-inspector="" data-active-section={activeSection} aria-label={text('view.tools')}>
       <style>{mcpInspectorStyles}</style>
+      {props.sessionNotice === undefined ? null : <p className="tools-notice" role="status">{props.sessionNotice}</p>}
       <header className="vk-header tools-header">
         <div className="tools-title"><strong className="vk-heading">{text('view.tools')}</strong><p className="vk-sub" role="status"><i className="vk-dot" data-tone={headerTone} aria-hidden="true" />{catalogHeading(props.catalogState, text)}</p></div>
         <div className="tools-summary" aria-label={text('header.subtitle')}>
@@ -389,13 +391,29 @@ function snapshotController(binding: ToolsHubBinding | undefined, fallback: Tool
 }
 
 export function McpInspectorView({ useSession, binding, controller, t }: ToolsInspectorViewProps): JSX.Element {
+  const activity = useSession(snapshot => {
+    const landed = snapshot.nodes.filter(node => node.kind === 'tool-result') as unknown as ActivityToolResultNode[]
+    return deriveToolActivity(landed, snapshot.runningCalls as unknown as ActivityRunningCall[])
+  })
+  return <ToolsInspectorContent activity={activity} binding={binding} controller={controller} t={t} />
+}
+
+/** Shared content for the legacy exported renderer and the session-following pane. */
+export function ToolsInspectorContent({ activity, binding, controller, t, initialFamily = 'all', sessionNotice }: {
+  readonly activity: ToolActivitySnapshot
+  readonly binding?: ToolsHubBinding | undefined
+  readonly controller?: ToolsHubController | undefined
+  readonly t?: ToolsTranslator | undefined
+  readonly initialFamily?: FamilyFilter
+  readonly sessionNotice?: string | undefined
+}): JSX.Element {
   const subscribe = binding === undefined ? idleSubscribe : binding.subscribe.bind(binding)
   const bound = useSyncExternalStore(subscribe, () => snapshotController(binding, controller), () => snapshotController(binding, controller))
   const hub = bound ?? EMPTY_CONTROLLER
   const catalogState = useSyncExternalStore(hub.subscribe.bind(hub), hub.getSnapshot.bind(hub), hub.getSnapshot.bind(hub))
   const pendingId = useSyncExternalStore(hub.subscribe.bind(hub), hub.pendingIdSnapshot.bind(hub), hub.pendingIdSnapshot.bind(hub))
   const [query, setQuery] = useState('')
-  const [family, setFamily] = useState<FamilyFilter>('all')
+  const [family, setFamily] = useState<FamilyFilter>(initialFamily)
   const [enabled, setEnabled] = useState<EnabledFilter>('all')
   const [selectedId, setSelectedId] = useState<string>()
   const [activeSection, setActiveSection] = useState<ToolsSection>('catalog')
@@ -412,11 +430,6 @@ export function McpInspectorView({ useSession, binding, controller, t }: ToolsIn
     return () => clearInterval(timer)
   }, [bound])
 
-  const activity = useSession(snapshot => {
-    const landed = snapshot.nodes.filter(node => node.kind === 'tool-result') as unknown as ActivityToolResultNode[]
-    return deriveToolActivity(landed, snapshot.runningCalls as unknown as ActivityRunningCall[])
-  })
-
   useEffect(() => {
     if (catalogState.status !== 'ready' || selectedId === undefined) return
     const visible = filterCatalog(catalogState.catalog.items, { query, family, enabled })
@@ -432,6 +445,7 @@ export function McpInspectorView({ useSession, binding, controller, t }: ToolsIn
     family,
     enabled,
     activity,
+    sessionNotice,
     ...(selectedId === undefined ? {} : { selectedId }),
     activeSection,
     activityMode,

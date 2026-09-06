@@ -3,7 +3,7 @@ import { buildPanelStyles } from '@yeisme/dsh-client-ui-visual-kit'
 const S = '[data-mcp-inspector]'
 
 const mcpInspectorExtra = `
-${S}{display:flex;flex-direction:column;align-content:flex-start;container-type:inline-size;min-height:100%;height:auto;overflow:visible;--vk-font-small:12px;--vk-font-body:13px;--vk-font-strong:14px;--vk-font-heading:15px;--vk-ctrl-button:32px;--vk-ctrl-input:36px}
+${S}{display:flex;flex-direction:column;align-content:flex-start;container-type:inline-size;min-height:0;height:100%;overflow:auto;--vk-font-small:12px;--vk-font-body:13px;--vk-font-strong:14px;--vk-font-heading:15px;--vk-ctrl-button:32px;--vk-ctrl-input:36px}
 ${S} .visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 ${S} .tools-header{display:grid;grid-template-columns:minmax(180px,auto) minmax(0,1fr) auto;gap:12px;padding:10px 14px}
 ${S} .tools-title{display:flex;align-items:center;gap:10px;min-width:0}
@@ -86,10 +86,9 @@ ${S} .tools-details-body dt{color:var(--vk-text-tertiary)}
 ${S} .tools-details-body dd{min-width:0;margin:0;color:var(--vk-text-primary);overflow-wrap:anywhere}
 ${S} .tools-reason{padding:8px;color:var(--vk-state-warn)!important;background:color-mix(in srgb,var(--vk-state-warn) 10%,transparent);border-radius:var(--vk-radius-md)}
 ${S} .tools-scope-note{padding-top:8px;border-top:1px solid var(--vk-border-l1);font-size:var(--vk-font-small)}
-${S} .tools-empty{min-height:120px;padding:20px}
 ${S} .tools-empty p,${S} .tools-empty small{margin:0}
 
-@container(max-width:1099px){
+@container(max-width:720px){
 ${S} .tools-header{grid-template-columns:minmax(0,1fr) auto}
 ${S} .tools-summary{grid-column:1/-1;grid-row:2;justify-content:flex-start;overflow:auto}
 ${S} .tools-mobile-tabs{display:flex;gap:4px;margin:10px 10px 0;padding:4px;background:var(--vk-bg-layer-1);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-md)}
@@ -101,7 +100,7 @@ ${S} .tools-workspace[data-active-section='activity'] .tools-right-column,${S} .
 ${S} .tools-right-tabs{display:none}
 }
 
-@container(max-width:699px){
+@container(max-width:420px){
 ${S} .tools-header{position:static;grid-template-columns:minmax(0,1fr);padding:10px}
 ${S} .tools-recheck{grid-row:1;grid-column:1;justify-self:end}
 ${S} .tools-title{grid-row:1;grid-column:1;padding-right:90px}

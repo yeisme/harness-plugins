@@ -32,8 +32,8 @@ describe('dsh-mcp-inspector bundle entry', () => {
     expect(filterCatalog).toBeTypeOf('function');
   });
 
-  it('declares the slot and locale injects', () => {
-    expect(inject).toEqual(['slots', 'locale']);
+  it('declares the locale and session injects', () => {
+    expect(inject).toEqual(['locale', 'sessions']);
   });
 
   it('ships a self-contained Host face so the toolHub Remote is not dropped', () => {

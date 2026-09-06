@@ -28,6 +28,7 @@ export const REQUIRED_SCREENSHOTS = [
   '05-narrow-layout.png',
   '06-keyboard-focus.png',
   '07-reduced-motion.png',
+  '08-compact-layout.png',
 ] as const
 
 type Decision = 'accept' | 'reject'
@@ -250,12 +251,20 @@ async function prepare(change: string): Promise<string> {
       { name: REQUIRED_SCREENSHOTS[3], width: 960, height: 900, props: treeProps({ activeSection: 'activity', activityMode: 'timeline' }) },
       { name: REQUIRED_SCREENSHOTS[4], width: 560, height: 900, props: treeProps() },
       { name: REQUIRED_SCREENSHOTS[5], width: 560, height: 900, props: treeProps(), focus: true },
+      { name: REQUIRED_SCREENSHOTS[7], width: 360, height: 900, props: treeProps() },
       { name: REQUIRED_SCREENSHOTS[6], width: 960, height: 900, props: treeProps({ activeSection: 'activity', activityMode: 'timeline' }), reduced: true },
     ]
     for (const scenario of scenarios) {
       const page = await browser.newPage({ viewport: { width: scenario.width, height: scenario.height }, colorScheme: 'dark', reducedMotion: scenario.reduced ? 'reduce' : 'no-preference' })
       await page.setContent(html(scenario.props), { waitUntil: 'load' })
-      if (scenario.focus) await page.locator('input[type="search"]').focus()
+      const layout = await page.locator('[data-mcp-inspector]').evaluate(element => ({
+        width: element.clientWidth, scrollWidth: element.scrollWidth,
+      }))
+      if (layout.scrollWidth > layout.width + 1) throw new Error(`Tools pane overflows at ${scenario.width}px`)
+      if (scenario.focus) {
+        await page.keyboard.press('Tab')
+        if (!await page.locator(':focus').count()) throw new Error('Tools pane has no keyboard focus target')
+      }
       await page.screenshot({ path: join(artifacts, scenario.name), fullPage: true })
       stdout.push(`screenshot=${scenario.name} width=${scenario.width}`)
       await page.close()
