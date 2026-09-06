@@ -1,8 +1,10 @@
-import { mkdtemp, writeFile, mkdir, readFile, symlink } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { mkdtemp, writeFile, mkdir, readFile, rename, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { createFileWorkspaceEditHost, createGitCompareSession, createOpaqueFileRefRegistry, handleYeismeFilesApi, listWorkspaceTree, NodeFileResourceMutationOwner, NodeFileTransferOwner, readGitDiffWindowV2, readGitHistoryWindow, readGitRepositoryContexts, readGitStatus, readGitStatusWindow, readWorkspaceBinary, readWorkspaceText, writeWorkspaceText } from '../src/node.ts'
+import { SECURE_FILE_TRAVERSAL_UNSUPPORTED_CODE } from '../src/index.ts'
 
 describe('@yeisme/dsh-file-host/node', () => {
   it('lists files and directories in one workspace level', async () => {
@@ -93,7 +95,7 @@ describe('@yeisme/dsh-file-host/node', () => {
       method: 'POST',
       url: '/yeisme-files/api/fs.tree',
       async *[Symbol.asyncIterator]() {
-        yield Buffer.from(JSON.stringify({ cwd: root }))
+        yield Buffer.from(JSON.stringify({ sessionId: 'session-1', cwd: root }))
       },
     }
     let treeBody = ''
@@ -101,7 +103,7 @@ describe('@yeisme/dsh-file-host/node', () => {
       writeHead() {},
       end(body: string) { treeBody = body },
     }
-    await handleYeismeFilesApi(treeReq, treeRes, { sessionCwd: (_id, cwd) => cwd ?? root })
+    await handleYeismeFilesApi(treeReq, treeRes, { sessionCwd: id => id === 'session-1' ? root : undefined })
     const tree = JSON.parse(treeBody) as { ok: boolean; value: { entries: Array<{ name: string; isDir: boolean }> } }
     expect(tree.ok).toBe(true)
     expect(tree.value.entries.some(entry => entry.name === 'a.ts' && entry.isDir === false)).toBe(true)
@@ -110,7 +112,7 @@ describe('@yeisme/dsh-file-host/node', () => {
       method: 'POST',
       url: '/yeisme-files/api/fs.read',
       async *[Symbol.asyncIterator]() {
-        yield Buffer.from(JSON.stringify({ cwd: root, path: join(root, 'a.ts') }))
+        yield Buffer.from(JSON.stringify({ sessionId: 'session-1', cwd: root, path: join(root, 'a.ts') }))
       },
     }
     let readBody = ''
@@ -118,7 +120,7 @@ describe('@yeisme/dsh-file-host/node', () => {
       writeHead() {},
       end(body: string) { readBody = body },
     }
-    await handleYeismeFilesApi(readReq, readRes, { sessionCwd: (_id, cwd) => cwd ?? root })
+    await handleYeismeFilesApi(readReq, readRes, { sessionCwd: id => id === 'session-1' ? root : undefined })
     const read = JSON.parse(readBody) as { ok: boolean; value: { content: string; version: string } }
     expect(read.value.content).toContain('export')
 
@@ -126,24 +128,24 @@ describe('@yeisme/dsh-file-host/node', () => {
       method: 'POST',
       url: '/yeisme-files/api/fs.write',
       async *[Symbol.asyncIterator]() {
-        yield Buffer.from(JSON.stringify({ cwd: root, path: join(root, 'a.ts'), content: 'export const value = 1\n', expectedVersion: read.value.version }))
+        yield Buffer.from(JSON.stringify({ sessionId: 'session-1', cwd: root, path: join(root, 'a.ts'), content: 'export const value = 1\n', expectedVersion: read.value.version }))
       },
     }
     let writeBody = ''
     const writeRes = { writeHead() {}, end(body: string) { writeBody = body } }
-    await handleYeismeFilesApi(writeReq, writeRes, { sessionCwd: (_id, cwd) => cwd ?? root })
+    await handleYeismeFilesApi(writeReq, writeRes, { sessionCwd: id => id === 'session-1' ? root : undefined })
     expect(JSON.parse(writeBody)).toMatchObject({ ok: true, value: { status: 'ok' } })
 
     const binaryReq = {
       method: 'POST',
       url: '/yeisme-files/api/fs.binary',
       async *[Symbol.asyncIterator]() {
-        yield Buffer.from(JSON.stringify({ cwd: root, path: join(root, 'a.ts') }))
+        yield Buffer.from(JSON.stringify({ sessionId: 'session-1', cwd: root, path: join(root, 'a.ts') }))
       },
     }
     let binaryBody = ''
     const binaryRes = { writeHead() {}, end(body: string) { binaryBody = body } }
-    await handleYeismeFilesApi(binaryReq, binaryRes, { sessionCwd: (_id, cwd) => cwd ?? root })
+    await handleYeismeFilesApi(binaryReq, binaryRes, { sessionCwd: id => id === 'session-1' ? root : undefined })
     expect(JSON.parse(binaryBody)).toMatchObject({ ok: true, value: { base64: Buffer.from('export const value = 1\n').toString('base64'), truncated: false } })
   })
 
@@ -217,6 +219,41 @@ describe('@yeisme/dsh-file-host/node', () => {
     expect(status).toBe(403)
     expect(body).toContain('session workspace owner is unavailable')
     expect(body).not.toContain(process.cwd())
+  })
+
+  it('reports secure fd traversal as a stable fail-closed API error', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-secure-fd-unsupported-v1-'))
+    const original = Object.getOwnPropertyDescriptor(process, 'platform')
+    if (original === undefined) throw new Error('process platform descriptor is unavailable')
+    Object.defineProperty(process, 'platform', { ...original, value: 'darwin' })
+    try {
+      const req = { method: 'POST', url: '/yeisme-files/api/fs.treePageV2', async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ sessionId: 'session-1' })) } }
+      let body = ''
+      await handleYeismeFilesApi(req, { writeHead() {}, end(value: string | Uint8Array) { body = String(value) } }, { sessionCwd: id => id === 'session-1' ? root : undefined, opaqueRefs: createOpaqueFileRefRegistry() })
+      expect(JSON.parse(body)).toMatchObject({ ok: false, error: { code: SECURE_FILE_TRAVERSAL_UNSUPPORTED_CODE, message: expect.stringContaining('secure file traversal') } })
+    } finally {
+      Object.defineProperty(process, 'platform', original)
+    }
+  })
+
+  it('keeps legacy tree/read/binary inside the session-owned workspace and rejects a swapped symlink', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-legacy-owned-v1-'))
+    const outside = await mkdtemp(join(tmpdir(), 'yeisme-legacy-outside-v1-'))
+    await writeFile(join(root, 'inside.txt'), 'inside')
+    await writeFile(join(outside, 'secret.txt'), 'outside secret')
+    await symlink(join(outside, 'secret.txt'), join(root, 'escape.txt'))
+    const call = async (method: 'fs.tree' | 'fs.read' | 'fs.binary', payload: Record<string, unknown>) => {
+      const req = { method: 'POST', url: `/yeisme-files/api/${method}`, async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ sessionId: 'session-1', cwd: outside, ...payload })) } }
+      let body = ''
+      await handleYeismeFilesApi(req, { writeHead() {}, end(value: string | Uint8Array) { body = String(value) } }, { sessionCwd: id => id === 'session-1' ? root : undefined })
+      return JSON.parse(body) as { ok: boolean; value?: unknown; error?: { code: string; message: string } }
+    }
+    await expect(call('fs.tree', {})).resolves.toMatchObject({ ok: true, value: { entries: expect.arrayContaining([expect.objectContaining({ name: 'inside.txt' })]) } })
+    await expect(call('fs.read', { path: join(outside, 'secret.txt') })).resolves.toMatchObject({ ok: false, error: { code: 'forbidden' } })
+    const escaped = await call('fs.binary', { path: join(root, 'escape.txt') })
+    expect(escaped).toMatchObject({ ok: false, error: { code: 'forbidden' } })
+    expect(JSON.stringify(escaped)).not.toContain('outside secret')
+    await expect(call('fs.read', { path: join(root, 'inside.txt') })).resolves.toMatchObject({ ok: true, value: { content: 'inside' } })
   })
 
   it('preflights, executes, redirects and undoes local resource mutations with CAS', async () => {
@@ -297,6 +334,133 @@ describe('@yeisme/dsh-file-host/node', () => {
     const reveal = await refs.issueSensitiveReveal(root, entry.id, blocked.version)
     await expect(refs.assertSensitiveAccess(root, entry.id, reveal.token)).resolves.toBeUndefined()
     await expect(refs.inspectV2(root, entry.id, reveal.token)).resolves.toMatchObject({ sensitive: true, usable: true, state: 'ready' })
+  })
+
+  it('resolves opaque file selections with exact UTF-8 bytes and rejects guessed paths or symlink targets', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-reference-owner-v1-'))
+    const outside = await mkdtemp(join(tmpdir(), 'yeisme-reference-outside-v1-'))
+    const content = 'zero 中文 tail'
+    await writeFile(join(root, 'notes.txt'), content)
+    await writeFile(join(outside, 'secret.txt'), 'outside')
+    await symlink(join(outside, 'secret.txt'), join(root, 'link.txt'))
+    const refs = createOpaqueFileRefRegistry()
+    const entry = (await refs.list(root)).find(item => item.name === 'notes.txt')!
+    const proof = await refs.inspectV2(root, entry.id)
+    const bytes = Buffer.from(content)
+    const window = { start: Buffer.byteLength('zero '), end: Buffer.byteLength('zero 中文') }
+    const digest = createHash('sha256').update(bytes).update(`:${window.start}:${window.end}`).digest('hex')
+    const resolved = await refs.resolveComposerReference(root, {
+      id: `selection:${entry.id}:${window.start}:${window.end}:${digest}`,
+      owner: 'dsh.local', ref: entry.id, kind: 'selection', intent: 'content', version: proof.version,
+      digest, scope: 'file/raw', window,
+    }, new AbortController().signal)
+    expect(resolved).toMatchObject({ ref: entry.id, kind: 'selection', window, snapshot: { type: 'text', text: '中文' } })
+    expect(JSON.stringify(resolved)).not.toContain(root)
+    await expect(refs.resolveComposerReference(root, {
+      id: 'guessed-path', owner: 'dsh.local', ref: 'notes.txt', kind: 'file', intent: 'content', version: proof.version,
+      digest, scope: 'file/raw', window,
+    }, new AbortController().signal)).resolves.toBeUndefined()
+    await expect(refs.refForPath(root, join(root, 'link.txt'))).rejects.toThrow('outside the workspace')
+    await expect(refs.resolveComposerReference(root, {
+      id: 'relabelled', owner: 'dsh.local', ref: entry.id, kind: 'skill', intent: 'guidance', version: proof.version,
+      digest, scope: 'skill/catalog', window,
+    } as never, new AbortController().signal)).resolves.toBeUndefined()
+  })
+
+  it('uses one owner version across inspect, text, binary, and admission', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-reference-version-v1-'))
+    const content = 'same owner snapshot'
+    await writeFile(join(root, 'notes.txt'), content)
+    const refs = createOpaqueFileRefRegistry()
+    const entry = (await refs.list(root)).find(item => item.name === 'notes.txt')!
+    const proof = await refs.inspectV2(root, entry.id)
+    const text = await refs.readTextV2(root, entry.id)
+    const binary = await refs.readBinaryV2(root, entry.id)
+    expect(text.version).toBe(proof.version)
+    expect(binary.version).toBe(proof.version)
+    const bytes = Buffer.from(content)
+    const window = { start: 0, end: bytes.byteLength }
+    const digest = createHash('sha256').update(bytes).update(`:${window.start}:${window.end}`).digest('hex')
+    await expect(refs.resolveComposerReference(root, {
+      id: `file:${digest}`, owner: 'dsh.local', ref: entry.id, kind: 'file', intent: 'content', version: proof.version,
+      digest, scope: 'file/full', window,
+    }, new AbortController().signal)).resolves.toMatchObject({ version: proof.version, snapshot: { type: 'text', text: content } })
+  })
+
+  it('derives file and selection scope from the owner window instead of trusting a client label', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-reference-scope-v1-'))
+    const bytes = Buffer.from('0123456789')
+    await writeFile(join(root, 'notes.txt'), bytes)
+    const refs = createOpaqueFileRefRegistry()
+    const entry = (await refs.list(root)).find(item => item.name === 'notes.txt')!
+    const proof = await refs.inspectV2(root, entry.id)
+    const claim = (kind: 'file' | 'selection', scope: 'file/full' | 'file/prefix' | 'file/raw', window: { start: number; end: number }) => ({
+      id: `${kind}:${scope}:${window.start}:${window.end}`,
+      owner: 'dsh.local' as const,
+      ref: entry.id,
+      kind,
+      intent: 'content' as const,
+      version: proof.version,
+      digest: createHash('sha256').update(bytes).update(`:${window.start}:${window.end}`).digest('hex'),
+      scope,
+      window,
+    })
+    await expect(refs.resolveComposerReference(root, claim('file', 'file/full', { start: 0, end: 4 }), new AbortController().signal)).resolves.toBeUndefined()
+    await expect(refs.resolveComposerReference(root, claim('file', 'file/prefix', { start: 2, end: 4 }), new AbortController().signal)).resolves.toBeUndefined()
+    await expect(refs.resolveComposerReference(root, claim('selection', 'file/full', { start: 2, end: 4 }), new AbortController().signal)).resolves.toBeUndefined()
+    await expect(refs.resolveComposerReference(root, claim('file', 'file/prefix', { start: 0, end: 4 }), new AbortController().signal))
+      .resolves.toMatchObject({ snapshot: { type: 'text', text: '0123', truncated: true } })
+    await expect(refs.resolveComposerReference(root, claim('selection', 'file/raw', { start: 2, end: 4 }), new AbortController().signal))
+      .resolves.toMatchObject({ kind: 'selection', snapshot: { type: 'text', text: '23', truncated: true } })
+    await expect(refs.resolveComposerReference(root, claim('selection', 'file/raw', { start: 6, end: bytes.byteLength }), new AbortController().signal))
+      .resolves.toMatchObject({ kind: 'selection', snapshot: { type: 'text', text: '6789', truncated: true } })
+  })
+
+  it('rejects discovery reads when an issued ref ancestor is swapped to an outside symlink', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-reference-race-v1-'))
+    const outside = await mkdtemp(join(tmpdir(), 'yeisme-reference-race-outside-v1-'))
+    await mkdir(join(root, 'src'))
+    await writeFile(join(root, 'src', 'notes.txt'), 'inside')
+    await writeFile(join(outside, 'notes.txt'), 'outside secret')
+    const refs = createOpaqueFileRefRegistry()
+    const directory = (await refs.list(root)).find(item => item.name === 'src')!
+    const entry = (await refs.list(root, directory.id)).find(item => item.name === 'notes.txt')!
+    await rename(join(root, 'src'), join(root, 'src-old'))
+    await symlink(outside, join(root, 'src'))
+    await expect(refs.readTextV2(root, entry.id)).rejects.toThrow(/outside|unavailable/)
+    await expect(refs.readBinaryV2(root, entry.id)).rejects.toThrow(/outside|unavailable/)
+    await expect(refs.inspectV2(root, entry.id)).rejects.toThrow(/outside|unavailable/)
+  })
+
+  it('rejects directory enumeration after an issued parent is swapped to an outside symlink', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-directory-race-v1-'))
+    const outside = await mkdtemp(join(tmpdir(), 'yeisme-directory-race-outside-v1-'))
+    await mkdir(join(root, 'src'))
+    await writeFile(join(root, 'src', 'inside.txt'), 'inside')
+    await writeFile(join(outside, 'secret.txt'), 'outside secret')
+    const refs = createOpaqueFileRefRegistry()
+    const directory = (await refs.list(root)).find(item => item.name === 'src')!
+    await rename(join(root, 'src'), join(root, 'src-old'))
+    await symlink(outside, join(root, 'src'))
+    await expect(refs.list(root, directory.id)).rejects.toThrow(/outside|unavailable/)
+    await expect(refs.listV2(root, { parentRef: directory.id })).rejects.toThrow(/outside|unavailable/)
+  })
+
+  it('resolves full images separately from normalized image regions and binds both to owner bytes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-reference-image-v1-'))
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    await writeFile(join(root, 'shot.png'), bytes)
+    const refs = createOpaqueFileRefRegistry()
+    const entry = (await refs.list(root)).find(item => item.name === 'shot.png')!
+    const proof = await refs.inspectV2(root, entry.id)
+    const digest = createHash('sha256').update(bytes).digest('hex')
+    const base = { owner: 'dsh.local' as const, ref: entry.id, intent: 'content' as const, version: proof.version, digest }
+    await expect(refs.resolveComposerReference(root, { ...base, id: `image:${digest}`, kind: 'image', scope: 'image/full' }, new AbortController().signal))
+      .resolves.toMatchObject({ kind: 'image', snapshot: { type: 'image', mediaType: 'image/png' } })
+    const region = { x: 0.1, y: 0.2, width: 0.3, height: 0.4 }
+    const regionDigest = createHash('sha256').update(bytes).update('\0image-region\0').update(JSON.stringify(region)).digest('hex')
+    await expect(refs.resolveComposerReference(root, { ...base, id: `image-region:${regionDigest}:0.1:0.2:0.3:0.4`, kind: 'image-region', scope: 'image/region', digest: regionDigest, region }, new AbortController().signal))
+      .resolves.toMatchObject({ kind: 'image-region', region, snapshot: { type: 'image', mediaType: 'image/png' } })
   })
 
   it('keeps both on an explicit name conflict without overwriting the original', async () => {
@@ -386,6 +550,9 @@ describe('@yeisme/dsh-file-host/node', () => {
     const ticket = await transfer.issueDownloadTicket(entry.id, proof.version)
     await expect(transfer.consumeDownloadTicket(ticket.ticket)).resolves.toEqual(new Uint8Array([1, 2, 3]))
     await expect(transfer.consumeDownloadTicket(ticket.ticket)).rejects.toThrow('unavailable')
+    const staleTicket = await transfer.issueDownloadTicket(entry.id, proof.version)
+    await writeFile(join(root, 'download.bin'), Buffer.from([4, 5, 6]))
+    await expect(transfer.consumeDownloadTicket(staleTicket.ticket)).rejects.toThrow('unavailable')
   })
 
   it('reads git porcelain status for the workspace', async () => {
@@ -535,13 +702,13 @@ describe('@yeisme/dsh-file-host/node', () => {
     const req = {
       method: 'POST', url: '/yeisme-files/api/fs.write',
       async *[Symbol.asyncIterator]() {
-        yield Buffer.from(JSON.stringify({ cwd: root, path: link, content: 'overwrite', expectedVersion: opened.version }))
+        yield Buffer.from(JSON.stringify({ sessionId: 'session-1', cwd: root, path: link, content: 'overwrite', expectedVersion: opened.version }))
       },
     }
     let status = 0
     let body = ''
     const res = { writeHead(code: number) { status = code }, end(text: string) { body = text } }
-    await handleYeismeFilesApi(req, res, { sessionCwd: () => root })
+    await handleYeismeFilesApi(req, res, { sessionCwd: id => id === 'session-1' ? root : undefined })
     expect(status).toBe(403)
     expect(body).toContain('file link escapes')
   })

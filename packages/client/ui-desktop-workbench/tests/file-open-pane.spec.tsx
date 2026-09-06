@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { FileOpenPane } from '../src/client/file-open-pane.tsx'
+import { FILE_IMAGE_REGION_REFERENCE_EVENT, FileOpenPane } from '../src/client/file-open-pane.tsx'
 import { strToU8, zipSync } from 'fflate'
 import type { FileEntryV1 } from '@yeisme/dsh-file-document'
 import type { FileHostV1 } from '@yeisme/dsh-file-host'
@@ -20,6 +20,41 @@ const entry: FileEntryV1 = {
 }
 
 describe('FileOpenPane', () => {
+  it('publishes exact owner/ref/version and UTF-8 byte bounds only on immutable raw text', async () => {
+    const raw: FileEntryV1 = { ...entry, id: 'file-opaque', name: 'notes.txt', mediaType: 'text/plain' }
+    const content = 'zero 中文 tail'
+    const host: FileHostV1 = {
+      version: '0.1.0-rc.1', capability: 'file-host',
+      async listEntries() { return [raw] },
+      async readText() { return { content, truncated: false, binary: false, version: 'proof-v1' } },
+    }
+    render(<FileOpenPane host={host} entry={raw} />)
+    const source = await screen.findByText(content)
+    expect(source.getAttribute('data-dsh-reference-source')).toBe('true')
+    expect(source.getAttribute('data-dsh-reference-source-owner')).toBe('dsh.local')
+    expect(source.getAttribute('data-dsh-reference-source-ref')).toBe('file-opaque')
+    expect(source.getAttribute('data-dsh-reference-source-version')).toBe('proof-v1')
+    expect(source.getAttribute('data-dsh-reference-source-scope')).toBe('file/raw')
+    expect(source.getAttribute('data-dsh-reference-source-range-start')).toBe('0')
+    expect(source.getAttribute('data-dsh-reference-source-range-end')).toBe(String(new TextEncoder().encode(content).byteLength))
+  })
+
+  it('does not advertise transformed, dirty, or truncated text as a raw selection source', async () => {
+    const editable: FileEntryV1 = { ...entry, capabilities: ['preview', 'open', 'edit'] }
+    const host: FileHostV1 = {
+      version: '0.1.0-rc.1', capability: 'file-host',
+      async listEntries() { return [editable] },
+      async readText() { return { content: '# rendered', truncated: false, binary: false, version: 'v1' } },
+      async writeText() { return { status: 'ok', version: 'v2' } },
+    }
+    render(<FileOpenPane host={host} entry={editable} />)
+    expect((await screen.findByRole('heading', { name: 'rendered' })).hasAttribute('data-dsh-reference-source')).toBe(false)
+    screen.getByRole('button', { name: '编辑模式' }).click()
+    fireEvent.change(await screen.findByRole('textbox', { name: '编辑 README.md 的 Markdown 区块 1' }), { target: { value: '# dirty' } })
+    screen.getByRole('button', { name: '源码模式' }).click()
+    expect((await screen.findByRole('textbox', { name: '编辑 README.md' })).hasAttribute('data-dsh-reference-source')).toBe(false)
+  })
+
   it('renders markdown by default and can switch to source', async () => {
     const host: FileHostV1 = {
       version: '0.1.0-rc.1',
@@ -105,6 +140,33 @@ describe('FileOpenPane', () => {
     }
     render(<FileOpenPane host={host} entry={audio} />)
     expect(document.querySelector('[data-dsh-file-open-audio]')?.getAttribute('src')).toBe('https://cdn.example/take.mp3')
+  })
+
+  it('emits a normalized pixel-region request only for an owner-versioned image', async () => {
+    const image: FileEntryV1 = { id: 'image-opaque', name: 'shot.png', kind: 'image', mediaType: 'image/png', capabilities: ['preview', 'open'] }
+    const NativeURL = URL
+    class TestURL extends NativeURL {
+      static createObjectURL(): string { return 'blob:image' }
+      static revokeObjectURL(): void {}
+    }
+    vi.stubGlobal('URL', TestURL)
+    const host: FileHostV1 = {
+      version: '0.1.0-rc.1', capability: 'file-host', async listEntries() { return [image] },
+      async readBinary() { return { bytes: new Uint8Array([1, 2, 3]), size: 3, truncated: false, version: 'image-v1', mediaType: 'image/png' } },
+    }
+    const requests: CustomEvent[] = []
+    const listener = (event: Event) => { requests.push(event as CustomEvent) }
+    window.addEventListener(FILE_IMAGE_REGION_REFERENCE_EVENT, listener)
+    render(<FileOpenPane host={host} entry={image} />)
+    const preview = await screen.findByRole('img', { name: 'shot.png' }) as HTMLImageElement
+    Object.defineProperties(preview, { naturalWidth: { value: 1000 }, naturalHeight: { value: 500 } })
+    preview.getBoundingClientRect = () => ({ x: 10, y: 20, left: 10, top: 20, right: 210, bottom: 120, width: 200, height: 100, toJSON: () => ({}) })
+    fireEvent.click(await screen.findByRole('button', { name: '引用图像区域' }))
+    fireEvent.pointerDown(preview, { clientX: 30, clientY: 40 })
+    fireEvent.pointerUp(preview, { clientX: 110, clientY: 80 })
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.detail).toMatchObject({ owner: 'dsh.local', ref: 'image-opaque', resourceVersion: 'image-v1', naturalSize: { width: 1000, height: 500 }, region: { x: 0.1, y: 0.2, width: 0.4, height: 0.4 } })
+    window.removeEventListener(FILE_IMAGE_REGION_REFERENCE_EVENT, listener)
   })
 
   it('shows an honest unsupported state when a media file has no preview URL', () => {

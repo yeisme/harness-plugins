@@ -1,6 +1,7 @@
 export {
   PANEL_SCALE,
   PANEL_TOKENS,
+  HOST_THEME_ALIASES,
   TOKEN_SYNONYMS,
   panelVar,
   type PanelTokenName,

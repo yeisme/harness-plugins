@@ -9,6 +9,7 @@
  */
 
 import { execFile } from 'node:child_process'
+import { constants as fsConstants, type Stats } from 'node:fs'
 import { createHash, randomBytes } from 'node:crypto'
 import { promisify } from 'node:util'
 import { copyFile, mkdir, opendir, open, readFile, readdir, realpath, rename, rm, stat, lstat, unlink, writeFile } from 'node:fs/promises'
@@ -42,6 +43,8 @@ import {
   FILE_TREE_PROJECTION_CAPABILITY_V2,
   type FileInspectCapabilityV1,
   type FileInspectProofV1,
+  type ComposerReferenceOwnerClaimV1,
+  type ComposerReferenceOwnerResolutionV1,
   type FileTreeNodeV2,
   type FileTreePageV2,
   type FileTreeProjectionCapabilityV2,
@@ -69,6 +72,9 @@ const DEFAULT_READ_LIMIT = 256 * 1024
 const DEFAULT_BINARY_READ_LIMIT = 24 * 1024 * 1024
 const DEFAULT_WRITE_LIMIT = 1024 * 1024
 const SYMLINK_PROBE_CONCURRENCY = 32
+// Keep this owner-side protocol literal local until the generated browser
+// contract is rebuilt; node source tests import the existing `index.js`.
+const SECURE_FILE_TRAVERSAL_UNSUPPORTED_CODE = 'secure-fd-unsupported' as const
 
 export interface OpaqueFileRecord {
   readonly ref: string
@@ -151,10 +157,10 @@ export class OpaqueFileRefRegistry {
   async list(cwd: string, parentRef?: string): Promise<readonly FileEntryV1[]> {
     const workspace = await realpath(requireAbsolute(cwd))
     const parent = parentRef === undefined ? undefined : await this.resolve(cwd, parentRef, true)
-    const target = parent?.target ?? workspace
-    const listing = await listWorkspaceTree(target)
+    const target = parent ?? this.issue(workspace, workspace, true)
+    const listing = await listOwnedWorkspaceTree(target, cwd)
     const entries = await Promise.all(listing.entries.map(async entry => {
-      const canonical = await realpath(entry.path).catch(() => undefined)
+      const canonical = entry.canonical
       if (canonical === undefined || !isWithin(workspace, canonical)) return undefined
       const kind = opaqueEntryKind(entry.name, entry.isDir)
       const mediaType = opaqueMediaType(entry.name, kind)
@@ -179,10 +185,10 @@ export class OpaqueFileRefRegistry {
   async listV2(cwd: string, request: { readonly parentRef?: string; readonly cursor?: string; readonly limit?: number } = {}): Promise<FileTreePageV2> {
     const workspace = await realpath(requireAbsolute(cwd))
     const parent = request.parentRef === undefined ? undefined : await this.resolve(cwd, request.parentRef, true)
-    const target = parent?.target ?? workspace
-    const listing = await listWorkspaceTree(target, 20_000)
+    const target = parent ?? this.issue(workspace, workspace, true)
+    const listing = await listOwnedWorkspaceTree(target, cwd, 20_000)
     const ignorePatterns = await workspaceIgnorePatterns(workspace)
-    const rows = await Promise.all(listing.entries.map(async entry => ({ entry, info: await lstat(entry.path).catch(() => undefined) })))
+    const rows = listing.entries.map(entry => ({ entry, info: entry.info }))
     const revision = createHash('sha256').update(JSON.stringify(rows.map(({ entry, info }) => ({ name: entry.name, dir: entry.isDir, symlink: entry.isSymlink, broken: entry.broken, size: info?.size, mtimeMs: info?.mtimeMs, mode: info?.mode })))).digest('hex').slice(0, 16)
     const limit = Math.max(1, Math.min(500, request.limit ?? 100))
     let offset = 0
@@ -194,8 +200,8 @@ export class OpaqueFileRefRegistry {
     const mapped = rows.map(({ entry, info }) => {
       const rawPath = entry.path
       const symlink = entry.isSymlink === true
-      const canonical = symlink ? realpath(rawPath).catch(() => undefined) : Promise.resolve(rawPath)
-      return canonical.then(async resolved => {
+      const resolved = entry.canonical
+      return Promise.resolve().then(async () => {
         const inside = resolved !== undefined && isWithin(workspace, resolved)
         const kind = entry.isDir ? 'directory' : 'file'
         const record = this.issue(workspace, inside && resolved !== undefined ? resolved : rawPath, entry.isDir && !symlink)
@@ -292,17 +298,150 @@ export class OpaqueFileRefRegistry {
   async inspectV2(cwd: string, ref: string, revealToken?: string): Promise<FileInspectProofV1> {
     const record = await this.resolve(cwd, ref)
     const workspace = await realpath(requireAbsolute(cwd))
-    const info = await lstat(record.target).catch(() => undefined)
-    if (info === undefined || info.isDirectory()) return { owner: 'dsh.local', ref, version: 'missing', usable: false, state: 'unsupported', sensitive: false, reason: 'resource is unavailable or a directory' }
-    const read = await readWorkspaceText(record.target).catch(() => undefined)
-    const version = `${info.size}:${info.mtimeMs}:${info.mode}`
+    const opened = await openOwnedFile(record, cwd, new AbortController().signal)
+    if (opened === undefined) return { owner: 'dsh.local', ref, version: 'missing', usable: false, state: 'unsupported', sensitive: false, reason: 'resource is unavailable or a directory' }
+    const { bytes, info } = opened
+    const version = textVersion(info.size, info.mtimeMs, bytes)
     const sensitive = sensitiveName(basename(record.target))
-    if (sensitive && !this.revealAllowed(workspace, ref, version, revealToken)) return { owner: 'dsh.local', ref, version, usable: false, state: 'unsupported', sensitive: true, reason: 'sensitive reveal confirmation required', resource: { name: basename(record.target), kind: read !== undefined && !read.binary ? 'text' : opaqueEntryKind(basename(record.target), false), size: info.size } }
-    if (read !== undefined && !read.binary) return { owner: 'dsh.local', ref, version, usable: true, state: read.truncated ? 'partial' : 'ready', sensitive, ...(read.truncated ? { inspectedWindow: { start: 0, end: read.content.length, digest: createHash('sha256').update(read.content).digest('hex').slice(0, 16) } } : {}), resource: { name: basename(record.target), kind: 'text', size: info.size, mediaType: 'text/plain' } }
-    const kind = opaqueEntryKind(basename(record.target), false)
-    const mediaType = opaqueMediaType(basename(record.target), kind)
-    const usable = mediaType !== undefined
-    return { owner: 'dsh.local', ref, version, usable, state: usable ? 'partial' : 'unsupported', sensitive, ...(usable ? {} : { reason: 'owner rendition unavailable' }), resource: { name: basename(record.target), kind, size: info.size, ...(mediaType === undefined ? {} : { mediaType }) } }
+    try {
+      const sample = bytes.subarray(0, Math.min(bytes.byteLength, DEFAULT_READ_LIMIT))
+      const binary = sample.includes(0)
+      if (sensitive && !this.revealAllowed(workspace, ref, version, revealToken)) return { owner: 'dsh.local', ref, version, usable: false, state: 'unsupported', sensitive: true, reason: 'sensitive reveal confirmation required', resource: { name: basename(record.target), kind: binary ? opaqueEntryKind(basename(record.target), false) : 'text', size: info.size } }
+      if (!binary) {
+        const truncated = bytes.byteLength > DEFAULT_READ_LIMIT
+        return { owner: 'dsh.local', ref, version, usable: true, state: truncated ? 'partial' : 'ready', sensitive, ...(truncated ? { inspectedWindow: { start: 0, end: sample.byteLength, digest: createHash('sha256').update(sample).digest('hex').slice(0, 16) } } : {}), resource: { name: basename(record.target), kind: 'text', size: info.size, mediaType: 'text/plain' } }
+      }
+      const kind = opaqueEntryKind(basename(record.target), false)
+      const mediaType = opaqueMediaType(basename(record.target), kind)
+      const usable = mediaType !== undefined
+      return { owner: 'dsh.local', ref, version, usable, state: usable ? 'partial' : 'unsupported', sensitive, ...(usable ? {} : { reason: 'owner rendition unavailable' }), resource: { name: basename(record.target), kind, size: info.size, ...(mediaType === undefined ? {} : { mediaType }) } }
+    } finally {
+      await opened.handle.close()
+    }
+  }
+
+  /** FD-backed V2 text read sharing one full-source version with inspect and admission. */
+  async readTextV2(cwd: string, ref: string, revealToken?: string): Promise<FileTextReadV1> {
+    const record = await this.resolve(cwd, ref)
+    const opened = await openOwnedFile(record, cwd, new AbortController().signal)
+    if (opened === undefined) throw new YeismeFilesError('forbidden', 'opaque file reference is unavailable', 403)
+    try {
+      const version = textVersion(opened.info.size, opened.info.mtimeMs, opened.bytes)
+      const workspace = await realpath(requireAbsolute(cwd))
+      if (sensitiveName(basename(record.target)) && !this.revealAllowed(workspace, ref, version, revealToken)) throw new YeismeFilesError('forbidden', 'sensitive reveal confirmation required', 403)
+      const sample = opened.bytes.subarray(0, Math.min(opened.bytes.byteLength, DEFAULT_READ_LIMIT))
+      const binary = sample.includes(0)
+      return { content: binary ? '' : sample.toString('utf8'), truncated: opened.bytes.byteLength > DEFAULT_READ_LIMIT, binary, version }
+    } finally {
+      await opened.handle.close()
+    }
+  }
+
+  /** FD-backed V2 binary read sharing one full-source version with inspect and admission. */
+  async readBinaryV2(cwd: string, ref: string, revealToken?: string): Promise<FileBinaryReadV1> {
+    const record = await this.resolve(cwd, ref)
+    const opened = await openOwnedFile(record, cwd, new AbortController().signal)
+    if (opened === undefined) throw new YeismeFilesError('forbidden', 'opaque file reference is unavailable', 403)
+    try {
+      const version = textVersion(opened.info.size, opened.info.mtimeMs, opened.bytes)
+      const workspace = await realpath(requireAbsolute(cwd))
+      if (sensitiveName(basename(record.target)) && !this.revealAllowed(workspace, ref, version, revealToken)) throw new YeismeFilesError('forbidden', 'sensitive reveal confirmation required', 403)
+      return { bytes: new Uint8Array(opened.bytes), size: opened.info.size, truncated: false, version }
+    } finally {
+      await opened.handle.close()
+    }
+  }
+
+  /** Resolve one immutable composer reference without exposing the backing path. */
+  async resolveComposerReference(
+    cwd: string,
+    claim: ComposerReferenceOwnerClaimV1,
+    signal: AbortSignal,
+  ): Promise<ComposerReferenceOwnerResolutionV1 | undefined> {
+    signal.throwIfAborted()
+    if (claim.owner !== 'dsh.local' || claim.intent !== 'content' || claim.ref === '' || claim.version === '' || claim.digest === '') return undefined
+    if (!['file', 'directory', 'selection', 'image', 'image-region'].includes(claim.kind)) return undefined
+    if (claim.kind === 'directory' && (claim.scope !== 'directory/children' || claim.window !== undefined || claim.region !== undefined)) return undefined
+    if (claim.kind === 'image' && (claim.scope !== 'image/full' || claim.window !== undefined || claim.region !== undefined)) return undefined
+    if (claim.kind === 'image-region' && (claim.scope !== 'image/region' || claim.window !== undefined || claim.region === undefined)) return undefined
+    if (claim.kind === 'selection' && (claim.scope !== 'file/raw' || claim.window === undefined || claim.region !== undefined)) return undefined
+    if (claim.kind === 'file' && (claim.window === undefined || claim.region !== undefined || !['file/full', 'file/prefix'].includes(claim.scope))) return undefined
+    const record = await this.resolve(cwd, claim.ref, claim.kind === 'directory').catch(() => undefined)
+    if (record === undefined) return undefined
+    if (claim.kind === 'directory') {
+      const page = await this.listV2(cwd, { parentRef: claim.ref, limit: 200 }).catch(() => undefined)
+      if (page === undefined) return undefined
+      const entries = page.nodes.map(node => ({ name: node.name, kind: node.kind === 'directory' ? 'directory' as const : 'file' as const }))
+      const digest = createHash('sha256').update(JSON.stringify({ ref: claim.ref, revision: page.revision, entries, truncated: page.truncated })).digest('hex')
+      if (claim.version !== page.revision || claim.digest !== digest) return undefined
+      return {
+        id: claim.id,
+        owner: 'dsh.local',
+        ref: claim.ref,
+        kind: 'directory',
+        intent: 'content',
+        version: page.revision,
+        digest,
+        scope: claim.scope,
+        label: basename(record.target),
+        preview: entries.slice(0, 8).map(entry => `${entry.kind === 'directory' ? 'd' : 'f'} ${entry.name}`).join('\n'),
+        snapshot: { type: 'directory', entries, truncated: page.truncated },
+      }
+    }
+    const opened = await openOwnedFile(record, cwd, signal)
+    if (opened === undefined) return undefined
+    try {
+      const { bytes, info } = opened
+      const version = textVersion(info.size, info.mtimeMs, bytes)
+      if (version !== claim.version) return undefined
+      if (claim.kind === 'image' || claim.kind === 'image-region') {
+        const mediaType = opaqueMediaType(basename(record.target), opaqueEntryKind(basename(record.target), false))
+        if (mediaType?.startsWith('image/') !== true || bytes.byteLength > DEFAULT_BINARY_READ_LIMIT) return undefined
+        if (claim.kind === 'image-region' && (claim.region === undefined || !validNormalizedRegion(claim.region))) return undefined
+        if (claim.kind === 'image' && claim.region !== undefined) return undefined
+        const digest = claim.kind === 'image-region' && claim.region !== undefined
+          ? imageRegionDigest(bytes, claim.region)
+          : createHash('sha256').update(bytes).digest('hex')
+        if (claim.digest !== digest) return undefined
+        return {
+          id: claim.id, owner: 'dsh.local', ref: claim.ref, kind: claim.kind, intent: 'content', version, digest,
+          scope: claim.scope, label: basename(record.target), ...(claim.region === undefined ? {} : { region: claim.region }),
+          snapshot: { type: 'image', mediaType, bytes },
+        }
+      }
+      const window = claim.window
+      if (window === undefined || !validByteWindow(window, bytes.byteLength)) return undefined
+      if (claim.kind === 'file' && claim.scope === 'file/full' && (window.start !== 0 || window.end !== bytes.byteLength)) return undefined
+      if (claim.kind === 'file' && claim.scope === 'file/prefix' && (window.start !== 0 || window.end >= bytes.byteLength)) return undefined
+      const selected = bytes.subarray(window.start, window.end)
+      const digest = createHash('sha256').update(bytes).update(`:${window.start}:${window.end}`).digest('hex')
+      if (claim.digest !== digest) return undefined
+      const text = selected.toString('utf8')
+      if (Buffer.from(text, 'utf8').compare(selected) !== 0) return undefined
+      return {
+        id: claim.id,
+        owner: 'dsh.local',
+        ref: claim.ref,
+        kind: claim.kind,
+        intent: 'content',
+        version,
+        digest,
+        scope: claim.scope,
+        label: basename(record.target),
+        preview: text.replace(/\s+/gu, ' ').trim().slice(0, 240),
+        window,
+        snapshot: {
+          type: 'text',
+          text: text.slice(0, 16_384),
+          // The advertised file/full window is the only form that contains
+          // the entire owner source.  A prefix, range, or local preview cap
+          // must remain visibly partial to downstream admission.
+          truncated: window.start > 0 || window.end < bytes.byteLength || text.length > 16_384,
+        },
+      }
+    } finally {
+      await opened.handle.close()
+    }
   }
 
   async issueSensitiveReveal(cwd: string, ref: string, version: string): Promise<{ readonly token: string; readonly expiresAt: string }> {
@@ -345,6 +484,48 @@ export class OpaqueFileRefRegistry {
     const info = await stat(canonical).catch(() => undefined)
     if (info === undefined) throw new YeismeFilesError('not-found', 'target is unavailable', 404)
     return this.issue(workspace, canonical, info.isDirectory())
+  }
+}
+
+function validByteWindow(window: { readonly start: number; readonly end: number }, size: number): boolean {
+  return Number.isSafeInteger(window.start) && Number.isSafeInteger(window.end)
+    && window.start >= 0 && window.end > window.start && window.end <= size
+    && window.end - window.start <= 16_384
+}
+
+function validNormalizedRegion(region: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }): boolean {
+  return [region.x, region.y, region.width, region.height].every(Number.isFinite)
+    && region.x >= 0 && region.y >= 0 && region.width > 0 && region.height > 0
+    && region.x + region.width <= 1 && region.y + region.height <= 1
+}
+
+function imageRegionDigest(bytes: Uint8Array, region: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }): string {
+  return createHash('sha256').update(bytes).update('\0image-region\0').update(JSON.stringify(region)).digest('hex')
+}
+
+async function openOwnedFile(
+  record: OpaqueFileRecord,
+  cwd: string,
+  signal: AbortSignal,
+): Promise<{ readonly handle: Awaited<ReturnType<typeof open>>; readonly bytes: Buffer; readonly info: Stats } | undefined> {
+  signal.throwIfAborted()
+  if (record.directory) return undefined
+  const opened = await openWorkspacePath(cwd, record.target, record.target)
+  if (opened === undefined || !opened.info.isFile() || opened.info.size > DEFAULT_BINARY_READ_LIMIT) {
+    await opened?.handle.close()
+    return undefined
+  }
+  const { handle, info } = opened
+  let handedOff = false
+  try {
+    const bytes = await handle.readFile()
+    signal.throwIfAborted()
+    const after = await handle.stat({ bigint: false })
+    if (after.dev !== info.dev || after.ino !== info.ino || after.size !== info.size || after.mtimeMs !== info.mtimeMs) return undefined
+    handedOff = true
+    return { handle, bytes, info }
+  } finally {
+    if (!handedOff) await handle.close()
   }
 }
 
@@ -747,7 +928,24 @@ export class NodeFileTransferOwner implements FileTransferCapabilityV1 {
   async cancelUpload(sessionRef: string): Promise<void> { const state = this.uploads.get(sessionRef); this.uploads.delete(sessionRef); if (state !== undefined) await unlink(state.path).catch(() => undefined) }
   async commitUpload(sessionRef: string): Promise<{ readonly importRef: string; readonly size: number; readonly digest: string }> { const state = this.uploads.get(sessionRef); if (state === undefined || state.received < state.size) throw new YeismeFilesError('bad-request', 'upload is incomplete'); const bytes = await readFile(state.path); const digest = createHash('sha256').update(bytes).digest('hex'); if (state.digest !== undefined && state.digest !== digest) throw new YeismeFilesError('bad-request', 'upload digest mismatch'); const importRef = `import-${randomBytes(12).toString('base64url')}`; stagedImports.set(importRef, { workspaceRef: state.session.workspaceRef, path: state.path, name: state.name, size: state.size, digest }); this.uploads.delete(sessionRef); return { importRef, size: state.size, digest } }
   async issueDownloadTicket(ref: string, version: string): Promise<{ readonly ticket: string; readonly expiresAt: string }> { await this.refs.resolve(this.cwd, ref); const expiresAtMs = Date.now() + 60_000; const ticket = `download-${randomBytes(18).toString('base64url')}`; this.tickets.set(ticket, { ref, version, expiresAtMs }); return { ticket, expiresAt: new Date(expiresAtMs).toISOString() } }
-  async consumeDownloadTicket(ticket: string): Promise<Uint8Array> { const value = this.tickets.get(ticket); this.tickets.delete(ticket); if (value === undefined || value.expiresAtMs < Date.now()) throw new YeismeFilesError('not-found', 'download ticket unavailable', 404); const proof = await this.refs.inspectV2(this.cwd, value.ref); if (proof.version !== value.version) throw new YeismeFilesError('not-found', 'download ticket unavailable', 404); const target = await this.refs.resolve(this.cwd, value.ref); return new Uint8Array(await readFile(target.target)) }
+  async consumeDownloadTicket(ticket: string): Promise<Uint8Array> {
+    const value = this.tickets.get(ticket)
+    this.tickets.delete(ticket)
+    if (value === undefined || value.expiresAtMs < Date.now()) throw new YeismeFilesError('not-found', 'download ticket unavailable', 404)
+    const record = await this.refs.resolve(this.cwd, value.ref)
+    const opened = await openOwnedFile(record, this.cwd, new AbortController().signal)
+    if (opened === undefined) throw new YeismeFilesError('not-found', 'download ticket unavailable', 404)
+    try {
+      // The authorized bytes and version are produced from this same file FD.
+      // A check-then-read path sequence would allow a rename between them.
+      if (textVersion(opened.info.size, opened.info.mtimeMs, opened.bytes) !== value.version) {
+        throw new YeismeFilesError('not-found', 'download ticket unavailable', 404)
+      }
+      return new Uint8Array(opened.bytes)
+    } finally {
+      await opened.handle.close()
+    }
+  }
 }
 
 function textVersion(size: number, mtimeMs: number, bytes: Uint8Array): string {
@@ -757,7 +955,7 @@ function textVersion(size: number, mtimeMs: number, bytes: Uint8Array): string {
 
 export class YeismeFilesError extends Error {
   constructor(
-    readonly code: 'bad-request' | 'forbidden' | 'fs-error' | 'not-found' | 'method-error',
+    readonly code: 'bad-request' | 'forbidden' | 'fs-error' | 'not-found' | 'method-error' | typeof SECURE_FILE_TRAVERSAL_UNSUPPORTED_CODE,
     message: string,
     readonly status = 400,
   ) {
@@ -795,6 +993,17 @@ interface MutableTreeEntry {
   hidden?: boolean
   isSymlink?: boolean
   broken?: boolean
+  /** Canonical target captured while the containing directory FD was open. */
+  canonical?: string
+  /** Metadata captured from that same anchored directory entry. */
+  info?: Stats
+}
+
+interface OpenedWorkspacePath {
+  readonly handle: Awaited<ReturnType<typeof open>>
+  readonly workspace: string
+  readonly canonical: string
+  readonly info: Stats
 }
 
 function compareEntries(left: WorkspaceTreeEntryLike, right: WorkspaceTreeEntryLike): number {
@@ -817,6 +1026,203 @@ async function probeSymlinkTargets(rows: MutableTreeEntry[]): Promise<void> {
     }
   })
   await Promise.all(workers)
+}
+
+function secureFdAnchorsAvailable(): boolean {
+  // `/proc/self/fd` plus O_NOFOLLOW/O_DIRECTORY is the boundary that makes
+  // component traversal stable across a parent rename.  Do not silently fall
+  // back to path-based traversal on platforms where that guarantee is absent.
+  return process.platform === 'linux'
+    && typeof fsConstants.O_NOFOLLOW === 'number'
+    && typeof fsConstants.O_DIRECTORY === 'number'
+}
+
+function secureFdUnsupported(): YeismeFilesError {
+  return new YeismeFilesError(
+    SECURE_FILE_TRAVERSAL_UNSUPPORTED_CODE,
+    'secure file traversal is unavailable on this host',
+    503,
+  )
+}
+
+async function assertSecureFdAnchors(): Promise<void> {
+  if (!secureFdAnchorsAvailable()) throw secureFdUnsupported()
+  // The feature exists only if this process can resolve its own descriptor
+  // namespace at runtime. A static Linux check is insufficient in a sandbox.
+  if (await realpath('/proc/self/fd').catch(() => undefined) === undefined) throw secureFdUnsupported()
+}
+
+function fdPath(handle: Awaited<ReturnType<typeof open>>): string | undefined {
+  return secureFdAnchorsAvailable() ? `/proc/self/fd/${handle.fd}` : undefined
+}
+
+function pathSegments(workspace: string, requestedWorkspace: string, target: string): readonly string[] | undefined {
+  const absolute = requireAbsolute(target)
+  const base = isWithin(workspace, absolute)
+    ? workspace
+    : isWithin(requestedWorkspace, absolute)
+      ? requestedWorkspace
+      : undefined
+  if (base === undefined) return undefined
+  const suffix = absolute.slice(base.length).replace(/^[\\/]+/, '')
+  if (suffix === '') return []
+  const parts = suffix.split(/[\\/]+/)
+  return parts.every(part => part !== '' && part !== '.' && part !== '..') ? parts : undefined
+}
+
+/**
+ * Open a workspace-relative target by walking from a verified workspace FD.
+ * Each component is opened through the previous FD and with O_NOFOLLOW, so a
+ * symlink or rename cannot redirect an already-authorized request elsewhere.
+ */
+async function openWorkspacePath(
+  cwd: string,
+  target: string,
+  expectedCanonical?: string,
+): Promise<OpenedWorkspacePath | undefined> {
+  await assertSecureFdAnchors()
+  const requestedWorkspace = requireAbsolute(cwd)
+  const workspace = await realpath(requestedWorkspace).catch(() => undefined)
+  if (workspace === undefined) return undefined
+  const parts = pathSegments(workspace, requestedWorkspace, target)
+  if (parts === undefined) return undefined
+  const directoryFlags = fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW
+  let current = await open(workspace, directoryFlags).catch(() => undefined)
+  if (current === undefined) return undefined
+  let handedOff = false
+  try {
+    const workspaceFdPath = fdPath(current)
+    if (workspaceFdPath === undefined) throw secureFdUnsupported()
+    const openedWorkspace = await realpath(workspaceFdPath).catch(() => undefined)
+    if (openedWorkspace === undefined) throw secureFdUnsupported()
+    if (openedWorkspace !== workspace) return undefined
+    for (let index = 0; index < parts.length; index += 1) {
+      const component = parts[index]!
+      const currentPath = fdPath(current)
+      if (currentPath === undefined) throw secureFdUnsupported()
+      const flags = fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | (index + 1 < parts.length ? fsConstants.O_DIRECTORY : 0)
+      const next = await open(join(currentPath, component), flags).catch(() => undefined)
+      if (next === undefined) return undefined
+      await current.close()
+      current = next
+    }
+    const currentPath = fdPath(current)
+    if (currentPath === undefined) throw secureFdUnsupported()
+    const canonical = await realpath(currentPath).catch(() => undefined)
+    const info = await current.stat({ bigint: false })
+    if (canonical === undefined || !isWithin(workspace, canonical) || (expectedCanonical !== undefined && canonical !== expectedCanonical)) return undefined
+    handedOff = true
+    return { handle: current, workspace, canonical, info }
+  } finally {
+    if (!handedOff) await current.close()
+  }
+}
+
+/** List a directory via its already-authorized FD, retaining only safe metadata. */
+async function listOwnedWorkspaceTree(
+  record: OpaqueFileRecord,
+  cwd: string,
+  maxEntries = DEFAULT_LIST_LIMIT,
+): Promise<{ readonly path: string; readonly entries: readonly MutableTreeEntry[]; readonly truncated: boolean }> {
+  if (!record.directory) throw new YeismeFilesError('bad-request', 'opaque reference is not a directory')
+  const opened = await openWorkspacePath(cwd, record.target, record.target)
+  if (opened === undefined || !opened.info.isDirectory()) throw new YeismeFilesError('forbidden', 'opaque directory reference is unavailable', 403)
+  const openedPath = fdPath(opened.handle)
+  if (openedPath === undefined) {
+    await opened.handle.close()
+    throw new YeismeFilesError('forbidden', 'secure directory traversal is unavailable', 403)
+  }
+  let level: Awaited<ReturnType<typeof opendir>> | undefined
+  try {
+    level = await opendir(openedPath)
+    const rows: MutableTreeEntry[] = []
+    let overflow = 0
+    for await (const dirent of level) {
+      if (rows.length >= maxEntries) {
+        overflow += 1
+        continue
+      }
+      const childPath = join(openedPath, dirent.name)
+      const info = await lstat(childPath).catch(() => undefined)
+      if (info === undefined) continue
+      const symlink = info.isSymbolicLink()
+      const symlinkTarget = symlink ? await realpath(childPath).catch(() => undefined) : undefined
+      const canonical = symlink ? undefined : await realpath(childPath).catch(() => undefined)
+      // Do not inspect a symlink target while enumerating.  Its target may be
+      // outside the workspace, and target metadata is not part of this safe
+      // projection.  Non-symlink entries must retain the inode seen by lstat.
+      if (!symlink) {
+        const resolvedInfo = canonical === undefined ? undefined : await stat(canonical).catch(() => undefined)
+        if (canonical === undefined || resolvedInfo === undefined || !isWithin(opened.workspace, canonical)
+          || resolvedInfo.dev !== info.dev || resolvedInfo.ino !== info.ino) continue
+      }
+      rows.push({
+        name: dirent.name,
+        path: canonical ?? join(record.target, dirent.name),
+        canonical,
+        info,
+        isDir: !symlink && info.isDirectory(),
+        isSymlink: symlink,
+        broken: symlink && symlinkTarget === undefined,
+        hidden: dirent.name.startsWith('.'),
+      })
+    }
+    rows.sort(compareEntries)
+    return { path: record.target, entries: rows, truncated: overflow > 0 }
+  } finally {
+    await level?.close().catch(() => undefined)
+    await opened.handle.close()
+  }
+}
+
+async function listWorkspaceTreeAt(cwd: string, target: string, maxEntries = DEFAULT_LIST_LIMIT): Promise<WorkspaceTreeListingLike> {
+  const opened = await openWorkspacePath(cwd, target)
+  if (opened === undefined || !opened.info.isDirectory()) {
+    await opened?.handle.close()
+    throw new YeismeFilesError('forbidden', 'directory is unavailable in the session workspace', 403)
+  }
+  await opened.handle.close()
+  return listOwnedWorkspaceTree({ ref: 'legacy', workspace: await realpath(requireAbsolute(cwd)), target: opened.canonical, directory: true }, cwd, maxEntries)
+}
+
+async function readWorkspaceTextAt(cwd: string, target: string, readLimit = DEFAULT_READ_LIMIT): Promise<FileTextReadV1> {
+  const opened = await openWorkspacePath(cwd, target)
+  if (opened === undefined || !opened.info.isFile()) {
+    await opened?.handle.close()
+    throw new YeismeFilesError('forbidden', 'file is unavailable in the session workspace', 403)
+  }
+  try {
+    const truncated = opened.info.size > readLimit
+    const buffer = Buffer.alloc(Math.min(opened.info.size, readLimit))
+    const { bytesRead } = await opened.handle.read(buffer, 0, buffer.length, 0)
+    const after = await opened.handle.stat({ bigint: false })
+    if (after.dev !== opened.info.dev || after.ino !== opened.info.ino || after.size !== opened.info.size || after.mtimeMs !== opened.info.mtimeMs) {
+      throw new YeismeFilesError('forbidden', 'file changed while being read', 403)
+    }
+    const bytes = buffer.subarray(0, bytesRead)
+    return { content: bytes.includes(0) ? '' : bytes.toString('utf8'), truncated, binary: bytes.includes(0), version: textVersion(opened.info.size, opened.info.mtimeMs, bytes) }
+  } finally {
+    await opened.handle.close()
+  }
+}
+
+async function readWorkspaceBinaryAt(cwd: string, target: string, readLimit = DEFAULT_BINARY_READ_LIMIT): Promise<FileBinaryReadV1> {
+  const opened = await openWorkspacePath(cwd, target)
+  if (opened === undefined || !opened.info.isFile()) {
+    await opened?.handle.close()
+    throw new YeismeFilesError('forbidden', 'file is unavailable in the session workspace', 403)
+  }
+  try {
+    if (opened.info.size > readLimit) return { bytes: new Uint8Array(), size: opened.info.size, truncated: true, version: textVersion(opened.info.size, opened.info.mtimeMs, new Uint8Array()) }
+    const bytes = await opened.handle.readFile()
+    const after = await opened.handle.stat({ bigint: false })
+    if (after.dev !== opened.info.dev || after.ino !== opened.info.ino || after.size !== opened.info.size || after.mtimeMs !== opened.info.mtimeMs) {
+      throw new YeismeFilesError('forbidden', 'file changed while being read', 403)
+    }
+    return { bytes, size: opened.info.size, truncated: false, version: textVersion(opened.info.size, opened.info.mtimeMs, bytes) }
+  } finally {
+    await opened.handle.close()
+  }
 }
 
 /** List one directory level, files and directories, directories first. */
@@ -1416,8 +1822,12 @@ export async function handleYeismeFilesApi(
     const sessionId = typeof record.sessionId === 'string' ? record.sessionId : undefined
     const clientCwd = typeof record.cwd === 'string' && record.cwd !== '' ? record.cwd : undefined
     const opaqueMethod = method === 'fs.treeV2' || method === 'fs.treePageV2' || method === 'fs.revealV2' || method === 'fs.inspectV2' || method === 'fs.sensitiveRevealV1' || method === 'fs.readV2' || method === 'fs.binaryV2' || method === 'fs.writeV2' || method.startsWith('fs.mutation.') || method.startsWith('fs.upload.') || method.startsWith('fs.download.')
+    const legacyWorkspaceMethod = method === 'fs.tree' || method === 'fs.read' || method === 'fs.binary' || method === 'fs.write'
     if (opaqueMethod && (sessionId === undefined || clientCwd !== undefined)) {
       throw new YeismeFilesError('forbidden', 'opaque file API requires a session owner and forbids client cwd', 403)
+    }
+    if (legacyWorkspaceMethod && sessionId === undefined) {
+      throw new YeismeFilesError('forbidden', 'legacy file API requires a session workspace owner', 403)
     }
     const resolvedCwd = options.sessionCwd(sessionId, opaqueMethod ? undefined : clientCwd)
     if (resolvedCwd === undefined || resolvedCwd === '') throw new YeismeFilesError('forbidden', 'session workspace owner is unavailable', 403)
@@ -1469,18 +1879,12 @@ export async function handleYeismeFilesApi(
     }
     if (method === 'fs.readV2') {
       if (opaqueRefs === undefined) throw new YeismeFilesError('not-found', 'opaque file capability is unavailable', 404)
-      const target = await opaqueRefs.resolve(cwd, requireString(payload, 'ref'))
-      if (target.directory) throw new YeismeFilesError('bad-request', 'directories are read-only')
-      await opaqueRefs.assertSensitiveAccess(cwd, target.ref, typeof record.revealToken === 'string' ? record.revealToken : undefined)
-      writeJson(res, 200, { ok: true, value: await readWorkspaceText(target.target) })
+      writeJson(res, 200, { ok: true, value: await opaqueRefs.readTextV2(cwd, requireString(payload, 'ref'), typeof record.revealToken === 'string' ? record.revealToken : undefined) })
       return
     }
     if (method === 'fs.binaryV2') {
       if (opaqueRefs === undefined) throw new YeismeFilesError('not-found', 'opaque file capability is unavailable', 404)
-      const target = await opaqueRefs.resolve(cwd, requireString(payload, 'ref'))
-      if (target.directory) throw new YeismeFilesError('bad-request', 'directories are read-only')
-      await opaqueRefs.assertSensitiveAccess(cwd, target.ref, typeof record.revealToken === 'string' ? record.revealToken : undefined)
-      const binary = await readWorkspaceBinary(target.target)
+      const binary = await opaqueRefs.readBinaryV2(cwd, requireString(payload, 'ref'), typeof record.revealToken === 'string' ? record.revealToken : undefined)
       writeJson(res, 200, {
         ok: true,
         value: {
@@ -1503,22 +1907,19 @@ export async function handleYeismeFilesApi(
     if (method === 'fs.tree') {
       const target = record.path === undefined || record.path === '' ? cwd : requireAbsolute(requireString(payload, 'path'))
       if (!isWithin(cwd, target)) throw new YeismeFilesError('forbidden', 'path escapes the session workspace', 403)
-      writeJson(res, 200, { ok: true, value: await listWorkspaceTree(target) })
+      writeJson(res, 200, { ok: true, value: await listWorkspaceTreeAt(cwd, target) })
       return
     }
     if (method === 'fs.read') {
       const target = requireAbsolute(requireString(payload, 'path'))
       if (!isWithin(cwd, target)) throw new YeismeFilesError('forbidden', 'path escapes the session workspace', 403)
-      writeJson(res, 200, { ok: true, value: await readWorkspaceText(target) })
+      writeJson(res, 200, { ok: true, value: await readWorkspaceTextAt(cwd, target) })
       return
     }
     if (method === 'fs.binary') {
       const target = requireAbsolute(requireString(payload, 'path'))
       if (!isWithin(cwd, target)) throw new YeismeFilesError('forbidden', 'path escapes the session workspace', 403)
-      const canonicalTarget = await realpath(target)
-      const canonicalWorkspace = await realpath(cwd)
-      if (!isWithin(canonicalWorkspace, canonicalTarget)) throw new YeismeFilesError('forbidden', 'file link escapes the session workspace', 403)
-      const binary = await readWorkspaceBinary(canonicalTarget)
+      const binary = await readWorkspaceBinaryAt(cwd, target)
       writeJson(res, 200, {
         ok: true,
         value: {

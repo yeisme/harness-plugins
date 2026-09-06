@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildPanelStyles } from './panel-styles.ts'
-import { TOKEN_SYNONYMS } from './tokens.ts'
+import { HOST_THEME_ALIASES, PANEL_TOKENS } from './tokens.ts'
 
 const SCOPE = 'pane-domain'
 
@@ -9,16 +9,25 @@ function build(): string {
 }
 
 describe('buildPanelStyles', () => {
+  it('publishes the documented spacing and touch scale without replacing the host font family', () => {
+    const css = build()
+    expect(css).toContain('--vk-ctrl-touch:44px')
+    expect(css).toContain('--vk-gap-xs:4px')
+    expect(css).toContain('--vk-gap-xl:14px')
+    expect(css).toContain('font-family:inherit;font-size:var(--vk-font-body)')
+    expect(css).not.toContain('system-ui')
+  })
   it('同一 host token 的 fallback 在输出中只出现一次（根变量块单点声明）', () => {
     const css = build()
-    const names = new Set([...css.matchAll(/--dsw-alias-([a-z0-9-]+)/g)].map(m => `--dsw-alias-${m[1]}`))
-    for (const name of names) {
-      const count = css.split(name).length - 1
+    for (const canonical of Object.keys(PANEL_TOKENS)) {
+      const name = `--dsw-alias-${canonical}`
+      const count = [...css.matchAll(new RegExp(`${name}(?=[,)])`, 'g'))].length
       expect(count, `${name} should appear exactly once`).toBe(1)
     }
-    // 同义词不得混入输出
-    for (const synonym of Object.keys(TOKEN_SYNONYMS)) {
-      expect(css).not.toContain(`--dsw-alias-${synonym}`)
+    // Host aliases are only consumed as nested fallbacks, never as root vars.
+    for (const alias of Object.values(HOST_THEME_ALIASES)) {
+      if (alias === undefined) continue
+      expect(css).toContain(`--dsw-alias-${alias}`)
     }
   })
 
@@ -48,13 +57,20 @@ describe('buildPanelStyles', () => {
     expect(css).toContain('.vk-btn:disabled')
   })
 
+  it('空状态使用与 SurfaceState 一致的紧凑容器', () => {
+    const css = build()
+    expect(css).toContain('.vk-empty{display:grid;place-items:center;align-content:center')
+    expect(css).toContain('min-height:92px;padding:16px')
+    expect(css).toContain('border:1px solid var(--vk-border-l1);border-radius:var(--vk-radius-md)')
+  })
+
   it('纯函数幂等：同参数输出逐字节相同', () => {
     expect(build()).toBe(build())
   })
 
-  it('accent fallback 可覆盖，host 变量仍优先', () => {
+  it('accent fallback preserves canonical and official host precedence', () => {
     const css = buildPanelStyles({ scope: SCOPE, accentFallback: '#9bcbff' })
-    expect(css).toContain('var(--dsw-alias-accent,#9bcbff)')
+    expect(css).toContain('var(--dsw-alias-accent,var(--dsw-alias-state-business-primary,#9bcbff))')
   })
 
   it('extra 原样追加且不同 scope 输出互不混淆', () => {

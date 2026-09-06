@@ -28,18 +28,11 @@ function asInteractiveHost(host: TerminalHostCompatible): TerminalHostV2 | undef
 }
 
 const terminalPaneStyles = `
-[data-dsh-terminal-pane]{display:flex;min-width:0;min-height:100%;height:100%;flex-direction:column;color:var(--vk-text-primary);background:var(--vk-bg-base);font:13px/1.45 var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif)}
-[data-dsh-terminal-pane] .dwt-toolbar{display:flex;min-height:38px;align-items:center;gap:10px;padding:0 10px;border-bottom:1px solid var(--vk-border-l2);background:var(--vk-bg-elevated)}
-[data-dsh-terminal-pane] .dwt-summary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--vk-text-tertiary);font-size:12px}
+[data-dsh-terminal-pane]{display:flex;min-width:0;min-height:100%;height:100%;flex-direction:column;color:var(--vk-text-primary);background:var(--vk-bg-base);font:inherit}
+[data-dsh-terminal-pane] .dwt-summary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--vk-text-tertiary);font-size:var(--vk-font-small)}
 [data-dsh-terminal-pane] .dwt-actions{display:flex;gap:6px;margin-left:auto}
-[data-dsh-terminal-pane] button{min-height:28px;border:1px solid var(--vk-border-l2);border-radius:7px;background:var(--vk-bg-layer-1);color:var(--vk-text-secondary);cursor:pointer;font:inherit}
-[data-dsh-terminal-pane] button:hover:not(:disabled),[data-dsh-terminal-pane] button:focus-visible{background:var(--vk-fill-hover);color:var(--vk-text-primary);outline:2px solid var(--vk-focus-ring);outline-offset:-2px}
-[data-dsh-terminal-pane] button:disabled{cursor:not-allowed;opacity:.45}
 [data-dsh-terminal-pane] .dwt-action{padding:0 10px}
-[data-dsh-terminal-pane] .dwt-action-primary{border-color:color-mix(in srgb,var(--vk-accent) 45%,transparent);background:color-mix(in srgb,var(--vk-accent) 24%,transparent);color:var(--vk-text-primary)}
-[data-dsh-terminal-pane] .dwt-message{margin:12px;padding:12px 14px;border:1px solid var(--vk-border-l2);border-radius:9px;background:var(--vk-bg-layer-1);color:var(--vk-text-secondary)}
-[data-dsh-terminal-pane] .dwt-message strong{display:block;margin-bottom:4px;color:var(--vk-text-primary)}
-[data-dsh-terminal-pane] .dwt-error{border-color:color-mix(in srgb,var(--vk-state-error) 35%,transparent);color:var(--vk-state-error)}
+[data-dsh-terminal-pane] .dwt-message{margin:8px 10px}
 [data-dsh-terminal-pane] .dwt-layout{display:grid;min-width:0;min-height:0;flex:1;grid-template-columns:minmax(156px,22%) minmax(0,1fr)}
 [data-dsh-terminal-pane] .dwt-list{min-width:0;overflow:auto;border-right:1px solid var(--vk-border-l2);background:var(--vk-bg-elevated)}
 [data-dsh-terminal-pane] .dwt-list ul{display:grid;gap:2px;margin:0;padding:6px;list-style:none}

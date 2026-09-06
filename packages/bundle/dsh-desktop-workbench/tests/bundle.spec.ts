@@ -1,4 +1,7 @@
 import { readFileSync } from 'node:fs'
+import { mkdtemp, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { desktopWorkbenchBundleV1 } from '../src/index.ts'
@@ -93,6 +96,35 @@ describe('@yeisme/dsh-desktop-workbench', () => {
       dispose()
     }
     await expect(desktopWorkbenchBundleV1.hosts.session.listSessions()).resolves.toEqual([])
+  })
+
+  it('uses the session header workspace for legacy file calls and never client cwd authority', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'dsh-session-workspace-v1-'))
+    const other = await mkdtemp(join(tmpdir(), 'dsh-client-workspace-v1-'))
+    await writeFile(join(workspace, 'owned.txt'), 'owned')
+    await writeFile(join(other, 'other.txt'), 'other')
+    let handler: ((req: unknown, res: unknown) => Promise<void> | void) | undefined
+    const ctx = {
+      sessions: { get(sessionId: string) { return sessionId === 'session-1' ? { header: { cwd: workspace } } : undefined } },
+      webServer: { register(route: { handler: (req: unknown, res: unknown) => Promise<void> | void }) { handler = route.handler; return () => {} } },
+      get(name: string) { return name === 'sessions' ? this.sessions : name === 'webServer' ? this.webServer : undefined },
+      provide() { return () => {} },
+    }
+    const dispose = bundleApply(ctx)
+    try {
+      expect(handler).toBeTypeOf('function')
+      const request = {
+        method: 'POST',
+        url: '/yeisme-files/api/fs.tree',
+        async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ sessionId: 'session-1', cwd: other })) },
+      }
+      let body = ''
+      await handler!(request, { writeHead() {}, end(value: string) { body = value } })
+      expect(JSON.parse(body)).toMatchObject({ ok: true, value: { entries: expect.arrayContaining([expect.objectContaining({ name: 'owned.txt' })]) } })
+      expect(body).not.toContain('other.txt')
+    } finally {
+      dispose()
+    }
   })
 
   // 本 bundle 在 apply 时经 pane workbench client 硬性要求 core-pane seam，

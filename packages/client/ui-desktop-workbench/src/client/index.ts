@@ -13,8 +13,8 @@ export type { SessionSidebarProps, SessionLineageBadge } from './session-sidebar
 export { FilePane } from './file-pane.tsx'
 export type { FilePaneProps } from './file-pane.tsx'
 
-export { FileOpenPane } from './file-open-pane.tsx'
-export type { FileOpenPaneProps } from './file-open-pane.tsx'
+export { FILE_IMAGE_REGION_REFERENCE_EVENT, FILE_IMAGE_REGION_REFERENCE_RESULT_EVENT, FileOpenPane } from './file-open-pane.tsx'
+export type { FileImageRegionReferenceDetailV1, FileOpenPaneProps } from './file-open-pane.tsx'
 export { DocxPreview, isDocxFile, parseDocx } from './docx-preview.tsx'
 export type { DocxBlock, DocxPreviewProps, ParsedDocx } from './docx-preview.tsx'
 

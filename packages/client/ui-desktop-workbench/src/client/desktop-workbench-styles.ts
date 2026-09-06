@@ -58,7 +58,7 @@ export const desktopWorkbenchStyles = `
 
 [data-dsh-desktop-main] {
   display: grid;
-  grid-template-rows: 56px minmax(0, 1fr);
+  grid-template-rows: 48px minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -69,9 +69,9 @@ export const desktopWorkbenchStyles = `
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   min-width: 0;
-  padding: 0 16px;
+  padding: 0 12px;
   background: var(--vk-bg-layer-1);
   background: color-mix(in srgb, var(--vk-bg-layer-1) 92%, transparent);
   border-bottom: 1px solid var(--vk-border-l2);
@@ -81,7 +81,7 @@ export const desktopWorkbenchStyles = `
 [data-dsh-desktop-toolbar-actions] {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -99,12 +99,12 @@ export const desktopWorkbenchStyles = `
   color: var(--vk-text-tertiary);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
 }
 
 [data-dsh-desktop-product] strong {
   overflow: hidden;
-  font-size: 15px;
+  font-size: var(--vk-font-heading);
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -114,14 +114,14 @@ export const desktopWorkbenchStyles = `
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  min-width: 40px;
-  min-height: 36px;
-  padding: 0 11px;
+  gap: 6px;
+  min-width: var(--vk-ctrl-button);
+  min-height: var(--vk-ctrl-button);
+  padding: 0 8px;
   color: var(--vk-text-secondary);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--vk-radius-md);
   cursor: pointer;
   transition:
     color var(--ds-transition-duration-fast, 0.1s) ease,
@@ -176,12 +176,12 @@ export const desktopWorkbenchStyles = `
 }
 
 [data-dsh-session-sidebar] {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
   height: 100%;
   min-height: 0;
-  padding: 18px 14px 14px;
+  padding: 0;
 }
 
 [data-dsh-session-sidebar-header] {
@@ -225,6 +225,10 @@ export const desktopWorkbenchStyles = `
   gap: 6px;
 }
 
+[data-dsh-session-search] {
+  padding: 10px 10px 8px;
+}
+
 [data-dsh-session-search] > span,
 [data-dsh-search-field] > span {
   color: var(--vk-text-tertiary);
@@ -237,13 +241,13 @@ export const desktopWorkbenchStyles = `
 [data-dsh-global-search] input,
 [data-dsh-terminal-pane] input {
   width: 100%;
-  min-height: 40px;
-  padding: 0 12px;
+  min-height: var(--vk-ctrl-input);
+  padding: 0 10px;
   color: var(--vk-text-primary);
   caret-color: var(--vk-accent);
   background: var(--vk-bg-layer-2);
   border: 1px solid var(--vk-border-l2);
-  border-radius: 9px;
+  border-radius: var(--vk-radius-md);
 }
 
 [data-dsh-session-search] input::placeholder,
@@ -256,15 +260,15 @@ export const desktopWorkbenchStyles = `
 [data-dsh-session-scroll] {
   min-height: 0;
   overflow: auto;
-  padding-right: 2px;
+  padding: 0 8px 10px;
 }
 
 [data-dsh-session-group] {
-  margin: 0 0 16px;
+  margin: 0 0 12px;
 }
 
 [data-dsh-session-group] h4 {
-  margin: 0 0 7px;
+  margin: 0 0 6px;
   color: var(--vk-text-tertiary);
   font-size: 11px;
   font-weight: 650;
@@ -285,11 +289,11 @@ export const desktopWorkbenchStyles = `
 
 [data-dsh-session-row] {
   display: grid;
-  gap: 6px;
-  padding: 8px;
+  gap: 4px;
+  padding: 6px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--vk-radius-md);
   transition:
     background var(--ds-transition-duration-fast, 0.1s) ease,
     border-color var(--ds-transition-duration-fast, 0.1s) ease;
@@ -354,12 +358,12 @@ export const desktopWorkbenchStyles = `
 [data-dsh-notification-center] li button,
 [data-dsh-terminal-pane] button,
 [data-dsh-global-search] li button {
-  min-height: 30px;
+  min-height: var(--vk-ctrl-button);
   padding: 0 8px;
   color: var(--vk-text-secondary);
   background: transparent;
   border: 1px solid var(--vk-border-l2);
-  border-radius: 7px;
+  border-radius: var(--vk-radius-md);
   cursor: pointer;
 }
 
@@ -382,28 +386,10 @@ export const desktopWorkbenchStyles = `
 }
 
 [data-dsh-archived-sessions] summary {
-  min-height: 36px;
+  min-height: 32px;
   padding: 8px;
-  border-radius: 8px;
+  border-radius: var(--vk-radius-md);
   cursor: pointer;
-}
-
-[data-dsh-panel-empty] {
-  display: grid;
-  place-items: center;
-  gap: 6px;
-  min-height: 148px;
-  padding: 24px;
-  color: var(--vk-text-tertiary);
-  text-align: center;
-  background: var(--vk-bg-layer-1);
-  border: 1px dashed var(--vk-border-l2);
-  border-radius: 12px;
-}
-
-[data-dsh-panel-empty] strong {
-  color: var(--vk-text-primary);
-  font-size: 14px;
 }
 
 [data-dsh-global-search],
@@ -412,7 +398,7 @@ export const desktopWorkbenchStyles = `
 [data-dsh-media-panel] {
   display: grid;
   align-content: start;
-  gap: 16px;
+  gap: 12px;
   max-width: 1040px;
   min-height: 100%;
   margin: 0 auto;
@@ -422,13 +408,13 @@ export const desktopWorkbenchStyles = `
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
 }
 
 [data-dsh-panel-heading] h2,
 [data-dsh-panel-heading] h3 {
   margin: 0;
-  font-size: 22px;
+  font-size: var(--vk-font-title);
   font-weight: 680;
   letter-spacing: -0.02em;
 }
@@ -449,11 +435,11 @@ export const desktopWorkbenchStyles = `
   display: grid;
   align-content: start;
   gap: 8px;
-  min-height: 112px;
-  padding: 14px;
+  min-height: 96px;
+  padding: 12px;
   background: var(--vk-bg-layer-1);
-  border: 1px solid var(--vk-border-l2);
-  border-radius: 12px;
+  border: 1px solid var(--vk-border-l1);
+  border-radius: var(--vk-radius-lg);
 }
 
 [data-dsh-global-search] li > span,
@@ -471,7 +457,7 @@ export const desktopWorkbenchStyles = `
 [data-dsh-conversation-manager] {
   display: grid;
   align-content: start;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -497,7 +483,7 @@ export const desktopWorkbenchStyles = `
   color: var(--vk-text-primary);
   background: var(--vk-bg-layer-1);
   border: 1px solid var(--vk-border-l2);
-  border-radius: 7px;
+  border-radius: var(--vk-radius-md);
 }
 
 [data-dsh-conversation-batchbar],
@@ -508,18 +494,23 @@ export const desktopWorkbenchStyles = `
   min-width: 0;
   padding: 9px;
   background: var(--vk-bg-layer-1);
-  border: 1px solid var(--vk-border-l2);
-  border-radius: 8px;
+  border: 1px solid var(--vk-border-l1);
+  border-radius: var(--vk-radius-md);
 }
 
 [data-dsh-conversation-manager] button {
-  min-height: 32px;
+  min-height: var(--vk-ctrl-button);
   padding: 0 10px;
   color: var(--vk-text-secondary);
-  background: var(--vk-fill-hover);
+  background: transparent;
   border: 1px solid var(--vk-border-l2);
-  border-radius: 7px;
+  border-radius: var(--vk-radius-md);
   cursor: pointer;
+}
+
+[data-dsh-conversation-manager] button:hover:not(:disabled) {
+  color: var(--vk-text-primary);
+  background: var(--vk-fill-hover);
 }
 
 [data-dsh-conversation-manager] button:disabled {
@@ -532,14 +523,15 @@ export const desktopWorkbenchStyles = `
   padding: 8px 10px;
   color: var(--vk-text-secondary);
   background: color-mix(in srgb, var(--vk-accent) 10%, transparent);
-  border-left: 3px solid var(--vk-accent);
+  border: 1px solid color-mix(in srgb, var(--vk-accent) 24%, var(--vk-border-l1));
+  border-radius: var(--vk-radius-md);
 }
 
 [data-dsh-conversation-table-wrap] {
   min-width: 0;
   overflow: auto;
   border: 1px solid var(--vk-border-l2);
-  border-radius: 8px;
+  border-radius: var(--vk-radius-md);
 }
 
 [data-dsh-conversation-table] {
@@ -585,11 +577,11 @@ export const desktopWorkbenchStyles = `
 [data-dsh-conversation-rules],
 [data-dsh-conversation-history] {
   display: grid;
-  gap: 9px;
-  padding: 12px;
+  gap: 8px;
+  padding: 10px;
   background: var(--vk-bg-layer-1);
-  border: 1px solid var(--vk-border-l2);
-  border-radius: 8px;
+  border: 1px solid var(--vk-border-l1);
+  border-radius: var(--vk-radius-md);
 }
 
 [data-dsh-conversation-rules] header,
@@ -638,10 +630,10 @@ export const desktopWorkbenchStyles = `
   display: grid;
   gap: 12px;
   width: min(440px, 100%);
-  padding: 18px;
+  padding: 16px;
   background: var(--vk-bg-layer-2);
   border: 1px solid var(--vk-border-l2);
-  border-radius: 10px;
+  border-radius: var(--vk-radius-lg);
   box-shadow: var(--vk-shadow-panel);
 }
 
@@ -665,7 +657,7 @@ export const desktopWorkbenchStyles = `
   [data-dsh-desktop-shell-sidebar] {
     position: absolute;
     z-index: 4;
-    inset: 56px auto 0 0;
+    inset: 48px auto 0 0;
     width: min(86vw, 320px);
     box-shadow: 18px 0 42px rgba(0, 0, 0, 0.32);
   }

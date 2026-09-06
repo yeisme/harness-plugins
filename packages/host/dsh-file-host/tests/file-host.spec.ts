@@ -5,6 +5,7 @@ import {
   createFileHostFromWorkspaceTree,
   createFileHostPlaceholder,
   FILE_OPAQUE_REF_CAPABILITY,
+  SECURE_FILE_TRAVERSAL_UNSUPPORTED_CODE,
   FILE_TREE_PROJECTION_CAPABILITY,
   FILE_TREE_PROJECTION_CAPABILITY_V2,
   FILE_WATCH_CAPABILITY,
@@ -205,6 +206,31 @@ describe('@yeisme/dsh-file-host', () => {
     expect(host.capabilities).toContain(FILE_TREE_PROJECTION_CAPABILITY_V2)
     await expect(host.inspect?.inspect('file-safe')).resolves.toMatchObject({ usable: false, sensitive: true })
     expect(requests.every(item => item.body.sessionId === 's1' && !('cwd' in item.body) && !('path' in item.body))).toBe(true)
+  })
+
+  it('preserves the secure-fd-unsupported owner error and never falls back to path APIs', async () => {
+    const requests: string[] = []
+    const fetchImpl = vi.fn(async (input: string) => {
+      requests.push(input)
+      return {
+        status: 503,
+        json: async () => ({
+          ok: false,
+          error: { code: SECURE_FILE_TRAVERSAL_UNSUPPORTED_CODE, message: 'secure file traversal is unavailable on this host' },
+        }),
+      } as unknown as Response
+    })
+    const host = createExplorerFileHost({ fetchImpl, sessionId: () => 'session-1', cwd: () => '/must-not-leak' })
+    await expect(host.listEntries()).rejects.toMatchObject({
+      code: SECURE_FILE_TRAVERSAL_UNSUPPORTED_CODE,
+      message: 'secure file traversal is unavailable on this host',
+    })
+    await expect(host.treeV2!.roots()).rejects.toMatchObject({ code: SECURE_FILE_TRAVERSAL_UNSUPPORTED_CODE })
+    expect(requests).toEqual([
+      '/yeisme-files/api/fs.treeV2',
+      '/yeisme-files/api/fs.treePageV2',
+    ])
+    expect(requests.some(input => input.endsWith('/fs.tree'))).toBe(false)
   })
 
   it('decodes owner-provided binary responses without exposing the path on entries', async () => {

@@ -1,5 +1,5 @@
 /** Opened file tab with rendered Markdown editing and an explicit source mode. */
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { Button, MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Surface, SurfaceContextBar, SurfaceState } from '@yeisme/dsh-client-ui-surface'
 import { SemanticFileEditor, createRemoteLanguageIntelligenceHost } from '@yeisme/dsh-client-ui-semantic-file-editor'
@@ -62,6 +62,21 @@ const markdownStyles = `
 `
 
 type FileViewMode = 'preview' | 'edit' | 'source'
+
+export const FILE_IMAGE_REGION_REFERENCE_EVENT = 'dsh-composer-reference:image-region-request' as const
+export const FILE_IMAGE_REGION_REFERENCE_RESULT_EVENT = 'dsh-composer-reference:image-region-result' as const
+
+export interface FileImageRegionReferenceDetailV1 {
+  readonly version: 1
+  readonly requestId: string
+  readonly owner: 'dsh.local'
+  readonly ref: string
+  readonly resourceVersion: string
+  readonly label: string
+  readonly scope: 'image/region'
+  readonly naturalSize: { readonly width: number; readonly height: number }
+  readonly region: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
+}
 
 interface MarkdownEditBlock {
   readonly source: string
@@ -127,6 +142,26 @@ function editorRows(source: string): number {
   return Math.max(2, Math.min(18, source.split(/\r\n|\n|\r/u).length + 1))
 }
 
+function referenceSourceAttributes(input: {
+  readonly owner: string
+  readonly ref: string
+  readonly version: string | undefined
+  readonly scope: string
+  readonly byteLength: number
+  readonly available: boolean
+}): Record<string, string | number | true> {
+  if (!input.available || input.version === undefined || input.byteLength <= 0) return {}
+  return {
+    'data-dsh-reference-source': true,
+    'data-dsh-reference-source-owner': input.owner,
+    'data-dsh-reference-source-ref': input.ref,
+    'data-dsh-reference-source-version': input.version,
+    'data-dsh-reference-source-scope': input.scope,
+    'data-dsh-reference-source-range-start': 0,
+    'data-dsh-reference-source-range-end': input.byteLength,
+  }
+}
+
 function mediaKindOf(entry: FileEntryV1): 'image' | 'audio' | 'video' | 'pdf' | undefined {
   if (entry.kind === 'image') return 'image'
   if (entry.kind === 'pdf' || entry.mediaType === 'application/pdf') return 'pdf'
@@ -154,6 +189,9 @@ function LegacyFileOpenPane({ host, entry }: Omit<FileOpenPaneProps, 'semanticSe
   const [viewMode, setViewMode] = useState<FileViewMode>('preview')
   const [markdownBlocks, setMarkdownBlocks] = useState<readonly MarkdownEditBlock[]>([{ source: '', separator: '' }])
   const [activeBlock, setActiveBlock] = useState<number>()
+  const [imageRegionMode, setImageRegionMode] = useState(false)
+  const [imageDragStart, setImageDragStart] = useState<{ readonly x: number; readonly y: number }>()
+  const [imageReferenceRequestId, setImageReferenceRequestId] = useState<string>()
   const previewUrl = host.resolvePreviewUrl?.(entry)
   const canEdit = mediaKind === undefined && host.writeText !== undefined && entry.capabilities.includes('edit') && version !== undefined && !truncated
   const dirty = text !== undefined && draft !== text
@@ -183,6 +221,7 @@ function LegacyFileOpenPane({ host, entry }: Omit<FileOpenPaneProps, 'semanticSe
         if (result === undefined) { setError('文件 owner 未授权该资源预览。'); return }
         if (result.truncated) { setError(`文件大小为 ${(result.size / (1024 * 1024)).toFixed(1)} MB，超过 Pane 的安全预览上限。`); return }
         setBinary(result)
+        setVersion(result.version)
       }, caught => {
         if (!live) return
         setLoading(false)
@@ -224,6 +263,18 @@ function LegacyFileOpenPane({ host, entry }: Omit<FileOpenPaneProps, 'semanticSe
     setBinaryUrl(url)
     return () => { URL.revokeObjectURL(url) }
   }, [binary, entry.mediaType, mediaKind])
+
+  useEffect(() => {
+    if (imageReferenceRequestId === undefined || typeof window === 'undefined') return
+    const onResult = (event: Event): void => {
+      const detail = (event as CustomEvent<{ readonly requestId?: unknown; readonly ok?: unknown; readonly reason?: unknown }>).detail
+      if (detail?.requestId !== imageReferenceRequestId || typeof detail.ok !== 'boolean') return
+      setNotice(detail.ok ? '已添加图像区域引用。' : typeof detail.reason === 'string' ? detail.reason : '图像区域引用不可用。')
+      setImageReferenceRequestId(undefined)
+    }
+    window.addEventListener(FILE_IMAGE_REGION_REFERENCE_RESULT_EVENT, onResult)
+    return () => window.removeEventListener(FILE_IMAGE_REGION_REFERENCE_RESULT_EVENT, onResult)
+  }, [imageReferenceRequestId])
 
   const save = async (): Promise<void> => {
     if (!canEdit || host.writeText === undefined || version === undefined || saving) return
@@ -284,12 +335,42 @@ function LegacyFileOpenPane({ host, entry }: Omit<FileOpenPaneProps, 'semanticSe
   }
 
   const effectivePreviewUrl = previewUrl ?? binaryUrl
+  const rawSourceAttributes = referenceSourceAttributes({
+    owner: 'dsh.local', ref: entry.id, version, scope: 'file/raw',
+    byteLength: visibleText === undefined ? 0 : new TextEncoder().encode(visibleText).byteLength,
+    available: visibleText !== undefined && !dirty && !truncated,
+  })
 
   const modeNav = text === undefined ? undefined : <div className="dwo-file-mode-switch" role="group" aria-label="文件显示模式" data-dsh-file-mode-switch>
     <Button type="button" size="sm" variant="toolbar" data-active={viewMode === 'preview'} aria-label={markdown ? '预览模式' : '只读模式'} aria-pressed={viewMode === 'preview'} onClick={() => { switchMode('preview') }}>{markdown ? '预览' : '只读'}</Button>
     <Button type="button" size="sm" variant="toolbar" data-active={viewMode === 'edit'} aria-label="编辑模式" title={canEdit ? '块级实时渲染编辑' : truncated ? '截断文件不能直接编辑' : '文件 owner 未授权编辑'} aria-pressed={viewMode === 'edit'} disabled={!canEdit} onClick={() => { switchMode('edit') }}>编辑</Button>
     {markdown && <Button type="button" size="sm" variant="toolbar" data-active={viewMode === 'source'} aria-label="源码模式" aria-pressed={viewMode === 'source'} onClick={() => { switchMode('source') }}>源码</Button>}
   </div>
+  const requestImageRegion = (event: PointerEvent<HTMLImageElement>): void => {
+    if (!imageRegionMode || version === undefined) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return
+    const point = { x: Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1), y: Math.min(Math.max((event.clientY - rect.top) / rect.height, 0), 1) }
+    if (event.type === 'pointerdown') { setImageDragStart(point); return }
+    const start = imageDragStart
+    setImageDragStart(undefined)
+    if (start === undefined) return
+    const round = (value: number): number => Math.round(value * 1e12) / 1e12
+    const region = { x: round(Math.min(start.x, point.x)), y: round(Math.min(start.y, point.y)), width: round(Math.abs(point.x - start.x)), height: round(Math.abs(point.y - start.y)) }
+    if (region.width <= 0 || region.height <= 0) { setNotice('请选择一个非空图像区域。'); return }
+    const requestId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? `image-region-${crypto.randomUUID()}` : `image-region-${Date.now()}`
+    window.dispatchEvent(new CustomEvent(FILE_IMAGE_REGION_REFERENCE_EVENT, { detail: {
+      version: 1, requestId, owner: 'dsh.local', ref: entry.id, resourceVersion: version, label: entry.name, scope: 'image/region',
+      naturalSize: { width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight }, region,
+    } satisfies FileImageRegionReferenceDetailV1 }))
+    setImageReferenceRequestId(requestId)
+    setNotice('正在添加图像区域引用…')
+  }
+
+  const contextActions = <>
+    {mediaKind === 'image' && version !== undefined ? <Button type="button" size="sm" variant="toolbar" aria-pressed={imageRegionMode} onClick={() => { setImageRegionMode(value => !value); setImageDragStart(undefined); setNotice(undefined) }}>{imageRegionMode ? '退出区域引用' : '引用图像区域'}</Button> : null}
+    {canEdit && (editing || dirty) ? <Button type="button" size="sm" variant="primary" disabled={!dirty || saving} title={!dirty ? '没有待保存的修改' : undefined} onClick={() => { void save() }}>{saving ? '保存中…' : '保存'}</Button> : null}
+  </>
 
   return (
     <Surface kind="workspace" className="dwo-file-open" data-dsh-file-open-pane data-file-id={entry.id} data-file-view={viewMode} data-file-mode={editing ? 'edit' : 'readonly'}>
@@ -299,13 +380,13 @@ function LegacyFileOpenPane({ host, entry }: Omit<FileOpenPaneProps, 'semanticSe
         title={entry.name}
         context={entry.mediaType ?? entry.kind}
         nav={modeNav}
-        actions={canEdit && (editing || dirty) ? <Button type="button" size="sm" variant="primary" disabled={!dirty || saving} title={!dirty ? '没有待保存的修改' : undefined} onClick={() => { void save() }}>{saving ? '保存中…' : '保存'}</Button> : undefined}
+        actions={contextActions}
       />
       <div className="dwo-file-body">
         {loading && <SurfaceState phase="loading" title="正在打开文件…" />}
         {error !== undefined && !loading && <SurfaceState phase="error" title={error} />}
         {docx && binary !== undefined && <DocxPreview bytes={binary.bytes} title={entry.name} />}
-        {mediaKind === 'image' && effectivePreviewUrl !== undefined && <img className="dwo-file-media" src={effectivePreviewUrl} alt={entry.name} data-dsh-file-open-image />}
+        {mediaKind === 'image' && effectivePreviewUrl !== undefined && <img className="dwo-file-media" src={effectivePreviewUrl} alt={entry.name} data-dsh-file-open-image data-image-region-mode={imageRegionMode || undefined} onPointerDown={requestImageRegion} onPointerUp={requestImageRegion} />}
         {mediaKind === 'audio' && effectivePreviewUrl !== undefined && <audio className="dwo-file-media" src={effectivePreviewUrl} controls preload="metadata" aria-label={entry.name} data-dsh-file-open-audio />}
         {mediaKind === 'video' && effectivePreviewUrl !== undefined && <video className="dwo-file-media" src={effectivePreviewUrl} controls preload="metadata" aria-label={entry.name} data-dsh-file-open-video />}
         {mediaKind === 'pdf' && effectivePreviewUrl !== undefined && <iframe className="dwo-file-media" src={effectivePreviewUrl} title={entry.name} sandbox="allow-same-origin" referrerPolicy="no-referrer" data-dsh-file-open-pdf />}
@@ -327,9 +408,9 @@ function LegacyFileOpenPane({ host, entry }: Omit<FileOpenPaneProps, 'semanticSe
                 <div data-dsh-file-markdown>{block.source.trim().length > 0 ? <MarkdownText text={block.source} /> : <span className="dwo-markdown-empty">空白区块，点击编辑</span>}</div>
               </section>)}
         </div>}
-        {text !== undefined && viewMode === 'source' && !canEdit && <pre className="dwo-file-source" data-dsh-file-open-text>{draft}</pre>}
+        {text !== undefined && viewMode === 'source' && !canEdit && <pre className="dwo-file-source" data-dsh-file-open-text {...rawSourceAttributes}>{draft}</pre>}
         {text !== undefined && ((viewMode === 'source' && canEdit) || (!markdown && viewMode === 'edit')) && <label className="ys-field dwo-file-editor-field"><textarea className="dwo-file-editor" aria-label={`编辑 ${entry.name}`} value={draft} spellCheck={false} wrap="off" data-dsh-file-open-editor data-dsh-file-source-editor={viewMode === 'source' || undefined} onChange={event => { setDraft(event.target.value); setNotice(undefined) }} onKeyDown={onEditorKeyDown} /></label>}
-        {!markdown && visibleText !== undefined && viewMode === 'preview' && <pre className="dwo-file-source" data-dsh-file-open-text>{visibleText}</pre>}
+        {!markdown && visibleText !== undefined && viewMode === 'preview' && <pre className="dwo-file-source" data-dsh-file-open-text {...rawSourceAttributes}>{visibleText}</pre>}
       </div>
       <div className="dwo-file-status" role={error === undefined ? 'status' : 'alert'} data-dsh-file-open-status>{status}</div>
     </Surface>

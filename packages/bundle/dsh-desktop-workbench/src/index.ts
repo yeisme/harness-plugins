@@ -9,6 +9,8 @@
  * @module @yeisme/dsh-desktop-workbench
  */
 
+import { createHash } from 'node:crypto'
+
 import { desktopWorkbenchModule } from '@yeisme/dsh-client-ui-desktop-workbench'
 import {
   apply as applySessionManagerHost,
@@ -23,7 +25,13 @@ import {
   type SessionMutationStatus,
   type SessionSummaryV1,
 } from '@yeisme/dsh-session-manager'
-import { createFileHostPlaceholder, type FileHostV1 } from '@yeisme/dsh-file-host'
+import {
+  COMPOSER_REFERENCE_OWNER_CONTEXT_KEY,
+  createFileHostPlaceholder,
+  type ComposerReferenceOwnerClaimV1,
+  type ComposerReferenceOwnerRegistryV1,
+  type FileHostV1,
+} from '@yeisme/dsh-file-host'
 import { createOpaqueFileRefRegistry, FILE_OPAQUE_REF_HOST_CONTEXT_KEY, handleYeismeFilesApi, NodeFileResourceMutationOwner, NodeFileTransferOwner } from '@yeisme/dsh-file-host/node'
 import { createTerminalHostPlaceholder, type TerminalHostV1, type TerminalHostV2 } from '@yeisme/dsh-terminal-host'
 import { createNotificationHostPlaceholder, type NotificationHostV1 } from '@yeisme/dsh-notify-host'
@@ -93,6 +101,21 @@ interface SessionStoreFace {
   get?(sessionId: string): { header?: { cwd?: string } } | undefined
 }
 
+interface AgentRegistryFace {
+  get(sessionId: string): unknown
+}
+
+interface TerminalRegistryFace {
+  list(owner: unknown): readonly { readonly sessionId: string; readonly name?: string; readonly type: string; readonly status: unknown }[]
+  read(owner: unknown, terminalId: string, request: { readonly offset?: number; readonly count?: number }): {
+    readonly text: string
+    readonly totalLines: number
+    readonly lineBegin: number
+    readonly lineEnd: number
+    readonly truncated: boolean
+  }
+}
+
 /** Structural Cordis face this bundle's node half consumes. */
 type DesktopWorkbenchNodeContext = {
   webServer?: WebServerFace
@@ -101,7 +124,6 @@ type DesktopWorkbenchNodeContext = {
 } & Partial<SessionManagerHostPluginContext>
 
 function sessionCwdOf(ctx: DesktopWorkbenchNodeContext, sessionId?: string, clientCwd?: string): string | undefined {
-  if (clientCwd !== undefined && clientCwd !== '') return clientCwd
   try {
     const sessions = (ctx.sessions ?? ctx.get?.('sessions')) as SessionStoreFace | undefined
     if (sessionId !== undefined && sessions?.get !== undefined) {
@@ -111,9 +133,14 @@ function sessionCwdOf(ctx: DesktopWorkbenchNodeContext, sessionId?: string, clie
   } catch {
     // Missing session store is an unavailable owner for opaque requests.
   }
-  // Legacy path-backed calls may still explicitly provide client cwd. Opaque
-  // V2 callers must fail closed instead of reading process.cwd().
-  return sessionId === undefined ? process.cwd() : undefined
+  // A session id always selects its server-owned workspace.  Legacy callers
+  // still carry `cwd`, but it is descriptive only once a session is present:
+  // accepting it as authority would let a browser retarget the file owner.
+  if (sessionId !== undefined) return undefined
+  // Pre-session legacy calls remain available for the local host workspace.
+  // Do not make a browser-supplied absolute path an authority boundary.
+  void clientCwd
+  return process.cwd()
 }
 
 /**
@@ -149,6 +176,41 @@ export function apply(ctx: DesktopWorkbenchNodeContext): () => void {
     return owner
   }
   const unprovide = ctx.provide?.(FILE_OPAQUE_REF_HOST_CONTEXT_KEY, opaqueRefs)
+  const referenceOwners: ComposerReferenceOwnerRegistryV1 = {
+    version: 1,
+    async resolve(input, signal) {
+      signal.throwIfAborted()
+      if (input.reference.owner === 'dsh.local') {
+        return opaqueRefs.resolveComposerReference(input.cwd, input.reference, signal)
+      }
+      if (input.reference.owner !== 'dsh.terminal' || input.reference.kind !== 'terminal'
+        || input.reference.intent !== 'content' || input.reference.scope !== 'terminal/scrollback'
+        || input.reference.window !== undefined || input.reference.region !== undefined) return undefined
+      const agents = ctx.get?.('agents') as AgentRegistryFace | undefined
+      const terminals = ctx.get?.('terminals') as TerminalRegistryFace | undefined
+      const owner = agents?.get(input.sessionId)
+      if (owner === undefined || terminals === undefined) return undefined
+      const row = terminals.list(owner).find(candidate => candidate.sessionId === input.reference.ref)
+      if (row === undefined) return undefined
+      const read = terminals.read(owner, row.sessionId, { offset: 0, count: 200 })
+      const proof = terminalReferenceProof(row, read)
+      if (proof.version !== input.reference.version || proof.digest !== input.reference.digest) return undefined
+      return {
+        id: input.reference.id,
+        owner: 'dsh.terminal',
+        ref: input.reference.ref,
+        kind: 'terminal',
+        intent: 'content',
+        version: proof.version,
+        digest: proof.digest,
+        scope: 'terminal/scrollback',
+        label: row.name ?? row.sessionId,
+        preview: read.text.replace(/\s+/gu, ' ').trim().slice(0, 240),
+        snapshot: { type: 'terminal', text: read.text.slice(0, 16_384), truncated: read.truncated || read.text.length > 16_384 },
+      }
+    },
+  }
+  const unprovideReferenceOwners = ctx.provide?.(COMPOSER_REFERENCE_OWNER_CONTEXT_KEY, referenceOwners)
   const dispose = webServer.register({
     kind: 'prefix',
     path: '/yeisme-files/api',
@@ -161,9 +223,19 @@ export function apply(ctx: DesktopWorkbenchNodeContext): () => void {
   })
   return () => {
     dispose()
+    if (typeof unprovideReferenceOwners === 'function') unprovideReferenceOwners()
     if (typeof unprovide === 'function') unprovide()
     for (const teardown of disposers) teardown()
   }
+}
+
+function terminalReferenceProof(
+  row: { readonly sessionId: string; readonly type: string; readonly status: unknown },
+  read: { readonly text: string; readonly totalLines: number; readonly lineBegin: number; readonly lineEnd: number; readonly truncated: boolean },
+): Pick<ComposerReferenceOwnerClaimV1, 'version' | 'digest'> {
+  const value = JSON.stringify({ id: row.sessionId, type: row.type, status: row.status, totalLines: read.totalLines, lineBegin: read.lineBegin, lineEnd: read.lineEnd, truncated: read.truncated, text: read.text })
+  const digest = createHash('sha256').update(value).digest('hex')
+  return { version: `sha256:${digest}`, digest }
 }
 
 const DesktopWorkbenchPlugin = { name, inject, apply }

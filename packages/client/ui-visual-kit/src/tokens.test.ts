@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PANEL_TOKENS, TOKEN_SYNONYMS, panelVar, type PanelTokenName } from './tokens.ts'
+import { HOST_THEME_ALIASES, PANEL_TOKENS, TOKEN_SYNONYMS, panelVar, type PanelTokenName } from './tokens.ts'
 
 describe('token registry', () => {
   it('每个 canonical token 只有唯一 fallback 且格式合法', () => {
@@ -21,7 +21,19 @@ describe('token registry', () => {
     expect(() => panelVar('not-a-token' as PanelTokenName)).toThrow(/unknown panel token/)
   })
 
-  it('host 变量优先：引用是 var(--dsw-alias-…, fallback) 形式', () => {
+  it('canonical override keeps priority over the official host alias and fallback', () => {
+    expect(panelVar('text-primary')).toBe(`var(--dsw-alias-text-primary,var(--dsw-alias-label-primary,${PANEL_TOKENS['text-primary']}))`)
+    expect(panelVar('bg-elevated')).toBe(`var(--dsw-alias-bg-elevated,var(--dsw-alias-bg-overlay,${PANEL_TOKENS['bg-elevated']}))`)
+    expect(panelVar('border-focus')).toBe(`var(--dsw-alias-border-focus,var(--dsw-alias-state-business-primary,${PANEL_TOKENS['border-focus']}))`)
+    expect(panelVar('text-link')).toBe(`var(--dsw-alias-text-link,var(--dsw-alias-state-business-primary,${PANEL_TOKENS['text-link']}))`)
+  })
+
+  it('keeps exact-match host aliases single-layered', () => {
     expect(panelVar('bg-base')).toBe(`var(--dsw-alias-bg-base,${PANEL_TOKENS['bg-base']})`)
+  })
+
+  it('documents only known official aliases', () => {
+    expect(HOST_THEME_ALIASES['fill-selected']).toBe('interactive-bg-hover-accent')
+    expect(HOST_THEME_ALIASES['state-positive']).toBe('state-success-primary')
   })
 })

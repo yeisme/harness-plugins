@@ -14,6 +14,10 @@ export const FILE_INSPECT_CAPABILITY = 'FileInspectCapabilityV1';
 export const FILE_TEXT_WRITE_CAPABILITY = 'FileTextWriteCapabilityV1';
 export const FILE_OPAQUE_REF_CAPABILITY = 'FileOpaqueRefCapabilityV1';
 export const FILE_WORKSPACE_EDIT_CAPABILITY = 'FileWorkspaceEditCapabilityV1';
+/** Stable fail-closed response code when this host cannot guarantee fd-anchored traversal. */
+export const SECURE_FILE_TRAVERSAL_UNSUPPORTED_CODE = 'secure-fd-unsupported';
+/** Host-only resolver registry consumed by the upstream structured-reference admission seam. */
+export const COMPOSER_REFERENCE_OWNER_CONTEXT_KEY = 'composerReferenceOwners';
 export function probeFileOpaqueRefs(host) {
     const available = host?.capabilities?.includes(FILE_OPAQUE_REF_CAPABILITY) === true;
     return {
@@ -441,7 +445,10 @@ export function createExplorerFileHost(options = {}) {
         });
         const parsed = await response.json();
         if (parsed.ok !== true) {
-            throw new Error(parsed.error?.message ?? `HTTP ${response.status}`);
+            const error = new Error(parsed.error?.message ?? `HTTP ${response.status}`);
+            if (typeof parsed.error?.code === 'string')
+                Object.assign(error, { code: parsed.error.code });
+            throw error;
         }
         return parsed.value;
     };
@@ -471,6 +478,8 @@ export function createExplorerFileHost(options = {}) {
     let opaqueRefsAvailable = false;
     let ownerCapabilities = new Set();
     const revealTokens = new Map();
+    const isSecureTraversalUnsupported = (error) => error instanceof Error
+        && error.code === SECURE_FILE_TRAVERSAL_UNSUPPORTED_CODE;
     const isOpaqueEntry = (entry) => {
         if (typeof entry !== 'object' || entry === null)
             return false;
@@ -508,7 +517,9 @@ export function createExplorerFileHost(options = {}) {
                     return entries;
                 }
             }
-            catch {
+            catch (error) {
+                if (isSecureTraversalUnsupported(error))
+                    throw error;
                 // Additive compatibility: old hosts keep the existing path-backed adapter.
             }
             opaqueRefsAvailable = false;
@@ -562,6 +573,8 @@ export function createExplorerFileHost(options = {}) {
                     // owner 切换取消（AbortError）必须穿透：不得吞成 legacy 回退再发请求。
                     if (error instanceof DOMException && error.name === 'AbortError')
                         throw error;
+                    if (isSecureTraversalUnsupported(error))
+                        throw error;
                     opaqueRefsAvailable = false;
                     return legacyTreePage(await legacyHost.listEntries());
                 }
@@ -576,6 +589,8 @@ export function createExplorerFileHost(options = {}) {
                 }
                 catch (error) {
                     if (error instanceof DOMException && error.name === 'AbortError')
+                        throw error;
+                    if (isSecureTraversalUnsupported(error))
                         throw error;
                     opaqueRefsAvailable = false;
                     return legacyTreePage(await legacyHost.listEntries(parentRef), parentRef);

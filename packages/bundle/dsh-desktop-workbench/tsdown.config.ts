@@ -51,6 +51,7 @@ export default defineConfig([
       '@yeisme/dsh-client-ui-visual-kit': fileURLToPath(new URL('../../client/ui-visual-kit/src/index.ts', import.meta.url)),
       '@yeisme/dsh-workbench-core/client': fileURLToPath(new URL('../dsh-workbench-core/src/client/index.ts', import.meta.url)),
       '@yeisme/dsh-workbench-core': fileURLToPath(new URL('../dsh-workbench-core/src/index.ts', import.meta.url)),
+      '@yeisme/dsh-file-document/client': fileURLToPath(new URL('../dsh-file-document/src/client/index.ts', import.meta.url)),
       '@yeisme/dsh-file-document': fileURLToPath(new URL('../dsh-file-document/src/index.ts', import.meta.url)),
       '@yeisme/dsh-rich-media': fileURLToPath(new URL('../dsh-rich-media/src/index.ts', import.meta.url)),
       '@yeisme/dsh-rich-media/client': fileURLToPath(new URL('../dsh-rich-media/src/client/index.ts', import.meta.url)),

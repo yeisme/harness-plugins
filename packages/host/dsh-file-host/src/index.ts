@@ -24,6 +24,10 @@ export const FILE_INSPECT_CAPABILITY = 'FileInspectCapabilityV1'
 export const FILE_TEXT_WRITE_CAPABILITY = 'FileTextWriteCapabilityV1'
 export const FILE_OPAQUE_REF_CAPABILITY = 'FileOpaqueRefCapabilityV1'
 export const FILE_WORKSPACE_EDIT_CAPABILITY = 'FileWorkspaceEditCapabilityV1'
+/** Stable fail-closed response code when this host cannot guarantee fd-anchored traversal. */
+export const SECURE_FILE_TRAVERSAL_UNSUPPORTED_CODE = 'secure-fd-unsupported' as const
+/** Host-only resolver registry consumed by the upstream structured-reference admission seam. */
+export const COMPOSER_REFERENCE_OWNER_CONTEXT_KEY = 'composerReferenceOwners' as const
 
 export type FileWatchFreshness = 'unknown' | 'stale' | 'offline' | 'contract_mismatch' | 'fresh'
 export type FileWatchOp = 'created' | 'changed' | 'deleted' | 'renamed'
@@ -270,6 +274,51 @@ export interface FileInspectCapabilityV1 {
   readonly capability: typeof FILE_INSPECT_CAPABILITY
   inspect(ref: string): Promise<FileInspectProofV1>
   reveal?(ref: string, version: string): Promise<{ readonly token: string; readonly expiresAt: string }>
+}
+
+/** Browser claim handed back to the owner at prompt admission. */
+export interface ComposerReferenceOwnerClaimV1 {
+  readonly id: string
+  readonly owner: string
+  readonly ref: string
+  readonly kind: 'file' | 'directory' | 'selection' | 'image' | 'image-region' | 'terminal'
+  readonly intent: 'content'
+  readonly version: string
+  readonly digest: string
+  readonly scope: string
+  readonly window?: { readonly start: number; readonly end: number }
+  readonly region?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
+}
+
+/** Detached owner result. Raw paths never leave the resolver implementation. */
+export interface ComposerReferenceOwnerResolutionV1 {
+  readonly id: string
+  readonly owner: string
+  readonly ref: string
+  readonly kind: ComposerReferenceOwnerClaimV1['kind']
+  readonly intent: 'content'
+  readonly version: string
+  readonly digest: string
+  readonly scope: string
+  readonly label: string
+  readonly preview?: string
+  readonly window?: { readonly start: number; readonly end: number }
+  readonly region?: ComposerReferenceOwnerClaimV1['region']
+  readonly snapshot:
+    | { readonly type: 'text'; readonly text: string; readonly truncated: boolean }
+    | { readonly type: 'directory'; readonly entries: readonly { readonly name: string; readonly kind: 'file' | 'directory' }[]; readonly truncated: boolean }
+    | { readonly type: 'image'; readonly mediaType: string; readonly bytes: Uint8Array }
+    | { readonly type: 'terminal'; readonly text: string; readonly truncated: boolean }
+}
+
+/** Optional same-process owner registry. Session admission calls it before any prompt mutation. */
+export interface ComposerReferenceOwnerRegistryV1 {
+  readonly version: 1
+  resolve(input: {
+    readonly sessionId: string
+    readonly cwd: string
+    readonly reference: ComposerReferenceOwnerClaimV1
+  }, signal: AbortSignal): Promise<ComposerReferenceOwnerResolutionV1 | undefined>
 }
 
 export function isSafeFileTreeNodeV2(node: FileTreeNodeV2): boolean {
@@ -894,9 +943,11 @@ export function createExplorerFileHost(options: ExplorerFileHostOptions = {}): F
       }),
       ...(signal === undefined ? {} : { signal }),
     })
-    const parsed = await response.json() as { ok?: boolean; value?: unknown; error?: { message?: string } }
+    const parsed = await response.json() as { ok?: boolean; value?: unknown; error?: { code?: unknown; message?: string } }
     if (parsed.ok !== true) {
-      throw new Error(parsed.error?.message ?? `HTTP ${response.status}`)
+      const error = new Error(parsed.error?.message ?? `HTTP ${response.status}`)
+      if (typeof parsed.error?.code === 'string') Object.assign(error, { code: parsed.error.code })
+      throw error
     }
     return parsed.value
   }
@@ -933,6 +984,8 @@ export function createExplorerFileHost(options: ExplorerFileHostOptions = {}): F
   let opaqueRefsAvailable = false
   let ownerCapabilities = new Set<string>()
   const revealTokens = new Map<string, { readonly version: string; readonly token: string }>()
+  const isSecureTraversalUnsupported = (error: unknown): boolean => error instanceof Error
+    && (error as Error & { readonly code?: unknown }).code === SECURE_FILE_TRAVERSAL_UNSUPPORTED_CODE
 
   const isOpaqueEntry = (entry: unknown): entry is FileEntryV1 => {
     if (typeof entry !== 'object' || entry === null) return false
@@ -969,7 +1022,8 @@ export function createExplorerFileHost(options: ExplorerFileHostOptions = {}): F
           opaqueRefsAvailable = true
           return entries
         }
-      } catch {
+      } catch (error) {
+        if (isSecureTraversalUnsupported(error)) throw error
         // Additive compatibility: old hosts keep the existing path-backed adapter.
       }
       opaqueRefsAvailable = false
@@ -1023,6 +1077,7 @@ export function createExplorerFileHost(options: ExplorerFileHostOptions = {}): F
         } catch (error) {
           // owner 切换取消（AbortError）必须穿透：不得吞成 legacy 回退再发请求。
           if (error instanceof DOMException && error.name === 'AbortError') throw error
+          if (isSecureTraversalUnsupported(error)) throw error
           opaqueRefsAvailable = false; return legacyTreePage(await legacyHost.listEntries())
         }
       },
@@ -1032,6 +1087,7 @@ export function createExplorerFileHost(options: ExplorerFileHostOptions = {}): F
           const page = parseTreePage(value); opaqueRefsAvailable = true; ownerCapabilities = new Set(page.ownerCapabilities ?? []); return page
         } catch (error) {
           if (error instanceof DOMException && error.name === 'AbortError') throw error
+          if (isSecureTraversalUnsupported(error)) throw error
           opaqueRefsAvailable = false; return legacyTreePage(await legacyHost.listEntries(parentRef), parentRef)
         }
       },

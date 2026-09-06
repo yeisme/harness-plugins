@@ -42,6 +42,31 @@ export const TOKEN_SYNONYMS: Readonly<Record<string, PanelTokenName>> = {
   'state-error-secondary': 'state-error',
 }
 
+/**
+ * Official DSH theme variables for concepts whose historical plugin names do
+ * not match the host vocabulary.  `panelVar` keeps the canonical plugin alias
+ * first so an existing custom panel theme remains authoritative, then falls
+ * through to the host variable and finally to the documented static fallback.
+ */
+export const HOST_THEME_ALIASES: Readonly<Partial<Record<PanelTokenName, string>>> = {
+  'bg-elevated': 'bg-overlay',
+  'text-primary': 'label-primary',
+  'text-secondary': 'label-secondary',
+  'text-tertiary': 'label-tertiary',
+  'text-quaternary': 'label-caption',
+  'text-link': 'state-business-primary',
+  'border-focus': 'state-business-primary',
+  'fill-hover': 'interactive-bg-hover',
+  'fill-selected': 'interactive-bg-hover-accent',
+  'fill-active': 'interactive-bg-active',
+  accent: 'state-business-primary',
+  'state-error': 'state-error-primary',
+  'state-positive': 'state-success-primary',
+  'state-info': 'state-business-primary',
+  'state-warn': 'state-warn-primary',
+  'state-neutral': 'label-tertiary',
+}
+
 /** 每个 canonical token 的唯一 fallback。bg/text 保持单调色阶。 */
 export const PANEL_TOKENS: Readonly<Record<PanelTokenName, string>> = {
   'bg-base': '#171719',
@@ -75,10 +100,20 @@ export const PANEL_SCALE = {
   gap: { xs: '4px', sm: '6px', md: '8px', lg: '10px', xl: '14px' },
 } as const
 
-/** 解析 token（含同义词）到 host 变量引用：`var(--dsw-alias-<name>, canonical)`。 */
+/**
+ * Resolve a token (including a historical synonym) through the host theme.
+ *
+ * The first alias is our stable override seam.  The optional second alias is
+ * the official host token, so light/dark/system changes continue to flow from
+ * ThemeRuntime without a plugin-owned preference store.
+ */
 export function panelVar(name: PanelTokenName | (string & {})): string {
   const canonical = TOKEN_SYNONYMS[name] ?? name
   const fallback = PANEL_TOKENS[canonical as PanelTokenName]
   if (fallback === undefined) throw new Error(`unknown panel token: ${name}`)
-  return `var(--dsw-alias-${canonical},${fallback})`
+  const hostAlias = HOST_THEME_ALIASES[canonical as PanelTokenName]
+  const hostValue = hostAlias === undefined
+    ? fallback
+    : `var(--dsw-alias-${hostAlias},${fallback})`
+  return `var(--dsw-alias-${canonical},${hostValue})`
 }
