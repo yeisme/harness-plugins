@@ -12,7 +12,7 @@ import { readFile } from 'node:fs/promises'
 import type { IncomingHttpHeaders } from 'node:http'
 
 /** Scopes a DSH access token can carry. */
-export type DshTokenScope = 'web' | 'tui' | 'admin'
+export type DshTokenScope = 'web' | 'admin'
 
 /** One accepted opaque token and the scopes it grants. */
 export interface DshTokenAuthToken {

@@ -11,7 +11,7 @@ import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 
 /** Scopes a DSH access token can carry; kept local to the CLI auth store. */
-export type DshTokenScope = 'web' | 'tui' | 'admin'
+export type DshTokenScope = 'web' | 'admin'
 
 /** One stored token record; never contains the plaintext token. */
 export interface StoredDshToken {

@@ -17,7 +17,6 @@ function request(headers: Record<string, string | undefined>): DshTokenAuthReque
 const CONFIG = {
   tokens: [
     { token: 'admin-token', scopes: ['admin' as const] },
-    { token: 'tui-token', scopes: ['tui' as const] },
     { token: 'web-token', scopes: ['web' as const] },
   ],
 }
@@ -31,7 +30,7 @@ describe('DshTokenGate', () => {
 
   it('accepts the custom header and exchanges an opaque browser session', async () => {
     const gate = new DshTokenGate(CONFIG)
-    await expect(gate.authorizeHttp(request({ 'x-dsh-access-token': 'tui-token' }))).resolves.toBe(true)
+    await expect(gate.authorizeHttp(request({ 'x-dsh-access-token': 'web-token' }))).resolves.toBe(true)
     const exchanged = await gate.exchangeToken('web-token')
     expect(exchanged?.session).not.toContain('web-token')
     await expect(gate.authorizeHttp(request({ cookie: `dsh-session=${exchanged?.session}` }))).resolves.toBe(true)
@@ -50,7 +49,6 @@ describe('DshTokenGate', () => {
   it('grants admin only to admin-scoped tokens', async () => {
     const gate = new DshTokenGate(CONFIG)
     await expect(gate.authorizeAdmin(request({ authorization: 'Bearer admin-token' }))).resolves.toBe(true)
-    await expect(gate.authorizeAdmin(request({ authorization: 'Bearer tui-token' }))).resolves.toBe(false)
     await expect(gate.authorizeAdmin(request({ authorization: 'Bearer web-token' }))).resolves.toBe(false)
   })
 

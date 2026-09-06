@@ -339,7 +339,7 @@ index 022436d558..97c88b1039 100644
 -async function mounted(config?: { trustedHosts?: string[] }): Promise<{
 +async function mounted(config?: {
 +  trustedHosts?: string[]
-+  tokenAuth?: { tokens: { token: string; scopes?: ('web' | 'tui' | 'admin')[] }[] }
++  tokenAuth?: { tokens: { token: string; scopes?: ('web' | 'admin')[] }[] }
 +}): Promise<{
 @@ -169,0 +177,58 @@ describe('connection node half', () => {
 +  it('requires a token on /api when tokenAuth is configured', async () => {

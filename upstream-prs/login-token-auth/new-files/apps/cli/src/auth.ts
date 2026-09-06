@@ -65,13 +65,13 @@ export async function runAuth(argv: readonly string[]): Promise<number> {
   token.command('create')
     .description('Create a token and print its plaintext value once.')
     .option('--name <name>', 'human-readable token name')
-    .option('--scope <scope>', 'comma-separated scopes (web,tui,admin)', 'admin')
+    .option('--scope <scope>', 'comma-separated scopes (web,admin)', 'admin')
     .option('--expires <duration>', 'optional lifetime (e.g. 30d, 12h, 30m)')
     .action(async (options: { name?: string; scope: string; expires?: string }) => {
       const scopes = options.scope.split(',').map(scope => scope.trim()).filter(Boolean) as DshTokenScope[]
       for (const scope of scopes) {
-        if (scope !== 'web' && scope !== 'tui' && scope !== 'admin') {
-          program.error(`error: invalid scope ${JSON.stringify(scope)}; expected web, tui, or admin`)
+        if (scope !== 'web' && scope !== 'admin') {
+          program.error(`error: invalid scope ${JSON.stringify(scope)}; expected web or admin`)
         }
       }
       let expiresAt: string | undefined

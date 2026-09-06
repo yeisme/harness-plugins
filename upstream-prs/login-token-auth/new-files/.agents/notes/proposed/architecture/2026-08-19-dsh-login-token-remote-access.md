@@ -4,7 +4,7 @@ Status: proposed
 
 ## Problem
 
-`dsh web` historically bound only loopback and rejected `--host 0.0.0.0` because the `/api` Host/Origin fence is reachability protection, not authentication. Remote Web and a future remote TUI need a first-party login-token mechanism that does not depend on an external enterprise control plane.
+`dsh web` historically bound only loopback and rejected `--host 0.0.0.0` because the `/api` Host/Origin fence is reachability protection, not authentication. Remote Web needs a first-party login-token mechanism that does not depend on an external enterprise control plane.
 
 ## Proposal
 
@@ -18,11 +18,11 @@ Add a built-in token-store gate to `@deepseek-ai/dsh-client-connection`:
 
 The web CLI teaches `--auth token-store` and allows `--host 0.0.0.0` only when digest-store auth is enabled. `--token` remains a deprecated compatibility ingress for one minor release. A new `dsh auth token create/list/revoke` family stores only SHA-256 token hashes under the DSH home.
 
-This slice covers first-party token auth for remote Web, operator token create/list/revoke, dynamic digest verification, opaque browser sessions, and the same bearer surface a future remote TUI can reuse. It does not add OAuth/SSO or TLS/WSS termination.
+This slice covers first-party token auth for remote Web, operator token create/list/revoke, dynamic digest verification, and opaque browser sessions. It does not add OAuth/SSO or TLS/WSS termination.
 
 ## Alternatives considered
 
-**Leave remote bind blocked until an external identity plane exists.** Rejected. Loopback-only Web already blocks LAN and remote TUI work; waiting for OAuth would keep `--host 0.0.0.0` unsupported with no first-party path.
+**Leave remote bind blocked until an external identity plane exists.** Rejected. Loopback-only Web already blocks LAN work; waiting for OAuth would keep `--host 0.0.0.0` unsupported with no first-party path.
 
 **Treat `trustedHosts` as authentication.** Rejected. That list is a DNS-rebinding fence. Using it as a login would authorize any caller who can present a declared Host.
 
