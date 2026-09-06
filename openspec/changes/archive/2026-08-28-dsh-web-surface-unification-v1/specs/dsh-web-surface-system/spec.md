@@ -34,15 +34,11 @@ SurfaceState SHALL 统一 loading、empty、error、stale、partial、success �
 - **THEN** Escape、focus trap/return、accessible title 与 disabled item 行为 SHALL 由官方 primitive 或现有宿主合同保持
 
 ### Requirement: All React Web visual surfaces SHALL adopt or explicitly embed
-所有 `packages/client/ui-*` React/Web surface 与 bundle 自有 Web UI SHALL 被 surface catalog 覆盖。完整 pane/dialog/overlay/dock SHALL 采纳 Surface；Mermaid、Markdown table、structured content 等嵌入 renderer SHALL 标记为 embed 并只消费统一 token/排版。TUI SHALL 被显式排除，MUST NOT 被 Web CSS 或组件依赖污染。
+所有 `packages/client/ui-*` React/Web surface 与 bundle 自有 Web UI SHALL 被 surface catalog 覆盖。完整 pane/dialog/overlay/dock SHALL 采纳 Surface；Mermaid、Markdown table、structured content 等嵌入 renderer SHALL 标记为 embed 并只消费统一 token/排版。
 
 #### Scenario: Conformance scans the repository
 - **WHEN** 运行 Web surface conformance
 - **THEN** catalog 中每个 Web UI package SHALL 被分类为 adopted 或 embed，未分类的新 Web surface SHALL 使检查失败
-
-#### Scenario: TUI package is present
-- **WHEN** catalog 遇到 `ui-command-experience-tui`
-- **THEN** 检查 SHALL 将其标记为 excluded 且不得要求 React surface 依赖
 
 ### Requirement: Migrated surfaces SHALL not regress to unstyled controls
 迁移 surface 的 select 与 textarea SHALL 位于共享 field 结构；官方已有 atom 的控件 SHALL 优先使用官方 primitive。已迁移业务 surface MUST NOT 引入分歧 token fallback、业务硬编码颜色或未白名单的顶层 inline layout；动态进度、拖拽和测量几何 MAY 使用具名白名单。

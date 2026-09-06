@@ -32,7 +32,7 @@
 
 **Non-Goals:**
 
-- 不修改 TUI、DSH AppFrame 几何、Pane split/dock owner 或官方主题实现。
+- 不修改 DSH AppFrame 几何、Pane split/dock owner 或官方主题实现。
 - 不新增 Storybook、Tailwind、Chromatic、Lighthouse、Axe 或新动画 runtime。
 - 不改 Owner 投影、mutation admission、审批账本、terminal state 或真实外部集成。
 - 不删除 view kind、command、data attribute、旧 class 或兼容字段。
@@ -92,7 +92,7 @@ commit composer 只在 staged group 非空时展示；remote unavailable 作为 
 3. Creator/agents：creator-studio、ai-drama-director、pane-domain、pane-agent-context、pane-subagent、ordo-agent-ops。
 4. Dialog/micro/embed：command-experience-web、agent-preset、session-tags、next-step-suggestions、conversation-rewrite、structured-content、mermaid-render 与剩余 bundle inline Web UI。
 
-同一个包含 pane 与 overlay 时在该包所在波次一次迁完。Mermaid/Markdown table 等嵌入 renderer 不包 Surface，只消费统一 token、focus 和排版规则。`ui-command-experience-tui` 被全局检查显式排除。
+同一个包含 pane 与 overlay 时在该包所在波次一次迁完。Mermaid/Markdown table 等嵌入 renderer 不包 Surface，只消费统一 token、focus 和排版规则。
 
 ### 6. 语义门与 Playwright 截图组成双验收
 
@@ -124,4 +124,4 @@ commit composer 只在 staged group 非空时展示；remote unavailable 作为 
 
 ## Open Questions
 
-无。TUI、旧 class 清理、官方 primitives 新版专属 API 与真实 `dsh web` 截图验收均另开 change。
+无。旧 class 清理、官方 primitives 新版专属 API 与真实 `dsh web` 截图验收均另开 change。

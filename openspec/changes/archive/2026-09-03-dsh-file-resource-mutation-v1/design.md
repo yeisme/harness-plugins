@@ -2,7 +2,7 @@
 
 现有 File Host 只覆盖读取、预览和带 version fence 的文本写入。文件/目录的创建、重命名、移动、复制、删除和传输若直接从 Pane 调用文件系统，会绕过 session owner、candidate workspace、lease、CAS、冲突预检、幂等、恢复和审计边界。
 
-本 change 在 Harness Plugins 内新增 provider-neutral 合同和本地受保护单用户 owner。Web Explorer 消费合同；Hosted adapter 只有在 Control Plane 提供 principal/tenant/workspace/generation 授权证据后才可启用。TUI 本轮只共享类型与 fixtures。
+本 change 在 Harness Plugins 内新增 provider-neutral 合同和本地受保护单用户 owner。Web Explorer 消费合同；Hosted adapter 只有在 Control Plane 提供 principal/tenant/workspace/generation 授权证据后才可启用。
 
 ## Goals / Non-Goals
 

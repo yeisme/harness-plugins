@@ -9,7 +9,6 @@
 - `dsh-web-explorer-reference-v1`：canonical Explorer、`FileTreeProjectionCapabilityV2`、严格 preview gate、hover/focus 与 `ComposerReferenceCapabilityV1`。
 - `dsh-file-resource-mutation-v1`：`FileResourceMutationCapabilityV1`、`FileTransferCapabilityV1`、proposal/receipt、trash/undo 和本地 first-support。
 
-TUI 本轮只共享合同和兼容 fixtures，不复制完整文件管理 UI。
 
 ## 核心数据流
 
@@ -85,4 +84,4 @@ trash 由 owner 存储在 workspace 外，默认保留七天并支持重启后 r
 
 ## 非目标
 
-本轮不包含 chmod/ACL、压缩解压、批量改名、云端文件管理或完整 TUI 文件管理 UI。
+本轮不包含 chmod/ACL、压缩解压、批量改名或云端文件管理。

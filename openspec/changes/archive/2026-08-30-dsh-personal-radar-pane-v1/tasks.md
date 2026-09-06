@@ -14,7 +14,7 @@
 
 - [x] 3.1 list/detail/compare 视图：可丢弃 UI projection，reload 从 Radar refs 恢复；detail 展示三分分数、reason、风险、known limitations；验证：reducer/lifecycle 测试 + 固定尺寸 snapshot。
 - [x] 3.2 状态模型：ready/empty/degraded/stale/offline/permission_denied/contract_mismatch/action_pending/reconcile_required，各给安全 next action；验证：状态矩阵测试。
-- [x] 3.3 a11y/窄屏：键盘可达、焦点恢复、aria/text label、窄屏 compare 降级；若存在 TUI renderer 则 update/render 可确定测试；验证：a11y + 窄屏 snapshot。
+- [x] 3.3 a11y/窄屏：键盘可达、焦点恢复、aria/text label、窄屏 compare 降级；验证：a11y + 窄屏 snapshot。
 - [x] 3.4 Workbench handoff：deep-link 只携带安全 refs；proposal 草稿 pending review、stale 时要求 refresh/review；验证：handoff/proposal 契约测试。
 
 ## 4. Bundle 与证据

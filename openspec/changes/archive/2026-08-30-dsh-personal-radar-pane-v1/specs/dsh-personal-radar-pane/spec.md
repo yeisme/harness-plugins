@@ -63,7 +63,7 @@ badge 与 Pane MUST 覆盖 ready、empty、degraded、stale、offline、permissi
 - **THEN** proposal 要求 refresh/review，不静默更新引用
 
 ### Requirement: Pane MUST 键盘可达且焦点可恢复
-Pane SHALL 提供键盘等价、可见焦点、aria/text label、焦点恢复与窄屏降级；若存在终端/TUI renderer，`update(state, event)` 与 `render(state, width, height)` MUST 可确定测试并支持固定尺寸 snapshot。
+Pane SHALL 提供键盘等价、可见焦点、aria/text label、焦点恢复与窄屏降级。
 
 #### Scenario: 键盘打开并保存机会
 - **WHEN** 用户仅键盘导航到机会并触发 save

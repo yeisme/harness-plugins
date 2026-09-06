@@ -31,7 +31,7 @@ flowchart LR
   SHELL --> VIEW["Module-owned view"]
 ```
 
-Registry 不依赖 React；Shell 只消费 registry snapshot。这样同一个 registry 可被 CLI、测试、TUI 或未来桌面端复用。
+Registry 不依赖 React；Shell 只消费 registry snapshot。这样同一个 registry 可被 CLI、测试或未来桌面端复用。
 
 ### 2. Module 合同是本地描述符，不是远程 UI 清单
 

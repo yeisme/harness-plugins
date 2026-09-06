@@ -57,7 +57,7 @@ host adapter 启动时 probe 三样东西：Radar binary 可达且 contract vers
 
 ### 4. Pane 状态与恢复
 
-list/detail/compare 是可丢弃 UI projection，reload 后从 Radar refs 恢复。状态覆盖 ready/empty/degraded/stale/offline/permission_denied/contract_mismatch/action_pending/reconcile_required；非 ready 各给安全 next action。mutation 超时/断线进入 unknown，按 idempotency key 对账 receipt，不自动重放。Pane 键盘可达、焦点可恢复、aria label 完整；若存在终端/TUI renderer，`update(state, event)`/`render(state, w, h)` 必须可确定测试并支持固定尺寸 snapshot。
+list/detail/compare 是可丢弃 UI projection，reload 后从 Radar refs 恢复。状态覆盖 ready/empty/degraded/stale/offline/permission_denied/contract_mismatch/action_pending/reconcile_required；非 ready 各给安全 next action。mutation 超时/断线进入 unknown，按 idempotency key 对账 receipt，不自动重放。Pane 键盘可达、焦点可恢复、aria label 完整。
 
 ### 5. Workbench handoff 与 proposal
 
