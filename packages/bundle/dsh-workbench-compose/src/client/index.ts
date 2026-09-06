@@ -87,6 +87,15 @@ function installPaneFileTree(ctx: ClientContext): () => void {
  * official workspace surface it degrades to a no-op.
  */
 export async function apply(ctx: ClientContext): Promise<() => void> {
+  const layout = ctx.get('workspaceLayout') as { version?: string } | undefined
+  if (layout?.version === 'workspace.unified.v1' && ctx.get('paneWorkbench') === undefined) {
+    const binding = ctx.inject(['paneWorkbench'], (scope: ClientContext) => {
+      const disposeTree = installPaneFileTree(scope)
+      const disposeHost = installOfficialWorkbenchHost(scope)
+      scope.effect(() => () => { disposeHost(); disposeTree() })
+    })
+    return () => { void binding.dispose() }
+  }
   const disposers: Array<() => void> = [installPaneFileTree(ctx), installOfficialWorkbenchHost(ctx)]
   return () => {
     for (const dispose of disposers.reverse()) {
