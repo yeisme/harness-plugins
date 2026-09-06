@@ -1,5 +1,12 @@
 # harness-plugins memory
 
+## 2026-09-06: archive completed DSH changes + workspace search 2.7
+
+- Archived Complete changes (specs synced, `--all --strict` 140/0): `dsh-session-insights-and-status`, `dsh-web-composer-references-theme-v1`, `dsh-selection-conversation-actions-v1`, `dsh-adaptive-pane-docking`, `dsh-unified-multi-pane-workbench`.
+- Left active: `dsh-tools-pane-migration` and `dsh-full-plugin-ui-acceptance` (No tasks.md; implementation exists but no checkbox closeout). Remaining incomplete changes are mostly `[external-gate skipped]`.
+- Advanced `dsh-workspace-search-experience-v1` 19→20/25: task 2.7 stage-A evidence. Overlay now injects `REGION_STYLES` via `.pwr-root`. History owner still missing; 3.7 stays open (`live_query=not_verified`). Evidence `temp/integration-test-runs/workspace-search-stage-a-2026-09-06T10-05-35-478Z-1677358/`.
+- Still open on search: 3.7 live history, 5.2 Playwright host chain, 5.3 surfaces/visual/plugins, 5.4 upstream-prs, 5.5 delivery packet.
+
 ## Active change: dsh-session-insights-and-status
 
 - Kimi session `session_d053cb5b-1d96-4c73-b883-5253da6b240e` implemented tasks 1.1–4.3, then hit a 5-hour provider quota on 4.4/4.5.
