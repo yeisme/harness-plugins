@@ -19,10 +19,10 @@
 
 | 能力 | 状态 | Canonical owner | 可见宿主 | 交付切片 | 验收证据 |
 | --- | --- | --- | --- | --- | --- |
-| 异常优先默认投影（context/blocker/next action/深链） | required | DSH | DSH Web/TUI | deliver-now | 有/无阻塞、unknown、partial 的状态 golden |
-| 共享 decision token consumer | required | 领域 owner（DSH 仅 consumer） | DSH Web/TUI | deliver-now | 幂等 receipt、stale/already_decided、duplicate decision 契约用例 |
+| 异常优先默认投影（context/blocker/next action/深链） | required | DSH | DSH Web | deliver-now | 有/无阻塞、unknown、partial 的状态 golden |
+| 共享 decision token consumer | required | 领域 owner（DSH 仅 consumer） | DSH Web | deliver-now | 幂等 receipt、stale/already_decided、duplicate decision 契约用例 |
 | 旧 full-show panes 兼容窗口与 deprecation | required | DSH | DSH Web | deliver-now（≥2 个发布窗口） | 兼容视图仍读 owner projection、deprecation 文案与 Workbench handoff 呈现 |
-| Workbench/editor handoff（Bridge V2 语义） | required | DSH | DSH Web/TUI | deliver-now | 只传 typed refs/launch ref 的 closed-schema 用例 |
+| Workbench/editor handoff（Bridge V2 语义） | required | DSH | DSH Web | deliver-now | 只传 typed refs/launch ref 的 closed-schema 用例 |
 | 旧 full-show pane 退役 | retained | DSH | DSH Web | 后续独立 removal change | consumer evidence + deprecation window + rollback |
 
 ## Non-Goals

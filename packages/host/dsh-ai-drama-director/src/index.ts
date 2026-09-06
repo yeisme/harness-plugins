@@ -216,3 +216,26 @@ export type {
   OpcSceneReceiptRefV1,
   OpcSceneDeliveryV1,
 } from './opc-scene-summary.js'
+
+// Additive Scaena canonical OPC ingress. The legacy DSH alpha surface above
+// remains frozen and is intentionally not unioned or enum-translated.
+export {
+  SCAENA_CANONICAL_OPC_SCENE_PACKAGE_SUMMARY_SCHEMA,
+  ScaenaCanonicalOpcContractError,
+  normalizeScaenaCanonicalOpcScenePackageSummary,
+  projectScaenaCanonicalOpcCrossEntryIdentity,
+  verifyScaenaCanonicalOpcCrossEntryConformance,
+} from './scaena-canonical-opc-summary.js'
+export type {
+  ScaenaCanonicalOpcFreshness,
+  ScaenaCanonicalOpcSurfaceState,
+  ScaenaCanonicalOpcGateId,
+  ScaenaCanonicalOpcGateState,
+  ScaenaCanonicalOpcSideEffectClass,
+  ScaenaCanonicalOpcHumanGateV1,
+  ScaenaCanonicalOpcActionDescriptorV1,
+  ScaenaCanonicalOpcScenePackageSummaryV1alpha1,
+  ScaenaCanonicalOpcCrossEntryIdentityV1,
+  ScaenaCanonicalOpcCrossEntryComparedV1,
+  ScaenaCanonicalOpcCrossEntryVerificationV1,
+} from './scaena-canonical-opc-summary.js'
