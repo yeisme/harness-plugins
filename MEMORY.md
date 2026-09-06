@@ -1,5 +1,15 @@
 # harness-plugins memory
 
+## 2026-09-06 PM: spec goal session — search 5.2–5.5, two closes, external rechecks
+
+- `dsh-workspace-search-experience-v1` 20→24/25: 5.2–5.5 done. New host-chain runner `scripts/run-workspace-search-host-chain.mjs` (self-boots official dsh web profile + 32 bundles, 13/13 checks incl. identity-across-filter, honest unavailable history, singleton relaunch, theme tokens). Six gates green (surfaces/visual 92/plugins 0 findings/typecheck/build/bundles 27/27). Delivery doc `docs/delivery/dsh-workspace-search-experience-2026-09-06.md` + Agent Note `.agents/notes/proposed/architecture/2026-09-06-workspace-search-experience.md`. Only 3.7 (live history owner) stays open.
+- Unified-host search entry implemented: `workspace.search` launcher command + `isUnifiedHostCatalogView` (search pane registers in host catalog because the unified host resolves renderers through its catalog; file-preview stays out). Commit d9ca1df.
+- Closed `dsh-tools-pane-migration` + `dsh-full-plugin-ui-acceptance` with per-requirement tasks.md evidence and archived (strict 140/140). Patch verify for remove-plugins-settings re-run green (run 2026-09-06T16-09-15).
+- run-web-plugin-acceptance.mjs: optional capability-probe 404s (`/api/*/capabilities`) now classified as `unavailable_owner_services`, not browser errors — the 07:23 token-usage pane's honest probe was failing the boot gate.
+- External rechecks 2026-09-06: upstream released 0.1.3-alpha.1 (HEAD `d347e70390`, 9,080 paths) but every awaited seam still 0 hits; npm next 0.1.2-rc.1, host-apiproxy 0.1.1-rc.2, @yeisme trio 404. 43 tasks annotated. Dogfood day 6/14 recorded (zero findings).
+- Remaining 15 active changes: all open tasks are external-gated (upstream seams/npm/PAT) or the 09-14 dogfood window; none actionable in-repo without owners moving.
+- Pitfall: profile resolves bundles through `packages/bundle/*/lib` (bundle build inlines client code) — rebuilding only `packages/client/*` does NOT reach the booted host; rebuild the bundle layer too.
+
 ## 2026-09-06: archive completed DSH changes + workspace search 2.7
 
 - Archived Complete changes (specs synced, `--all --strict` 140/0): `dsh-session-insights-and-status`, `dsh-web-composer-references-theme-v1`, `dsh-selection-conversation-actions-v1`, `dsh-adaptive-pane-docking`, `dsh-unified-multi-pane-workbench`.
