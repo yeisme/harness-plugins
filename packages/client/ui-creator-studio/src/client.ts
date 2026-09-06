@@ -371,21 +371,34 @@ function resolveLocale(ctx: ClientContext): { readonly t: CreatorStudioTranslato
 export function apply(ctx: ClientContext): () => void {
   const slots = ctx.get('slots') as unknown as SlotsFace
   const locale = resolveLocale(ctx)
-  const pane = resolvePane(ctx)
-  if (pane === undefined) {
-    const disposeLauncher = installUnavailableLauncher(slots, locale.t('client.paneUnavailable'), locale.t)
-    return () => { disposeLauncher(); locale.dispose() }
-  }
   let disposed = false
+  let generation = 0
   let disposeMounted: (() => void) | undefined
-  void resolveCreatorStudioRemote(ctx).then(remote => {
-    if (disposed) return
-    disposeMounted = remote === undefined
-      ? installUnavailableLauncher(slots, locale.t('client.remoteUnavailable'), locale.t)
-      : installAvailable(ctx, slots, pane, remote, locale.t)
-  })
+  const mount = (): void => {
+    const current = ++generation
+    disposeMounted?.()
+    disposeMounted = undefined
+    const pane = resolvePane(ctx)
+    if (pane === undefined) {
+      disposeMounted = installUnavailableLauncher(slots, locale.t('client.paneUnavailable'), locale.t)
+      return
+    }
+    void resolveCreatorStudioRemote(ctx).then(remote => {
+      if (disposed || current !== generation) return
+      disposeMounted = remote === undefined
+        ? installUnavailableLauncher(slots, locale.t('client.remoteUnavailable'), locale.t)
+        : installAvailable(ctx, slots, pane, remote, locale.t)
+    })
+  }
+  // Optional sibling services may arrive after this entry. Keep the launcher
+  // honest without making missing Pane contracts block the whole plugin tree.
+  const serviceEvents = ctx.on?.('internal/service', name => {
+    if (!disposed && name === 'paneWorkbench') mount()
+  }, { global: true })
+  mount()
   return () => {
     disposed = true
+    serviceEvents?.()
     disposeMounted?.()
     locale.dispose()
   }

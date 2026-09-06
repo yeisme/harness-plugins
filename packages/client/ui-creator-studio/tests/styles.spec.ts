@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { PANEL_TOKENS, HOST_THEME_ALIASES } from '@yeisme/dsh-client-ui-visual-kit'
 import { creatorStudioStyles } from '../src/styles.ts'
 
 /**
@@ -7,18 +8,20 @@ import { creatorStudioStyles } from '../src/styles.ts'
  * 字面量、无同义词 token、scope 隔离、交互底线齐备。
  */
 describe('creator studio visual adoption', () => {
-  it('每个 --dsw-alias-* token 只出现一次（kit 根块单点 fallback）', () => {
-    const names = new Set([...creatorStudioStyles.matchAll(/--dsw-alias-([a-z0-9-]+)/g)].map(m => `--dsw-alias-${m[1]}`))
-    expect(names.size).toBeGreaterThan(0)
-    for (const name of names) {
-      expect(creatorStudioStyles.split(name).length - 1, `${name} once`).toBe(1)
+  it('canonical token 在根块单点声明，并保留宿主主题 fallback', () => {
+    for (const [name, fallback] of Object.entries(PANEL_TOKENS)) {
+      const alias = HOST_THEME_ALIASES[name]
+      const localFallback = name === 'accent' ? '#9bcbff' : fallback
+      const value = alias === undefined ? localFallback : `var(--dsw-alias-${alias},${localFallback})`
+      const declaration = `--vk-${name}:var(--dsw-alias-${name},${value})`
+      expect(creatorStudioStyles.split(declaration).length - 1, `${name} root declaration once`).toBe(1)
     }
   })
 
   it('自有规则只消费 --vk-*；无 label-*/state-business 同义词，状态色 hex 只在根 token 块出现一次', () => {
-    expect(creatorStudioStyles).not.toContain('--dsw-alias-label-')
-    expect(creatorStudioStyles).not.toContain('--dsw-alias-state-business-primary')
-    expect(creatorStudioStyles).not.toContain('--dsw-alias-interactive-bg-hover')
+    expect(creatorStudioStyles).not.toContain('--vk-label-')
+    expect(creatorStudioStyles).not.toContain('--vk-state-business-primary')
+    expect(creatorStudioStyles).not.toContain('--vk-interactive-bg-hover')
     for (const hex of ['#51c58b', '#f0b45a', '#ee6b72', '#6aa8ff', '#8b8b94']) {
       expect(creatorStudioStyles.split(hex).length - 1, `${hex} once (root token block)`).toBe(1)
     }

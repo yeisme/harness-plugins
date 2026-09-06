@@ -8,6 +8,42 @@ import { creatorSnapshot } from './fixtures.ts'
 afterEach(() => { cleanup(); vi.useRealTimers() })
 
 describe('Creator Studio client composition', () => {
+  it('replaces the unavailable launcher when Pane arrives after client activation', async () => {
+    vi.useFakeTimers()
+    let pane: unknown
+    let serviceChanged: (name: string) => void = () => {}
+    const removeLauncher = vi.fn()
+    const removeListener = vi.fn()
+    const slots = { inject: (_name: string, setup: () => () => void) => setup(), register: vi.fn(() => removeLauncher) }
+    const remote = { snapshot: vi.fn(async () => ({ ok: true, value: creatorSnapshot() })), dispatch: vi.fn(), resolveArtifact: vi.fn() }
+    const ctx = {
+      get: (name: string) => name === 'slots' ? slots : name === 'paneWorkbench' ? pane : name === 'remote.creatorStudio' ? remote : undefined,
+      on: (event: string, listener: typeof serviceChanged) => {
+        if (event !== 'internal/service') return vi.fn()
+        serviceChanged = listener
+        return removeListener
+      },
+    }
+    const dispose = apply(ctx as never)
+    expect(slots.register).toHaveBeenCalledWith(expect.objectContaining({ id: 'creator-studio-unavailable' }), expect.any(Function))
+    pane = { registerView: vi.fn(() => vi.fn()), registerPlugin: vi.fn(() => vi.fn()), openView: vi.fn() }
+    serviceChanged('paneWorkbench')
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(removeLauncher).toHaveBeenCalledOnce()
+    expect(slots.register).toHaveBeenCalledWith(expect.objectContaining({ id: 'creator-studio-sidebar' }), expect.any(Function))
+    pane = undefined
+    serviceChanged('paneWorkbench')
+    expect(slots.register).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'creator-studio-unavailable' }), expect.any(Function))
+    pane = { registerView: vi.fn(() => vi.fn()), openView: vi.fn() }
+    serviceChanged('paneWorkbench')
+    dispose()
+    expect(removeListener).toHaveBeenCalledOnce()
+    const count = slots.register.mock.calls.length
+    serviceChanged('paneWorkbench')
+    await Promise.resolve()
+    expect(slots.register).toHaveBeenCalledTimes(count)
+  })
   it('publishes one shared runtime and revokes the provider on dispose', async () => {
     vi.useFakeTimers()
     const unregisterRuntime = vi.fn()
