@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { BALANCE_MIN_INTERVAL_MS, DeepSeekBalanceClient, mapBalanceResponse } from '../src/balance.ts'
+import { BALANCE_MIN_INTERVAL_MS, DeepSeekBalanceClient, HostCredentialSource, mapBalanceResponse } from '../src/balance.ts'
 import { parseBalanceSnapshot } from '../src/projection.ts'
 
 const OFFICIAL_DOC_EXAMPLE = {
@@ -105,5 +105,68 @@ describe('DeepSeekBalanceClient', () => {
     const snapshot = await client.refresh('deepseek-official')
     expect(() => parseBalanceSnapshot(snapshot)).not.toThrow()
     expect(() => parseBalanceSnapshot({ ...snapshot, apiKey: 'sk-leak' })).toThrow()
+  })
+})
+
+describe('HostCredentialSource', () => {
+  it('resolves through the probed credentials provider per call', async () => {
+    let value: string | undefined = 'sk-from-provider'
+    const source = new HostCredentialSource({
+      ref: 'DEEPSEEK_API_KEY',
+      provider: { resolve: async () => (value === undefined ? undefined : { value }) },
+      fallback: () => 'sk-from-env',
+    })
+    await expect(source.resolveApiKey()).resolves.toBe('sk-from-provider')
+    // A rotated credential reaches the next resolution without a restart.
+    value = 'sk-rotated'
+    await expect(source.resolveApiKey()).resolves.toBe('sk-rotated')
+  })
+
+  it('falls back to the env var when the provider has no value or throws', async () => {
+    const missing = new HostCredentialSource({
+      ref: 'DEEPSEEK_API_KEY',
+      provider: { resolve: async () => undefined },
+      fallback: () => 'sk-from-env',
+    })
+    await expect(missing.resolveApiKey()).resolves.toBe('sk-from-env')
+    const broken = new HostCredentialSource({
+      ref: 'DEEPSEEK_API_KEY',
+      provider: { resolve: async () => { throw new Error('store locked') } },
+      fallback: () => 'sk-from-env',
+    })
+    await expect(broken.resolveApiKey()).resolves.toBe('sk-from-env')
+    const envOnly = new HostCredentialSource({ ref: 'DEEPSEEK_API_KEY', fallback: () => 'sk-from-env' })
+    await expect(envOnly.resolveApiKey()).resolves.toBe('sk-from-env')
+  })
+
+  it('drives a refresh through the provider without leaking the key', async () => {
+    const fetchMock = vi.fn(async () => okResponse(OFFICIAL_DOC_EXAMPLE))
+    const source = new HostCredentialSource({
+      ref: 'DEEPSEEK_API_KEY',
+      provider: { resolve: async () => ({ value: 'sk-provider-secret' }) },
+      fallback: () => undefined,
+    })
+    const client = new DeepSeekBalanceClient({ fetch: fetchMock as never, credentials: source })
+    const snapshot = await client.refresh('deepseek-official')
+    expect(snapshot).toMatchObject({ status: 'ready' })
+    expect((fetchMock.mock.calls[0]?.[1] as { headers: Record<string, string> }).headers.Authorization).toBe('Bearer sk-provider-secret')
+    expect(JSON.stringify(snapshot)).not.toContain('sk-provider-secret')
+  })
+
+  it('keeps the last good balance stale when a refresh fails through the provider', async () => {
+    let fail = false
+    const fetchMock = vi.fn(async () => (fail ? { ok: false, status: 500, json: async () => ({}) } : okResponse(OFFICIAL_DOC_EXAMPLE)))
+    let now = 1_000_000
+    const source = new HostCredentialSource({
+      ref: 'DEEPSEEK_API_KEY',
+      provider: { resolve: async () => ({ value: 'sk-provider-secret' }) },
+    })
+    const client = new DeepSeekBalanceClient({ fetch: fetchMock as never, credentials: source, now: () => now })
+    await client.refresh('deepseek-official')
+    now += BALANCE_MIN_INTERVAL_MS + 1
+    fail = true
+    const degraded = await client.refresh('deepseek-official')
+    expect(degraded).toMatchObject({ status: 'error', freshness: 'stale', reasonCode: 'network_failed' })
+    expect(degraded.infos?.[0]?.totalBalance).toBe('110.00')
   })
 })

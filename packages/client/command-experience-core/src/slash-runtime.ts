@@ -1,5 +1,5 @@
 /**
- * Live slash runtime shared by Web/TUI adapters.
+ * Live slash runtime for the Web adapter.
  *
  * Watches pane and host command snapshots, rebuilds the directory, and
  * plans inspect execution. It never issues RPC on discovery and never
@@ -19,6 +19,7 @@ import {
 import {
   planInspectCommand,
   projectHostCommands,
+  SESSION_STATUS_VIEW_KIND,
   type HostCommandProjection,
   type InspectPlan,
   type InspectSurfaceSnapshot,
@@ -90,12 +91,35 @@ export interface SlashPluginRecord {
   readonly status?: string;
 }
 
+/**
+ * Session status surface seam supplied by the status owner plugin.
+ * The header/popover belongs to exactly one session; the command runtime
+ * never borrows another session's popover.
+ */
+export interface SlashSessionStatusSeam {
+  header(): { readonly available: boolean; readonly sessionRef?: string };
+  /** Returns true when the popover for the session was actually opened. */
+  openPopover?(sessionRef: string): boolean;
+}
+
+/** Frozen dispatch context for one command execution. */
+export interface SlashCommandContext {
+  /** Originating session; never a last-activity substitute. */
+  readonly sessionRef?: string;
+}
+
 export interface SlashRuntimeHost {
   readonly paneWorkbench?: SlashPaneWorkbench;
   readonly hostCommands?: SlashHostCommands;
   readonly conversationViews?: SlashConversationViews;
   readonly plugins?: () => readonly SlashPluginRecord[];
   readonly ownerActions?: ReadonlySet<string>;
+  readonly sessionStatus?: SlashSessionStatusSeam;
+  /**
+   * Session the command surface is bound to. Must return the originating
+   * session of the command input, never a last-activity guess.
+   */
+  readonly currentSessionRef?: () => string | undefined;
 }
 
 export interface SlashInspectResult {
@@ -108,28 +132,32 @@ export interface SlashHostRegistration {
   readonly description: string;
   readonly inputHint?: string;
   readonly recordInput: false;
-  readonly handler: (rawInput: string) => { readonly kind: 'success' | 'error'; readonly text: string };
+  readonly handler: (rawInput: string, context?: SlashCommandContext) => { readonly kind: 'success' | 'error'; readonly text: string };
 }
 
 export interface SlashRuntime {
   snapshot(): LiveDirectorySnapshot;
   subscribe(listener: () => void): () => void;
   surfaces(): InspectSurfaceSnapshot;
-  execute(command: CommandExperienceEntryV1, query?: string): SlashInspectResult;
+  execute(command: CommandExperienceEntryV1, query?: string, context?: SlashCommandContext): SlashInspectResult;
   dispose(): void;
 }
 
 function surfacesFrom(host: SlashRuntimeHost): InspectSurfaceSnapshot {
   const views = host.paneWorkbench?.views.snapshot() ?? [];
   const kinds = new Set(views.map((view) => view.kind));
+  const header = host.sessionStatus?.header();
   return {
-    mcpInspector: host.conversationViews?.has('mcp-inspector') === true,
+    mcpInspector: kinds.has('mcp-inspector'),
     agentContext: kinds.has('workspace.agent-context'),
     paneWorkbench: host.paneWorkbench !== undefined,
     explorer: kinds.has('dsh.explorer'),
     sourceControl: kinds.has('dsh.source-control'),
     conversationViewSwitcher: host.conversationViews?.activate !== undefined
       || host.conversationViews?.has('mcp-inspector') === true,
+    sessionStatus: kinds.has(SESSION_STATUS_VIEW_KIND),
+    tokenUsage: kinds.has('workspace.token-usage'),
+    ...(header === undefined ? {} : { sessionStatusHeader: header }),
   };
 }
 
@@ -158,19 +186,27 @@ function capabilitiesOf(host: SlashRuntimeHost): OwnerCapabilitySnapshot {
 
 function openRequestFor(
   views: readonly SlashPaneViewRecord[],
-  kind: string,
-  tab?: string,
+  plan: {
+    readonly viewKind: string;
+    readonly tab?: string;
+    readonly resourceKey?: string;
+    readonly metadata?: Readonly<Record<string, string>>;
+  },
 ): SlashOpenViewRequest {
-  const view = views.find((item) => item.kind === kind);
+  const view = views.find((item) => item.kind === plan.viewKind);
+  const metadata: Record<string, string> = {
+    ...(plan.tab === undefined ? {} : { tab: plan.tab }),
+    ...(plan.metadata ?? {}),
+  };
   return {
-    kind,
-    resourceKey: view?.resourceKey ?? `slash:${kind}`,
+    kind: plan.viewKind,
+    resourceKey: plan.resourceKey ?? view?.resourceKey ?? `slash:${plan.viewKind}`,
     role: view?.role ?? 'inspector',
     preferredRegion: view?.preferredRegion ?? 'right',
     retention: view?.retention ?? 'keep-alive',
     singleton: view?.singleton ?? true,
     ...(view?.label === undefined ? {} : { title: view.label }),
-    ...(tab === undefined ? {} : { metadata: { tab } }),
+    ...(Object.keys(metadata).length === 0 ? {} : { metadata }),
   };
 }
 
@@ -240,12 +276,15 @@ export function createSlashRuntime(host: SlashRuntimeHost = {}): SlashRuntime {
       return () => events.unsubscribe();
     },
     surfaces: () => surfacesFrom(host),
-    execute(command, query) {
+    execute(command, query, context) {
+      const surfaces = surfacesFrom(host);
+      const sessionRef = context?.sessionRef ?? host.currentSessionRef?.();
       const plan = planInspectCommand({
         command,
         ...(query === undefined ? {} : { query }),
-        surfaces: surfacesFrom(host),
+        surfaces,
         views: host.paneWorkbench?.views.snapshot() ?? [],
+        ...(sessionRef === undefined ? {} : { sessionRef }),
       });
       switch (plan.kind) {
         case 'open-conversation-view': {
@@ -263,9 +302,40 @@ export function createSlashRuntime(host: SlashRuntimeHost = {}): SlashRuntime {
         }
         case 'open-pane': {
           host.paneWorkbench?.openView(
-            openRequestFor(host.paneWorkbench.views.snapshot(), plan.viewKind, plan.tab),
+            openRequestFor(host.paneWorkbench.views.snapshot(), plan),
           );
-          return { plan, message: `Opened pane ${plan.viewKind}.` };
+          // Navigation success is not data success: the surface reports its
+          // own coverage/freshness once it loads.
+          const message = plan.sessionRef === undefined
+            ? `Opened pane ${plan.viewKind}.`
+            : `Opened pane ${plan.viewKind} bound to the originating session; data availability is reported by the surface.`;
+          return { plan, message };
+        }
+        case 'open-status-popover': {
+          if (host.sessionStatus?.openPopover?.(plan.sessionRef) === true) {
+            return {
+              plan,
+              message: 'Opened the session status popover for the originating session; data availability is reported by the status surface.',
+            };
+          }
+          // Execution-time degradation: the popover seam declined after
+          // planning. Fall back to the originating session's pane, then to
+          // bounded safe text — never claim the popover opened.
+          if (surfaces.sessionStatus === true && host.paneWorkbench !== undefined) {
+            const panePlan: InspectPlan = {
+              kind: 'open-pane',
+              viewKind: SESSION_STATUS_VIEW_KIND,
+              sessionRef: plan.sessionRef,
+              metadata: { sessionRef: plan.sessionRef },
+            };
+            host.paneWorkbench.openView(openRequestFor(host.paneWorkbench.views.snapshot(), panePlan));
+            return {
+              plan: panePlan,
+              message: `Status popover was unavailable; opened pane ${SESSION_STATUS_VIEW_KIND} bound to the originating session.`,
+            };
+          }
+          const reason = 'Session status popover declined and no status pane is available';
+          return { plan: { kind: 'unavailable', reason }, message: reason };
         }
         case 'pane-picker':
           return { plan, message: 'Open a workspace pane from the picker.' };
@@ -275,6 +345,12 @@ export function createSlashRuntime(host: SlashRuntimeHost = {}): SlashRuntime {
             ? 'No plugin inventory is available in this session.'
             : plugins.map((plugin) => plugin.status === undefined ? plugin.id : `${plugin.id} (${plugin.status})`).join('\n');
           return { plan, message: text };
+        }
+        case 'command-list': {
+          const commands = directory.snapshot().commands
+            .filter((entry) => entry.availability.state === 'available')
+            .map((entry) => `/${entry.canonicalName} — ${entry.description}`);
+          return { plan, message: commands.length === 0 ? 'No commands are registered.' : commands.join('\n') };
         }
         case 'pane-command': {
           void host.paneWorkbench?.commands.execute(plan.commandId);
@@ -315,10 +391,10 @@ export function inspectRegistrationsFrom(
       description: command.description,
       ...(command.input.hint === undefined ? {} : { inputHint: command.input.hint }),
       recordInput: false,
-      handler: (rawInput: string) => {
+      handler: (rawInput: string, context?: SlashCommandContext) => {
         const current = runtime.snapshot().commands.find((item) => item.canonicalName === name) ?? command;
         const query = rawInput.trim().length === 0 ? `/${name}` : `/${name} ${rawInput.trim()}`;
-        const result = runtime.execute(current, query);
+        const result = runtime.execute(current, query, context);
         return {
           kind: result.plan.kind === 'unavailable' ? 'error' : 'success',
           text: result.message,

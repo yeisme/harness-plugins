@@ -108,3 +108,8 @@ export type {
   FirstSupportName,
   FirstSupportOutcome,
 } from './first-support';
+export { runStatusCommand } from './status-command';
+export type {
+  StatusCommandRunInput,
+  StatusCommandRunResult,
+} from './status-command';

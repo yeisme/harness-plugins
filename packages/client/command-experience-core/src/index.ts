@@ -2,7 +2,7 @@
  * Command Experience Core
  *
  * Shared types, utilities, and reducer for unified command experience
- * across Web and TUI surfaces.
+ * for the Web surface.
  */
 
 // Types
@@ -181,6 +181,11 @@ export {
   AGENT_CONTEXT_VIEW_KIND,
   EXPLORER_VIEW_KIND,
   SOURCE_CONTROL_VIEW_KIND,
+  SESSION_STATUS_VIEW_KIND,
+  TOKEN_USAGE_VIEW_KIND,
+  STATUS_SUPPORTED_SYNTAX,
+  STATUS_SELECT_SESSION_REASON,
+  tokenUsageResourceKey,
   DEFAULT_INSPECT_SURFACES,
   splitSlashRest,
   matchPaneKind,
@@ -196,6 +201,8 @@ export {
   type SlashHostCommands,
   type SlashConversationViews,
   type SlashPluginRecord,
+  type SlashSessionStatusSeam,
+  type SlashCommandContext,
   type SlashRuntimeHost,
   type SlashInspectResult,
   type SlashRuntime,

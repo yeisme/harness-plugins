@@ -41,7 +41,7 @@ describe('dsh-token-usage bundle contract', () => {
     expect(typeof clientApply).toBe('function')
     expect(clientInject).toEqual(['slots', 'locale'])
     expect(tokenUsageRemoteContribution.package).toBe('@yeisme/dsh-token-usage-host')
-    expect(tokenUsageRemoteContribution.descriptors.map(d => d.method).sort()).toEqual(['refreshBalance', 'snapshot'])
+    expect(tokenUsageRemoteContribution.descriptors.map(d => d.method).sort()).toEqual(['capabilities', 'query', 'refreshBalance', 'snapshot'])
     for (const descriptor of tokenUsageRemoteContribution.descriptors) {
       expect(descriptor.namespace).toBe('tokenUsage')
       expect(descriptor.invocation).toEqual({ kind: 'direct' })

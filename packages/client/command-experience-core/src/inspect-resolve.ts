@@ -15,13 +15,36 @@ export interface InspectSurfaceSnapshot {
   readonly explorer: boolean;
   readonly sourceControl: boolean;
   readonly conversationViewSwitcher: boolean;
+  /** The workspace.session-status pane kind is registered. */
+  readonly sessionStatus?: boolean;
+  /** The workspace.token-usage pane kind is registered. */
+  readonly tokenUsage?: boolean;
+  /**
+   * Session header/popover seam. sessionRef pins which session the header
+   * belongs to; a header bound to another session must not be borrowed.
+   */
+  readonly sessionStatusHeader?: {
+    readonly available: boolean;
+    readonly sessionRef?: string;
+  };
 }
 
 export type InspectPlan =
   | { readonly kind: 'open-conversation-view'; readonly viewId: string }
-  | { readonly kind: 'open-pane'; readonly viewKind: string; readonly tab?: string }
+  | {
+    readonly kind: 'open-pane';
+    readonly viewKind: string;
+    readonly tab?: string;
+    /** Frozen originating session the pane is bound to. */
+    readonly sessionRef?: string;
+    /** Explicit instance key (overrides the registered view default). */
+    readonly resourceKey?: string;
+    readonly metadata?: Readonly<Record<string, string>>;
+  }
+  | { readonly kind: 'open-status-popover'; readonly sessionRef: string }
   | { readonly kind: 'pane-picker' }
   | { readonly kind: 'plugin-list' }
+  | { readonly kind: 'command-list' }
   | { readonly kind: 'pane-command'; readonly commandId: string }
   | { readonly kind: 'host-command'; readonly name: string }
   | { readonly kind: 'unavailable'; readonly reason: string };
@@ -30,6 +53,16 @@ export const MCP_INSPECTOR_VIEW_ID = 'mcp-inspector';
 export const AGENT_CONTEXT_VIEW_KIND = 'workspace.agent-context';
 export const EXPLORER_VIEW_KIND = 'dsh.explorer';
 export const SOURCE_CONTROL_VIEW_KIND = 'dsh.source-control';
+export const SESSION_STATUS_VIEW_KIND = 'workspace.session-status';
+export const TOKEN_USAGE_VIEW_KIND = 'workspace.token-usage';
+
+/** Singleton instance key for a session-bound token usage pane. */
+export function tokenUsageResourceKey(sessionRef: string): string {
+  return `token-usage:session:${sessionRef}`;
+}
+
+export const STATUS_SUPPORTED_SYNTAX = '/status, /status tokens';
+export const STATUS_SELECT_SESSION_REASON = '请先选择会话 / Select a session first';
 
 export const DEFAULT_INSPECT_SURFACES: InspectSurfaceSnapshot = {
   mcpInspector: false,
@@ -38,6 +71,8 @@ export const DEFAULT_INSPECT_SURFACES: InspectSurfaceSnapshot = {
   explorer: false,
   sourceControl: false,
   conversationViewSwitcher: false,
+  sessionStatus: false,
+  tokenUsage: false,
 };
 
 function schemaKey(command: CommandExperienceEntryV1): string {
@@ -99,6 +134,8 @@ export function planInspectCommand(input: {
   readonly query?: string;
   readonly surfaces?: InspectSurfaceSnapshot;
   readonly views?: readonly PaneSlashViewSnapshot[];
+  /** Frozen originating session; never substituted with a last-activity session. */
+  readonly sessionRef?: string;
 }): InspectPlan {
   const surfaces = input.surfaces ?? DEFAULT_INSPECT_SURFACES;
   const paneId = paneCommandId(input.command);
@@ -116,13 +153,13 @@ export function planInspectCommand(input: {
   const name = input.command.canonicalName;
   switch (name) {
     case 'mcp':
+      if (!surfaces.paneWorkbench) {
+        return { kind: 'unavailable', reason: 'Pane Workbench is not installed' };
+      }
       if (!surfaces.mcpInspector) {
-        return { kind: 'unavailable', reason: 'MCP inspector plugin not installed' };
+        return { kind: 'unavailable', reason: 'Tools pane is not registered' };
       }
-      if (!surfaces.conversationViewSwitcher) {
-        return { kind: 'unavailable', reason: 'conversation view switcher is unavailable' };
-      }
-      return { kind: 'open-conversation-view', viewId: MCP_INSPECTOR_VIEW_ID };
+      return { kind: 'open-pane', viewKind: MCP_INSPECTOR_VIEW_ID, tab: 'mcp' };
     case 'skills':
       if (!surfaces.agentContext) {
         return { kind: 'unavailable', reason: 'Agent Context pane not installed' };
@@ -130,6 +167,8 @@ export function planInspectCommand(input: {
       return { kind: 'open-pane', viewKind: AGENT_CONTEXT_VIEW_KIND, tab: 'skills' };
     case 'plugins':
       return { kind: 'plugin-list' };
+    case 'commands':
+      return { kind: 'command-list' };
     case 'explorer':
       if (!surfaces.explorer) {
         return { kind: 'unavailable', reason: 'Explorer pane is not installed' };
@@ -151,6 +190,51 @@ export function planInspectCommand(input: {
         return { kind: 'unavailable', reason: `no unique pane match for ${parseSlashToken(rest)}` };
       }
       return { kind: 'open-pane', viewKind: match.kind };
+    }
+    case 'status': {
+      const parsed = splitSlashRest(input.query ?? '');
+      const subcommand = (parsed.token === 'status' ? parsed.rest : (input.query ?? '').trim()).toLowerCase();
+      if (subcommand.length !== 0 && subcommand !== 'tokens') {
+        return {
+          kind: 'unavailable',
+          reason: `Unsupported /status subcommand "${subcommand}"; supported syntax: ${STATUS_SUPPORTED_SYNTAX}`,
+        };
+      }
+      const sessionRef = input.sessionRef;
+      if (sessionRef === undefined || sessionRef.length === 0) {
+        return { kind: 'unavailable', reason: STATUS_SELECT_SESSION_REASON };
+      }
+      if (subcommand === 'tokens') {
+        if (surfaces.tokenUsage !== true) {
+          return { kind: 'unavailable', reason: 'Token usage pane is not installed' };
+        }
+        return {
+          kind: 'open-pane',
+          viewKind: TOKEN_USAGE_VIEW_KIND,
+          sessionRef,
+          resourceKey: tokenUsageResourceKey(sessionRef),
+          metadata: { sessionRef },
+        };
+      }
+      // Degradation chain: originating-session Popover -> session-status Pane
+      // -> bounded safe text. A header bound to another session is never
+      // borrowed; it falls through to the originating session's pane.
+      const header = surfaces.sessionStatusHeader;
+      if (header?.available === true && (header.sessionRef === undefined || header.sessionRef === sessionRef)) {
+        return { kind: 'open-status-popover', sessionRef };
+      }
+      if (surfaces.sessionStatus === true) {
+        return {
+          kind: 'open-pane',
+          viewKind: SESSION_STATUS_VIEW_KIND,
+          sessionRef,
+          metadata: { sessionRef },
+        };
+      }
+      return {
+        kind: 'unavailable',
+        reason: 'No session status surface is available (popover and pane seams missing)',
+      };
     }
     default:
       return { kind: 'unavailable', reason: `no inspect resolver for ${name}` };
@@ -182,7 +266,7 @@ export function projectHostCommands(
           : { hint: command.inputHint }),
         schemaKey: `host-command:${command.name}`,
       },
-      surfaces: ['web', 'tui'],
+      surfaces: ['web'],
       actionKind: 'inspect',
       owner: 'host',
       danger: 'safe',

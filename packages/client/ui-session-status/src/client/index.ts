@@ -3,8 +3,10 @@
  */
 
 import {
+  parseSessionStatusProbe,
   parseSessionStatusSnapshot,
   unavailableClientSnapshot,
+  type SessionStatusProbeV1,
   type SessionStatusSnapshotAnswerV1,
   type SessionStatusSnapshotV1,
 } from '../wire.ts'
@@ -14,10 +16,17 @@ export interface SessionStatusCapabilityProbe {
   readonly available: boolean
   readonly reason: string | null
   readonly capabilities: readonly string[]
+  /**
+   * Push-subscription capability, probed separately from `snapshot`.
+   * `false` (or `null` when the probe seam is absent) means manual refresh
+   * only — never promise live updates.
+   */
+  readonly subscription: boolean | null
 }
 
 export interface SessionStatusRemoteFace {
   snapshot(input: { readonly sessionRef: string }): Promise<SessionStatusSnapshotAnswerV1>
+  probe?(): Promise<SessionStatusProbeV1>
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -30,6 +39,7 @@ export function probeSessionStatusRemote(host: unknown): SessionStatusCapability
       available: false,
       reason: 'sessionStatus remote is unavailable',
       capabilities: [],
+      subscription: null,
     }
   }
   const remote = isRecord(host.sessionStatus) ? host.sessionStatus : host
@@ -38,12 +48,38 @@ export function probeSessionStatusRemote(host: unknown): SessionStatusCapability
       available: false,
       reason: 'sessionStatus.snapshot is unavailable',
       capabilities: [],
+      subscription: null,
     }
   }
   return {
     available: true,
     reason: null,
     capabilities: ['session-status'],
+    subscription: null,
+  }
+}
+
+/**
+ * Live probe: calls the Remote `probe()` method when present so the
+ * subscription capability comes from the owner declaration, not from a
+ * structural guess. Absent/failed probe seams degrade to `null`.
+ */
+export async function probeSessionStatusRemoteLive(host: unknown): Promise<SessionStatusCapabilityProbe> {
+  const base = probeSessionStatusRemote(host)
+  if (!base.available || !isRecord(host)) return base
+  const remote = (isRecord(host.sessionStatus) ? host.sessionStatus : host) as unknown as SessionStatusRemoteFace
+  if (typeof remote.probe !== 'function') return base
+  try {
+    const parsed = parseSessionStatusProbe(await remote.probe())
+    if (parsed === null) return base
+    return {
+      available: true,
+      reason: null,
+      capabilities: parsed.capabilities,
+      subscription: parsed.subscription,
+    }
+  } catch {
+    return base
   }
 }
 

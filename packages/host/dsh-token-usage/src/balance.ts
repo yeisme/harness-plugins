@@ -18,7 +18,50 @@ export const BALANCE_MIN_INTERVAL_MS = 15_000
 
 /** Credential resolution port: the host seam decides where keys live. */
 export interface BalanceCredentialSource {
-  resolveApiKey(): string | undefined
+  resolveApiKey(): string | undefined | Promise<string | undefined>
+}
+
+/** Structural face of the probed `ctx.credentials` provider (dsh-credentials). */
+export interface CredentialProviderFace {
+  resolve(ref: string): Promise<{ readonly value: string } | undefined>
+}
+
+export interface HostCredentialSourceOptions {
+  /** Probed ctx.credentials provider; absent when the seam is missing. */
+  readonly provider?: CredentialProviderFace
+  /** Credential reference (an environment-variable name, e.g. DEEPSEEK_API_KEY). */
+  readonly ref: string
+  /** Legacy env-var fallback, consulted when the provider has no value. */
+  readonly fallback?: () => string | undefined
+}
+
+/**
+ * Credential adapter: resolve through the probed host credentials seam first
+ * (per call, so a rotated key reaches the next refresh), then fall back to
+ * the legacy env var. The value never leaves this process.
+ */
+export class HostCredentialSource implements BalanceCredentialSource {
+  private readonly provider: CredentialProviderFace | undefined
+  private readonly ref: string
+  private readonly fallback: (() => string | undefined) | undefined
+
+  constructor(options: HostCredentialSourceOptions) {
+    this.provider = options.provider
+    this.ref = options.ref
+    this.fallback = options.fallback
+  }
+
+  async resolveApiKey(): Promise<string | undefined> {
+    if (this.provider !== undefined) {
+      try {
+        const resolved = await this.provider.resolve(this.ref)
+        if (resolved !== undefined && resolved.value.trim().length > 0) return resolved.value
+      } catch {
+        // A broken provider must not block the legacy env fallback.
+      }
+    }
+    return this.fallback?.()
+  }
 }
 
 export interface BalanceFetchLike {
@@ -117,7 +160,7 @@ export class DeepSeekBalanceClient {
     if (this.now() - this.lastCompletedAt < BALANCE_MIN_INTERVAL_MS && this.lastProjection !== null) {
       return this.lastProjection
     }
-    const apiKey = this.credentials.resolveApiKey()
+    const apiKey = await this.credentials.resolveApiKey()
     if (apiKey === undefined || apiKey.length === 0) {
       return this.remember(unavailable(generatedAt, 'credential_missing', 'No API key is configured for the DeepSeek official route.'))
     }

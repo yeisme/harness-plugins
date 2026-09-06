@@ -16,6 +16,9 @@ import {
 
 export interface TokenUsageViewModel {
   readonly usageAvailable: boolean
+  /** Usage slice failure reason; the previous value stays visible (stale). */
+  readonly usageError: string | null
+  readonly usageStale: boolean
   readonly currentSession: { readonly label: string; readonly text: string } | null
   readonly todayText: string
   readonly weekText: string
@@ -29,6 +32,11 @@ export interface TokenUsageViewModel {
     readonly freshness: TokenBalanceSnapshotV1['freshness']
     readonly message: string | null
     readonly canRefresh: boolean
+    /** Explicit-refresh failure reason; the previous value stays visible. */
+    readonly error: string | null
+    readonly busy: boolean
+    /** False until the first balance read lands (尚未查询). */
+    readonly queried: boolean
   }
   readonly generatedAt: string | null
 }
@@ -67,6 +75,10 @@ function safeBuckets(value: unknown): TokenBucketsV1 {
 export function deriveTokenUsageViewModel(input: {
   readonly usage?: TokenUsageSnapshotV1 | undefined
   readonly balance?: TokenBalanceSnapshotV1 | undefined
+  readonly usageError?: string | null | undefined
+  readonly usageStale?: boolean | undefined
+  readonly balanceError?: string | null | undefined
+  readonly balanceBusy?: boolean | undefined
 }): TokenUsageViewModel {
   const usage = input.usage
   const balance = input.balance
@@ -78,8 +90,11 @@ export function deriveTokenUsageViewModel(input: {
   const current = usage?.currentSession
   const balanceVisible = balance?.status === 'ready'
   const balanceLines = balance?.infos?.map(info => `${info.currency} ${info.totalBalance}`) ?? []
+  const balanceError = input.balanceError ?? null
   return {
     usageAvailable,
+    usageError: input.usageError ?? null,
+    usageStale: input.usageStale === true,
     currentSession: current === undefined ? null : { label: current.label, text: formatTokens(totalOf(safeBuckets(current.buckets))) },
     todayText: formatTokens(totalOf(safeBuckets(windows?.today))),
     weekText: formatTokens(totalOf(safeBuckets(windows?.week))),
@@ -90,9 +105,12 @@ export function deriveTokenUsageViewModel(input: {
     balance: {
       visible: balanceVisible,
       lines: balanceLines,
-      freshness: balance?.freshness ?? 'unknown',
+      freshness: balanceError !== null && balance !== undefined ? 'stale' : (balance?.freshness ?? 'unknown'),
       message: balanceVisible || balance === undefined ? null : balance.safeMessage,
       canRefresh: balance?.status !== 'unsupported',
+      error: balanceError,
+      busy: input.balanceBusy === true,
+      queried: balance !== undefined,
     },
     generatedAt: usage?.generatedAt ?? null,
   }

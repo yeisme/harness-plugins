@@ -25,12 +25,12 @@ describe('inspect resolve', () => {
       surfaces: {
         mcpInspector: true,
         agentContext: false,
-        paneWorkbench: false,
+        paneWorkbench: true,
         explorer: false,
         sourceControl: false,
-        conversationViewSwitcher: true,
+        conversationViewSwitcher: false,
       },
-    })).toEqual({ kind: 'open-conversation-view', viewId: 'mcp-inspector' })
+    })).toEqual({ kind: 'open-pane', viewKind: 'mcp-inspector', tab: 'mcp' })
 
     expect(planInspectCommand({
       command: command('skills'),
@@ -50,7 +50,7 @@ describe('inspect resolve', () => {
   it('disables inspect plans when the target plugin is missing', () => {
     expect(planInspectCommand({ command: command('mcp') })).toMatchObject({
       kind: 'unavailable',
-      reason: 'MCP inspector plugin not installed',
+      reason: 'Pane Workbench is not installed',
     })
     expect(planInspectCommand({ command: command('skills') }).kind).toBe('unavailable')
     expect(planInspectCommand({ command: command('explorer') }).kind).toBe('unavailable')
@@ -89,5 +89,107 @@ describe('inspect resolve', () => {
     ], reserved)
     expect(projected.find((item) => item.canonicalName === 'yeisme-foo')?.input.schemaKey).toBe('host-command:yeisme-foo')
     expect(projected.some((item) => item.canonicalName === 'mcp')).toBe(false)
+  })
+
+  describe('/status resolver', () => {
+    const statusSurfaces = {
+      mcpInspector: false,
+      agentContext: false,
+      paneWorkbench: true,
+      explorer: false,
+      sourceControl: false,
+      conversationViewSwitcher: false,
+      sessionStatus: true,
+      tokenUsage: true,
+    }
+
+    it('plans the originating session popover when its header is available', () => {
+      expect(planInspectCommand({
+        command: command('status'),
+        query: '/status',
+        sessionRef: 'sess_a',
+        surfaces: { ...statusSurfaces, sessionStatusHeader: { available: true, sessionRef: 'sess_a' } },
+      })).toEqual({ kind: 'open-status-popover', sessionRef: 'sess_a' })
+    })
+
+    it('opens the originating session pane when only another session header is available', () => {
+      expect(planInspectCommand({
+        command: command('status'),
+        query: '/status',
+        sessionRef: 'sess_a',
+        surfaces: { ...statusSurfaces, sessionStatusHeader: { available: true, sessionRef: 'sess_b' } },
+      })).toEqual({
+        kind: 'open-pane',
+        viewKind: 'workspace.session-status',
+        sessionRef: 'sess_a',
+        metadata: { sessionRef: 'sess_a' },
+      })
+    })
+
+    it('falls back to bounded safe text when no visual seam exists', () => {
+      const plan = planInspectCommand({
+        command: command('status'),
+        sessionRef: 'sess_a',
+        surfaces: { ...statusSurfaces, sessionStatus: false },
+      })
+      expect(plan.kind).toBe('unavailable')
+      expect(plan.kind === 'unavailable' && plan.reason).toMatch(/no session status surface/i)
+      expect(plan.kind === 'unavailable' && plan.reason).not.toMatch(/no inspect resolver/)
+    })
+
+    it('asks for a session instead of borrowing a last-activity one', () => {
+      const plan = planInspectCommand({
+        command: command('status'),
+        query: '/status',
+        surfaces: statusSurfaces,
+      })
+      expect(plan).toEqual({ kind: 'unavailable', reason: '请先选择会话 / Select a session first' })
+    })
+
+    it('plans /status tokens with a session-bound singleton resource key', () => {
+      expect(planInspectCommand({
+        command: command('status'),
+        query: '/status tokens',
+        sessionRef: 'sess_a',
+        surfaces: statusSurfaces,
+      })).toEqual({
+        kind: 'open-pane',
+        viewKind: 'workspace.token-usage',
+        sessionRef: 'sess_a',
+        resourceKey: 'token-usage:session:sess_a',
+        metadata: { sessionRef: 'sess_a' },
+      })
+    })
+
+    it('keeps /status tokens session-bound when the bare argument form is passed', () => {
+      expect(planInspectCommand({
+        command: command('status'),
+        query: 'tokens',
+        sessionRef: 'sess_a',
+        surfaces: statusSurfaces,
+      })).toMatchObject({ kind: 'open-pane', viewKind: 'workspace.token-usage', sessionRef: 'sess_a' })
+    })
+
+    it('degrades /status tokens when the pane is not installed', () => {
+      const plan = planInspectCommand({
+        command: command('status'),
+        query: '/status tokens',
+        sessionRef: 'sess_a',
+        surfaces: { ...statusSurfaces, tokenUsage: false },
+      })
+      expect(plan).toEqual({ kind: 'unavailable', reason: 'Token usage pane is not installed' })
+    })
+
+    it('explains supported syntax for unknown subcommands without a model send', () => {
+      const plan = planInspectCommand({
+        command: command('status'),
+        query: '/status everything',
+        sessionRef: 'sess_a',
+        surfaces: statusSurfaces,
+      })
+      expect(plan.kind).toBe('unavailable')
+      expect(plan.kind === 'unavailable' && plan.reason).toContain('Unsupported /status subcommand "everything"')
+      expect(plan.kind === 'unavailable' && plan.reason).toContain('/status, /status tokens')
+    })
   })
 })

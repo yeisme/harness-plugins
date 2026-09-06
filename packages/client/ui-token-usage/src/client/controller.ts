@@ -1,29 +1,46 @@
 /**
- * Token usage controller: one snapshot store over the tokenUsage Remote.
+ * Token usage controller: legacy process snapshot + independent balance state.
  *
- * Read-mostly: `refresh()` pulls `snapshot()`; `refreshBalance()` issues the
- * server-authored action. Failures surface as honest error states — never
- * retried automatically, never replaced with guesses.
+ * Usage load/retry and balance refresh are independent slices: a usage
+ * failure never drops a successful balance result, and a balance failure
+ * never hides the usage projection. Failures surface as honest error slices
+ * with the previous value kept (marked stale by the view model) — never
+ * retried automatically, never replaced with guesses, never swallowed.
  *
  * @module @yeisme/dsh-client-ui-token-usage/client/controller
  */
 
 import type { TokenBalanceSnapshotV1, TokenUsageRemoteFace, TokenUsageSnapshotV1 } from '../wire.ts'
 
-export type TokenUsageControllerState =
+export type TokenUsageSlice =
   | { readonly status: 'idle' }
-  | { readonly status: 'loading' }
-  | { readonly status: 'ready'; readonly usage: TokenUsageSnapshotV1; readonly balance: TokenBalanceSnapshotV1 }
-  | { readonly status: 'unavailable'; readonly message: string }
+  | { readonly status: 'loading'; readonly previous?: TokenUsageSnapshotV1 }
+  | { readonly status: 'ready'; readonly usage: TokenUsageSnapshotV1 }
+  | { readonly status: 'error'; readonly message: string; readonly previous?: TokenUsageSnapshotV1 }
 
-const IDLE: TokenUsageControllerState = Object.freeze({ status: 'idle' })
-const LOADING: TokenUsageControllerState = Object.freeze({ status: 'loading' })
+export type TokenBalanceSlice =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly previous?: TokenBalanceSnapshotV1 }
+  | { readonly status: 'ready'; readonly balance: TokenBalanceSnapshotV1 }
+  | { readonly status: 'error'; readonly message: string; readonly previous?: TokenBalanceSnapshotV1 }
+
+export interface TokenUsageControllerState {
+  readonly usage: TokenUsageSlice
+  readonly balance: TokenBalanceSlice
+}
+
+const IDLE: TokenUsageControllerState = Object.freeze({
+  usage: Object.freeze({ status: 'idle' }),
+  balance: Object.freeze({ status: 'idle' }),
+})
 
 export class TokenUsageController {
   private readonly remote: TokenUsageRemoteFace
   private state: TokenUsageControllerState = IDLE
   private readonly listeners = new Set<() => void>()
-  private refreshGeneration = 0
+  private usageGeneration = 0
+  private balanceGeneration = 0
+  private disposed = false
 
   constructor(remote: TokenUsageRemoteFace) {
     this.remote = remote
@@ -45,34 +62,95 @@ export class TokenUsageController {
     for (const listener of this.listeners) listener()
   }
 
+  /** Cancel in-flight reads and discard their late replies (HMR/unload). */
+  dispose(): void {
+    this.disposed = true
+    this.usageGeneration += 1
+    this.balanceGeneration += 1
+    this.listeners.clear()
+  }
+
+  /**
+   * Authoritative read-only re-read of the legacy process snapshot. Explicit
+   * retry only; errors keep the previous usage value (stale) plus the reason.
+   */
   async refresh(): Promise<void> {
-    const generation = ++this.refreshGeneration
-    if (this.state.status !== 'ready') this.setState(LOADING)
+    const generation = ++this.usageGeneration
+    const previous = this.state.usage.status === 'ready' ? this.state.usage.usage : undefined
+    if (this.state.usage.status !== 'ready') {
+      this.setState({ ...this.state, usage: previous === undefined ? { status: 'loading' } : { status: 'loading', previous } })
+    }
     try {
       const answer = await this.remote.snapshot()
-      if (generation !== this.refreshGeneration) return
+      if (this.disposed || generation !== this.usageGeneration) return
       if (answer.ok) {
-        this.setState({ status: 'ready', usage: answer.usage, balance: answer.balance })
+        this.setState({
+          usage: { status: 'ready', usage: answer.usage },
+          balance: { status: 'ready', balance: answer.balance },
+        })
       } else {
-        this.setState({ status: 'unavailable', message: answer.message })
+        this.setState({
+          ...this.state,
+          usage: {
+            status: 'error',
+            message: answer.message,
+            ...(previous === undefined ? {} : { previous }),
+          },
+        })
       }
     } catch (error) {
-      if (generation !== this.refreshGeneration) return
-      this.setState({ status: 'unavailable', message: error instanceof Error ? error.message : 'tokenUsage remote failed' })
+      if (this.disposed || generation !== this.usageGeneration) return
+      this.setState({
+        ...this.state,
+        usage: {
+          status: 'error',
+          message: error instanceof Error ? error.message : 'tokenUsage remote failed',
+          ...(previous === undefined ? {} : { previous }),
+        },
+      })
     }
   }
 
-  /** Server-authored balance refresh; keeps the previous usage projection. */
+  /**
+   * Server-authored balance refresh (explicit user action only). Independent
+   * of the usage slice: results land whether or not usage is ready, and
+   * failures keep the previous balance with a readable reason.
+   */
   async refreshBalance(): Promise<void> {
-    const current = this.state
+    const generation = ++this.balanceGeneration
+    const current = this.state.balance
+    const previous = current.status === 'ready' ? current.balance
+      : current.status === 'error' || current.status === 'loading' ? current.previous
+        : undefined
+    this.setState({
+      ...this.state,
+      balance: previous === undefined ? { status: 'loading' } : { status: 'loading', previous },
+    })
     try {
       const answer = await this.remote.refreshBalance()
-      if (answer.ok && current.status === 'ready') {
-        this.setState({ status: 'ready', usage: current.usage, balance: answer.balance })
+      if (this.disposed || generation !== this.balanceGeneration) return
+      if (answer.ok) {
+        this.setState({ ...this.state, balance: { status: 'ready', balance: answer.balance } })
+      } else {
+        this.setState({
+          ...this.state,
+          balance: {
+            status: 'error',
+            message: answer.message,
+            ...(previous === undefined ? {} : { previous }),
+          },
+        })
       }
-    } catch {
-      // Balance failures keep the current projection; the panel already
-      // renders the honest degrade text from the balance snapshot itself.
+    } catch (error) {
+      if (this.disposed || generation !== this.balanceGeneration) return
+      this.setState({
+        ...this.state,
+        balance: {
+          status: 'error',
+          message: error instanceof Error ? error.message : 'tokenUsage balance refresh failed',
+          ...(previous === undefined ? {} : { previous }),
+        },
+      })
     }
   }
 }

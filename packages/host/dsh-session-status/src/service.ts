@@ -59,19 +59,40 @@ export class SessionStatusService {
     const runtime = this.lookup.runtime?.(sessionRef) ?? undefined
     const tokenMeter = this.lookup.tokenMeter?.(sessionRef) ?? undefined
     this.revision += 1
-    const snapshot: SessionStatusSnapshotV1 = assembleSessionStatusSnapshot({
-      session: identity,
-      runtime,
-      tokenMeter,
-      adapters: this.adapters,
-      generatedAt: this.now().toISOString(),
-      revision: this.revision,
-    })
+    let snapshot: SessionStatusSnapshotV1
+    try {
+      snapshot = assembleSessionStatusSnapshot({
+        session: identity,
+        runtime,
+        tokenMeter,
+        adapters: this.adapters,
+        generatedAt: this.now().toISOString(),
+        revision: this.revision,
+      })
+    } catch {
+      // A ref that passes the shape check but carries credential-shaped or
+      // otherwise forbidden text (or a source row that does) must degrade to
+      // a typed failure, never a throw across the wire.
+      return {
+        ok: false,
+        code: 'invalid_session_ref',
+        message: 'Session ref is not a safe opaque identifier',
+      }
+    }
     return {
       ok: true,
       specVersion: SESSION_STATUS_SPEC_VERSION,
       snapshot,
     }
+  }
+
+  /**
+   * Advance the revision clock after an owner source change notification.
+   * Snapshots stay live-read; this keeps the revision honest for consumers
+   * comparing revisions across reads.
+   */
+  noteSourceChange(): void {
+    this.revision += 1
   }
 
   unavailable(sessionRef: string, reason: string): SessionStatusSnapshotV1 {

@@ -10,11 +10,16 @@
  * @module @yeisme/dsh-client-ui-token-usage/client/remote-contribution
  */
 
-import type {
-  TokenBalanceSnapshotV1,
-  TokenBucketsV1,
-  TokenUsageRefreshAnswerV1,
-  TokenUsageSnapshotAnswerV1,
+import {
+  parseSessionInsightsQueryInput,
+  parseSessionInsightsQueryResult,
+  parseTokenUsageCapabilitiesAnswer,
+  type SessionInsightsQueryResultV1,
+  type TokenBalanceSnapshotV1,
+  type TokenBucketsV1,
+  type TokenUsageCapabilitiesAnswerV1,
+  type TokenUsageRefreshAnswerV1,
+  type TokenUsageSnapshotAnswerV1,
 } from '../wire.ts'
 
 interface MinimalSchema<Output> {
@@ -31,9 +36,14 @@ export interface TokenUsageInvocationDescriptor {
   readonly id: string
   readonly service: 'tokenUsage'
   readonly namespace: 'tokenUsage'
-  readonly method: 'snapshot' | 'refreshBalance'
+  readonly method: 'snapshot' | 'refreshBalance' | 'capabilities' | 'query'
   readonly invocation: { readonly kind: 'direct' }
-  readonly parameters: readonly []
+  readonly parameters: readonly {
+    readonly name: string
+    readonly wire: string
+    readonly source: 'json'
+    readonly codec: StrictCodec
+  }[]
   readonly result: StrictCodec
 }
 
@@ -120,6 +130,28 @@ const refreshAnswerSchema: MinimalSchema<TokenUsageRefreshAnswerV1> = {
   },
 }
 
+const capabilitiesAnswerSchema: MinimalSchema<TokenUsageCapabilitiesAnswerV1> = {
+  parse(value: unknown): TokenUsageCapabilitiesAnswerV1 {
+    const parsed = parseTokenUsageCapabilitiesAnswer(value)
+    if (parsed === null) throw new TypeError('tokenUsage.capabilities answer failed validation')
+    return { ok: true, specVersion: '1.0', capabilities: parsed }
+  },
+}
+
+const queryInputSchema: MinimalSchema<unknown> = {
+  parse(value: unknown): unknown {
+    return parseSessionInsightsQueryInput(value)
+  },
+}
+
+const queryAnswerSchema: MinimalSchema<SessionInsightsQueryResultV1> = {
+  parse(value: unknown): SessionInsightsQueryResultV1 {
+    const parsed = parseSessionInsightsQueryResult(value)
+    if (parsed === null) throw new TypeError('tokenUsage.query answer failed validation')
+    return parsed
+  },
+}
+
 export const tokenUsageRemoteContribution: TokenUsageRemoteContribution = {
   package: '@yeisme/dsh-token-usage-host',
   descriptors: [
@@ -140,6 +172,26 @@ export const tokenUsageRemoteContribution: TokenUsageRemoteContribution = {
       invocation: { kind: 'direct' },
       parameters: [],
       result: { mode: 'strict', typeSymbol: 'TokenUsageRefreshAnswerV1', schema: refreshAnswerSchema },
+    },
+    {
+      id: '@yeisme/dsh-token-usage-host/tokenUsage.capabilities@1',
+      service: 'tokenUsage',
+      namespace: 'tokenUsage',
+      method: 'capabilities',
+      invocation: { kind: 'direct' },
+      parameters: [],
+      result: { mode: 'strict', typeSymbol: 'TokenUsageCapabilitiesAnswerV1', schema: capabilitiesAnswerSchema },
+    },
+    {
+      id: '@yeisme/dsh-token-usage-host/tokenUsage.query@1',
+      service: 'tokenUsage',
+      namespace: 'tokenUsage',
+      method: 'query',
+      invocation: { kind: 'direct' },
+      parameters: [
+        { name: 'input', wire: 'input', source: 'json', codec: { mode: 'strict', typeSymbol: 'SessionInsightsQueryInputV1', schema: queryInputSchema } },
+      ],
+      result: { mode: 'strict', typeSymbol: 'SessionInsightsQueryResultV1', schema: queryAnswerSchema },
     },
   ],
 }

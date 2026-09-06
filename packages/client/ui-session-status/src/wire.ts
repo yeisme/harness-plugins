@@ -69,6 +69,27 @@ export type SessionStatusSnapshotAnswerV1 =
   | { readonly ok: true; readonly specVersion: typeof SESSION_STATUS_SPEC_VERSION; readonly snapshot: SessionStatusSnapshotV1 }
   | { readonly ok: false; readonly code: 'remote_unavailable' | 'invalid_session_ref' | 'source_unavailable'; readonly message: string }
 
+/** Capability declaration returned by the `probe` Remote method. */
+export interface SessionStatusProbeV1 {
+  readonly ok: true
+  readonly specVersion: typeof SESSION_STATUS_SPEC_VERSION
+  readonly capabilities: readonly string[]
+  /**
+   * Wire-level push subscription. False today: clients must re-read
+   * `snapshot` — manual refresh only, never a promised live feed.
+   */
+  readonly subscription: boolean
+}
+
+/** Structural parse of the probe answer; unknown shapes degrade to null. */
+export function parseSessionStatusProbe(value: unknown): SessionStatusProbeV1 | null {
+  if (!isRecord(value) || hasCredentialKey(value) || hasForbiddenText(value)) return null
+  if (value.ok !== true || value.specVersion !== SESSION_STATUS_SPEC_VERSION) return null
+  if (!Array.isArray(value.capabilities) || !value.capabilities.every(item => typeof item === 'string')) return null
+  if (typeof value.subscription !== 'boolean') return null
+  return value as unknown as SessionStatusProbeV1
+}
+
 const CREDENTIAL_KEY = /^(api[_-]?key|authorization|cookie|token|password|secret|bearer)$/iu
 const FORBIDDEN_VALUE = /(api[_-]?key|bearer\s|authorization|sk-[a-z0-9]|https?:\/\/|\/home\/|\/var\/)/iu
 const SAFE_REF = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u
