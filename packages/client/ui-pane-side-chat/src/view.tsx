@@ -110,45 +110,45 @@ export function SideChatView({ controller, sessions, currentSessionId, t }: {
       status={session !== null && session.queue.length > 0
         ? <span className="sc-badge" data-side-chat-queue={session.queue.length}>{interpolate(t('queue.count'), { count: session.queue.length })}</span>
         : undefined}
+      nav={<>
+        <label className="sc-badge" htmlFor="sc-session-select">{t('picker.label')}</label>
+        <label className="ys-field sc-session-field" htmlFor="sc-session-select">
+          <span className="sr-only">{t('picker.label')}</span>
+          <select
+            id="sc-session-select"
+            className="sc-session"
+            value={state.sessionId ?? ''}
+            onChange={event => { controller.attach(event.target.value) }}
+            data-side-chat-picker
+          >
+            <option value="">{t('picker.placeholder')}</option>
+            {sessions.map(option => <option key={option.sessionId} value={option.sessionId}>{option.displayTitle}</option>)}
+          </select>
+        </label>
+        <Button
+          type="button"
+          size="sm"
+          variant="toolbar"
+          disabled={!state.createAvailable || state.starting}
+          title={state.createAvailable ? t('action.new') : t('action.new.unavailable')}
+          onClick={() => { void controller.startNew() }}
+          data-side-chat-new
+        >{t('action.new')}</Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="toolbar"
+          disabled={currentSessionId === undefined || state.starting}
+          title={t('action.fork')}
+          onClick={() => { if (currentSessionId !== undefined) void controller.forkFrom(currentSessionId) }}
+          data-side-chat-fork
+        >{t('action.fork')}</Button>
+        {state.sessionId !== undefined
+          ? <Button type="button" size="sm" variant="toolbar" onClick={() => { controller.detach() }} data-side-chat-detach>{t('action.detach')}</Button>
+          : null}
+        {state.error !== undefined ? <span role="alert" className="sc-error-inline" data-side-chat-error>{state.error}</span> : null}
+      </>}
     />
-    <div className="sc-bar">
-      <label className="sc-badge" htmlFor="sc-session-select">{t('picker.label')}</label>
-      <label className="ys-field sc-session-field" htmlFor="sc-session-select">
-        <span className="sr-only">{t('picker.label')}</span>
-        <select
-          id="sc-session-select"
-          className="sc-session"
-          value={state.sessionId ?? ''}
-          onChange={event => { controller.attach(event.target.value) }}
-          data-side-chat-picker
-        >
-          <option value="">{t('picker.placeholder')}</option>
-          {sessions.map(option => <option key={option.sessionId} value={option.sessionId}>{option.displayTitle}</option>)}
-        </select>
-      </label>
-      <Button
-        type="button"
-        size="sm"
-        variant="toolbar"
-        disabled={!state.createAvailable || state.starting}
-        title={state.createAvailable ? t('action.new') : t('action.new.unavailable')}
-        onClick={() => { void controller.startNew() }}
-        data-side-chat-new
-      >{t('action.new')}</Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="toolbar"
-        disabled={currentSessionId === undefined || state.starting}
-        title={t('action.fork')}
-        onClick={() => { if (currentSessionId !== undefined) void controller.forkFrom(currentSessionId) }}
-        data-side-chat-fork
-      >{t('action.fork')}</Button>
-      {state.sessionId !== undefined
-        ? <Button type="button" size="sm" variant="toolbar" onClick={() => { controller.detach() }} data-side-chat-detach>{t('action.detach')}</Button>
-        : null}
-      {state.error !== undefined ? <span role="alert" className="sc-error-inline" data-side-chat-error>{state.error}</span> : null}
-    </div>
     {state.phase === 'unresolvable'
       ? <div className="ys-body"><SurfaceState phase="error" title={t('state.unresolvable')} data-side-chat-unresolvable /></div>
       : session === null
@@ -200,23 +200,22 @@ export function SideChatView({ controller, sessions, currentSessionId, t }: {
 
 const SIDE_CHAT_STYLES = `
 [data-dsh-side-chat]{display:flex;flex-direction:column;width:100%;min-height:0;height:100%}
-[data-dsh-side-chat] .sc-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;min-height:34px}
 [data-dsh-side-chat] .sc-session-field{display:block;min-width:0}
 [data-dsh-side-chat] .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-[data-dsh-side-chat] .sc-bar select,[data-dsh-side-chat] .sc-composer input{font:inherit;background:var(--vk-bg-base);color:inherit;border:1px solid var(--vk-border-l2);border-radius:8px;padding:4px 8px;min-width:0}
+[data-dsh-side-chat] .sc-session-field select,[data-dsh-side-chat] .sc-composer input{min-width:0;min-height:var(--vk-ctrl-input);padding:4px 8px;color:inherit;background:var(--vk-bg-layer-2);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-md);font:inherit}
 [data-dsh-side-chat] .sc-session{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-[data-dsh-side-chat] .sc-badge{font-size:12px;color:var(--vk-text-tertiary)}
-[data-dsh-side-chat] .sc-error-inline{margin-left:auto;color:var(--vk-state-error);font-size:12px;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-[data-dsh-side-chat] .sc-list{flex:1;min-height:120px;margin:0 10px;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;border:1px solid var(--vk-border-l2);border-radius:12px;background:var(--vk-bg-layer-1)}
-[data-dsh-side-chat] .sc-row{padding:8px 10px;border-radius:10px;font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+[data-dsh-side-chat] .sc-badge{font-size:var(--vk-font-small);color:var(--vk-text-tertiary)}
+[data-dsh-side-chat] .sc-error-inline{margin-left:auto;color:var(--vk-state-error);font-size:var(--vk-font-small);max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-dsh-side-chat] .sc-list{flex:1;min-height:120px;margin:0 10px;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:var(--vk-gap-md);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-lg);background:var(--vk-bg-layer-1)}
+[data-dsh-side-chat] .sc-row{padding:8px 10px;border-radius:var(--vk-radius-lg);font-size:var(--vk-font-strong);line-height:1.5;white-space:pre-wrap;word-break:break-word}
 [data-dsh-side-chat] .sc-user{background:var(--vk-fill-selected);align-self:flex-end;max-width:88%}
 [data-dsh-side-chat] .sc-assistant{background:var(--vk-bg-layer-2);align-self:flex-start;max-width:95%}
-[data-dsh-side-chat] .sc-tool,[data-dsh-side-chat] .sc-unknown{background:transparent;color:var(--vk-text-tertiary);font-size:12px;padding:2px 10px;align-self:flex-start}
+[data-dsh-side-chat] .sc-tool,[data-dsh-side-chat] .sc-unknown{background:transparent;color:var(--vk-text-tertiary);font-size:var(--vk-font-small);padding:2px 10px;align-self:flex-start}
 [data-dsh-side-chat] .sc-error{background:color-mix(in srgb,var(--vk-state-error) 12%,transparent);color:var(--vk-state-error);align-self:stretch}
-[data-dsh-side-chat] .sc-tools{margin-top:6px;font-size:12px;color:var(--vk-text-tertiary)}
+[data-dsh-side-chat] .sc-tools{margin-top:6px;font-size:var(--vk-font-small);color:var(--vk-text-tertiary)}
 [data-dsh-side-chat] .sc-tools summary{cursor:pointer}
 [data-dsh-side-chat] .sc-tool-line{padding-left:12px}
 [data-dsh-side-chat] .sc-composer{display:flex;gap:6px;align-items:center;padding:8px 10px 10px}
 [data-dsh-side-chat] .sc-composer input{flex:1}
-[data-dsh-side-chat] button:focus-visible,[data-dsh-side-chat] select:focus-visible,[data-dsh-side-chat] input:focus-visible{outline:2px solid var(--vk-focus-ring);outline-offset:1px}
+[data-dsh-side-chat] button:focus-visible,[data-dsh-side-chat] select:focus-visible,[data-dsh-side-chat] input:focus-visible{outline:2px solid var(--vk-border-focus);outline-offset:1px}
 `

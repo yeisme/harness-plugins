@@ -16,14 +16,14 @@ export interface DevtoolsPanelProps {
 }
 
 const styles = `
-[data-dsh-devtools-panel]{min-height:280px;height:100%;font:13px system-ui}
+[data-dsh-devtools-panel]{min-height:280px;height:100%;font:inherit}
 [data-dsh-devtools-panel] .dt-tabs{display:flex;gap:4px;min-width:0;overflow:auto}
 [data-dsh-devtools-panel] .dt-tabs button{text-transform:capitalize}
 [data-dsh-devtools-panel] .dt-panel{min-height:0;overflow:auto}
 [data-dsh-devtools-panel] .dt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
-[data-dsh-devtools-panel] .dt-metric{display:grid;gap:4px;padding:10px;background:var(--vk-bg-layer-1);border:1px solid var(--vk-border-l2);border-radius:8px}
-[data-dsh-devtools-panel] .dt-metric span{color:var(--vk-text-tertiary)}[data-dsh-devtools-panel] .dt-metric strong{font-size:18px}
-[data-dsh-devtools-panel] .dt-findings{grid-column:1/-1;padding:10px;background:var(--vk-bg-layer-1);border:1px solid var(--vk-border-l2);border-radius:8px}
+[data-dsh-devtools-panel] .dt-metric{display:grid;gap:4px;padding:10px;background:var(--vk-bg-layer-1);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-md)}
+[data-dsh-devtools-panel] .dt-metric span{color:var(--vk-text-tertiary)}[data-dsh-devtools-panel] .dt-metric strong{font-size:var(--vk-font-title)}
+[data-dsh-devtools-panel] .dt-findings{grid-column:1/-1;padding:10px;background:var(--vk-bg-layer-1);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-md)}
 [data-dsh-devtools-panel] table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 [data-dsh-devtools-panel] th,[data-dsh-devtools-panel] td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--vk-border-l1)}
 [data-dsh-devtools-panel] td:not(:first-child){font-family:ui-monospace,monospace}

@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { HOST_THEME_ALIASES, PANEL_TOKENS } from '@yeisme/dsh-client-ui-visual-kit'
 import { createElement } from 'react'
 import { CookieManagerPanel, type CookieManagerPanelProps } from '../src/panel.tsx'
 import { cookieManagerStyles } from '../src/styles.ts'
@@ -24,11 +25,13 @@ const baseProps: CookieManagerPanelProps = {
 }
 
 describe('cookie manager visual adoption', () => {
-  it('样式串逐字节等于 kit 输出；token fallback 单点', () => {
-    const names = new Set([...cookieManagerStyles.matchAll(/--dsw-alias-([a-z0-9-]+)/g)].map(m => `--dsw-alias-${m[1]}`))
-    expect(names.size).toBeGreaterThan(0)
-    for (const name of names) {
-      expect(cookieManagerStyles.split(name).length - 1, `${name} once`).toBe(1)
+  it('每个 canonical token 在根块单点声明，并保留 canonical → official host → fallback 顺序', () => {
+    for (const [canonical, fallback] of Object.entries(PANEL_TOKENS)) {
+      const host = HOST_THEME_ALIASES[canonical]
+      const declaration = host === undefined
+        ? `--vk-${canonical}:var(--dsw-alias-${canonical},${fallback})`
+        : `--vk-${canonical}:var(--dsw-alias-${canonical},var(--dsw-alias-${host},${fallback}))`
+      expect(cookieManagerStyles.split(declaration).length - 1, `${canonical} root declaration once`).toBe(1)
     }
     expect(cookieManagerStyles).toContain('[data-dsh-cookie-manager] .cm-row{')
     expect(cookieManagerStyles).toContain('[data-dsh-cookie-manager] .sr-only{')

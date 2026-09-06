@@ -59,6 +59,7 @@ Ordo 是 run/task/session/lease/approval/verification/evidence/closeout 的唯�
 ## Skill Triggers
 
 - 本项目 active skills 由根目录 `.skills/profiles/targets/agent/harness-plugins.txt` 声明，并由 `scripts/skills.sh sync-target agent/harness-plugins` 生成到 `.agents/skills/` 与 `.claude/skills/`；不得再把 runtime 副本当作 skill 源码。
+- 新增、修改或评审任何 React/Web UI 前，必须先读取 `docs/design/dsh-unified-panel-visual-system.md`。完整 surface 使用 `ui-surface`，嵌入 renderer 使用 `ui-visual-kit` token；所属 `design.md` 必须填写该文档 §12 的 UI Contract，并运行 `pnpm run check:surfaces`、`pnpm run test:visual` 与 `pnpm run check:plugins`。
 - 设计/实现/评审 Ordo Agent Ops 适配：使用 `dsh-ordo-agent-ops`。
 - 创建/评审 DSH UI 插件：参考上游 deepseek-ai/deepseek-harness 的 dsh-plugin-experience skill（经 PR staging worktree 或上游仓读取）。
 - 决定 owner 边界：遵循本仓库 openspec/changes/ordo-dsh-plugin-visualization-v1/。

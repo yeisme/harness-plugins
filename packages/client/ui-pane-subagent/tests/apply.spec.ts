@@ -21,7 +21,7 @@ function fakeCtx(options: { pane?: { registerView: ReturnType<typeof vi.fn>; ope
   }
   const sessions = {
     list: {
-      getSnapshot: () => ({ current: 's-1', byId: {}, subagentsByParent: {} }),
+      getSnapshot: () => ({ current: 's-1' as string | undefined, byId: {}, subagentsByParent: {} }),
       subscribe: () => () => {},
     },
     openSubagent: vi.fn(),
@@ -43,6 +43,7 @@ function fakeCtx(options: { pane?: { registerView: ReturnType<typeof vi.fn>; ope
   ])
   if (options.pane !== undefined) services.set('paneWorkbench', options.pane)
   return {
+    sessions,
     registered,
     pane: options.pane,
     ctx: {
@@ -64,6 +65,18 @@ function fakeCtx(options: { pane?: { registerView: ReturnType<typeof vi.fn>; ope
 }
 
 describe('Subagent Monitor apply', () => {
+  it('explains why Agents is unavailable before a session is selected', () => {
+    const pane = { registerView: vi.fn(() => vi.fn()), openView: vi.fn() }
+    const host = fakeCtx({ pane })
+    host.sessions.list.getSnapshot = () => ({ current: undefined, byId: {}, subagentsByParent: {} })
+    const dispose = apply(host.ctx as never)
+    render(host.registered[0]!.component?.() as never)
+    const button = screen.getByRole('button', { name: /Start or select a session/ })
+    expect(button.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(button)
+    expect(pane.openView).not.toHaveBeenCalled()
+    dispose()
+  })
   it('does not make the optional Pane Workbench capability a loader dependency', () => {
     expect(inject).toEqual(['sessions', 'connection', 'slots'])
   })

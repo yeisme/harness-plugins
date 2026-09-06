@@ -25,6 +25,12 @@ function snapshot(overrides: Record<string, unknown> = {}) {
 }
 
 describe('conversation completion fallback', () => {
+  it('degrades to null on the 0.1.2 session-shell snapshot without conversation fields', () => {
+    expect(conversationRecapFromSnapshot({ openState: 'open' } as never)).toBeNull()
+    expect(conversationRecapFromSnapshot({ openState: 'open', nodes: [] } as never)).toBeNull()
+    expect(conversationRecapFromSnapshot(null as never)).toBeNull()
+  })
+
   it('builds a bounded recap from finalized text only', () => {
     const recap = conversationRecapFromSnapshot(snapshot())
     expect(recap).toMatchObject({ id: 'turn:2:9', turn: 2 })

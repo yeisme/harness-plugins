@@ -16,26 +16,27 @@ export interface SubagentMonitorViewProps {
 
 const SUBAGENT_STYLES = `
 [data-pane-subagent-monitor]{height:100%}
-[data-pane-subagent-monitor] .psa-summary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--vk-text-tertiary);font-size:12px}
-[data-pane-subagent-monitor] .psa-tree{min-height:0;flex:1;overflow:auto;padding:6px}
-[data-pane-subagent-monitor] .psa-node{display:grid;min-width:0;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:4px;min-height:34px;border-radius:7px}
+[data-pane-subagent-monitor] .psa-summary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--vk-text-tertiary);font-size:var(--vk-font-small)}
+[data-pane-subagent-monitor] .psa-tree{min-height:0;flex:1;overflow:auto;padding:8px}
+[data-pane-subagent-monitor] .psa-node{grid-template-columns:28px minmax(0,1fr) auto;gap:4px;padding-right:6px}
 [data-pane-subagent-monitor] .psa-node:hover{background:var(--vk-fill-hover)}
-[data-pane-subagent-monitor] .psa-disclosure{width:24px;padding:0;border:0}
-[data-pane-subagent-monitor] .psa-leaf{display:grid;width:24px;place-items:center;color:var(--vk-text-quaternary)}
-[data-pane-subagent-monitor] .psa-select{display:flex;min-width:0;align-items:center;gap:7px;padding:0 6px;text-align:left}
+[data-pane-subagent-monitor] .psa-node[aria-selected='true']{background:var(--vk-fill-selected)}
+[data-pane-subagent-monitor] .psa-disclosure{flex:none}
+[data-pane-subagent-monitor] .psa-leaf{display:grid;width:28px;place-items:center;color:var(--vk-text-quaternary)}
+[data-pane-subagent-monitor] .psa-select{display:flex;min-width:0;min-height:var(--vk-ctrl-button);align-items:center;gap:6px;padding:0 4px;color:inherit;text-align:left;background:transparent;border:0;cursor:pointer}
 [data-pane-subagent-monitor] .psa-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--vk-text-primary)}
-[data-pane-subagent-monitor] .psa-badge{flex:none;padding:1px 6px;border-radius:999px;background:var(--vk-bg-layer-2);color:var(--vk-text-tertiary);font-size:10px}
+[data-pane-subagent-monitor] .psa-badge{flex:none}
 [data-pane-subagent-monitor] .psa-status[data-status='running']{background:color-mix(in srgb,var(--vk-tone-info) 18%,transparent);color:var(--vk-tone-info)}
 [data-pane-subagent-monitor] .psa-status[data-status='failed']{background:color-mix(in srgb,var(--vk-tone-critical) 16%,transparent);color:var(--vk-tone-critical)}
 [data-pane-subagent-monitor] .psa-status[data-status='completed']{background:color-mix(in srgb,var(--vk-tone-positive) 16%,transparent);color:var(--vk-tone-positive)}
-[data-pane-subagent-monitor] .psa-metrics{color:var(--vk-text-quaternary);font-size:11px;white-space:nowrap}
-[data-pane-subagent-monitor] .psa-open{margin-right:2px;padding:0 7px;color:var(--vk-text-tertiary);font-size:11px}
+[data-pane-subagent-monitor] .psa-metrics{color:var(--vk-text-quaternary);font-size:var(--vk-font-small);white-space:nowrap}
+[data-pane-subagent-monitor] .psa-open{margin-right:0;color:var(--vk-text-tertiary)}
 [data-pane-subagent-monitor] .psa-detail-head{display:flex;align-items:center;gap:8px}
 [data-pane-subagent-monitor] .psa-detail-head strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 [data-pane-subagent-monitor] .psa-detail-actions{display:flex;flex-wrap:wrap;gap:6px}
 [data-pane-subagent-monitor] .psa-followup{display:flex;min-width:0;gap:6px}
-[data-pane-subagent-monitor] .psa-followup input{min-width:0;flex:1}
-[data-pane-subagent-monitor] .psa-feedback{color:var(--vk-text-tertiary);font-size:12px}
+[data-pane-subagent-monitor] .psa-followup input{min-width:0;min-height:var(--vk-ctrl-input);flex:1;padding:0 9px;color:var(--vk-text-primary);background:var(--vk-bg-layer-2);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-md)}
+[data-pane-subagent-monitor] .psa-feedback{color:var(--vk-text-tertiary);font-size:var(--vk-font-small)}
 `
 
 const STATUS_LABEL: Record<SubagentStatus, string> = {
@@ -68,7 +69,7 @@ function NodeRow(props: {
   const disclosure = props.node.hasChildren
     ? createElement(Button, {
       type: 'button',
-      className: 'psa-disclosure',
+      className: 'psa-disclosure vk-icon-btn',
       'aria-label': `${isExpanded ? '折叠' : '展开'} ${props.node.label}`,
       'aria-expanded': isExpanded,
       onClick: () => props.onToggle(props.node.ref),
@@ -85,21 +86,26 @@ function NodeRow(props: {
     'aria-level': props.node.depth + 1,
     'aria-selected': props.selected,
     'aria-expanded': props.node.hasChildren ? isExpanded : undefined,
-    className: 'psa-node',
+    className: 'psa-node ys-row',
     'data-pane-subagent-node': props.node.ref,
     'data-pane-subagent-status': props.node.status,
-    style: { paddingLeft: `${props.node.depth * 16}px` },
+    style: { paddingLeft: `${8 + props.node.depth * 16}px` },
   },
     disclosure,
-    createElement(Button, { type: 'button', className: 'psa-select', onClick: () => props.onSelect(props.node) },
+    createElement(Button, {
+      type: 'button',
+      className: 'psa-select',
+      'aria-label': `${props.node.label}${props.node.mode === 'continuable' ? '可继续' : '单次'}${STATUS_LABEL[props.node.status]}`,
+      onClick: () => props.onSelect(props.node),
+    },
       createElement('span', { className: 'psa-label', 'data-pane-subagent-label': true }, props.node.label),
-      createElement('span', { className: 'psa-badge', 'data-pane-subagent-mode': true }, props.node.mode === 'continuable' ? '可继续' : '单次'),
-      createElement('span', { className: 'psa-badge psa-status', 'data-status': props.node.status, 'data-pane-subagent-status-text': true }, STATUS_LABEL[props.node.status]),
+      createElement('span', { className: 'psa-badge vk-badge', 'data-pane-subagent-mode': true }, props.node.mode === 'continuable' ? '可继续' : '单次'),
+      createElement('span', { className: 'psa-badge psa-status vk-badge', 'data-status': props.node.status, 'data-pane-subagent-status-text': true }, STATUS_LABEL[props.node.status]),
       metrics === '' ? null : createElement('span', { className: 'psa-metrics', 'data-pane-subagent-metrics': true }, metrics),
     ),
     createElement(Button, {
       type: 'button',
-      className: 'psa-open',
+      className: 'psa-open vk-btn',
       'aria-label': `在主会话打开 ${props.node.label}`,
       onClick: () => props.onOpen(props.node),
     }, '打开'),
@@ -156,7 +162,7 @@ export function SubagentMonitorView(props: SubagentMonitorViewProps): ReactNode 
       status: createElement('span', { className: 'psa-summary', role: 'status', 'aria-live': 'polite' }, summary),
       actions: createElement(Button, {
         type: 'button',
-        className: 'psa-refresh',
+        className: 'psa-refresh vk-btn',
         disabled: projection.rootSessionId === '',
         onClick: () => props.controller.refresh(),
       }, '刷新'),
@@ -190,21 +196,23 @@ export function SubagentMonitorView(props: SubagentMonitorViewProps): ReactNode 
       ? null
       : createElement('div', { className: 'ys-body' }, createElement(SurfaceSection, { className: 'psa-detail', title: selected.label, 'data-pane-subagent-detail': selected.ref },
         createElement('div', { className: 'psa-detail-head' },
-          createElement('span', { className: 'psa-badge psa-status', 'data-status': selected.status }, STATUS_LABEL[selected.status]),
+          createElement('span', { className: 'psa-badge psa-status vk-badge', 'data-status': selected.status }, STATUS_LABEL[selected.status]),
         ),
         createElement('div', { className: 'psa-detail-actions' },
           createElement(Button, {
             type: 'button',
+            className: 'vk-btn',
             onClick: () => {
               void props.controller.peek(selected).then(result => {
                 setFeedback(result.ok ? result.summary ?? '最近记录已读取' : result.error ?? '读取失败')
               })
             },
           }, '查看最近记录'),
-          createElement(Button, { type: 'button', onClick: () => props.controller.openInMain(selected) }, '在主会话打开'),
+          createElement(Button, { type: 'button', className: 'vk-btn', onClick: () => props.controller.openInMain(selected) }, '在主会话打开'),
           selected.mode === 'continuable'
             ? createElement(Button, {
               type: 'button',
+              className: 'vk-btn',
               onClick: () => {
                 void props.controller.interrupt(selected).then(result => {
                   setFeedback(result.ok ? '已请求停止' : result.error ?? '停止失败')
@@ -224,6 +232,7 @@ export function SubagentMonitorView(props: SubagentMonitorViewProps): ReactNode 
             }),
             createElement(Button, {
               type: 'button',
+              className: 'vk-btn',
               disabled: draft.trim().length === 0,
               onClick: () => {
                 const text = draft.trim()

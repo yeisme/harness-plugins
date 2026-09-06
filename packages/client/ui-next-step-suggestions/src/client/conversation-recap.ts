@@ -30,10 +30,24 @@ function boundedSummary(text: string): string | null {
 }
 
 /**
+ * dsh web 0.1.2 splits the legacy conversation snapshot into session-shell and
+ * conversation-timeline hooks, so `useSession(state => state)` no longer carries
+ * `pending`/`turnEnds`/`nodes`. Recognize only the legacy composite; anything
+ * else degrades to “no recap” instead of crashing the dock slot.
+ */
+function isLegacyConversationSnapshot(snapshot: ConversationSnapshot): boolean {
+  return typeof snapshot === 'object' && snapshot !== null
+    && Array.isArray((snapshot as { pending?: unknown }).pending)
+    && ((snapshot as { turnEnds?: unknown }).turnEnds instanceof Map)
+    && Array.isArray((snapshot as { nodes?: unknown }).nodes)
+}
+
+/**
  * Read the latest successfully finalized assistant text without touching
  * reasoning blocks, tool payloads, provider payloads, or raw event data.
  */
 export function conversationRecapFromSnapshot(snapshot: ConversationSnapshot): ConversationRecapV1 | null {
+  if (!isLegacyConversationSnapshot(snapshot)) return null
   if (
     snapshot.openState !== 'open'
     || snapshot.removed

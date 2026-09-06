@@ -94,8 +94,7 @@ export function apply(ctx: Context): () => void {
 
   const openAgents = (): void => {
     const rootSessionId = sessions.list.getSnapshot().current
-    // No live root session: opening a fake `subagent:current` key would never
-    // match a real session again, so the launcher stays a no-op instead.
+    // Guard session changes between rendering the disabled state and clicking.
     if (rootSessionId === undefined) return
     pane?.openView({
       kind: 'subagent.monitor', resourceKey: `subagent:${rootSessionId}`,
@@ -165,7 +164,8 @@ export function apply(ctx: Context): () => void {
     }, props => createElement(AgentsLauncher, {
       wide: false,
       onOpen: openAgents,
-      ...(pane === undefined ? { disabledReason: PANE_WORKBENCH_UNAVAILABLE } : {}),
+      ...(pane === undefined ? { disabledReason: PANE_WORKBENCH_UNAVAILABLE }
+        : sessions.list.getSnapshot().current === undefined ? { disabledReason: 'Start or select a session to inspect its agents.' } : {}),
     })))
 
   const refreshPane = (nextPane: PaneWorkbenchFace | undefined): void => {
@@ -186,8 +186,13 @@ export function apply(ctx: Context): () => void {
       if (name !== 'paneWorkbench') return
       refreshPane(asPaneWorkbench(value))
     }, { global: true }))
+    const sessionEvents = subscriptionHandle(sessions.list.subscribe(() => {
+      disposeLauncher()
+      disposeLauncher = registerLauncher()
+    }))
     return () => {
       serviceEvents.unsubscribe()
+      sessionEvents.unsubscribe()
       disposeLauncher()
       disposePane()
     }
