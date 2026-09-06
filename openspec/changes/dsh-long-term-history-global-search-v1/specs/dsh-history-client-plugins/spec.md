@@ -22,34 +22,12 @@ Web SHALL 展示 title、labels、workspace、updated time、archived 状态、m
 - **WHEN** connection 断开或 history capability disabled
 - **THEN** dialog 显示 offline/disabled 原因和可执行诊断动作，不清空 query、不显示空结果伪装成功
 
-### Requirement: TUI 历史搜索必须是公共插件贡献
-TUI SHALL 通过 renderer-neutral public plugin registry 注册 history commands、overlay/route、keymap、semantic view 与 effects；built-in 插件不得读取 SQLite、Host internals 或 Pi renderer objects。
+### Requirement: Web 与 CLI 使用同一结果与 receipt 语义
+Web 与 CLI SHALL 消费同一 `history.*` request/result、cursor、anchor、index state 与 mutation receipt；客户端 SHALL NOT 重排结果或乐观认定 label/archive/resume 成功。
 
-#### Scenario: 插件加载
-- **WHEN** `history-search` 插件在兼容的 TUI runtime 中加载
-- **THEN** command palette、`Ctrl+Shift+F`、`/history` 与 `/resume` 贡献可见，且所有查询只通过 typed history service port
-
-#### Scenario: 插件卸载
-- **WHEN** 插件在请求、overlay 或 focus claim 存在时卸载/重载
-- **THEN** runtime 取消 owned effects、释放 command/keymap/overlay/focus、忽略 late completion，并恢复有效的先前 focus
-
-### Requirement: TUI 保留 prompt recall 与 session search 的语义差异
-TUI MUST 保留 `Ctrl+R` 作为 prompt history recall，并 MUST 使用独立命令/快捷键承载全局 Session 搜索；每个键盘动作 SHALL 在 command palette/help 中有可见 fallback。
-
-#### Scenario: Ctrl+R
-- **WHEN** 用户按 `Ctrl+R`
-- **THEN** TUI 搜索可复用的历史 prompts，而不是切换当前 Session 或打开 global history
-
-#### Scenario: 全局历史快捷键不可编码
-- **WHEN** terminal 无法可靠编码 `Ctrl+Shift+F`
-- **THEN** `/history` 与 command palette 仍可打开同一插件 route，状态与能力不降级为静默不可达
-
-### Requirement: Web 与 TUI 使用同一结果与 receipt 语义
-Web 与 TUI SHALL 消费同一 `history.*` request/result、cursor、anchor、index state 与 mutation receipt；客户端 SHALL NOT 重排结果或乐观认定 label/archive/resume 成功。
-
-#### Scenario: 两个客户端同时观察标签修改
-- **WHEN** Web 修改标签并收到 owner receipt，同时 TUI 已连接同一 Session
-- **THEN** 两端最终投影相同 revision 与 labels，TUI 不需要读取 Web local state
+#### Scenario: 两个入口观察标签修改
+- **WHEN** Web 修改标签并收到 owner receipt，同时 CLI 读取同一 Session
+- **THEN** 两端最终投影相同 revision 与 labels，CLI 不需要读取 Web local state
 
 #### Scenario: 归档 response 丢失
 - **WHEN** archive action 已发送但客户端在 receipt 前断线
@@ -71,11 +49,7 @@ CLI SHALL 提供 `dsh history search|show|tag|archive|unarchive|reindex|doctor`�
 - **THEN** stdout 是按 seq 排序的 start/progress/end 或 error NDJSON，取消/失败返回非零退出码且不泄露正文或绝对路径
 
 ### Requirement: 客户端插件具有确定性故障降级
-Web/TUI history plugins SHALL 处理 loading、ready、loading-more、opening-session、offline、disabled、reconcile-required、partial 与 error 状态，并 SHALL 在 renderer/plugin failure 时保留 generic fallback 和 owner facts。
-
-#### Scenario: TUI renderer contribution 失败
-- **WHEN** history plugin 的专用 semantic view 渲染失败
-- **THEN** runtime 隔离该 contribution generation、显示 generic result list/diagnostic，并保持 Host search state 可检查
+Web history plugin SHALL 处理 loading、ready、loading-more、opening-session、offline、disabled、reconcile-required、partial 与 error 状态，并 SHALL 在 renderer/plugin failure 时保留 generic fallback 和 owner facts。
 
 #### Scenario: Web stale cursor
 - **WHEN** Web 加载下一页收到 `HISTORY_CURSOR_STALE`

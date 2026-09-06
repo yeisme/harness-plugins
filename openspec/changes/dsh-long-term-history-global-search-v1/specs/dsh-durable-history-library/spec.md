@@ -52,5 +52,5 @@
 - **THEN** 该事件因 `ignorable: true` 可被保留和跳过，旧 build 不得因此拒绝整个 Session
 
 #### Scenario: 关闭新插件
-- **WHEN** Web/TUI history plugin 被卸载或 full-text `openAt` 恢复为 `never`
+- **WHEN** Web history plugin 被卸载或 full-text `openAt` 恢复为 `never`
 - **THEN** 旧侧栏搜索和会话恢复合同保持原义，派生索引不成为启动依赖
