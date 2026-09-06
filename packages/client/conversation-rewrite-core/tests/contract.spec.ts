@@ -8,7 +8,7 @@ import {
 } from '../src/testing.ts'
 
 /**
- * Shared fixtures 自检：本包先以第一 consumer 身份跑通全表，Web/TUI 的
+ * Shared fixtures 自检：本包先以第一 consumer 身份跑通全表，Web 与其它 consumer 的
  * cross-surface 测试执行同一 case 表（见 specs 的 cross-surface requirement）。
  */
 describe('rewriteContractCasesV2', () => {

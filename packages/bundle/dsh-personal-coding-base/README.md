@@ -7,10 +7,17 @@ run、lease 或领域状态；每个状态仍由对应 owner 提供。
 安装：
 
 ```bash
-dsh-tui setup --source <yeisme-agent-root> --yes
+dsh plugin --profile web add @yeisme/dsh-command-experience
+dsh plugin --profile web add @yeisme/dsh-workbench-core
+dsh plugin --profile web add @yeisme/dsh-desktop-workbench
+dsh plugin --profile web add @yeisme/dsh-semantic-file-editor
+dsh plugin --profile web add @yeisme/dsh-terminal
+dsh plugin --profile web add @yeisme/dsh-devtools
+dsh plugin --profile web add @yeisme/dsh-ordo-agent-ops
+dsh plugin --profile web add @yeisme/dsh-personal-coding-base
 ```
 
-`dsh-tui setup` 会把基础包作为 composition 标记层安装，并把 TUI-safe 成员（command experience、workbench-core、terminal、Ordo）作为 sibling profile layers 安装。Desktop workbench、semantic file editor 和 DevTools 依赖 Web `webServer`，不得作为 TUI profile layer，否则 DSH 会把 pending activation 当成 fatal plugin-tree failure。不要只 `dsh plugin add` 基础包本身：DSH 不会把 `link:` 组合依赖提升到 profile `node_modules`。composition patch 只 insert 标记 id，避免 duplicate loader id。
+成员必须作为 sibling Web profile layers 显式安装。不要只安装基础包本身：DSH 不会把 `link:` 组合依赖提升到 profile `node_modules`。composition patch 只 insert 标记 id，避免 duplicate loader id。
 
 基础包不会安装创作/领域 pane。`ordo-agent-ops` 是 optional contribution：缺失或
 `run launch` capability 未到岗时只显示稳定禁用原因，不回退为 `run start`。

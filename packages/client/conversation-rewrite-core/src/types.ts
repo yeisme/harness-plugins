@@ -1,7 +1,7 @@
 /**
  * Host-neutral conversation rewrite V2 类型。
  *
- * 这些类型是 Web 与 TUI 共享的最小事实投影：Session 身份、generation、
+ * 这些类型是 Web 与其它 typed consumer 共享的最小事实投影：Session 身份、generation、
  * 消息/文本内容、turn/end 边界、能力与派生 target。core 只比较 opaque key，
  * 不解析其内部结构；数组输入一律视为 immutable，内部排序前先复制。
  *
@@ -46,7 +46,7 @@ export interface RewriteCapabilitiesV2 {
   readonly forkBeforeMessage: boolean
 }
 
-/** Edit = 修改历史 prompt；Retry = 未修改重发（TUI 未修改提交亦传 retry）。 */
+/** Edit = 修改历史 prompt；Retry = 未修改重发。 */
 export type RewriteKindV2 = 'edit' | 'retry'
 
 /**

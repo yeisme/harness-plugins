@@ -4,6 +4,7 @@
 // 见 docs/plugin-host-protocol.md）；本脚本与官方宿主集成证据互为补充。
 import { createRequire } from 'node:module'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { createElement } from 'react'
 
 let entry = null
 globalThis.window = { __ModuleLoader__: { load: (candidate) => { entry = candidate } } }
@@ -15,7 +16,12 @@ if (entry === null) throw new Error('ModuleLoader.load 未被调用')
 console.log('banner id =', entry.id)
 if (entry.id !== '@yeisme/dsh-plugin-example') throw new Error('banner id 与包名不一致')
 
-const exports_ = entry.factory(require_)
+// The Node artifact smoke supplies host primitives; the real Web acceptance
+// separately validates the official browser implementations.
+const exports_ = entry.factory(name => name === '@deepseek-ai/dsh-client-ui-primitives' ? {
+  Button: ({ children, ...props }) => createElement('button', props, children),
+  Modal: ({ open, children }) => open ? children : null,
+} : require_(name))
 console.log('exports keys =', Object.keys(exports_).join(','))
 
 // fake 宿主结构面：只实现被探测的面，记录全部注册。

@@ -48,7 +48,7 @@ for (const [binary, args] of commands) {
   if ((result.status ?? 1) !== 0) exitCode = result.status ?? 1
 }
 
-// ── pack canary：验证 files/exports/tarball 完整性并记录 digest 供 dsh-tui 消费 ──
+// ── pack canary：验证 files/exports/tarball 完整性并记录 digest ──
 const canary = { status: 'skipped' }
 try {
   const packDir = await mkdtemp(join(tmpdir(), 'rrc-pack-'))
@@ -65,7 +65,7 @@ try {
   const entries = (listing.stdout ?? '').split('\n')
   const missing = requiredFiles.filter((file) => !entries.some((entry) => entry.endsWith(file)))
   if (missing.length > 0) throw new Error(`tarball missing files: ${missing.join(', ')}`)
-  // 保留 tarball 副本到 evidence，供 dsh-tui 本地 consumer 验证使用
+  // 保留 tarball 副本到 evidence，供版本化 consumer 验证使用
   await cp(tarballPath, resolve(evidenceDir, 'artifacts', tarballName))
   canary.status = 'ok'
   canary.package = pkg.name

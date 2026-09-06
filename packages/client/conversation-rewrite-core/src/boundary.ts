@@ -114,8 +114,8 @@ function firstBoundaryDecision(
 }
 
 /**
- * Edit / TUI 历史改写的共同入口：按用户消息 seq 定位 prompt。
- * TUI 未修改提交（重发原文）同样传 `kind: 'retry'`，语义仍是 fork child 后重发。
+ * Edit / typed consumer 历史改写的共同入口：按用户消息 seq 定位 prompt。
+ * 未修改提交（重发原文）同样传 `kind: 'retry'`，语义仍是 fork child 后重发。
  */
 export function computeUserTurnTargetV2(
   snapshot: RewriteConversationSnapshotV2,

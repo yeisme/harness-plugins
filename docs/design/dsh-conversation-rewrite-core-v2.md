@@ -2,18 +2,17 @@
 
 状态：**已实施（core + Web facade）；发布为显式 operator 动作**（2026-09-02）。证据：`temp/integration-test-runs/conversation-rewrite-core-v2-20260902125803Z-806734/`（pack canary sha256 `b8ce64b5…c12`）  
 Owning change：`openspec/changes/dsh-conversation-rewrite-core-v2/`  
-首个 consumer：`client/dsh-tui` 的 `dsh-tui-v21-conversation-input-control`
 
 ## 目标
 
-现有 Web `ui-conversation-rewrite` 已把 Edit/Retry 定义为 child branch，但 pure boundary/controller 仍位于 React/DSH-specific package。Core V2 把跨 Web/TUI 必须一致的语义抽成独立、host-neutral、零 React 包：
+现有 Web `ui-conversation-rewrite` 已把 Edit/Retry 定义为 child branch，但 pure boundary/controller 仍位于 React/DSH-specific package。Core V2 把跨 Web entry point 必须一致的语义抽成独立、host-neutral、零 React 包：
 
 ```text
 owner history adapter
         -> stable rewrite boundary
         -> typed fork/prompt/activate/hydrate pipeline
         -> success or recoverable receipt
-        -> Web/TUI-specific rendering
+        -> client-specific rendering
 ```
 
 它不拥有 DSH Session，不注册 UI slot，不渲染组件，也不实现自动补偿。
@@ -25,10 +24,10 @@ owner history adapter
 | Export | Purpose |
 | --- | --- |
 | `.` | V2 snapshot、boundary、outcome helpers、controller/store |
-| `./testing` | Web/TUI 共用 synthetic contract fixtures |
+| `./testing` | Web entry points 共用 synthetic contract fixtures |
 | `./package.json` | package metadata |
 
-生产依赖为空；不得 import React、DOM、Cordis、DSH runtime/private module。Web 和 TUI adapter 各自把 owner 数据规范化成：Session/generation、message key/kind/seq/content/completed、turnEnds、running/removed 与 first-round capability。
+生产依赖为空；不得 import React、DOM、Cordis、DSH runtime/private module。Web adapters 各自把 owner 数据规范化成：Session/generation、message key/kind/seq/content/completed、turnEnds、running/removed 与 first-round capability。
 
 ## Boundary semantics
 
@@ -43,7 +42,7 @@ owner history adapter
 | image/attachment/mixed content | `not-text` |
 | removed/stale/missing boundary | matching typed disabled reason |
 
-V2 提供 `computeUserTurnTargetV2` 给 Web Edit 与 TUI historical Edit/Retry，提供 `computeRetryTargetV2` 给已由 adapter 准确寻址的 assistant。DSH Web 特有的 messageId/turn-tail heuristic 继续留在 Web adapter，不能污染公共 core。
+V2 提供 `computeUserTurnTargetV2` 给 Web Edit/Retry，提供 `computeRetryTargetV2` 给已由 adapter 准确寻址的 assistant。DSH Web 特有的 messageId/turn-tail heuristic 继续留在 Web adapter，不能污染公共 core。
 
 ## Typed owner outcomes
 
@@ -89,7 +88,7 @@ V1 facade 把 V2 的 forking/prompting/activating/hydrating 折叠成 `submittin
 
 ## Cross-surface fixtures
 
-`./testing` 提供一份 expected table，Web 和 TUI 直接运行，不能各复制一份预期。覆盖：
+`./testing` 提供一份 expected table，所有 Web entry point 直接运行，不能各复制一份预期。覆盖：
 
 - completed Edit/Retry；
 - first-round enabled/disabled；
@@ -124,10 +123,10 @@ temp/integration-test-runs/<run-id>/
 1. 新 core package 与 fixtures 独立完成；
 2. Web adapter/facade 迁移并锁旧 exports；
 3. `pnpm pack` 验证 files/exports/types；
-4. dsh-tui 使用 exact version/tarball 跑 consumer fixtures；
+4. Web consumer 使用 exact version/tarball 跑 consumer fixtures；
 5. 全部门通过后，由有权限的 operator 决定 publish。
 
-publish 是外部动作，不在自动实施范围。Web adapter 回归时恢复旧 V1 internal implementation，已发布 core 与 additive exports 保留；TUI 回归由 v16 input selector 回滚。没有 deprecation、Session migration 或数据回滚。
+publish 是外部动作，不在自动实施范围。Web adapter 回归时恢复旧 V1 internal implementation，已发布 core 与 additive exports 保留。没有 deprecation、Session migration 或数据回滚。
 
 ## Specification validation
 

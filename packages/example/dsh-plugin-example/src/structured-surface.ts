@@ -12,7 +12,7 @@ export function createExampleStructuredSurfaceV1(options: { readonly available?:
     id: 'example.structured-surface',
     owner: 'dsh-plugin-example',
     generation: 1,
-    surfaces: ['web', 'tui'],
+    surfaces: ['web'],
     commands: [{
       id: 'example.inspect',
       canonical_name: '/example',

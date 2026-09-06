@@ -1,6 +1,6 @@
 # @yeisme/dsh-client-ui-conversation-rewrite-core
 
-Host-neutral conversation rewrite core V2：稳定边界决策、typed owner outcome 与分阶段 fork/prompt/activate mutation controller。零 React、零 DOM、零 DSH runtime 依赖，由 Web（`@yeisme/dsh-client-ui-conversation-rewrite`）与 TUI（`client/dsh-tui` v21）共享。
+Host-neutral conversation rewrite core V2：稳定边界决策、typed owner outcome 与分阶段 fork/prompt/activate mutation controller。零 React、零 DOM、零 DSH runtime 依赖，由 Web adapter 消费。
 
 ## V2 boundary
 
@@ -21,7 +21,7 @@ if (decision.ok) {
 }
 ```
 
-- `computeUserTurnTargetV2` 是 Web Edit 与 TUI 历史改写的共同入口；TUI 未修改提交传 `kind: 'retry'`。
+- `computeUserTurnTargetV2` 是 Web Edit 与其它 typed consumer 历史改写的共同入口；未修改提交传 `kind: 'retry'`。
 - `computeRetryTargetV2` 只接受 adapter 已精确解析的 assistant key；Web 的 single-tail 启发式留在 adapter。
 - 稳定边界规则只有一个：目标 prompt 之前最近的 `turn/end`；`boundarySeq=null` 仅在首轮且能力可用时成为可执行 target。
 - 纯函数：同输入两次调用产生深相等结果，输入数组不被修改。

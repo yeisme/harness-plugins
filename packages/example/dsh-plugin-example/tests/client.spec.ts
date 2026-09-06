@@ -121,6 +121,9 @@ describe('pane seam missing (overlay degrade)', () => {
     apply(harness.ctx)
     expect(harness.views.map(view => view.slot).sort()).toEqual(['conversation.session.header.actions', 'shell.overlay'])
     expect(panelPlacement({ slots: probeCapability(() => ({})), pane: probeCapability(() => undefined) })).toBe('overlay')
+    const overlay = harness.views.find(view => view.slot === 'shell.overlay')
+    const markup = renderToStaticMarkup(overlay?.component?.() as ReactElement)
+    expect(markup).not.toContain('data-dsh-plugin-example-panel')
   })
 })
 

@@ -15,7 +15,9 @@
  * @module @yeisme/dsh-plugin-example/client
  */
 
-import { createElement, type ReactNode } from 'react'
+import { createElement, useEffect, useState, type ReactNode } from 'react'
+import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Surface, SurfaceContextBar, SurfaceSection } from '@yeisme/dsh-client-ui-surface'
 import { degradeReason, probeCapability, type ProbeResult } from '../probe.js'
 import type { ExampleWireSnapshot } from '../wire.js'
 
@@ -87,7 +89,7 @@ function acquirePane(ctx: unknown): PaneWorkbenchFace | undefined {
   return candidate as unknown as PaneWorkbenchFace
 }
 
-// ── 面板与入口（纯函数组件：探测结果在 apply 时定格，无 hooks）──────────────
+// ── 面板与入口（探测结果在 apply 时定格；浮层只持有打开状态）──────────────
 
 /** 面板可见的探测行：每个 seam 一行，缺什么、为什么，明说。 */
 export interface ExampleProbeRow {
@@ -116,9 +118,10 @@ export function buildProbeRows(probes: {
 
 export function ExamplePanel({ rows }: { readonly rows: readonly ExampleProbeRow[] }): ReactNode {
   return createElement(
-    'section',
-    { 'data-dsh-plugin-example-panel': true, 'aria-label': 'DSH plugin example' },
-    createElement('h2', { 'data-dsh-plugin-example-title': true }, 'DSH Plugin Example'),
+    Surface,
+    { kind: 'inspector', 'data-dsh-plugin-example-panel': true, 'aria-label': 'DSH plugin example' },
+    createElement(SurfaceContextBar, { title: 'DSH Plugin Example' }),
+    createElement(SurfaceSection, { title: 'Host capabilities', className: 'ys-body' },
     createElement(
       'p',
       { 'data-dsh-plugin-example-note': true },
@@ -126,7 +129,7 @@ export function ExamplePanel({ rows }: { readonly rows: readonly ExampleProbeRow
     ),
     createElement(
       'ul',
-      { 'data-dsh-plugin-example-probes': true },
+      { className: 'ys-list', 'data-dsh-plugin-example-probes': true },
       ...rows.map(row =>
         createElement(
           'li',
@@ -134,6 +137,7 @@ export function ExamplePanel({ rows }: { readonly rows: readonly ExampleProbeRow
           `${row.seam}: ${row.status} — ${row.detail}`,
         ),
       ),
+    ),
     ),
   )
 }
@@ -154,6 +158,7 @@ export function apply(ctx: unknown): () => void {
   const disabledReason = dataProbe.status === 'available' ? '' : degradeReason(dataProbe)
 
   const disposers: Array<() => void> = []
+  let openOverlay = (): void => {}
 
   // 面板落位：pane seam 优先，缺席降级 overlay 座位；两者都缺 → 面板不出现。
   const panel = (): ReactNode => createElement(ExamplePanel, { rows })
@@ -173,8 +178,16 @@ export function apply(ctx: unknown): () => void {
   } else if (slotsProbe.status === 'available') {
     const slots = slotsProbe.capability
     const register = slots.register.bind(slots)
+    function ExampleOverlay(): ReactNode {
+      const [open, setOpen] = useState(false)
+      useEffect(() => {
+        openOverlay = () => setOpen(true)
+        return () => { openOverlay = () => {} }
+      }, [])
+      return createElement(Modal, { open, onClose: () => setOpen(false), title: 'DSH Plugin Example' }, panel())
+    }
     disposers.push(slots.inject('shell.overlay', () =>
-      register({ name: 'shell.overlay', id: 'yeisme.dsh-plugin-example.panel', order: 95, label: 'Example' }, panel)))
+      register({ name: 'shell.overlay', id: 'yeisme.dsh-plugin-example.panel', order: 95, label: 'Example' }, () => createElement(ExampleOverlay))))
   }
 
   // header 入口：可见；数据 seam 未到岗时禁用 + 可读原因（不伪造可用）。
@@ -192,8 +205,7 @@ export function apply(ctx: unknown): () => void {
           singleton: true,
           title: 'Example',
         })
-      }
-      // overlay 降级路径：面板常驻 overlay 座位，open 无需额外动作。
+      } else openOverlay()
     }
     disposers.push(slots.inject('conversation.session.header.actions', () =>
       register(
@@ -213,10 +225,10 @@ export function apply(ctx: unknown): () => void {
           const enabled = face.isReady?.() ?? false
           const reason = face.disabledReason?.() ?? 'example data seam missing'
           return createElement(
-            'button',
+            Button,
             {
               type: 'button',
-              'data-dsh-plugin-example-open': true,
+              ...{ 'data-dsh-plugin-example-open': true },
               disabled: !enabled,
               title: enabled ? 'DSH plugin example' : reason,
               onClick: () => {

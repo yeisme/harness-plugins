@@ -4,7 +4,7 @@ import type { ProbeResult } from './probe.js'
 export const DSH_PLUGIN_SURFACE_CONTRACT_V1 = 'dsh.plugin.surface.v1' as const
 
 export type DshPluginSurfaceContractVersionV1 = typeof DSH_PLUGIN_SURFACE_CONTRACT_V1
-export type DshPluginSurfaceTargetV1 = 'web' | 'tui'
+export type DshPluginSurfaceTargetV1 = 'web'
 export type DshPluginViewKindV1 = 'status' | 'list' | 'table' | 'detail' | 'timeline' | 'diff'
 export type DshPluginActionEffectV1 = 'read' | 'mutation' | 'external_write' | 'danger'
 export type DshPluginActionRiskV1 = 'low' | 'medium' | 'high' | 'critical'
@@ -115,7 +115,7 @@ export type DshPluginSurfaceDecodeResultV1<T> =
   | { readonly ok: false; readonly code: DshPluginSurfaceDecodeErrorCodeV1; readonly reason: string }
 
 const VIEW_KINDS = new Set<DshPluginViewKindV1>(['status', 'list', 'table', 'detail', 'timeline', 'diff'])
-const TARGETS = new Set<DshPluginSurfaceTargetV1>(['web', 'tui'])
+const TARGETS = new Set<DshPluginSurfaceTargetV1>(['web'])
 const EFFECTS = new Set<DshPluginActionEffectV1>(['read', 'mutation', 'external_write', 'danger'])
 const RISKS = new Set<DshPluginActionRiskV1>(['low', 'medium', 'high', 'critical'])
 const PREVIEW_POLICIES = new Set<DshPluginPreviewPolicyV1>(['none', 'owner_preview_required'])

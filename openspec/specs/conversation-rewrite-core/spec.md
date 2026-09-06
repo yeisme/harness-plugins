@@ -1,13 +1,13 @@
 # conversation-rewrite-core Specification
 
 ## Purpose
-TBD - created by archiving change dsh-conversation-rewrite-core-v2. Update Purpose after archive.
+Define a host-neutral conversation rewrite core for Web and typed consumers without React, DOM, or private DSH runtime dependencies.
 ## Requirements
 ### Requirement: Core SHALL use host-neutral immutable rewrite inputs
 
 `@yeisme/dsh-client-ui-conversation-rewrite-core` SHALL expose plain TypeScript types for Session identity, generation, messages, text parts, turn ends, capabilities and targets. The package MUST NOT import React, DOM APIs, DSH client runtime/private modules or UI slot types. Boundary functions SHALL be pure and MUST NOT perform mutation, I/O or global state access.
 
-#### Scenario: Core is consumed in Node/TUI
+#### Scenario: Core is consumed in Node
 - **WHEN** a consumer imports the package in a Node-only process without React or DSH Web packages
 - **THEN** typecheck, tests and build SHALL succeed
 - **AND** package source/output SHALL contain no React, DOM or DSH private-runtime import
@@ -116,12 +116,11 @@ Core observable state, errors, recovery receipts, test evidence and logs MUST NO
 - **THEN** it SHALL continue returning/settling the existing disabled/error behavior
 - **AND** the compatibility facade SHALL NOT expose a fabricated child
 
-### Requirement: Web and TUI adapters SHALL pass one cross-surface fixture suite
+### Requirement: Web adapters SHALL pass one shared fixture suite
 
-The repository SHALL publish host-neutral fixtures and expected decisions/results for completed Edit, completed Retry, first-round enabled/disabled, running, non-text, removed, stale, fork unknown, prompt rejected/unknown and activation/hydration failure. Web and TUI adapters SHALL map their owner data into these fixtures without changing expected boundary, reason or recovery classification.
+The repository SHALL publish host-neutral fixtures and expected decisions/results for completed Edit, completed Retry, first-round enabled/disabled, running, non-text, removed, stale, fork unknown, prompt rejected/unknown and activation/hydration failure. Web adapters SHALL map their owner data into these fixtures without changing expected boundary, reason or recovery classification.
 
 #### Scenario: Cross-surface parity runs
-- **WHEN** Web and TUI adapter tests execute the shared fixtures
-- **THEN** both SHALL produce identical target boundary, availability and stage/outcome classifications
+- **WHEN** Web adapter tests execute the shared fixtures
+- **THEN** each entry point SHALL produce identical target boundary, availability and stage/outcome classifications
 - **AND** UI-specific labels/layout MAY differ without changing mutation order or safety rules
-

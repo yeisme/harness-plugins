@@ -40,8 +40,8 @@ export interface PersonalCodingContractFixtureV1 {
 }
 
 const BASE_COMMANDS: readonly Omit<PersonalCodingCommandFixtureV1, 'available' | 'disabled_reason_code'>[] = [
-  { id: 'candidate.diff', canonical_name: '/diff', aliases: [], owner: 'dsh-tui', action_kind: 'candidate.inspect' },
-  { id: 'candidate.review', canonical_name: '/review', aliases: [], owner: 'dsh-tui', action_kind: 'candidate.review' },
+  { id: 'candidate.diff', canonical_name: '/diff', aliases: [], owner: 'dsh', action_kind: 'candidate.inspect' },
+  { id: 'candidate.review', canonical_name: '/review', aliases: [], owner: 'dsh', action_kind: 'candidate.review' },
   { id: 'session.resume', canonical_name: '/resume', aliases: ['/r'], owner: 'dsh', action_kind: 'session.resume' },
   { id: 'session.manage', canonical_name: '/session', aliases: ['/sessions'], owner: 'dsh', action_kind: 'session.manage' },
   { id: 'plugins.inspect', canonical_name: '/plugins', aliases: [], owner: 'harness-plugins', action_kind: 'plugins.inspect' },
@@ -60,13 +60,13 @@ export function createPersonalCodingContractFixtureV1(options: { readonly ordo_r
         }
       : { ...command, available: true }),
     views: [
-      { id: 'candidate.status', owner: 'dsh-tui', kind: 'status', presentation: options.web_views_available === true ? 'available' : 'retained-next' },
-      { id: 'candidate.files', owner: 'dsh-tui', kind: 'list', presentation: options.web_views_available === true ? 'available' : 'retained-next' },
-      { id: 'candidate.diff', owner: 'dsh-tui', kind: 'diff', presentation: options.web_views_available === true ? 'available' : 'retained-next' },
+      { id: 'candidate.status', owner: 'dsh', kind: 'status', presentation: options.web_views_available === true ? 'available' : 'retained-next' },
+      { id: 'candidate.files', owner: 'dsh', kind: 'list', presentation: options.web_views_available === true ? 'available' : 'retained-next' },
+      { id: 'candidate.diff', owner: 'dsh', kind: 'diff', presentation: options.web_views_available === true ? 'available' : 'retained-next' },
     ],
     actions: [{
       id: 'candidate.apply',
-      owner: 'dsh-tui',
+      owner: 'dsh',
       effect: 'mutation',
       risk: 'high',
       expected_revision: 'candidate-r1',
@@ -83,7 +83,7 @@ export interface PersonalCodingParityIssueV1 {
   readonly field: string
 }
 
-/** 比较语义字段；presentation 可不同，因此不比较 Web/TUI 的渲染可用度。 */
+/** 比较语义字段；presentation 可不同，因此不比较 Web 渲染可用度。 */
 export function comparePersonalCodingContractSemanticsV1(left: PersonalCodingContractFixtureV1, right: PersonalCodingContractFixtureV1): readonly PersonalCodingParityIssueV1[] {
   const issues: PersonalCodingParityIssueV1[] = []
   compareRows('commands', left.commands, right.commands, ['canonical_name', 'aliases', 'owner', 'action_kind', 'available', 'disabled_reason_code'], issues)

@@ -15,7 +15,7 @@ function fixture(): DshPluginSurfaceContributionV1 {
     id: 'personal-coding.core',
     owner: 'harness-plugins',
     generation: 7,
-    surfaces: ['web', 'tui'],
+    surfaces: ['web'],
     commands: [{
       id: 'ordo.run.launch',
       canonical_name: '/ordo run launch',
@@ -35,7 +35,7 @@ function fixture(): DshPluginSurfaceContributionV1 {
     ],
     actions: [{
       id: 'candidate.apply',
-      owner: 'dsh-tui',
+      owner: 'dsh',
       label: 'Apply candidate',
       effect: 'mutation',
       risk: 'high',
@@ -57,7 +57,7 @@ function fixture(): DshPluginSurfaceContributionV1 {
 }
 
 describe('structured surface V1', () => {
-  it('keeps all six view kinds and round-trips the host/TUI structural mirror', () => {
+  it('keeps all six view kinds and round-trips the host/Web structural mirror', () => {
     expectTypeOf<DshPluginViewKindV1>().toEqualTypeOf<'status' | 'list' | 'table' | 'detail' | 'timeline' | 'diff'>()
     const input = fixture()
     const decoded = decodeDshPluginSurfaceContributionV1(JSON.parse(JSON.stringify(input)))
@@ -101,7 +101,7 @@ describe('action receipt V1', () => {
       contract_version: DSH_PLUGIN_SURFACE_CONTRACT_V1,
       action_id: 'candidate.apply',
       action_ref: 'action:apply:7',
-      owner: 'dsh-tui',
+      owner: 'dsh',
       status: 'applied',
       revision: 'r8',
       receipt_ref: 'receipt:8',

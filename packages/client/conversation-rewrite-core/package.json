@@ -1,7 +1,7 @@
 {
   "name": "@yeisme/dsh-client-ui-conversation-rewrite-core",
   "version": "0.1.0-rc.1",
-  "description": "Host-neutral conversation rewrite core V2: stable boundary decisions, typed owner outcomes and staged fork/prompt/activate controller shared by Web and TUI",
+  "description": "Host-neutral conversation rewrite core V2: stable boundary decisions, typed owner outcomes and staged fork/prompt/activate controller for Web and typed consumers",
   "main": "lib/index.js",
   "scripts": {
     "test": "vitest run",

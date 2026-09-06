@@ -6,7 +6,7 @@ host+client+bundle 三层最小结构与 probe-first 降级写法。不接管 co
 
 同时提供 `DshPluginSurfaceContributionV1` 双表面参考：`/example` command、
 `list|detail|diff` 宿主渲染 view、owner-previewed `example.refresh` action、
-revision fence、receipt 与 contribution health。Web/TUI 消费同一纯数据 fixture，
+revision fence、receipt 与 contribution health。Web 消费同一纯数据 fixture，
 不传 React/DOM/ANSI renderer，也不建立 canonical state。
 
 ## 三层最小结构（同一包内演示）
@@ -65,7 +65,7 @@ pnpm --filter @yeisme/dsh-plugin-example run smoke:bundle   # 真实 lib/client.
   `useSyncExternalStore` 参照 `packages/client/ui-token-usage`。
 # Structured personal-coding surface example
 
-本 example 现在同时展示 command、`list/detail/diff` view、previewed typed action、health 与 dispose。它只注册 projection，不持有 canonical state，也不跨 Web/TUI 传递 renderer。
+本 example 现在同时展示 command、`list/detail/diff` view、previewed typed action、health 与 dispose。它只注册 projection，不持有 canonical state，也不跨边界传递 renderer。
 
 验证：
 

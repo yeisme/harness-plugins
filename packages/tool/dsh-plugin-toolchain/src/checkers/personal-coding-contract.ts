@@ -79,7 +79,7 @@ export function runPersonalCodingContractCheck(root: string): CheckerReport {
   }
   const syntheticSurface: DshPluginSurfaceContributionV1 = {
     contract_version: fixture.contract_version,
-    id: 'personal-coding.parity', owner: 'harness-plugins', generation: 1, surfaces: ['web', 'tui'],
+    id: 'personal-coding.parity', owner: 'harness-plugins', generation: 1, surfaces: ['web'],
     commands: fixture.commands,
     views: [], actions: [],
     health: optionalHealth,

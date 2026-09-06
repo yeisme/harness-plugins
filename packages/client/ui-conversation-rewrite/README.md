@@ -11,7 +11,7 @@ DSH Web 会话改写客户端：把「编辑用户消息」和「重试 Assistan
 
 ## Shared Core V2（已实施）
 
-Web 与 dsh-tui 通过新包 `@yeisme/dsh-client-ui-conversation-rewrite-core` 共享 host-neutral boundary、`accepted | rejected | unknown` mutation outcome、分阶段 recovery receipt 与 contract fixtures。本 package 现在是 **adapter + view**：
+Web 通过 `@yeisme/dsh-client-ui-conversation-rewrite-core` 消费 host-neutral boundary、`accepted | rejected | unknown` mutation outcome、分阶段 recovery receipt 与 contract fixtures。本 package 现在是 **adapter + view**：
 
 - `boundary.ts` 保留 DSH-specific addressing（messageId 精确寻址 + turn-tail single-tail 启发式），映射为 V2 snapshot 后委托 core 的 `computeUserTurnTargetV2` / `computeRetryTargetV2`；V2 新增 reason（settlement-pending / stable-boundary-unavailable / stale）折回最近的 legacy reason，五个 V1 reason 与返回形状不变。
 - `ChatRewriteController` 是 V2 controller 的薄 facade：`forking|prompting|activating|hydrating → submitting`、`succeeded → opened`、`recoverable_error → error`。旧 store shape、Promise 汇合、`mutation_failed` 首轮 fail-closed 与 dispose 收敛语义保持不变。

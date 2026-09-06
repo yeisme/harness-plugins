@@ -6,7 +6,6 @@ import { homedir } from 'node:os'
 import { join, relative, resolve } from 'node:path'
 
 const projectRoot = resolve(import.meta.dirname, '..')
-const workspaceRoot = resolve(projectRoot, '../..')
 const startedAt = new Date()
 const runId = `${startedAt.toISOString().replaceAll(':', '-').replaceAll('.', '-')}-${process.pid}`
 const evidenceDir = join(projectRoot, 'temp', 'integration-test-runs', runId)
@@ -20,13 +19,11 @@ const commands = [
   ['pnpm', ['--filter', '@yeisme/dsh-client-ui-command-experience-core', 'test']],
   ['pnpm', ['--filter', '@yeisme/dsh-client-ui-command-experience-web', 'test']],
   ['node', ['scripts/check-plugins.mjs', '--only=personal-coding-contract', '--no-report']],
-  ['bun', [join(workspaceRoot, 'scripts/verify-dsh-personal-coding-contracts.ts')]],
 ]
 
 const display = ([bin, args]) => [bin, ...args].join(' ')
 const redact = value => value
   .replaceAll(projectRoot, '[PROJECT_ROOT]')
-  .replaceAll(workspaceRoot, '[WORKSPACE_ROOT]')
   .replaceAll(homedir(), '[USER_HOME]')
   .replace(/(authorization|token|password|cookie|secret)\s*[:=]\s*\S+/gi, '$1=[REDACTED]')
 
@@ -64,7 +61,7 @@ writeFileSync(join(evidenceDir, 'command.txt'), `${redact(commandText)}\n`)
 writeFileSync(join(evidenceDir, 'stdout.log'), redact(stdout))
 writeFileSync(join(evidenceDir, 'stderr.log'), redact(stderr))
 writeFileSync(join(evidenceDir, 'env.json'), `${JSON.stringify({ node: process.version, platform: process.platform, arch: process.arch, ci: process.env.CI === 'true', timezone: 'UTC' }, null, 2)}\n`)
-writeFileSync(join(artifactsDir, 'contract.txt'), 'base pack -> plugin V1 -> Web/TUI semantic parity -> Ordo preview-CAS\n')
+writeFileSync(join(artifactsDir, 'contract.txt'), 'base pack -> plugin V1 -> Web semantic contract -> Ordo preview-CAS\n')
 
 process.stdout.write(`personal coding integration evidence: ${rel(evidenceDir)}\n`)
 process.stdout.write(redact(stdout))

@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsdown'
 
 // 纯 ESM/Node 输出：`.（index）` 与 `./testing` 两个入口各自独立成单文件 bundle，
-// 不携带任何运行时依赖，供 Web 与 TUI 以相同产物消费。
+// 不携带任何运行时依赖，供 Web 与其它 typed consumer 以相同产物消费。
 const node = {
   outDir: 'lib',
   format: ['esm'],

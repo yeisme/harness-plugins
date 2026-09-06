@@ -19,8 +19,8 @@ const healthy: DshPluginContributionHealthV1 = {
 describe('personal coding contract parity', () => {
   it('keeps semantic parity while allowing Web presentation to remain retained-next', () => {
     const web = createPersonalCodingContractFixtureV1({ ordo_run_launch_available: false, web_views_available: false })
-    const tui = createPersonalCodingContractFixtureV1({ ordo_run_launch_available: false, web_views_available: true })
-    expect(comparePersonalCodingContractSemanticsV1(web, tui)).toEqual([])
+    const secondWebEntry = createPersonalCodingContractFixtureV1({ ordo_run_launch_available: false, web_views_available: true })
+    expect(comparePersonalCodingContractSemanticsV1(web, secondWebEntry)).toEqual([])
     expect(web.views.every(view => view.presentation === 'retained-next')).toBe(true)
   })
 

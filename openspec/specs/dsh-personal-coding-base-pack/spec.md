@@ -1,15 +1,15 @@
 # dsh-personal-coding-base-pack Specification
 
 ## Purpose
-TBD - created by archiving change dsh-personal-coding-plugin-platform-v1. Update Purpose after archive.
+定义 Web profile 的个人编码组合标记、显式 sibling 成员安装、可选 packs、静态发现、失败隔离与可重复组合验证边界，同时禁止基础包接管 Session、candidate、run、lease 或领域状态。
 ## Requirements
 ### Requirement: 最小完整基础 bundle
 
-仓库 SHALL 提供可由 `dsh plugin --profile tui add` 安装的 `@yeisme/dsh-personal-coding-base`，只组合黄金路径所需的 command experience、file/document、Git typed actions、terminal、devtools/diagnostics、plugin contracts 和 Ordo command projection；bundle MUST 不拥有 Session、candidate、run、lease 或领域 canonical state。
+仓库 SHALL 提供可加入 Web profile 的 `@yeisme/dsh-personal-coding-base` composition marker，并要求 command experience、file/document、Git typed actions、terminal、devtools/diagnostics、plugin contracts 和 Ordo command projection 作为显式 sibling layers 安装；bundle MUST 不拥有 Session、candidate、run、lease 或领域 canonical state。
 
 #### Scenario: 安装基础包
 
-- **WHEN** setup 将基础 bundle 加入 tui profile
+- **WHEN** operator 将基础 bundle 与成员 layers 加入 Web profile
 - **THEN** catalog/probe SHALL 报告核心 command/file/git/terminal/diagnostic 能力及其 owner，且不默认启用创作或领域 panes
 
 ### Requirement: Packs 显式且静态可发现
@@ -29,4 +29,3 @@ base/packs 的 bundle graph、insert ids、build output、safe projection 和启
 
 - **WHEN** 新 pack 引入已被基础包使用的 insert id
 - **THEN** declaration/bundle contract check SHALL 红灯并指出冲突包，catalog MUST 不把该组合标为可用
-

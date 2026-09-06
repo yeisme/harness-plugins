@@ -36,10 +36,9 @@ sdk 的 README SHALL 明示：本包面向本仓内部一致性，不向第三�
 
 ### Requirement: SDK 与宿主镜像合同测试
 
-SDK SHALL 提供 Web host、TUI structural mirror 和 example plugin 的 conformance fixtures；任一字段、enum、reason code 或 dispose 语义漂移 MUST 使 contract test 红灯。
+SDK SHALL 提供 Web host、Web consumer 和 example plugin 的 conformance fixtures；任一字段、enum、reason code 或 dispose 语义漂移 MUST 使 contract test 红灯。
 
-#### Scenario: TUI mirror 遗漏 action revision
+#### Scenario: Web consumer 遗漏 action revision
 
-- **WHEN** SDK fixture 包含 `expected_revision` 而 TUI mirror/decoder 未保留
+- **WHEN** SDK fixture 包含 `expected_revision` 而 Web consumer/decoder 未保留
 - **THEN** conformance test SHALL 红灯并指出丢失字段
-

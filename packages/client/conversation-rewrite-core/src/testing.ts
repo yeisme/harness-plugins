@@ -1,7 +1,7 @@
 /**
  * Shared host-neutral contract fixtures。
  *
- * Web 与 TUI 的 consumer 测试执行同一份 case 表，证明 boundary 决策与
+ * Web 与其它 typed consumer 测试执行同一份 case 表，证明 boundary 决策与
  * staged mutation 分类跨 surface 一致；expected 表只在本包定义一次，
  * consumer 不复制。所有文本/ID 均为虚构，不含真实 prompt、绝对路径或
  * provider payload。
