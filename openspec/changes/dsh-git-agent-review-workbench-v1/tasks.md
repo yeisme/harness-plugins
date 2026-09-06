@@ -16,7 +16,7 @@
 - [x] 3.2 实现 DSH adapter 侧 Worktree/Agent、Pause/Resume、lease blocker 与独立 owner receipt 边界
 - [x] 3.3 实现 History/Graph/Compare Inspector 和安全 workspace persistence
 - [x] 3.4 实现 Branch/Remote/Stash/Tag capability-gated 视图与明确 unavailable fallback
-- [ ] 3.5 [Owner: agent/ordo / Git owner] 发布真实 Agent launch 双 receipt 与 Branch/Remote/Stash/Tag 完整 action transport；本仓不得伪造 owner state Recheck 2026-09-04: `[external-gate skipped]` 维持——上游 HEAD `76fda729` 全树 GitTypedActions 0 命中（fork 系列 fork-ready 未合入）；agent/ordo 无 git action transport 交付 change，双 receipt 仍 owner 侧缺位。
+- [ ] 3.5 [Owner: agent/ordo / Git owner] 发布真实 Agent launch 双 receipt 与 Branch/Remote/Stash/Tag 完整 action transport；本仓不得伪造 owner state Recheck 2026-09-04: `[external-gate skipped]` 维持——上游 HEAD `76fda729` 全树 GitTypedActions 0 命中（fork 系列 fork-ready 未合入）；agent/ordo 无 git action transport 交付 change，双 receipt 仍 owner 侧缺位。 Recheck 2026-09-06: `[external-gate skipped]` 维持——上游 master HEAD 前移至 `d347e70390`（0.1.3-alpha.1），全树 GitTypedActions 仍 0 命中（fork 系列 fork-ready 未合入）；agent/ordo 无 git action transport 交付 change，双 receipt 仍 owner 侧缺位。
   - 2026-09-03 [external-gate skipped] 复核：`upstream-prs/git-typed-actions/` 维持 fork-ready（rebased 上游 master、未合入任何发布版；已装 `@deepseek-ai` 依赖中无 `GitTypedActionsCapabilityV1` 面）；agent/ordo 侧真实 review/launch transport 与 Branch/Remote/Stash/Tag action transport 仍为独立 owner 交付（design.md owner_handoff 结论不变）。本仓 3.4 capability-gated 视图 + unavailable fallback 已就绪等 seam，不伪造 owner state，维持 open。
 
 ## 4. 响应式、无障碍与性能
