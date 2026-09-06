@@ -14,3 +14,6 @@ export { FILE_ENTRY_KINDS, isFileEntry, validateFileEntry } from './types.ts'
 export type { FileEntryKind, FileEntryV1, FileEntryValidation } from './types.ts'
 export { createFileTreeHostAdapter } from './file-tree-host.ts'
 export type { FileTreeDirectoryEntryLike, FileTreeDirectoryListingLike, FileTreeHostAdapter, FileTreeListRequest } from './file-tree-host.ts'
+
+/** No-op Host lifecycle. Browser UI lives in `./client`. */
+export function apply(): void {}
