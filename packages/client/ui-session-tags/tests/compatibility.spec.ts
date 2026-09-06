@@ -3,8 +3,21 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { apply, inject, name, registerSessionTagsClient } from '../src/client/index.ts'
 import type { SessionTagsRemoteFace } from '../src/client/wire.ts'
+import { resolveSessionOrganizationRemote } from '../src/client/register.ts'
 
 afterEach(cleanup)
+
+it('degrades a guarded remote namespace instead of rejecting the panel mount', async () => {
+  const remote = new Proxy({}, { get(_target, name) {
+    if (name === '$mount') return undefined
+    throw new Error(`cannot get property remote.${String(name)} without inject`)
+  } })
+  const ctx = { get: (name: string) => {
+    if (name === 'remote') return remote
+    throw new Error('namespace not injected')
+  } }
+  await expect(resolveSessionOrganizationRemote(ctx as never)).resolves.toBeUndefined()
+})
 
 const remote: SessionTagsRemoteFace = {
   async list() { return { ok: true, specVersion: '1.0', entries: [] } },

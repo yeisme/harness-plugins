@@ -128,8 +128,8 @@ interface RemoteResultLike<T> {
 async function resolveRemote(ctx: ClientContext, override?: SessionTagsRemoteFace): Promise<SessionTagsRemoteFace> {
   if (override !== undefined) return override
   const remote = optionalLookup(ctx, 'remote')
-  const direct = isRemoteFace(remote?.sessionTags)
-  if (direct) return remote.sessionTags as SessionTagsRemoteFace
+  const direct = optionalNamespace(remote, 'sessionTags')
+  if (isRemoteFace(direct)) return direct
 
   // out-of-tree 命名空间不在 Client assembly 生成清单里：走公开 $mount 自挂。
   // $mount 失败（旧 runtime 无该 API / 服务端拒绝）→ 诚实降级，返回 undefined。
@@ -163,6 +163,12 @@ function optionalLookup(ctx: ClientContext, name: string): Record<string, unknow
   return direct === undefined || direct === null ? undefined : direct as Record<string, unknown>
 }
 
+// A remote facade may itself be a guarded Proxy; optional chaining only
+// handles nullish values, not a denied namespace getter.
+function optionalNamespace(remote: Record<string, unknown> | undefined, name: string): unknown {
+  try { return remote?.[name] } catch { return undefined }
+}
+
 function isRemoteFace(candidate: unknown): candidate is SessionTagsRemoteFace {
   return typeof candidate === 'object' && candidate !== null
     && typeof (candidate as SessionTagsRemoteFace).list === 'function'
@@ -182,7 +188,8 @@ export async function resolveSessionOrganizationRemote(
 ): Promise<SessionOrganizationRemoteFace | undefined> {
   if (override !== undefined) return override
   const remote = optionalLookup(ctx, 'remote')
-  if (isOrganizationRemoteFace(remote?.sessionOrganization)) return remote.sessionOrganization
+  const direct = optionalNamespace(remote, 'sessionOrganization')
+  if (isOrganizationRemoteFace(direct)) return direct
   const existingMounted = optionalLookup(ctx, 'remote.sessionOrganization')
   if (existingMounted !== undefined && isOrganizationRemoteFace(existingMounted)) return unwrapOrganizationNamespace(existingMounted)
   if (remote === undefined || typeof (remote as { $mount?: unknown }).$mount !== 'function') return undefined

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { HOST_THEME_ALIASES, PANEL_TOKENS } from '@yeisme/dsh-client-ui-visual-kit'
 import { sessionTagsOverlayStyles } from '../src/client/styles.ts'
 
 /**
@@ -7,11 +8,13 @@ import { sessionTagsOverlayStyles } from '../src/client/styles.ts'
  * 历史"类名定义在无处"的裸面获得统一 chrome，交互底线齐备。
  */
 describe('session tags overlay visual adoption', () => {
-  it('每个 --dsw-alias-* token 只出现一次（kit 根块单点声明）', () => {
-    const names = new Set([...sessionTagsOverlayStyles.matchAll(/--dsw-alias-([a-z0-9-]+)/g)].map(m => `--dsw-alias-${m[1]}`))
-    expect(names.size).toBeGreaterThan(0)
-    for (const name of names) {
-      expect(sessionTagsOverlayStyles.split(name).length - 1, `${name} once`).toBe(1)
+  it('每个 canonical token 在根块单点声明，并保留 canonical → official host → fallback 顺序', () => {
+    for (const [canonical, fallback] of Object.entries(PANEL_TOKENS)) {
+      const host = HOST_THEME_ALIASES[canonical]
+      const declaration = host === undefined
+        ? `--vk-${canonical}:var(--dsw-alias-${canonical},${fallback})`
+        : `--vk-${canonical}:var(--dsw-alias-${canonical},var(--dsw-alias-${host},${fallback}))`
+      expect(sessionTagsOverlayStyles.split(declaration).length - 1, `${canonical} root declaration once`).toBe(1)
     }
   })
 
@@ -31,9 +34,9 @@ describe('session tags overlay visual adoption', () => {
     }
   })
 
-  it('无同义词 token、无状态色 hex 字面量（tone 变量承载）', () => {
-    expect(sessionTagsOverlayStyles).not.toContain('--dsw-alias-label-')
-    expect(sessionTagsOverlayStyles).not.toContain('--dsw-alias-state-business-primary')
+  it('不声明同义词 token；官方 host alias 仅作为 fallback，tone 变量承载状态色', () => {
+    expect(sessionTagsOverlayStyles).not.toContain('--vk-label-')
+    expect(sessionTagsOverlayStyles).not.toContain('--vk-state-business-primary')
     expect(sessionTagsOverlayStyles).not.toContain('--dsw-alias-state-error-secondary')
     for (const hex of ['#51c58b', '#f0b45a', '#ee6b72', '#6aa8ff']) {
       expect(sessionTagsOverlayStyles.split(hex).length - 1, `${hex} once (root block only)`).toBe(1)
