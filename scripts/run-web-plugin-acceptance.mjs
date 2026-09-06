@@ -20,6 +20,10 @@ const child = spawn('dsh', ['--profile', profile, ...(hmr ? ['--patch', resolve(
 })
 let stdout = '', stderr = '', browser, exitCode = 0
 const errors = [], responses = [], surfaces = []
+// Optional capability probes (…/capabilities) may 404 on hosts without the
+// owner route; plugins degrade honestly to unavailable. Record those apart
+// from real browser errors instead of failing the boot gate.
+const capabilityProbeResponses = []
 const bundles = workspaceBundles(await discoverWorkspacePackages(root)).map(pkg => ({ name: pkg.name, status: 'not_verified' }))
 child.stdout.on('data', chunk => { stdout += chunk })
 child.stderr.on('data', chunk => { stderr += chunk })
@@ -39,7 +43,9 @@ try {
   page.on('pageerror', error => errors.push(redact(error.message)))
   page.on('response', response => {
     const path = new URL(response.url()).pathname
-    if (response.status() >= 400) responses.push({ path, status: response.status() })
+    if (response.status() < 400) return
+    if (response.status() === 404 && /\/api\/.+\/capabilities$/.test(path)) capabilityProbeResponses.push({ path, status: response.status() })
+    else responses.push({ path, status: response.status() })
   })
   await page.goto(url)
   const home = (process.env.DSH_HOME ?? resolve(homedir(), '.dsh')).replace(/^~(?=\/|$)/, homedir())
@@ -195,7 +201,7 @@ try {
       ...surfaces.map(surface => `| ${surface.name} | ${surface.status} | ${(surface.reason ?? '').replaceAll('|', '/')} |`),
       '', '截图为当前无模型请求的本地状态；入口打开不代表外部 owner 的业务流程完成。', '',
     ].join('\n')),
-    writeFile(resolve(dir, 'summary.json'), JSON.stringify({ schema_version: 'yeisme.integration_test_evidence.v1', run_id: runId, started_at: startedAt, status: exitCode ? 'failed' : 'partial', boot_status: surfaces.some(surface => surface.name === 'Web boot') ? 'passed' : 'failed', function_status: 'partial', exit_code: exitCode, layer: 'e2e', command, bundles, surfaces, errors, responses, redacted: true }, null, 2)),
+    writeFile(resolve(dir, 'summary.json'), JSON.stringify({ schema_version: 'yeisme.integration_test_evidence.v1', run_id: runId, started_at: startedAt, status: exitCode ? 'failed' : 'partial', boot_status: surfaces.some(surface => surface.name === 'Web boot') ? 'passed' : 'failed', function_status: 'partial', exit_code: exitCode, layer: 'e2e', command, bundles, surfaces, errors, responses, unavailable_owner_services: capabilityProbeResponses, redacted: true }, null, 2)),
   ])
 }
 console.log(`Web plugin acceptance: ${exitCode ? 'FAIL' : 'BOOT PASS; FUNCTIONAL COVERAGE PARTIAL'}; evidence: ${relative(root, dir)}`)
