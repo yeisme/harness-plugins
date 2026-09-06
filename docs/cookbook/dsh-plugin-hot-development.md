@@ -60,6 +60,13 @@ pnpm dsh:dev -- --host 127.0.0.1 --port 0
 pnpm dsh:dev -- --profile web-dev --no-open
 ```
 
+自定义 profile 必须已包含官方 DSH base 和 Web app；仅安装业务 bundle 不会自动创建 Web 宿主。准备阶段会检查这一点。完整隔离验收优先保留官方 `web` 模板，只隔离 DSH_HOME：
+
+```bash
+DSH_HOME="$PWD/temp/dsh-acceptance-home" pnpm dsh:dev -- --prepare-only
+DSH_HOME="$PWD/temp/dsh-acceptance-home" node scripts/run-web-plugin-acceptance.mjs
+```
+
 ## 热更新规则
 
 | 变化 | 行为 |
@@ -102,6 +109,16 @@ pnpm run check:bundles
 ```
 
 Integration evidence 写入 `temp/integration-test-runs/<run-id>/`，失败也保留 summary、stdout、stderr、环境和 artifacts。
+
+完整门禁按顺序执行，避免 build 清理产物时其他测试正在读取：
+
+```bash
+node scripts/run-full-plugin-validation.mjs
+```
+
+实机验收启动 loopback Web、检查浏览器异常及可见入口，随后关闭本次启动的进程。每个 bundle 的加载结果和功能未验证状态分别记录；`entry_opened` 不代表领域业务流程完成。该命令不发送模型请求。视觉基线更新仍须先检查变化，再执行 `pnpm run test:visual:update`；普通视觉验证不会自动创建或更新基线。
+
+隔离环境可额外设置 `DSH_ACCEPTANCE_SCAN_PANES=1` 遍历注册视图，或 `DSH_ACCEPTANCE_HMR=1` 检查真实客户端热更新。HMR 检查要求上述隔离 DSH_HOME，临时给示例插件构建产物追加标记，确认浏览器收到后恢复原字节；不要与 build 同时运行。
 
 ## 停止与回滚
 

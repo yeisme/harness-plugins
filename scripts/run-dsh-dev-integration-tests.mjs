@@ -43,6 +43,24 @@ for (const [command, args] of commands) {
   }
 }
 
+// A syntactically valid custom profile must not be reported as Web-ready
+// without its official app layer. Use a disposable home, never the user profile.
+if (exitCode === 0) {
+  const env = { ...process.env, DSH_HOME: join(artifactsDir, 'dsh-home') }
+  const seedArgs = ['plugin', '--profile', 'missing-web', 'add', `link:${join(projectRoot, 'packages/bundle/anchored-standard')}`]
+  const seed = spawnSync('dsh', seedArgs, { cwd: projectRoot, encoding: 'utf8', env })
+  commands.push(['dsh', seedArgs])
+  stdout += seed.stdout ?? ''
+  stderr += seed.stderr ?? ''
+  if (seed.status !== 0) exitCode = seed.status ?? 1
+  const args = ['scripts/dsh-dev.mjs', '--profile', 'missing-web', '--skip-build', '--skip-install', '--prepare-only']
+  commands.push(['node', args])
+  const result = spawnSync('node', args, { cwd: projectRoot, encoding: 'utf8', env })
+  stdout += `$ ${commandText('node', args)} (expected rejection)\n${result.stdout ?? ''}`
+  stderr += result.stderr ?? ''
+  if (result.status !== 1 || !result.stderr?.includes('has no DSH Web app')) exitCode = 1
+}
+
 const finishedAt = new Date()
 const rel = path => relative(projectRoot, path).split('\\').join('/')
 const command = commands.map(([bin, args]) => commandText(bin, args)).join('\n')

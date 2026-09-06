@@ -4,13 +4,13 @@
 
 ## 入口
 
-- design/dsh-conversation-rewrite-core-v2.md：Web/TUI 共用的 host-neutral rewrite boundary、typed mutation outcomes、partial-success recovery、V1 compatibility facade 与跨 surface fixtures；设计与规格已冻结，尚未实施。Owning change：`../openspec/changes/dsh-conversation-rewrite-core-v2/`。
-- design/dsh-personal-coding-plugin-platform.md：个人编码基础包、显式 packs、`dsh.plugin_surface.v1`、Web/TUI 语义 fixture 和 contribution 故障隔离；V1 local profile integration 与 full maintainer gate 已完成，根级 7 天 dogfood 前保持 experimental。Owning change：`../openspec/changes/dsh-personal-coding-plugin-platform-v1/`。
+- design/dsh-unified-panel-visual-system.md：所有 React/Web 插件 UI 的设计事实源，定义 host-first token、Surface composition、容器密度、状态矩阵、插件 archetype、Workbench 联邦对齐和视觉验收门。
+- design/dsh-conversation-rewrite-core-v2.md：Web 共用的 host-neutral rewrite boundary、typed mutation outcomes、partial-success recovery、V1 compatibility facade 与 fixtures。
+- design/dsh-personal-coding-plugin-platform.md：个人编码基础包、显式 packs、`dsh.plugin_surface.v1`、Web 语义 fixture 和 contribution 故障隔离；当前保持 experimental。
 - cookbook/adding-ordo-agent-ops-plugin.md：Ordo Agent Ops 插件的组装/安装方式。
 - cookbook/adding-ordo-agent-ops-plugin.md §8：Ordo、Workbench、pack 与 Control Plane handoff 字段账本。
 - design/dsh-web-ordo-team-hub-v1.md：Session Agents / Ordo Teams 统一 Hub、Task-Agent graph、Host safe projection、响应式与可访问性设计。
 - design/dsh-web-command-first-interaction-v1.md：参考 Codex 交互语法的 DSH Web 命令优先混合壳；包含 Composer slash、全局 Palette、结构化命令、状态中枢、Activity、Pane handoff、线框、组件树与控制清单。实施见 ../openspec/changes/dsh-web-command-first-interaction-v1/。
-- design/dsh-tui-command-first-interaction-v1.md：与 Web 共用命令目录和状态事实的 DSH TUI 命令优先壳；包含完整 P0、Slash Assist、Command Center、结构化参数、确认、receipt、Activity、Inspector、statusline、尺寸退化与可重放调试。实施见 ../openspec/changes/dsh-tui-command-first-interaction-v1/。
 - cookbook/dsh-web-ordo-team-hub.md：Team Hub V1 的英文安装、使用、降级和回滚指南；中文版本为 `cookbook/dsh-web-ordo-team-hub.zh.md`。
 - ../openspec/changes/dsh-web-ordo-team-hub-v1/：DSH Web Ordo Team Hub 的 owning contract 与实施任务。
 - ../packages/bundle/pane-workbench/README.md：Pane Workbench overlay 的安装、快捷操作、排障与 canary handoff。
@@ -33,6 +33,7 @@
 - cookbook/dsh-web-pane-terminal-sidechat.md：面向用户的终端 console 与侧边对话安装/使用/排障（含 DSH ≥ 0.1.1-rc.2 锚点与降级原因对照）。
 - design/dsh-selection-agent-review-v1.md：选区/截图批注与逐位置审批的 V1 产品与设计摘要（split-owner、能力账本、桥接事件），历史实施记录见 ../openspec/changes/archive/2026-08-28-dsh-selection-agent-review-v1/。
 - design/dsh-selection-interaction-v2.md：统一 singleton 选区交互层、1+2+More 动作密度、扩展 descriptor、偏好、编辑控件防护、触控退化与 V1→V2 迁移设计；实施见 ../openspec/changes/dsh-selection-interaction-v2/。
+- [选区添加到对话、引用与询问](design/dsh-selection-conversation-actions-v1.md)：目标会话、引用详情、固定／拖动、宿主视觉；插件合同已验收，真实宿主 overlay 仍未验证。交付见 [delivery/dsh-selection-conversation-actions-2026-09-05.md](delivery/dsh-selection-conversation-actions-2026-09-05.md)。
 - design/dsh-semantic-file-editor.md：基于 opaque ref、Host-side LSP/AST、Monaco 与 workspace edit receipt 的语义文件 Pane 设计，实施见 ../openspec/changes/dsh-semantic-file-editor-pane-v1/。
 - ../packages/bundle/dsh-semantic-file-editor/README.md：语义编辑 bundle 的安装顺序、降级、回滚与证据命令。
 - ../packages/bundle/dsh-selection-annotation/README.md：选区批注 bundle 的安装、kill-switch 与宿主桥接契约。
@@ -48,3 +49,6 @@
 ## CI/CD
 
 - [模块化、分级 CI/CD](delivery/ci-cd.md)：quick、full、integration、release 的触发场景、真实命令和权限边界。
+- [DSH 全插件 UI 与本机验收（2026-09-05）](delivery/dsh-full-plugin-ui-acceptance-2026-09-05.md)：32 个 bundle、23 个注册视图、九项门禁、前后截图与未验证的外部能力。
+- [DSH 完整多 Pane 工作台（2026-09-05）](delivery/dsh-unified-multi-pane-acceptance-2026-09-05.md)：宿主分屏与悬浮、会话和轨迹绑定、21 条浏览器动作链、兼容入口与回退。
+- [Pane 自适应停靠体验修正（2026-09-05）](delivery/dsh-adaptive-pane-docking-2026-09-05.md)：宽吸附区、真实让位预演、窄屏自动排列与前后实测。

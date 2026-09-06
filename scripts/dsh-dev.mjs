@@ -367,6 +367,9 @@ async function probeComposedConfig(profile, patchFile, workspaceRoot) {
     process.stderr.write(result.stderr)
     throw new Error('composed DSH config is invalid')
   }
+  if (!/^\s*(?:-\s*)?name:\s*['"]?@deepseek-ai\/dsh-web-app['"]?\s*$/m.test(result.stdout)) {
+    throw new Error('The selected profile has no DSH Web app. Use the web profile with an isolated DSH_HOME, or install the official base and Web app bundles into the custom profile first.')
+  }
 }
 
 function helpText() {
