@@ -3,8 +3,10 @@
  *
  * 页面级唯一实例（refcount 生命周期）：监听 `selectionchange` → 120ms 稳定 →
  * normalizer → Actions(1+2+More)/Bottom Sheet；显式动作经 typed intent 交给
- * owner adapter；Esc 逐层退出并还原焦点；Pin 是唯一持久入口；dispose/HMR 对称
- * 释放 listener/timer/style/overlay。Pane 只提交 context（publishExternalContext）
+ * owner adapter；Esc 逐层退出并还原焦点；旧 pin 事件的选区收藏/恢复仍是唯一
+ * 持久入口；手柄的位置固定与拖动仅为 layer 内部短生命周期展示状态（几何 +
+ * 布尔位，不进 reducer、不持久化）；dispose/HMR 对称释放
+ * listener/timer/style/overlay。Pane 只提交 context（publishExternalContext）
  * 或让自身 DOM 承载可分类选区，不得自建 toolbar。
  *
  * @module @yeisme/dsh-client-ui-interaction-space/selection
@@ -44,6 +46,8 @@ export interface SelectionInteractionLayerOptions {
   /** coarse pointer 探测（触控端只显示单一入口 + Bottom Sheet）。 */
   readonly isCoarsePointer?: () => boolean
   readonly viewportWidth?: () => number
+  /** 当前 DSH locale；缺席时才回退 navigator.language。 */
+  readonly language?: () => string
 }
 
 export const SELECTION_ACTIONS_STYLE_ID = 'dsh-selection-actions-styles'
@@ -61,24 +65,33 @@ function injectActionsStyles(doc: Document): void {
   style.textContent = buildPanelStyles({
     scope: 'dsh-selection-actions',
     extra: `
-[data-dsh-selection-actions]{position:fixed;z-index:2147483000;font-size:var(--vk-font-small)}
-[data-dsh-selection-actions] .sa-toolbar{display:flex;align-items:center;gap:2px;padding:2px 4px;background:var(--vk-bg-elevated);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-md);box-shadow:0 4px 16px color-mix(in srgb,var(--vk-bg-base) 60%,transparent)}
-[data-dsh-selection-actions] .sa-btn{min-height:26px;padding:0 8px;color:var(--vk-text-primary);font:inherit;background:transparent;border:0;border-radius:var(--vk-radius-sm);cursor:pointer}
+[data-dsh-selection-actions]{position:fixed;z-index:2147483000;font-size:var(--vk-font-small);background:transparent}
+[data-dsh-selection-actions] .sa-toolbar{display:flex;align-items:center;gap:3px;width:max-content;max-width:calc(100vw - 16px);padding:4px;background:var(--vk-bg-elevated);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-lg);box-shadow:0 10px 30px color-mix(in srgb,var(--vk-bg-base) 68%,transparent);animation:sa-enter 140ms cubic-bezier(.16,1,.3,1)}
+[data-dsh-selection-actions] .sa-context{display:inline-flex;align-items:center;gap:6px;max-width:92px;min-height:30px;padding:0 8px;color:var(--vk-text-tertiary);border-right:1px solid var(--vk-border-l1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-dsh-selection-actions] .sa-context::before{width:7px;height:7px;flex:0 0 auto;border-radius:50%;background:var(--vk-accent);content:''}
+[data-dsh-selection-actions] .sa-btn{min-height:30px;padding:0 9px;color:var(--vk-text-secondary);font:inherit;background:transparent;border:1px solid transparent;border-radius:var(--vk-radius-md);cursor:pointer}
 [data-dsh-selection-actions] .sa-btn:hover:not(:disabled){background:var(--vk-fill-hover)}
 [data-dsh-selection-actions] .sa-btn:focus-visible{outline:2px solid var(--vk-border-focus);outline-offset:1px}
-[data-dsh-selection-actions] .sa-btn:disabled{color:var(--vk-text-tertiary);cursor:not-allowed}
-[data-dsh-selection-actions] .sa-btn--primary{color:var(--vk-accent);font-weight:650}
-[data-dsh-selection-actions] .sa-more{display:none;position:absolute;top:calc(100% + 4px);min-width:180px;padding:4px;background:var(--vk-bg-elevated);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-md)}
+[data-dsh-selection-actions] .sa-btn:disabled{color:var(--vk-text-tertiary);opacity:.55;cursor:not-allowed}
+[data-dsh-selection-actions] .sa-btn--primary{color:var(--vk-text-primary);font-weight:650;background:color-mix(in srgb,var(--vk-accent) 15%,transparent);border-color:color-mix(in srgb,var(--vk-accent) 34%,transparent)}
+[data-dsh-selection-actions] .sa-more{display:none;position:absolute;right:0;top:calc(100% + 6px);min-width:240px;max-width:min(320px,calc(100vw - 24px));padding:6px;background:var(--vk-bg-elevated);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-lg);box-shadow:0 12px 36px color-mix(in srgb,var(--vk-bg-base) 72%,transparent)}
 [data-dsh-selection-actions] .sa-more:not([hidden]){display:flex;flex-direction:column}
-[data-dsh-selection-actions] .sa-more .sa-btn{justify-content:flex-start;min-height:26px;text-align:left}
+[data-dsh-selection-actions] .sa-more .sa-btn{justify-content:flex-start;min-height:34px;text-align:left}
+[data-dsh-selection-actions] .sa-selection{display:grid;gap:4px;margin-bottom:5px;padding:7px 8px;background:var(--vk-bg-layer-1);border:1px solid var(--vk-border-l1);border-radius:var(--vk-radius-md)}
+[data-dsh-selection-actions] .sa-selection strong{color:var(--vk-text-secondary);font-size:var(--vk-font-small);font-weight:650}
+[data-dsh-selection-actions] .sa-selection span{display:-webkit-box;overflow:hidden;color:var(--vk-text-tertiary);font-size:var(--vk-font-small);line-height:1.45;-webkit-box-orient:vertical;-webkit-line-clamp:2;word-break:break-word}
 [data-dsh-selection-actions] .sa-reason{padding:0 8px 4px;color:var(--vk-text-tertiary);font-size:var(--vk-font-small)}
+[data-dsh-selection-actions] .sa-feedback{position:absolute;right:0;top:calc(100% + 5px);max-width:min(320px,calc(100vw - 24px));padding:6px 8px;color:var(--vk-text-secondary);font-size:var(--vk-font-small);line-height:1.4;background:var(--vk-bg-elevated);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-md);box-shadow:0 10px 30px color-mix(in srgb,var(--vk-bg-base) 68%,transparent)}
 [data-dsh-selection-actions] .sa-sheet-backdrop{position:fixed;inset:0;background:color-mix(in srgb,var(--vk-bg-base) 55%,transparent)}
-[data-dsh-selection-actions] .sa-sheet{position:fixed;left:0;right:0;bottom:0;display:flex;flex-direction:column;gap:2px;padding:8px 12px 16px;background:var(--vk-bg-elevated);border-top:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-xl) var(--vk-radius-xl) 0 0}
+[data-dsh-selection-actions] .sa-sheet{position:fixed;left:8px;right:8px;bottom:8px;display:flex;flex-direction:column;gap:3px;max-height:72vh;overflow:auto;padding:10px 12px 14px;background:var(--vk-bg-elevated);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-lg);box-shadow:0 16px 44px color-mix(in srgb,var(--vk-bg-base) 72%,transparent);animation:sa-enter 140ms cubic-bezier(.16,1,.3,1)}
 [data-dsh-selection-actions] .sa-sheet .sa-btn{min-height:44px;font-size:var(--vk-font-body)}
 [data-dsh-selection-actions] .sa-sheet .sa-reason{padding:0 4px}
+[data-dsh-selection-actions] .sa-pin{display:inline-flex;align-items:center;justify-content:center;min-width:30px;cursor:grab}
+[data-dsh-selection-actions] .sa-pin:active{cursor:grabbing}
 [data-dsh-selection-actions] .sa-pin[aria-pressed='true']{border:1px solid var(--vk-accent)}
 [data-dsh-selection-actions] .sa-edge{position:fixed;padding:2px 8px;color:var(--vk-text-secondary);font-size:var(--vk-font-small);background:var(--vk-bg-elevated);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-md);opacity:.9}
-@media (prefers-reduced-motion: reduce){[data-dsh-selection-actions] *{transition:none!important;animation:none!important}}
+@keyframes sa-enter{from{opacity:0;transform:translateY(4px) scale(.98)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){[data-dsh-selection-actions],[data-dsh-selection-actions] *{transition:none!important;animation:none!important}}
 `,
   })
   doc.head.append(style)
@@ -97,6 +110,76 @@ export function labelFor(label: { readonly default: string; readonly zh?: string
   return label.default
 }
 
+type SelectionFlavor = 'text' | 'source' | 'error' | 'image' | 'table' | 'editable'
+
+const ERROR_LIKE_SELECTION = /(?:error|exception|failed|failure|cannot|undefined|null pointer|traceback|报错|错误|失败|异常|无法)/i
+
+function selectionFlavor(context: SelectionContextV2): SelectionFlavor {
+  if (ERROR_LIKE_SELECTION.test(context.anchor?.quotePreview ?? '')) return 'error'
+  if (context.kind === 'source') return 'source'
+  if (context.kind === 'image-region') return 'image'
+  if (context.kind === 'table-range') return 'table'
+  if (context.kind === 'editable-control') return 'editable'
+  return 'text'
+}
+
+function selectionUiText(language: string): {
+  readonly context: Readonly<Record<SelectionFlavor, string>>
+  readonly selected: string
+  readonly actions: string
+  readonly more: string
+  readonly pinPosition: string
+  readonly unpinPosition: string
+  readonly positionPinned: string
+  readonly positionUnpinned: string
+  readonly dragMoved: string
+  readonly dragCancelled: string
+  readonly sourceInvalid: string
+} {
+  const zh = language.toLowerCase().startsWith('zh')
+  return zh
+    ? {
+        context: { text: '文本', source: '代码', error: '错误信息', image: '图像', table: '表格', editable: '输入' },
+        selected: '当前选区',
+        actions: '选区操作',
+        more: '更多',
+        pinPosition: '固定位置（单击固定，拖动移动）',
+        unpinPosition: '取消固定位置',
+        positionPinned: '已固定工具条位置',
+        positionUnpinned: '已取消固定位置',
+        dragMoved: '已移动并固定工具条位置',
+        dragCancelled: '已取消移动，位置已还原',
+        sourceInvalid: '来源已失效，可关闭或重新选择',
+      }
+    : {
+        context: { text: 'Text', source: 'Code', error: 'Error output', image: 'Image', table: 'Table', editable: 'Input' },
+        selected: 'Current selection',
+        actions: 'Selection actions',
+        more: 'More',
+        pinPosition: 'Pin position (click to pin, drag to move)',
+        unpinPosition: 'Unpin position',
+        positionPinned: 'Toolbar position pinned',
+        positionUnpinned: 'Toolbar position unpinned',
+        dragMoved: 'Toolbar moved and pinned',
+        dragCancelled: 'Move cancelled; position restored',
+        sourceInvalid: 'Source is no longer valid; close or select again',
+      }
+}
+
+function actionLabel(view: ActionViewLike, context: SelectionContextV2, language: string): string {
+  const zh = language.toLowerCase().startsWith('zh')
+  const flavor = selectionFlavor(context)
+  const id = view.descriptor.id
+  if (id === 'dsh:ask' && flavor === 'error') return zh ? '诊断' : 'Diagnose'
+  if (id === 'dsh:ask' && flavor === 'source') return zh ? '解释' : 'Explain'
+  if (id === 'dsh:comment' && flavor === 'image') return zh ? '批注' : 'Annotate'
+  if (id === 'dsh:edit' && flavor === 'error') return zh ? '生成修复' : 'Draft fix'
+  if (id === 'dsh:edit' && flavor === 'source') return zh ? '修改代码' : 'Edit code'
+  if (id === 'dsh:edit' && flavor === 'text') return zh ? '改写' : 'Rewrite'
+  if (id === 'dsh:edit' && flavor === 'editable') return zh ? '替换' : 'Replace'
+  return labelFor(view.descriptor.label, language)
+}
+
 export interface LayerContextPublisher {
   readonly id: string
   readonly capabilities?: readonly string[]
@@ -108,6 +191,23 @@ interface ActionViewLike {
   readonly disabled: boolean
   readonly disabledReason?: { readonly default: string; readonly zh?: string }
 }
+
+/** 手柄拖动手势（pending = 按下未超阈值；dragging = 超阈值移动中）。 */
+interface HandleGesture {
+  readonly pointerId: number
+  readonly startClientX: number
+  readonly startClientY: number
+  readonly origLeft: number
+  readonly origTop: number
+  readonly origPinned: boolean
+  phase: 'pending' | 'dragging'
+}
+
+/** 点击/拖动判定阈值（CSS px）。 */
+const HANDLE_DRAG_THRESHOLD_PX = 6
+/** 手柄键盘/拖动步进（px；Shift 加速）。 */
+const HANDLE_MOVE_STEP_PX = 8
+const HANDLE_MOVE_STEP_SHIFT_PX = 32
 
 /**
  * The page-level interaction layer. Headless 状态机 + DOM 表面渲染同一实例；
@@ -126,6 +226,7 @@ export class SelectionInteractionLayer {
   private readonly overlayRoot: HTMLElement
   private readonly toolbar: HTMLElement
   private readonly morePanel: HTMLElement
+  private readonly feedbackElement: HTMLElement
   private readonly sheetBackdrop: HTMLElement
   private readonly sheet: HTMLElement
   private stableTimer: ReturnType<typeof setTimeout> | undefined
@@ -138,12 +239,19 @@ export class SelectionInteractionLayer {
   private moreOpen = false
   private sheetOpen = false
   private edgeTimer: ReturnType<typeof setTimeout> | undefined
-  private readonly language: string
+  private feedback: string | undefined
+  // 位置固定/拖动：内部展示状态，与 reducer `pinned`（选区收藏/恢复）无关。
+  private positionPinned = false
+  private pinnedLeft: number | undefined
+  private pinnedTop: number | undefined
+  private invalidPinnedContext: SelectionContextV2 | undefined
+  private handleGesture: HandleGesture | undefined
+  private gestureHandle: HTMLButtonElement | undefined
+  private suppressNextHandleClick = false
 
   constructor(doc: Document, options: SelectionInteractionLayerOptions = {}) {
     this.doc = doc
     this.options = options
-    this.language = doc.defaultView?.navigator.language ?? 'en'
     injectActionsStyles(doc)
     this.overlayRoot = doc.createElement('div')
     this.overlayRoot.setAttribute('data-dsh-selection-actions', '')
@@ -152,21 +260,26 @@ export class SelectionInteractionLayer {
     this.toolbar = doc.createElement('div')
     this.toolbar.className = 'sa-toolbar'
     this.toolbar.setAttribute('role', 'toolbar')
-    this.toolbar.setAttribute('aria-label', 'selection actions')
+    this.toolbar.setAttribute('aria-label', selectionUiText(this.language()).actions)
     this.morePanel = doc.createElement('div')
     this.morePanel.className = 'sa-more'
     this.morePanel.setAttribute('role', 'menu')
-    this.morePanel.setAttribute('aria-label', 'more actions')
+    this.morePanel.setAttribute('aria-label', selectionUiText(this.language()).more)
     this.morePanel.hidden = true
+    this.feedbackElement = doc.createElement('div')
+    this.feedbackElement.className = 'sa-feedback'
+    this.feedbackElement.setAttribute('role', 'status')
+    this.feedbackElement.setAttribute('aria-live', 'polite')
+    this.feedbackElement.hidden = true
     this.sheetBackdrop = doc.createElement('div')
     this.sheetBackdrop.className = 'sa-sheet-backdrop'
     this.sheetBackdrop.style.display = 'none'
     this.sheet = doc.createElement('div')
     this.sheet.className = 'sa-sheet'
     this.sheet.setAttribute('role', 'dialog')
-    this.sheet.setAttribute('aria-label', 'selection actions')
+    this.sheet.setAttribute('aria-label', selectionUiText(this.language()).actions)
     this.sheetBackdrop.append(this.sheet)
-    this.overlayRoot.append(this.toolbar, this.morePanel, this.sheetBackdrop)
+    this.overlayRoot.append(this.toolbar, this.feedbackElement, this.morePanel, this.sheetBackdrop)
     doc.body.append(this.overlayRoot)
 
     registerBuiltinSelectionActions(this.registry)
@@ -177,6 +290,12 @@ export class SelectionInteractionLayer {
     this.doc.defaultView?.addEventListener('resize', this.onResize)
     this.doc.addEventListener('keydown', this.onKeydown, true)
     this.doc.addEventListener('pointerdown', this.onPointerDown, true)
+    this.toolbar.addEventListener('pointerdown', this.onHandlePointerDown)
+    this.toolbar.addEventListener('lostpointercapture', this.onHandleLostCapture)
+    this.doc.defaultView?.addEventListener('pointermove', this.onWindowPointerMove)
+    this.doc.defaultView?.addEventListener('pointerup', this.onWindowPointerUp)
+    this.doc.defaultView?.addEventListener('pointercancel', this.onWindowPointerCancel)
+    this.doc.defaultView?.addEventListener('blur', this.onWindowBlur)
     // G21 dispose 收口：按钮交互以事件委托挂在常驻 overlay 上（一次挂载、
     // dispose 显式摘除）；innerHTML 重渲染不再累积元素监听。
     this.overlayRoot.addEventListener('click', this.onOverlayClick)
@@ -205,8 +324,12 @@ export class SelectionInteractionLayer {
       return
     }
     if (button.dataset.role === 'pin') {
-      this.transition({ type: 'pin' })
-      this.render()
+      // 手柄 click = 位置固定切换；拖动手势/取消后的尾随 click 吞掉一次。
+      if (this.suppressNextHandleClick) {
+        this.suppressNextHandleClick = false
+        return
+      }
+      this.togglePositionPin()
     }
   }
 
@@ -222,6 +345,12 @@ export class SelectionInteractionLayer {
     this.doc.defaultView?.removeEventListener('resize', this.onResize)
     this.doc.removeEventListener('keydown', this.onKeydown, true)
     this.doc.removeEventListener('pointerdown', this.onPointerDown, true)
+    this.toolbar.removeEventListener('pointerdown', this.onHandlePointerDown)
+    this.toolbar.removeEventListener('lostpointercapture', this.onHandleLostCapture)
+    this.doc.defaultView?.removeEventListener('pointermove', this.onWindowPointerMove)
+    this.doc.defaultView?.removeEventListener('pointerup', this.onWindowPointerUp)
+    this.doc.defaultView?.removeEventListener('pointercancel', this.onWindowPointerCancel)
+    this.doc.defaultView?.removeEventListener('blur', this.onWindowBlur)
     this.overlayRoot.removeEventListener('click', this.onOverlayClick)
     this.registry.dispose()
     this.intentHandlers.clear()
@@ -307,10 +436,22 @@ export class SelectionInteractionLayer {
     this.render()
   }
 
+  /** Owner receipts can report an explicit action outcome without fabricating a new surface. */
+  setActionFeedback(message: string | undefined): void {
+    this.feedback = message === undefined || message.trim() === '' ? undefined : message
+    this.render()
+  }
+
   dismiss(): void {
+    this.clearPositionPin()
     this.transition({ type: 'dismiss' })
     this.restoreFocus()
     this.render()
+  }
+
+  /** Return focus to the original selection surface while a receipt remains visible. */
+  restoreSourceFocus(): void {
+    this.restoreFocus()
   }
 
   // --- 内部：事件 --------------------------------------------------------
@@ -337,6 +478,7 @@ export class SelectionInteractionLayer {
       return
     }
     this.contextSeq += 1
+    this.feedback = undefined
     const contextId = `sel-v2-${this.contextSeq}`
     this.candidateAt = Date.now()
     this.currentContextId = contextId
@@ -377,6 +519,8 @@ export class SelectionInteractionLayer {
 
   private readonly onScroll = (): void => {
     if (this.disposed) return
+    // 位置固定期间滚动不再追随选区也不关闭。
+    if (this.positionPinned) return
     if (this.state.phase === 'actions-visible' || this.state.phase === 'dispatching') {
       // 滚出视口：短暂边缘 affordance 后关闭；仍在视口则随动重摆。
       // rect 缺失（jsdom/旧引擎无 Range 布局）视为仍在视口，不以猜测关闭。
@@ -393,6 +537,11 @@ export class SelectionInteractionLayer {
 
   private readonly onResize = (): void => {
     if (this.disposed) return
+    // 固定位置在视口变化时重新约束进视口，而不是关闭。
+    if (this.positionPinned) {
+      this.applyPinnedPosition()
+      return
+    }
     this.transition({ type: 'resize' })
     this.render()
   }
@@ -401,6 +550,11 @@ export class SelectionInteractionLayer {
     if (this.disposed) return
     if (!(event.target instanceof Node)) return
     if (this.overlayRoot.contains(event.target)) return
+    if (this.invalidPinnedContext !== undefined) {
+      this.clearPositionPin()
+      this.render()
+      return
+    }
     const { phase } = this.state
     if (phase === 'actions-visible' || phase === 'dispatching' || phase === 'candidate' || phase === 'stable') {
       this.transition({ type: 'outside-pointer' })
@@ -411,6 +565,18 @@ export class SelectionInteractionLayer {
   private readonly onKeydown = (event: KeyboardEvent): void => {
     if (this.disposed) return
     if (event.key === 'Escape') {
+      // 手势进行中：Escape 只取消手势（还原几何/固定状态），不关闭工具条。
+      if (this.handleGesture !== undefined) {
+        event.preventDefault()
+        this.cancelHandleGesture()
+        return
+      }
+      if (this.invalidPinnedContext !== undefined) {
+        event.preventDefault()
+        this.clearPositionPin()
+        this.render()
+        return
+      }
       const { phase } = this.state
       if (phase === 'surface' || phase === 'actions-visible' || phase === 'dispatching' || phase === 'candidate' || phase === 'stable') {
         event.preventDefault()
@@ -449,10 +615,22 @@ export class SelectionInteractionLayer {
       }
       return
     }
-    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft' || event.key === 'ArrowUp' || event.key === 'ArrowDown') {
       if (event.target instanceof Node && this.toolbar.contains(event.target)) {
-        event.preventDefault()
-        this.moveFocus(event.key === 'ArrowRight' ? 1 : -1)
+        // 聚焦手柄时方向键 = 移动工具条（Shift 加大步长）；其余按钮保持焦点移动。
+        if (event.target instanceof Element && event.target.closest('button.sa-pin') !== null) {
+          if (this.overlayRoot.style.display === 'none') return
+          event.preventDefault()
+          const step = event.shiftKey ? HANDLE_MOVE_STEP_SHIFT_PX : HANDLE_MOVE_STEP_PX
+          const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0
+          const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0
+          this.moveHandleBy(dx, dy)
+          return
+        }
+        if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+          event.preventDefault()
+          this.moveFocus(event.key === 'ArrowRight' ? 1 : -1)
+        }
       }
     }
   }
@@ -460,8 +638,19 @@ export class SelectionInteractionLayer {
   // --- 内部：状态与渲染 ---------------------------------------------------
 
   private transition(event: SelectionInteractionEvent): void {
+    // 新选区/外部 context 接管：位置固定展示状态随之重置。
+    if (event.type === 'selection-candidate') this.clearPositionPin()
+    const visibleContext = this.state.phase === 'actions-visible' || this.state.phase === 'dispatching'
+      ? this.state.context
+      : undefined
     let next = selectionInteractionReducer(this.state, event)
     if (next === this.state) return
+    // 位置固定期间来源失效：保留浮层（禁用内容动作），不执行陈旧 context。
+    if (this.positionPinned
+      && visibleContext !== undefined
+      && (event.type === 'context-invalid' || event.type === 'selection-excluded')) {
+      this.invalidPinnedContext = visibleContext
+    }
     if (next.phase === 'pinned') this.pinnedContext = next.context
     // dismissed 是瞬态：立即回落 idle，避免陈旧 context 残留。
     if (next.phase === 'dismissed') {
@@ -502,12 +691,241 @@ export class SelectionInteractionLayer {
   }
 
   private positionToolbar(rect: { top: number; left: number; width: number; height: number } | null): void {
-    if (rect === null) return
     const width = this.toolbar.offsetWidth || 320
-    const centerX = rect.left + rect.width / 2
+    const height = this.toolbar.offsetHeight || 38
     const viewWidth = this.doc.defaultView?.innerWidth ?? 1024
+    const viewHeight = this.doc.defaultView?.innerHeight ?? 768
+    if (rect === null) {
+      this.overlayRoot.style.left = `${Math.max(8, viewWidth - width - 16)}px`
+      this.overlayRoot.style.top = `${Math.max(8, viewHeight - height - 16)}px`
+      return
+    }
+    const centerX = rect.left + rect.width / 2
+    const gap = 10
+    const above = rect.top - height - gap
+    const top = above >= 8 ? above : Math.min(viewHeight - height - 8, rect.top + rect.height + gap)
     this.overlayRoot.style.left = `${Math.max(8, Math.min(centerX - width / 2, viewWidth - width - 8))}px`
-    this.overlayRoot.style.top = `${Math.max(8, rect.top - 40)}px`
+    this.overlayRoot.style.top = `${Math.max(8, top)}px`
+  }
+
+  // --- 内部：位置固定与手柄拖动 -------------------------------------------
+
+  private clampOverlayPosition(left: number, top: number): { left: number; top: number } {
+    const width = this.toolbar.offsetWidth || 320
+    const height = this.toolbar.offsetHeight || 38
+    const viewWidth = this.doc.defaultView?.innerWidth ?? 1024
+    const viewHeight = this.doc.defaultView?.innerHeight ?? 768
+    return {
+      left: Math.max(8, Math.min(left, viewWidth - width - 8)),
+      top: Math.max(8, Math.min(top, viewHeight - height - 8)),
+    }
+  }
+
+  private applyPinnedPosition(): void {
+    if (this.pinnedLeft === undefined || this.pinnedTop === undefined) return
+    const clamped = this.clampOverlayPosition(this.pinnedLeft, this.pinnedTop)
+    this.pinnedLeft = clamped.left
+    this.pinnedTop = clamped.top
+    this.overlayRoot.style.left = `${clamped.left}px`
+    this.overlayRoot.style.top = `${clamped.top}px`
+  }
+
+  private overlayPosition(): { left: number; top: number } {
+    const left = parseFloat(this.overlayRoot.style.left)
+    const top = parseFloat(this.overlayRoot.style.top)
+    return { left: Number.isFinite(left) ? left : 8, top: Number.isFinite(top) ? top : 8 }
+  }
+
+  private clearPositionPin(): void {
+    this.positionPinned = false
+    this.pinnedLeft = undefined
+    this.pinnedTop = undefined
+    this.invalidPinnedContext = undefined
+    this.suppressNextHandleClick = false
+  }
+
+  private showFeedback(message: string | undefined): void {
+    this.feedback = message
+    this.feedbackElement.hidden = message === undefined
+    this.feedbackElement.textContent = message ?? ''
+  }
+
+  private togglePositionPin(): void {
+    // 失效展示中的手柄点击 = 取消固定并关闭该展示。
+    if (this.invalidPinnedContext !== undefined) {
+      this.clearPositionPin()
+      this.render()
+      return
+    }
+    if (this.state.phase !== 'actions-visible') return
+    const handleHadFocus = this.doc.activeElement instanceof Element
+      && this.doc.activeElement.closest('button.sa-pin') !== null
+      && this.toolbar.contains(this.doc.activeElement)
+    const text = selectionUiText(this.language())
+    if (this.positionPinned) {
+      this.positionPinned = false
+      this.pinnedLeft = undefined
+      this.pinnedTop = undefined
+      this.feedback = text.positionUnpinned
+    } else {
+      const { left, top } = this.overlayPosition()
+      this.pinnedLeft = left
+      this.pinnedTop = top
+      this.positionPinned = true
+      this.feedback = text.positionPinned
+    }
+    this.render()
+    // render 重建工具条 innerHTML；键盘路径下手柄焦点原地恢复，方向键可直接续移。
+    if (handleHadFocus) this.toolbar.querySelector<HTMLButtonElement>('button.sa-pin')?.focus()
+  }
+
+  /** 键盘移动：聚焦手柄时方向键步进（Shift 加速），落点即固定。 */
+  private moveHandleBy(dx: number, dy: number): void {
+    const current = this.positionPinned && this.pinnedLeft !== undefined && this.pinnedTop !== undefined
+      ? { left: this.pinnedLeft, top: this.pinnedTop }
+      : this.overlayPosition()
+    const clamped = this.clampOverlayPosition(current.left + dx, current.top + dy)
+    const becamePinned = !this.positionPinned
+    this.positionPinned = true
+    this.pinnedLeft = clamped.left
+    this.pinnedTop = clamped.top
+    this.overlayRoot.style.left = `${clamped.left}px`
+    this.overlayRoot.style.top = `${clamped.top}px`
+    // 不整树 render：保持手柄焦点，原地同步 pressed/label。
+    const handle = this.toolbar.querySelector('button.sa-pin')
+    if (handle !== null) {
+      const text = selectionUiText(this.language())
+      handle.setAttribute('aria-pressed', 'true')
+      handle.setAttribute('aria-label', text.unpinPosition)
+      handle.setAttribute('title', text.unpinPosition)
+    }
+    if (becamePinned) this.showFeedback(selectionUiText(this.language()).positionPinned)
+  }
+
+  private readonly onHandlePointerDown = (event: Event): void => {
+    if (this.disposed) return
+    const pointer = event as PointerEvent
+    if (pointer.button !== 0) return
+    if (!(pointer.target instanceof Element)) return
+    const handle = pointer.target.closest('button.sa-pin')
+    if (handle === null || !this.toolbar.contains(handle)) return
+    // 窄屏/coarse sheet 打开时手柄让位给 sheet，不启动拖动。
+    if (this.isNarrowOrCoarse() && this.sheetOpen) return
+    if (this.overlayRoot.style.display === 'none') return
+    this.suppressNextHandleClick = false
+    const { left, top } = this.overlayPosition()
+    this.handleGesture = {
+      pointerId: pointer.pointerId,
+      startClientX: pointer.clientX,
+      startClientY: pointer.clientY,
+      origLeft: left,
+      origTop: top,
+      origPinned: this.positionPinned,
+      phase: 'pending',
+    }
+    this.gestureHandle = handle as HTMLButtonElement
+  }
+
+  private readonly onWindowPointerMove = (event: Event): void => {
+    const gesture = this.handleGesture
+    if (gesture === undefined) return
+    const pointer = event as PointerEvent
+    if (pointer.pointerId !== gesture.pointerId) return
+    const dx = pointer.clientX - gesture.startClientX
+    const dy = pointer.clientY - gesture.startClientY
+    if (gesture.phase === 'pending') {
+      if (Math.hypot(dx, dy) <= HANDLE_DRAG_THRESHOLD_PX) return
+      gesture.phase = 'dragging'
+      // jsdom/旧引擎可能无 pointer capture；有则在超阈值后接管后续指针事件。
+      try {
+        this.gestureHandle?.setPointerCapture?.(gesture.pointerId)
+      } catch {
+        // 合成指针不在活动指针表中：忽略，window 级监听已足够。
+      }
+    }
+    const clamped = this.clampOverlayPosition(gesture.origLeft + dx, gesture.origTop + dy)
+    this.overlayRoot.style.left = `${clamped.left}px`
+    this.overlayRoot.style.top = `${clamped.top}px`
+    if (event.cancelable) event.preventDefault()
+  }
+
+  private readonly onWindowPointerUp = (event: Event): void => {
+    const gesture = this.handleGesture
+    if (gesture === undefined) return
+    const pointer = event as PointerEvent
+    if (pointer.pointerId !== gesture.pointerId) return
+    if (gesture.phase !== 'dragging') {
+      // 阈值内释放 = 单击：交给随后的 click 走 togglePositionPin。
+      this.handleGesture = undefined
+      this.gestureHandle = undefined
+      return
+    }
+    this.handleGesture = undefined
+    this.releaseHandleCapture(gesture.pointerId)
+    const { left, top } = this.overlayPosition()
+    this.pinnedLeft = left
+    this.pinnedTop = top
+    this.positionPinned = true
+    this.suppressNextHandleClick = true
+    this.syncHandlePressed()
+    this.showFeedback(selectionUiText(this.language()).dragMoved)
+  }
+
+  private readonly onWindowPointerCancel = (event: Event): void => {
+    const gesture = this.handleGesture
+    if (gesture === undefined) return
+    if ((event as PointerEvent).pointerId !== gesture.pointerId) return
+    this.cancelHandleGesture()
+  }
+
+  private readonly onHandleLostCapture = (event: Event): void => {
+    if (this.handleGesture === undefined) return
+    if ((event as PointerEvent).pointerId !== this.handleGesture.pointerId) return
+    this.cancelHandleGesture()
+  }
+
+  private readonly onWindowBlur = (): void => {
+    if (this.handleGesture !== undefined) this.cancelHandleGesture()
+  }
+
+  private cancelHandleGesture(): void {
+    const gesture = this.handleGesture
+    if (gesture === undefined) return
+    this.handleGesture = undefined
+    this.releaseHandleCapture(gesture.pointerId)
+    this.overlayRoot.style.left = `${gesture.origLeft}px`
+    this.overlayRoot.style.top = `${gesture.origTop}px`
+    this.positionPinned = gesture.origPinned
+    if (gesture.origPinned) {
+      this.pinnedLeft = gesture.origLeft
+      this.pinnedTop = gesture.origTop
+    }
+    this.suppressNextHandleClick = true
+    this.showFeedback(selectionUiText(this.language()).dragCancelled)
+  }
+
+  private releaseHandleCapture(pointerId: number): void {
+    const handle = this.gestureHandle
+    this.gestureHandle = undefined
+    if (handle === undefined) return
+    try {
+      if (typeof handle.releasePointerCapture === 'function' && handle.hasPointerCapture?.(pointerId) === true) {
+        handle.releasePointerCapture(pointerId)
+      }
+    } catch {
+      // jsdom 无真实捕获状态。
+    }
+  }
+
+  /** 拖放/键盘移动后原地同步手柄 pressed 状态与文案（不打断焦点）。 */
+  private syncHandlePressed(): void {
+    const handle = this.toolbar.querySelector('button.sa-pin')
+    if (handle === null) return
+    const text = selectionUiText(this.language())
+    const label = this.positionPinned ? text.unpinPosition : text.pinPosition
+    handle.setAttribute('aria-pressed', String(this.positionPinned))
+    handle.setAttribute('aria-label', label)
+    handle.setAttribute('title', label)
   }
 
   private showEdgeAffordance(): void {
@@ -531,10 +949,19 @@ export class SelectionInteractionLayer {
     return width < SELECTION_NARROW_VIEWPORT_PX
   }
 
+  private language(): string {
+    return this.options.language?.() ?? this.doc.defaultView?.navigator.language ?? 'en'
+  }
+
   private render(): void {
     if (this.disposed) return
     const { phase } = this.state
     if (phase !== 'actions-visible') {
+      // 固定期间来源失效：浮层保留为禁用展示，由用户关闭/取消固定/重选清除。
+      if (this.invalidPinnedContext !== undefined && this.positionPinned) {
+        this.renderPinnedInvalid(this.invalidPinnedContext)
+        return
+      }
       // surface 阶段由 owner surface（Composer/批注/审批）接管屏幕。
       this.overlayRoot.style.display = 'none'
       this.moreOpen = false
@@ -545,13 +972,20 @@ export class SelectionInteractionLayer {
     const resolved = this.registry.resolve(context, { customOrder: BUILTIN_CONTEXT_ORDERS[context.kind] })
     const narrow = this.isNarrowOrCoarse()
     this.overlayRoot.style.display = 'block'
-    this.renderToolbar(resolved, narrow)
+    this.renderToolbar(resolved, narrow, context)
+    this.feedbackElement.hidden = this.feedback === undefined
+    this.feedbackElement.textContent = this.feedback ?? ''
+    if (this.positionPinned && this.pinnedLeft !== undefined && this.pinnedTop !== undefined) {
+      this.applyPinnedPosition()
+    } else {
+      this.positionToolbar(selectionRect(this.doc.defaultView?.getSelection() ?? null))
+    }
     if (narrow) {
       this.toolbar.style.display = this.sheetOpen ? 'none' : 'flex'
       this.sheetBackdrop.style.display = this.sheetOpen ? 'block' : 'none'
       this.morePanel.hidden = true
       this.sheet.innerHTML = ''
-      if (this.sheetOpen) this.renderActionList(this.sheet, resolved, true)
+      if (this.sheetOpen) this.renderActionList(this.sheet, resolved, true, context)
     } else {
       this.toolbar.style.display = 'flex'
       this.sheetBackdrop.style.display = 'none'
@@ -559,72 +993,123 @@ export class SelectionInteractionLayer {
       this.morePanel.hidden = !this.moreOpen
       if (this.moreOpen) {
         this.morePanel.innerHTML = ''
-        this.renderActionList(this.morePanel, resolved, false)
+        this.renderActionList(this.morePanel, resolved, false, context)
       }
     }
   }
 
-  private renderToolbar(resolved: ResolvedActions, narrow: boolean): void {
+  private renderToolbar(resolved: ResolvedActions, narrow: boolean, context: SelectionContextV2): void {
     this.toolbar.innerHTML = ''
+    const language = this.language()
+    const text = selectionUiText(language)
     if (narrow) {
       const entry = this.doc.createElement('button')
       entry.type = 'button'
       entry.className = 'sa-btn'
       entry.dataset.role = 'sheet-entry'
-      entry.textContent = 'Actions'
+      entry.textContent = text.actions
       entry.setAttribute('aria-haspopup', 'dialog')
       entry.setAttribute('aria-expanded', String(this.sheetOpen))
       this.toolbar.append(entry)
       return
     }
-    if (resolved.primary !== undefined) this.toolbar.append(this.actionButton(resolved.primary))
-    for (const secondary of resolved.secondary) this.toolbar.append(this.actionButton(secondary))
+    const flavor = selectionFlavor(context)
+    const contextBadge = this.doc.createElement('span')
+    contextBadge.className = 'sa-context'
+    contextBadge.textContent = text.context[flavor]
+    contextBadge.title = context.anchor?.quotePreview ?? text.selected
+    this.toolbar.append(contextBadge)
+    if (resolved.primary !== undefined) this.toolbar.append(this.actionButton(resolved.primary, context, language))
+    for (const secondary of resolved.secondary) this.toolbar.append(this.actionButton(secondary, context, language))
     if (resolved.more.length > 0) {
       const more = this.doc.createElement('button')
       more.type = 'button'
       more.className = 'sa-btn'
-      more.textContent = `More (${resolved.more.length})`
+      more.textContent = `${text.more} (${resolved.more.length})`
       more.setAttribute('aria-expanded', String(this.moreOpen))
       more.setAttribute('aria-controls', 'sa-more-panel')
       this.morePanel.id = 'sa-more-panel'
       more.dataset.role = 'more-toggle'
       this.toolbar.append(more)
     }
-    const pin = this.doc.createElement('button')
-    pin.type = 'button'
-    pin.className = 'sa-btn sa-pin'
-    pin.textContent = '⌷'
-    pin.title = 'Pin'
-    pin.setAttribute('aria-label', 'Pin selection actions')
-    pin.dataset.role = 'pin'
+    const pin = this.pinHandleButton()
     this.toolbar.append(pin)
   }
 
-  private renderActionList(target: HTMLElement, resolved: ResolvedActions, sheet: boolean): void {
+  /** 手柄：位置固定切换 + 拖动起点；语义 SVG 图标 + aria-pressed。 */
+  private pinHandleButton(): HTMLButtonElement {
+    const text = selectionUiText(this.language())
+    const pin = this.doc.createElement('button')
+    pin.type = 'button'
+    pin.className = 'sa-btn sa-pin'
+    pin.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"/></svg>'
+    const label = this.positionPinned ? text.unpinPosition : text.pinPosition
+    pin.title = label
+    pin.setAttribute('aria-label', label)
+    pin.setAttribute('aria-pressed', String(this.positionPinned))
+    pin.dataset.role = 'pin'
+    return pin
+  }
+
+  /** 固定期间来源失效的展示：内容动作禁用、原因可见、手柄仍可取消固定/关闭。 */
+  private renderPinnedInvalid(context: SelectionContextV2): void {
+    const resolved = this.registry.resolve(context, { customOrder: BUILTIN_CONTEXT_ORDERS[context.kind] })
+    const narrow = this.isNarrowOrCoarse()
+    this.overlayRoot.style.display = 'block'
+    this.moreOpen = false
+    this.sheetOpen = false
+    this.renderToolbar(resolved, narrow, context)
+    if (narrow && this.toolbar.querySelector('button.sa-pin') === null) this.toolbar.append(this.pinHandleButton())
+    for (const button of this.toolbar.querySelectorAll<HTMLButtonElement>('button')) {
+      if (button.dataset.role !== 'pin') button.disabled = true
+    }
+    this.toolbar.style.display = 'flex'
+    this.sheetBackdrop.style.display = 'none'
+    this.morePanel.hidden = true
+    this.feedbackElement.hidden = false
+    this.feedbackElement.textContent = selectionUiText(this.language()).sourceInvalid
+    this.applyPinnedPosition()
+  }
+
+  private renderActionList(target: HTMLElement, resolved: ResolvedActions, sheet: boolean, context: SelectionContextV2): void {
     // 桌面 More 面板只承载 More 子集（同一动作不得同时出现在主槽位与 More）；
     // 触控 Bottom Sheet 替换整个工具条，承载全部可用动作。
     const actions: readonly ActionViewLike[] = sheet
       ? [...(resolved.primary !== undefined ? [resolved.primary] : []), ...resolved.secondary, ...resolved.more]
       : resolved.more
+    const language = this.language()
+    const quote = context.anchor?.quotePreview
+    if (quote !== undefined && quote !== '') {
+      const text = selectionUiText(language)
+      const selection = this.doc.createElement('div')
+      selection.className = 'sa-selection'
+      const title = this.doc.createElement('strong')
+      title.textContent = `${text.selected} · ${text.context[selectionFlavor(context)]}`
+      const preview = this.doc.createElement('span')
+      preview.textContent = quote
+      selection.append(title, preview)
+      target.append(selection)
+    }
     for (const view of actions) {
-      target.append(this.actionButton(view))
+      target.append(this.actionButton(view, context, language))
       if (view.disabled && view.disabledReason !== undefined) {
         const reason = this.doc.createElement('span')
         reason.className = 'sa-reason'
-        reason.textContent = labelFor(view.disabledReason, this.language)
+        reason.textContent = labelFor(view.disabledReason, language)
         target.append(reason)
       }
     }
   }
 
-  private actionButton(view: ActionViewLike): HTMLButtonElement {
+  private actionButton(view: ActionViewLike, context: SelectionContextV2, language: string): HTMLButtonElement {
     const button = this.doc.createElement('button')
     button.type = 'button'
     button.className = `sa-btn${view.slot === 'primary' ? ' sa-btn--primary' : ''}`
-    const label = labelFor(view.descriptor.label, this.language)
+    const label = actionLabel(view, context, language)
     button.textContent = label
     button.setAttribute('aria-label', label)
     button.disabled = view.disabled
+    if (view.disabled && view.disabledReason !== undefined) button.title = labelFor(view.disabledReason, language)
     button.dataset.actionId = this.registry.resolveCanonical(view.descriptor.id)
     return button
   }
@@ -632,6 +1117,8 @@ export class SelectionInteractionLayer {
   /** 显式动作 → typed intent → owner dispatch（本地 copy 即时完成）。 */
   activateAction(canonicalId: string, requestedId: string, context: SelectionContextV2 | undefined): void {
     if (context === undefined) return
+    // 固定展示中的失效来源不得再 dispatch 陈旧 context。
+    if (this.invalidPinnedContext !== undefined) return
     const descriptor = this.registry.lookup(canonicalId)
     if (descriptor === undefined) return
     const intent: SelectionActionIntentV2 = {

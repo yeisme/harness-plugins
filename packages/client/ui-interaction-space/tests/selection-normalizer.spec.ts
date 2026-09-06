@@ -101,6 +101,16 @@ describe('normalizeSelection (fail-closed pipeline)', () => {
     expect(normalizeSelection(observation(span))).toEqual({ status: 'excluded', reason: 'self-surface' })
   })
 
+  it('excludes raw reasoning surfaces from selection actions', () => {
+    const reasoning = document.createElement('section')
+    reasoning.setAttribute('data-message-part', 'reasoning')
+    const span = document.createElement('span')
+    span.textContent = 'private reasoning trace'
+    reasoning.append(span)
+    document.body.append(reasoning)
+    expect(normalizeSelection(observation(span))).toEqual({ status: 'excluded', reason: 'reasoning-surface' })
+  })
+
   it('bounds the quote preview to 512 chars', () => {
     const para = document.createElement('p')
     para.textContent = 'y'.repeat(900)

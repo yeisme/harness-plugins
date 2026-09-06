@@ -22,6 +22,8 @@ import {
 export const SELECTION_OPT_OUT_ATTRIBUTE = 'data-dsh-selection-optout'
 /** 交互层/Composer 自身标记（强制排除，防自触发）。 */
 export const SELECTION_SELF_SURFACE_SELECTOR = '[data-dsh-selection-surface]'
+/** 原始 reasoning/Think 表面不得进入选区工作流，只允许宿主提供脱敏摘要。 */
+export const PROTECTED_REASONING_SURFACE_SELECTOR = '[data-dsh-reasoning],[data-dsh-thinking],[data-message-part="reasoning"],[data-content-kind="reasoning"],[data-role="reasoning"],[aria-label="Think" i],[aria-label="Thinking" i],[aria-label="思考"]'
 /** 敏感输入标记（password/token-like/隐私字段）。 */
 export const SENSITIVE_INPUT_PATTERN = /(?:password|passphrase|token|secret|api[-_]?key|credential|private)/i
 
@@ -33,6 +35,7 @@ export type SelectionExclusionReason =
   | 'sensitive-area'
   | 'host-opt-out'
   | 'self-surface'
+  | 'reasoning-surface'
   | 'unclassified'
 
 export type NormalizedSelection =
@@ -50,6 +53,10 @@ export function hostOptOut(node: Node | null): boolean {
 
 export function insideSelfSurface(node: Node | null): boolean {
   return ancestorMatch(node, current => current instanceof Element && current.matches(SELECTION_SELF_SURFACE_SELECTOR))
+}
+
+export function protectedReasoningSurface(node: Node | null): boolean {
+  return ancestorMatch(node, current => current instanceof Element && current.matches(PROTECTED_REASONING_SURFACE_SELECTOR))
 }
 
 /** password 输入、token-like 命名或显式 private 标记的控件。 */
@@ -151,6 +158,7 @@ export function normalizeSelection(observation: SelectionObservation): Normalize
   if (observation.text.trim() === '') return { status: 'excluded', reason: 'empty-text' }
   if (hostOptOut(observation.startNode)) return { status: 'excluded', reason: 'host-opt-out' }
   if (insideSelfSurface(observation.startNode)) return { status: 'excluded', reason: 'self-surface' }
+  if (protectedReasoningSurface(observation.startNode)) return { status: 'excluded', reason: 'reasoning-surface' }
   if (sensitiveControl(observation.startNode)) return { status: 'excluded', reason: 'sensitive-area' }
   if (observation.stableForMs < SELECTION_STABLE_DEBOUNCE_MS) return { status: 'pending', reason: 'unstable' }
   if (!observation.inViewport) return { status: 'excluded', reason: 'out-of-viewport' }

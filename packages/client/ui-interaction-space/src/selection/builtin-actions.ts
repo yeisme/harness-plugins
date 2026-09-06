@@ -12,10 +12,46 @@ import type { SelectionActionDescriptorV2, SelectionContextKindV2 } from './cont
 
 /** ask/open-full 需要 Conversation Composer owner；edit 需要 preview owner；批注组需要 batch owner。 */
 export const SELECTION_CAPABILITY_CONVERSATION = 'conversation.composer'
+/** A real main-conversation reference consumer has captured a target. */
+export const SELECTION_CAPABILITY_REFERENCE = 'conversation.reference.add'
+/** Host confirmed it can activate the target and focus the composer after insert. */
+export const SELECTION_CAPABILITY_REFERENCE_ACTIVATE = 'conversation.reference.activate'
+/** Explicit plain-text fallback for selections without a structured source proof. */
+export const SELECTION_CAPABILITY_TEXT_QUOTE = 'conversation.text-quote.add'
+/** Host owns an explicit conversation picker / creation entry. */
+export const SELECTION_CAPABILITY_TARGET_CHOOSE = 'conversation.target.choose'
 export const SELECTION_CAPABILITY_EDIT = 'selection.edit'
 export const SELECTION_CAPABILITY_BATCH = 'annotation.batch'
 
 export const BUILTIN_SELECTION_ACTIONS: readonly SelectionActionDescriptorV2[] = [
+  {
+    id: 'dsh:reference',
+    label: { default: 'Add to chat', zh: '添加到对话' },
+    shortLabel: { default: 'Reference', zh: '引用' },
+    contexts: ['text', 'source', 'image-region', 'table-range', 'editable-control'],
+    requires: [SELECTION_CAPABILITY_REFERENCE],
+    priority: 100,
+    defaultSlot: 'primary',
+    visibility: 'default',
+    danger: 'safe',
+    owner: 'host',
+    presentation: 'pane',
+    disabledReason: { default: 'reference source or target unavailable', zh: '引用来源或目标不可用' },
+  },
+  {
+    id: 'dsh:ask-with-reference',
+    label: { default: 'Ask with reference', zh: '引用并询问' },
+    shortLabel: { default: 'Ask', zh: '询问' },
+    contexts: ['text', 'source', 'image-region', 'table-range', 'editable-control'],
+    requires: [SELECTION_CAPABILITY_REFERENCE, SELECTION_CAPABILITY_REFERENCE_ACTIVATE],
+    priority: 95,
+    defaultSlot: 'secondary',
+    visibility: 'default',
+    danger: 'safe',
+    owner: 'host',
+    presentation: 'pane',
+    disabledReason: { default: 'Host cannot focus the composer after insert', zh: '宿主暂不支持插入后聚焦输入框' },
+  },
   {
     id: 'dsh:ask',
     aliases: ['ask'],
@@ -87,6 +123,20 @@ export const BUILTIN_SELECTION_ACTIONS: readonly SelectionActionDescriptorV2[] =
     presentation: 'local',
   },
   {
+    id: 'dsh:reference-details',
+    label: { default: 'Source details', zh: '来源详情' },
+    shortLabel: { default: 'Details', zh: '详情' },
+    contexts: ['text', 'source', 'image-region', 'table-range', 'editable-control'],
+    requires: [SELECTION_CAPABILITY_REFERENCE],
+    priority: 65,
+    defaultSlot: 'more',
+    visibility: 'default',
+    danger: 'safe',
+    owner: 'host',
+    presentation: 'popover',
+    disabledReason: { default: 'Reference source details are unavailable', zh: '引用来源不可用，无法展示详情' },
+  },
+  {
     id: 'dsh:add-to-batch',
     aliases: ['add-to-batch'],
     label: { default: 'Add to batch', zh: '加入批注组' },
@@ -100,6 +150,34 @@ export const BUILTIN_SELECTION_ACTIONS: readonly SelectionActionDescriptorV2[] =
     owner: 'dsh',
     presentation: 'local',
     disabledReason: { default: 'annotation batch unavailable', zh: '批注组不可用' },
+  },
+  {
+    id: 'dsh:add-text-quote',
+    label: { default: 'Add as text quote', zh: '以选区文字添加' },
+    shortLabel: { default: 'Text quote', zh: '文字引用' },
+    contexts: ['text', 'source', 'table-range', 'editable-control'],
+    requires: [SELECTION_CAPABILITY_TEXT_QUOTE],
+    priority: 55,
+    defaultSlot: 'more',
+    visibility: 'default',
+    danger: 'safe',
+    owner: 'host',
+    presentation: 'pane',
+    disabledReason: { default: 'Needs a target conversation and no linked source', zh: '需要可用目标对话，且选区无结构化来源' },
+  },
+  {
+    id: 'dsh:choose-conversation',
+    label: { default: 'Choose conversation', zh: '选择对话' },
+    shortLabel: { default: 'Choose', zh: '选择' },
+    contexts: ['text', 'source', 'image-region', 'table-range', 'editable-control'],
+    requires: [SELECTION_CAPABILITY_TARGET_CHOOSE],
+    priority: 45,
+    defaultSlot: 'more',
+    visibility: 'default',
+    danger: 'safe',
+    owner: 'host',
+    presentation: 'pane',
+    disabledReason: { default: 'Host cannot pick or create a conversation', zh: '宿主暂不支持选择或新建对话' },
   },
   {
     id: 'dsh:open-full',
@@ -120,11 +198,11 @@ export const BUILTIN_SELECTION_ACTIONS: readonly SelectionActionDescriptorV2[] =
 
 /** built-in 偏好层：每 context 的确定性顺序（primary=第 1，secondary=2-3，余 More）。 */
 export const BUILTIN_CONTEXT_ORDERS: Readonly<Record<SelectionContextKindV2, readonly string[]>> = Object.freeze({
-  'text': ['dsh:ask', 'dsh:comment', 'dsh:copy-quote', 'dsh:edit', 'dsh:add-to-batch', 'dsh:open-full'],
-  'source': ['dsh:ask', 'dsh:comment', 'dsh:copy-quote', 'dsh:edit', 'dsh:add-to-batch', 'dsh:open-full'],
-  'image-region': ['dsh:comment', 'dsh:ask', 'dsh:add-to-batch', 'dsh:edit', 'dsh:open-full'],
-  'table-range': ['dsh:analyze', 'dsh:comment', 'dsh:copy-quote', 'dsh:edit', 'dsh:add-to-batch', 'dsh:open-full'],
-  'editable-control': ['dsh:edit', 'dsh:ask', 'dsh:comment', 'dsh:copy-quote', 'dsh:add-to-batch', 'dsh:open-full'],
+  'text': ['dsh:reference', 'dsh:ask-with-reference', 'dsh:ask', 'dsh:comment', 'dsh:copy-quote', 'dsh:reference-details', 'dsh:edit', 'dsh:add-to-batch', 'dsh:add-text-quote', 'dsh:choose-conversation', 'dsh:open-full'],
+  'source': ['dsh:reference', 'dsh:ask-with-reference', 'dsh:ask', 'dsh:comment', 'dsh:copy-quote', 'dsh:reference-details', 'dsh:edit', 'dsh:add-to-batch', 'dsh:add-text-quote', 'dsh:choose-conversation', 'dsh:open-full'],
+  'image-region': ['dsh:reference', 'dsh:ask-with-reference', 'dsh:comment', 'dsh:ask', 'dsh:reference-details', 'dsh:add-to-batch', 'dsh:edit', 'dsh:choose-conversation', 'dsh:open-full'],
+  'table-range': ['dsh:reference', 'dsh:ask-with-reference', 'dsh:analyze', 'dsh:comment', 'dsh:copy-quote', 'dsh:reference-details', 'dsh:edit', 'dsh:add-to-batch', 'dsh:add-text-quote', 'dsh:choose-conversation', 'dsh:open-full'],
+  'editable-control': ['dsh:reference', 'dsh:ask-with-reference', 'dsh:edit', 'dsh:ask', 'dsh:comment', 'dsh:copy-quote', 'dsh:reference-details', 'dsh:add-to-batch', 'dsh:add-text-quote', 'dsh:choose-conversation', 'dsh:open-full'],
 })
 
 /** 注册全部 built-in 动作；返回统一 dispose（逐个注销，供测试/HMR）。 */

@@ -77,11 +77,17 @@ export {
   SELECTION_CAPABILITY_BATCH,
   SELECTION_CAPABILITY_CONVERSATION,
   SELECTION_CAPABILITY_EDIT,
+  SELECTION_CAPABILITY_REFERENCE,
+  SELECTION_CAPABILITY_REFERENCE_ACTIVATE,
+  SELECTION_CAPABILITY_TARGET_CHOOSE,
+  SELECTION_CAPABILITY_TEXT_QUOTE,
   registerBuiltinSelectionActions,
 } from './selection/builtin-actions.ts'
 export {
   normalizeSelection,
+  protectedReasoningSurface,
   selectionStillValid,
+  PROTECTED_REASONING_SURFACE_SELECTOR,
   SELECTION_OPT_OUT_ATTRIBUTE,
 } from './selection/normalizer.ts'
 export type { NormalizedSelection, SelectionExclusionReason, SelectionObservation } from './selection/normalizer.ts'

@@ -37,6 +37,8 @@ export interface SelectionCapture {
   readonly startNode: Node | null
   /** Node the selection ends in. */
   readonly endNode: Node | null
+  /** Original DOM Range; consumers may derive owner-advertised byte windows synchronously. */
+  readonly range: Range
 }
 
 export interface SelectionAnchorContext {
@@ -175,5 +177,6 @@ export function captureFromSelection(selection: Selection | null): SelectionCapt
     text,
     startNode: range.startContainer,
     endNode: range.endContainer,
+    range,
   }
 }
