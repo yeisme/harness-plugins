@@ -7,8 +7,6 @@
 
 import { bindSlashRuntime, type SlashBindContext } from '../slash-bind.ts';
 
-export { commandExperienceTuiAdapter } from '@yeisme/dsh-client-ui-command-experience-tui';
-
 /**
  * The React web adapter cannot ship inside this ModuleLoader bundle:
  * React stays external by contract. Hosts consume it directly from

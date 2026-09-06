@@ -21,7 +21,7 @@ function entry(partial: Partial<CommandExperienceEntryV1> & Pick<CommandExperien
     description: partial.description ?? partial.canonicalName,
     category: 'discovery',
     input: {},
-    surfaces: ['web', 'tui'],
+    surfaces: ['web'],
     actionKind: 'local',
     owner: 'client',
     danger: 'safe',

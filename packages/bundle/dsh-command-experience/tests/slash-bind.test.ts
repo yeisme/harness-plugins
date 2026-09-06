@@ -78,7 +78,7 @@ describe('bindSlashRuntime', () => {
     }
     const binding = bindSlashRuntime(ctx)
     const mcp = binding.runtime.snapshot().commands.find((item) => item.canonicalName === 'mcp')
-    expect(mcp?.availability.state).toBe('available')
+    expect(mcp?.availability.state).toBe('disabled')
     binding.dispose()
   })
 
@@ -148,7 +148,7 @@ describe('bindSlashRuntime', () => {
     }
     const binding = bindSlashRuntime(ctx)
     const mcp = binding.runtime.snapshot().commands.find((item) => item.canonicalName === 'mcp')
-    expect(mcp?.availability.state).toBe('available')
+    expect(mcp?.availability.state).toBe('disabled')
     const plugins = binding.runtime.execute(
       binding.runtime.snapshot().commands.find((item) => item.canonicalName === 'plugins')!,
       '/plugins',

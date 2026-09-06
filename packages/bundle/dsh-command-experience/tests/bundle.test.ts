@@ -29,7 +29,7 @@ describe('bundle', () => {
         id: '@yeisme/dsh-command-experience',
         version: '0.1.0-rc.1',
         name: 'Codex Command Experience',
-        description: 'Unified command experience across Web and TUI',
+        description: 'Unified command experience for Web',
         targetDSHVersion: '0.1.0-rc.8',
       });
     });

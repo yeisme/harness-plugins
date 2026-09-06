@@ -2,7 +2,7 @@
  * Command Experience Reducer
  *
  * Pure reducer for command interaction state machine.
- * Shared between Web and TUI to ensure consistent semantics.
+ * Shared by Web entry points to ensure consistent semantics.
  */
 
 import type {

@@ -97,7 +97,7 @@ export function buildP0Catalog(capabilities: OwnerCapabilitySnapshot = { availab
         ...(seed.selectorKey === undefined ? {} : { selectorKey: seed.selectorKey }),
         ...(seed.schemaKey === undefined ? {} : { schemaKey: seed.schemaKey }),
       },
-      surfaces: ['web', 'tui'],
+      surfaces: ['web'],
       actionKind: seed.actionKind,
       owner: seed.owner,
       danger: seed.danger,

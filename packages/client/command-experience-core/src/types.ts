@@ -2,7 +2,7 @@
  * Command Experience Core Types
  *
  * Shared pure types for unified command directory and interaction state machine.
- * These types are consumed by both Web and TUI adapters.
+ * These types are consumed by the Web adapter.
  */
 
 /**
@@ -37,7 +37,7 @@ export type CommandDanger = 'safe' | 'confirm' | 'destructive'
 /**
  * Supported surfaces
  */
-export type CommandSurface = 'web' | 'tui'
+export type CommandSurface = 'web'
 
 /**
  * Command ownership

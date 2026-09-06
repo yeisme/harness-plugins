@@ -1,6 +1,6 @@
 # @yeisme/dsh-client-ui-command-experience-core
 
-DSH Codex command experience core package - shared types, directory utilities, and reducer for unified command experience across Web and TUI surfaces.
+DSH Codex command experience core package - shared types, directory utilities, and reducer for the Web command surface.
 
 ## Purpose
 
@@ -10,7 +10,7 @@ This package provides the pure functional core of the command experience system:
 - **Directory**: Command directory management with filtering, sorting, and conflict detection
 - **Reducer**: State machine for command interaction flow
 
-This package has no runtime dependencies on DSH or React - it's pure TypeScript/JavaScript that can be consumed by both Web and TUI adapters.
+This package has no runtime dependencies on DSH or React - it's pure TypeScript/JavaScript consumed by Web adapters.
 
 ## Installation
 

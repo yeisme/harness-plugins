@@ -1,6 +1,6 @@
 # @yeisme/dsh-command-experience
 
-DSH Codex Command Experience bundle - unified `/` command experience across Web and TUI surfaces with Codex-style command coverage, `/agent` thread picker, and `/resume` session picker.
+DSH Codex Command Experience bundle for the Web surface with Codex-style command coverage, `/agent` thread picker, and `/resume` session picker.
 
 ## Installation
 
@@ -9,21 +9,15 @@ DSH Codex Command Experience bundle - unified `/` command experience across Web 
 dsh plugin --profile web add @yeisme/dsh-command-experience
 ```
 
-### TUI Profile
-```bash
-dsh plugin --profile tui add @yeisme/dsh-command-experience
-```
-
 ### Removal
 ```bash
 dsh plugin --profile web remove @yeisme/dsh-command-experience
-dsh plugin --profile tui remove @yeisme/dsh-command-experience
 ```
 
 ## Features
 
 ### Unified Command Directory
-- Single source of truth for command metadata across Web and TUI
+- Single source of truth for Web command metadata
 - Canonical names, aliases, descriptions, categories
 - Availability, danger levels, and action kinds
 - Codex compatibility coverage tracking
@@ -77,7 +71,7 @@ dsh plugin --profile tui remove @yeisme/dsh-command-experience
   receipt path; no impact data is invented client-side
 
 ### Shared Keymap (mouse-free operation)
-- One binding table drives Web and TUI: `Ctrl/Cmd+K` toggle,
+- One binding table drives Web entry points: `Ctrl/Cmd+K` toggle,
   arrows / `Ctrl+N` / `Ctrl+P` navigation, `Home` / `End` jumps,
   `Enter` execute, `Escape` cancel, `Tab` safe-prefix completion,
   `Ctrl/Cmd+Enter` confirm (bare `Enter` never confirms a danger gate),
@@ -101,18 +95,17 @@ Complete coverage matrix tracking:
 - `conditional` - Platform-specific conditions
 - `not-applicable` - Does not apply to DSH
 
-## Command-first shell (Web + TUI)
+## Command-first Web shell
 
-`/` Slash Assist and `Ctrl/Cmd+K` Palette (Web) / Command Center (TUI) consume
-one live revisioned directory. Canonical id, alias, owner, danger, coverage,
-and disabled reason are the same on both surfaces. First `/` or `:` discovery
+`/` Slash Assist and `Ctrl/Cmd+K` Palette consume one live revisioned directory.
+Canonical id, alias, owner, danger, coverage, and disabled reason are shared by
+all Web entry points. First `/` or `:` discovery
 is local (no RPC). `:` is a migration hint, not a second identity.
 
 Structured draft covers command token, argument/selector, original-draft
 restore on Escape, and safe/confirm/destructive gates. Bare Enter does not
-confirm non-safe commands. Web confirm uses `Ctrl/Cmd+Enter`; TUI confirm
-defaults Cancel and needs `y` or an explicit Confirm focus; destructive
-needs the owner phrase.
+confirm non-safe commands. Web confirm uses `Ctrl/Cmd+Enter`; destructive
+actions need the owner phrase.
 
 Composer receipt is the short-lived lane. Durable Activity is restored only
 from official `command/run|done`. Results do not enter the model transcript.
@@ -180,11 +173,8 @@ pnpm --filter @yeisme/dsh-command-experience test:integration
 @yeisme/dsh-command-experience (bundle)
 ├── @yeisme/dsh-client-ui-command-experience-core (shared types & reducer)
 ├── @yeisme/dsh-command-experience-host (DSH adapter)
-├── @yeisme/dsh-client-ui-command-experience-web (Web contribution adapter)
-└── @yeisme/dsh-client-ui-command-experience-tui (TUI console contribution adapter)
+└── @yeisme/dsh-client-ui-command-experience-web (Web contribution adapter)
 ```
-
-The TUI adapter probes a public `registerCommandConsole` / `contributeCommandConsole` seam. Missing seams fail closed: the contribution stays unregistered with an explicit reason. No fake console, no host patching, and no RPC on first discovery. Canonical `/` assist, the `:` legacy alias (with a migration hint), `/agent` thread picker, and `/resume` session picker all resolve against the shared catalog. Missing owner actions stay visible and disabled with a reason.
 
 ### Host registration contract
 
@@ -229,7 +219,7 @@ Missing capabilities result in:
 
 ## Compatibility
 
-### TUI Legacy Prefix
+### Legacy Prefix
 - `:` works as alias for `/` with migration hints
 - `//text` sends `/text` as literal prompt
 - Removal requires future OpenSpec

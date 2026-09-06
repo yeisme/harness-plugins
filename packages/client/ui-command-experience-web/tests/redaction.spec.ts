@@ -23,7 +23,7 @@ describe('Redaction Utilities', () => {
     description: 'Switch agent',
     category: 'session',
     input: {},
-    surfaces: ['web', 'tui'],
+    surfaces: ['web'],
     actionKind: 'owner-action',
     owner: 'dsh',
     danger: 'safe',

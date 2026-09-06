@@ -26,7 +26,6 @@ export default defineConfig([
   { ...node, entry: ['lib/types/index.js'] },
   {
     alias: {
-      '@yeisme/dsh-client-ui-command-experience-tui': fileURLToPath(new URL('../../client/ui-command-experience-tui/src/index.ts', import.meta.url)),
       '@yeisme/dsh-client-ui-command-experience-core': fileURLToPath(new URL('../../client/command-experience-core/src/index.ts', import.meta.url)),
     },
     entry: { client: 'lib/types/client/index.js' },

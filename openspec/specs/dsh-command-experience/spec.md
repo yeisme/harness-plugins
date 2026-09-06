@@ -59,20 +59,12 @@ TBD - created by archiving change dsh-command-experience-session-keymap-v1. Upda
 - **WHEN** query 变化后携带的新 candidateKeys 不含当前 cursorKey
 - **THEN** 光标 SHALL 变为 null，MUST NOT 选中相邻候选
 
-### Requirement: Web 与 TUI 表面接线
-Web 菜单/selector/确认/回执四处键盘处理 SHALL 统一经 `resolveKeyAction`（消费 `keyboardShortcuts` 配置），并提供 `useCommandPaletteToggle`（window 级 toggle，`enabled: false` 时挂起）。TUI SHALL 提供纯函数 `parseTerminalKey`（终端键序列→逻辑键）与 `applyTuiConsoleKey`/`controller.handleKeyEvent`（官方 seam 接入点）；TUI 适配器 MUST NOT 读 stdin 或开 rawMode，seam 未发布时保持 fail-closed。Web 焦点回补在官方 `bindComposerFocus` 公开前 SHALL 使用 DOM fallback。键盘可达界面 SHALL 提供礼貌 aria-live 播报。
+### Requirement: Web 表面接线
+Web 菜单/selector/确认/回执四处键盘处理 SHALL 统一经 `resolveKeyAction`（消费 `keyboardShortcuts` 配置），并提供 `useCommandPaletteToggle`（window 级 toggle，`enabled: false` 时挂起）。Web 焦点回补在官方 `bindComposerFocus` 公开前 SHALL 使用 DOM fallback。键盘可达界面 SHALL 提供礼貌 aria-live 播报。
 
 #### Scenario: Ctrl+K 打开面板
 - **WHEN** web 页面处于 idle 且用户按 `ctrl+k`
 - **THEN** 系统 SHALL 进入 assist 态并聚焦命令输入
-
-#### Scenario: TUI 合成键序列
-- **WHEN** 本地测试宿主向 controller 喂 `\x1b[B`、`\r`、`\x1b`
-- **THEN** SHALL 分别产生光标下移、执行意图、取消并恢复 draft
-
-#### Scenario: TUI seam 缺失
-- **WHEN** 官方 `@deepseek-ai/dsh-client-tui` seam 不可用
-- **THEN** 适配器 SHALL 保持未注册并给出原因，MUST NOT 伪造 console
 
 ### Requirement: fail-closed 降级无死按钮
 缺 owner action 的命令与动作 SHALL 保持可见并 disabled 且带原因；mutation 仅在 receipt 通道可用时启用。hub 动作清单 SHALL 由 `buildSessionHubActions` 依 owner capability 快照派生（缺 `archive-session` → Archive disabled + `missing owner action archive-session`）。
@@ -124,10 +116,9 @@ Web 菜单/selector/确认/回执四处键盘处理 SHALL 统一经 `resolveKeyA
 #### Scenario: 合格 capability 可用
 
 - **WHEN** Ordo capability projection 宣告兼容的 `run launch` preview/apply
-- **THEN** Web/TUI command entry SHALL 使用同一 owner/action kind，并进入各自宿主的 preview-confirm-receipt 流程
+- **THEN** Web command entry SHALL 使用共享 owner/action kind，并进入 preview-confirm-receipt 流程
 
 #### Scenario: 仅存在 `ordo run start`
 
 - **WHEN** 环境支持既有 `run start` 但没有 `run launch`
 - **THEN** `/ordo run launch` SHALL 保持 disabled，reason SHALL 说明 foreground handoff capability 缺失
-

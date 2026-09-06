@@ -1,3 +1,0 @@
-schema: spec-driven
-created: 2026-08-31
-goal: 让 TUI 用户用键盘在 1–2 个确定步骤内发现和执行常见命令，并与 Web 共用目录、owner、状态投影和安全回执。

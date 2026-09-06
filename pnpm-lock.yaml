@@ -78,6 +78,9 @@ importers:
 
   packages/bundle/dsh-browser-pane:
     dependencies:
+      '@deepseek-ai/cordis':
+        specifier: ^4.0.1
+        version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@yeisme/dsh-browser-host':
         specifier: workspace:0.1.0-rc.1
         version: link:../../host/dsh-browser-host
@@ -106,9 +109,6 @@ importers:
       '@yeisme/dsh-client-ui-command-experience-core':
         specifier: workspace:*
         version: link:../../client/command-experience-core
-      '@yeisme/dsh-client-ui-command-experience-tui':
-        specifier: workspace:*
-        version: link:../../client/ui-command-experience-tui
       '@yeisme/dsh-command-experience-host':
         specifier: workspace:*
         version: link:../../host/dsh-command-experience
@@ -202,6 +202,9 @@ importers:
       '@deepseek-ai/dsh-client-runtime':
         specifier: ^0.1.0-rc.6
         version: 0.1.0-rc.6(2e7801b4bc3df44e2ff6c3a6bbd5f2d6)
+      '@deepseek-ai/dsh-client-store':
+        specifier: ^0.1.2-rc.1
+        version: 0.1.2-rc.1(@deepseek-ai/cordis@4.0.1)(@types/react@18.3.31)(react@18.3.1)
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: ^0.1.0-rc.6
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
@@ -612,6 +615,9 @@ importers:
       '@yeisme/dsh-client-ui-surface':
         specifier: workspace:^
         version: link:../../client/ui-surface
+      '@yeisme/dsh-client-ui-visual-kit':
+        specifier: workspace:^
+        version: link:../../client/ui-visual-kit
       '@yeisme/dsh-workbench-core':
         specifier: workspace:*
         version: link:../dsh-workbench-core
@@ -1091,6 +1097,9 @@ importers:
       '@deepseek-ai/dsh-client-runtime':
         specifier: ^0.1.0-rc.6
         version: 0.1.0-rc.6(2e7801b4bc3df44e2ff6c3a6bbd5f2d6)
+      '@deepseek-ai/dsh-client-store':
+        specifier: ^0.1.2-rc.1
+        version: 0.1.2-rc.1(@deepseek-ai/cordis@4.0.1)(@types/react@18.3.31)(react@18.3.1)
       '@deepseek-ai/dsh-client-test-runtime':
         specifier: ^0.1.0-rc.6
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-client-runtime@0.1.0-rc.6(2e7801b4bc3df44e2ff6c3a6bbd5f2d6))(@deepseek-ai/dsh-client-ui-slots@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-client-web-react@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-host-apiproxy@0.1.0-rc.6(0c404f3e99864b0ace84b3758d4e257d))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(@types/node@22.20.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(jsdom@30.0.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(vite@7.3.6(@types/node@22.20.1)(tsx@4.23.12)(yaml@2.9.0))
@@ -1206,6 +1215,9 @@ importers:
       '@deepseek-ai/dsh-client-runtime':
         specifier: ^0.1.0-rc.6
         version: 0.1.0-rc.6(2e7801b4bc3df44e2ff6c3a6bbd5f2d6)
+      '@deepseek-ai/dsh-client-ui-renderer':
+        specifier: '>=0.1.0-rc.6 <0.2.0'
+        version: 0.1.0-rc.8(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-client-runtime@0.1.0-rc.6(2e7801b4bc3df44e2ff6c3a6bbd5f2d6))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(react@18.3.1)
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: ^0.1.0-rc.6
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
@@ -1416,22 +1428,6 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jsdom@30.0.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(tsx@4.23.12)(yaml@2.9.0)
 
-  packages/client/ui-command-experience-tui:
-    dependencies:
-      '@yeisme/dsh-client-ui-command-experience-core':
-        specifier: workspace:^
-        version: link:../command-experience-core
-    devDependencies:
-      tsdown:
-        specifier: ^0.22.14
-        version: 0.22.14(tsx@4.23.12)(typescript@5.9.3)
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.7
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jsdom@30.0.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(tsx@4.23.12)(yaml@2.9.0)
-
   packages/client/ui-command-experience-web:
     dependencies:
       '@deepseek-ai/dsh-client-ui-primitives':
@@ -1599,6 +1595,9 @@ importers:
       '@deepseek-ai/dsh-client-runtime':
         specifier: ^0.1.0-rc.6
         version: 0.1.0-rc.6(2e7801b4bc3df44e2ff6c3a6bbd5f2d6)
+      '@deepseek-ai/dsh-client-store':
+        specifier: ^0.1.2-rc.1
+        version: 0.1.2-rc.1(@deepseek-ai/cordis@4.0.1)(@types/react@18.3.31)(react@18.3.1)
       '@deepseek-ai/dsh-client-ui-primitives':
         specifier: 0.1.0-rc.6
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
@@ -2601,9 +2600,15 @@ importers:
       '@deepseek-ai/cordis':
         specifier: ^4.0.1
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: 0.1.0-rc.6
+        version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@types/react':
         specifier: ~18.3.31
         version: 18.3.31
+      '@yeisme/dsh-client-ui-surface':
+        specifier: workspace:*
+        version: link:../../client/ui-surface
       '@yeisme/dsh-plugin-contracts':
         specifier: workspace:*
         version: link:../../sdk/dsh-plugin-contracts
@@ -2854,6 +2859,9 @@ importers:
       '@deepseek-ai/cordis':
         specifier: ^4.0.1
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
+      '@deepseek-ai/dsh-typert-protocol':
+        specifier: ^0.1.0-rc.6
+        version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       tsdown:
         specifier: ^0.22.14
         version: 0.22.14(tsx@4.23.12)(typescript@5.9.3)
@@ -3313,6 +3321,11 @@ packages:
       '@deepseek-ai/cordis': ^4.0.1
       '@deepseek-ai/dsh-invariants': ^0.1.0-rc.6
 
+  '@deepseek-ai/dsh-client-store@0.1.2-rc.1':
+    resolution: {integrity: sha512-tDtAkfYb3URpASDP2fJFOZhGINtVVoUlQQqTSHtTF2L9N+7Tqij/PrSPXawBijBCkVdwaYsXdbzfLLjsh2SBqQ==}
+    peerDependencies:
+      '@deepseek-ai/cordis': ^4.0.2
+
   '@deepseek-ai/dsh-client-test-runtime@0.1.0-rc.6':
     resolution: {integrity: sha512-N+uI//JT9Dc5mY327r+bE63G553Mj9E8ryFSJW9Hw/bRryd0qc9Dg9b2VUPkyr/NPcNcO+atIpo1jTJAU8c+WA==}
     peerDependencies:
@@ -3418,6 +3431,13 @@ packages:
     peerDependencies:
       '@deepseek-ai/cordis': ^4.0.1
       '@deepseek-ai/dsh-invariants': ^0.1.0-rc.7
+
+  '@deepseek-ai/dsh-client-ui-renderer@0.1.0-rc.8':
+    resolution: {integrity: sha512-/MpR9i++feUFNzJgCChLfct1RphTPJ1WKfZrIsczjyOAZNBzAM5LRjpvM0ZO5Vg7rs7id+PLJYuUKy2e2V5aAA==}
+    peerDependencies:
+      '@deepseek-ai/cordis': ^4.0.1
+      '@deepseek-ai/dsh-client-runtime': ^0.1.0-rc.8
+      '@deepseek-ai/dsh-invariants': ^0.1.0-rc.8
 
   '@deepseek-ai/dsh-client-ui-settings@0.1.0-rc.6':
     resolution: {integrity: sha512-g+6w62SWnwMWkn6VuLK6MHcSKbXQZD7oTYLG5wjhDRDULOEBCgikXD3LJo/esOsVncXABDiih8KuDW3Fg8TfSQ==}
@@ -6791,6 +6811,15 @@ snapshots:
       '@deepseek-ai/dsh-invariants': 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)
       '@deepseek-ai/schemastery': 3.18.1
 
+  '@deepseek-ai/dsh-client-store@0.1.2-rc.1(@deepseek-ai/cordis@4.0.1)(@types/react@18.3.31)(react@18.3.1)':
+    dependencies:
+      '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
+      immer: 10.2.0
+      zustand: 4.4.7(@types/react@18.3.31)(immer@10.2.0)(react@18.3.1)
+    transitivePeerDependencies:
+      - '@types/react'
+      - react
+
   '@deepseek-ai/dsh-client-test-runtime@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-client-runtime@0.1.0-rc.6(2e7801b4bc3df44e2ff6c3a6bbd5f2d6))(@deepseek-ai/dsh-client-ui-slots@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-client-web-react@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-host-apiproxy@0.1.0-rc.6(0c404f3e99864b0ace84b3758d4e257d))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(@types/node@22.20.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(jsdom@30.0.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(vite@7.3.6(@types/node@22.20.1)(tsx@4.23.12)(yaml@2.9.0))':
     dependencies:
       '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
@@ -6999,6 +7028,15 @@ snapshots:
       shiki: 4.4.3
     transitivePeerDependencies:
       - supports-color
+
+  '@deepseek-ai/dsh-client-ui-renderer@0.1.0-rc.8(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-client-runtime@0.1.0-rc.6(2e7801b4bc3df44e2ff6c3a6bbd5f2d6))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(react@18.3.1)':
+    dependencies:
+      '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
+      '@deepseek-ai/dsh-client-runtime': 0.1.0-rc.6(2e7801b4bc3df44e2ff6c3a6bbd5f2d6)
+      '@deepseek-ai/dsh-invariants': 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)
+      use-sync-external-store: 1.2.0(react@18.3.1)
+    transitivePeerDependencies:
+      - react
 
   '@deepseek-ai/dsh-client-ui-settings@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-api-remotes@0.1.0-rc.6(78336eedd53cc2394391ff1df5d7c2a6))(@deepseek-ai/dsh-client-connection@0.1.0-rc.6)(@deepseek-ai/dsh-client-runtime@0.1.0-rc.6(2e7801b4bc3df44e2ff6c3a6bbd5f2d6))(@deepseek-ai/dsh-client-schema-form@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-client-ui-slots@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/dsh-settings@0.1.0-rc.8(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-brand@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/schemastery@3.18.1))(react@18.3.1)':
     dependencies:

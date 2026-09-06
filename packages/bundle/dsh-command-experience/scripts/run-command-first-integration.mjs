@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Fake official-seam integration runner for command-first Web/TUI.
+ * Fake official-seam integration runner for command-first Web.
  *
  * Spawns the shipped Vitest suites that drive directory → draft/update →
  * dispatch → command/run|done → receipt/Activity. Does not boot official
@@ -24,7 +24,6 @@ const publicCommand = 'pnpm --filter @yeisme/dsh-command-experience test:integra
 const suites = [
   { id: 'core-directory-draft', package: '@yeisme/dsh-client-ui-command-experience-core', files: ['tests/presentation.test.ts', 'tests/draft.test.ts', 'tests/p0-catalog.test.ts'] },
   { id: 'web-shell-first-support', package: '@yeisme/dsh-client-ui-command-experience-web', files: ['tests/shell.spec.ts', 'tests/first-support.spec.ts'] },
-  { id: 'tui-update-render', package: '@yeisme/dsh-client-ui-command-experience-tui', files: ['tests/shell.spec.ts'] },
   { id: 'session-status-host', package: '@yeisme/dsh-session-status-host', files: ['tests/schema.spec.ts', 'tests/projection.spec.ts'] },
   { id: 'session-status-client', package: '@yeisme/dsh-client-ui-session-status', files: ['tests/wire.spec.ts', 'tests/view-model.spec.ts'] },
   { id: 'entry-convergence', package: '@yeisme/dsh-client-ui-command-experience-core', files: ['tests/entry-convergence.test.ts'] },
@@ -77,7 +76,7 @@ writeFileSync(resolve(evidenceRoot, 'env.json'), `${JSON.stringify({
 }, null, 2)}\n`)
 writeFileSync(resolve(artifactsRoot, 'integration-matrix.json'), `${JSON.stringify({
   schema: 'dsh.command-first.integration-matrix.v1',
-  changes: ['dsh-web-command-first-interaction-v1', 'dsh-tui-command-first-interaction-v1'],
+  changes: ['dsh-web-command-first-interaction-v1'],
   suites: results.map(({ id, status, exit_code }) => ({ id, status, exit_code })),
   official_dsh_web: false,
   seam: 'fake',

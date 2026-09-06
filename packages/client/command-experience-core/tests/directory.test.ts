@@ -26,7 +26,7 @@ describe('directory', () => {
       description: 'Show command help',
       category: 'discovery',
       input: {},
-      surfaces: ['web', 'tui'],
+      surfaces: ['web'],
       actionKind: 'local',
       owner: 'client',
       danger: 'safe',
@@ -39,7 +39,7 @@ describe('directory', () => {
       description: 'Resume a session',
       category: 'session',
       input: { selectorKey: 'sessionId' },
-      surfaces: ['web', 'tui'],
+      surfaces: ['web'],
       actionKind: 'owner-action',
       owner: 'dsh',
       danger: 'safe',
@@ -52,7 +52,7 @@ describe('directory', () => {
       description: 'Delete a session',
       category: 'session',
       input: { selectorKey: 'sessionId' },
-      surfaces: ['web', 'tui'],
+      surfaces: ['web'],
       actionKind: 'owner-action',
       owner: 'dsh',
       danger: 'destructive',
@@ -101,9 +101,9 @@ describe('directory', () => {
 
   describe('filterCommands', () => {
     it('should filter by surface', () => {
-      const filtered = filterCommands(mockCommands, { surface: 'tui' });
-      expect(filtered).toHaveLength(3);
-      expect(filtered.every(c => c.surfaces.includes('tui'))).toBe(true);
+      const filtered = filterCommands(mockCommands, { surface: 'web' });
+      expect(filtered).toHaveLength(4);
+      expect(filtered.every(c => c.surfaces.includes('web'))).toBe(true);
     });
 
     it('should filter by availability', () => {

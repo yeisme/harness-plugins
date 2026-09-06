@@ -9,6 +9,7 @@ import {
   type HostCommandProjection,
   type SlashHostCommands,
   type SlashPaneWorkbench,
+  type SlashPaneViewRecord,
   type SlashPluginRecord,
   type SlashRuntime,
 } from '@yeisme/dsh-client-ui-command-experience-core';
@@ -28,7 +29,21 @@ function asPaneWorkbench(value: unknown): SlashPaneWorkbench | undefined {
   if (typeof value.views.snapshot !== 'function' || typeof value.views.subscribe !== 'function') return undefined;
   if (typeof value.commands.snapshot !== 'function' || typeof value.commands.subscribe !== 'function') return undefined;
   if (typeof value.commands.execute !== 'function' || typeof value.openView !== 'function') return undefined;
-  return value as unknown as SlashPaneWorkbench;
+  const pane = value as unknown as SlashPaneWorkbench;
+  return {
+    views: {
+      // PaneViewRegistry returns registrations; older adapters returned flat descriptors.
+      snapshot: () => pane.views.snapshot().map(row => {
+        const registration = row as unknown as Record<string, unknown>;
+        return isRecord(registration.descriptor)
+          ? { ...registration.descriptor, showInPicker: registration.showInPicker !== false } as unknown as SlashPaneViewRecord
+          : row;
+      }),
+      subscribe: pane.views.subscribe.bind(pane.views),
+    },
+    commands: pane.commands,
+    openView: request => pane.openView(request),
+  };
 }
 
 function pluginRecords(ctx: SlashBindContext): SlashPluginRecord[] {
@@ -44,7 +59,7 @@ function pluginRecords(ctx: SlashBindContext): SlashPluginRecord[] {
   }
   // Official plugin inventory seam: the cordis loader's entry table is the
   // same source @deepseek-ai/dsh-host-plugin-inventory projects. Surface
-  // probes (`/mcp`, `/skills`) and `/plugins` depend on it.
+  // reports and `/plugins` depend on it. Pane availability comes from the registry.
   const loaderEntries = (ctx as { readonly loader?: { readonly entries?: () => Iterable<unknown> } }).loader?.entries?.();
   if (loaderEntries !== undefined) {
     const records: SlashPluginRecord[] = [];
@@ -64,10 +79,6 @@ function pluginRecords(ctx: SlashBindContext): SlashPluginRecord[] {
   return [...keys]
     .filter((id): id is string => typeof id === 'string')
     .map((id) => ({ id, status: 'loaded' }));
-}
-
-function hasPlugin(ctx: SlashBindContext, fragment: string): boolean {
-  return pluginRecords(ctx).some((plugin) => plugin.id.includes(fragment));
 }
 
 function asHostCommands(value: unknown): SlashHostCommands | undefined {
@@ -102,22 +113,6 @@ export function bindSlashRuntime(ctx: SlashBindContext): { readonly runtime: Sla
   const runtime = createSlashRuntime({
     ...(paneWorkbench === undefined ? {} : { paneWorkbench }),
     ...(hostCommands === undefined ? {} : { hostCommands }),
-    conversationViews: {
-      has: (id) => id === 'mcp-inspector' && hasPlugin(ctx, 'mcp-inspector'),
-      activate: (id) => {
-        const conversation = ctx.get('conversation');
-        if (isRecord(conversation) && typeof conversation.setActiveView === 'function') {
-          (conversation.setActiveView as (id: string) => void)(id);
-          return true;
-        }
-        const layout = ctx.get('layout');
-        if (isRecord(layout) && typeof layout.setConversationView === 'function') {
-          (layout.setConversationView as (id: string) => void)(id);
-          return true;
-        }
-        return false;
-      },
-    },
     plugins: () => pluginRecords(ctx),
   });
   ctx.provide?.('slashDirectory', runtime);

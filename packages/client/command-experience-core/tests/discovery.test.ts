@@ -13,7 +13,7 @@ function command(
     description: `${partial.canonicalName} command`,
     category: 'session',
     input: {},
-    surfaces: ['web', 'tui'],
+    surfaces: ['web'],
     actionKind: 'local',
     owner: 'client',
     danger: 'safe',
@@ -87,17 +87,14 @@ describe('resolveAssistQuery', () => {
     expect(parseSlashToken('  /Help  ')).toBe('help');
   });
 
-  it('filters the local directory to the requested surface', () => {
+  it('filters the local directory to the Web surface', () => {
     const mixed: CommandExperienceEntryV1[] = [
-      command({ canonicalName: 'help', surfaces: ['web', 'tui'] }),
+      command({ canonicalName: 'help', surfaces: ['web'] }),
       command({ canonicalName: 'web-only', surfaces: ['web'] }),
-      command({ canonicalName: 'tui-only', surfaces: ['tui'] }),
     ];
 
     const web = resolveAssistQuery(mixed, '/');
-    const tui = resolveAssistQuery(mixed, '/', { surface: 'tui' });
 
     expect(web.candidates.map((entry) => entry.canonicalName)).toEqual(['help', 'web-only']);
-    expect(tui.candidates.map((entry) => entry.canonicalName)).toEqual(['help', 'tui-only']);
   });
 });

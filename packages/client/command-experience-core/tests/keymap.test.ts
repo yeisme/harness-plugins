@@ -33,7 +33,7 @@ const commands: CommandExperienceEntryV1[] = [
     description: 'Manage sessions',
     category: 'session',
     input: { selectorKey: 'sessionId' },
-    surfaces: ['web', 'tui'],
+    surfaces: ['web'],
     actionKind: 'owner-action',
     owner: 'dsh',
     danger: 'safe',
@@ -46,7 +46,7 @@ const commands: CommandExperienceEntryV1[] = [
     description: 'Show runtime status',
     category: 'discovery',
     input: {},
-    surfaces: ['web', 'tui'],
+    surfaces: ['web'],
     actionKind: 'inspect',
     owner: 'dsh',
     danger: 'safe',
@@ -211,4 +211,3 @@ describe('resolveKeyAction per state', () => {
       .toBe('unhandled')
   })
 })
-

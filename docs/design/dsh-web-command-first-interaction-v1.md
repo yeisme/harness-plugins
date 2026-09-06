@@ -2,7 +2,6 @@
 
 > 状态：UI/交互规格完成；实现由 `openspec/changes/dsh-web-command-first-interaction-v1/` 跟踪。
 
-> TUI 同源交互由 `docs/design/dsh-tui-command-first-interaction-v1.md` 与 `openspec/changes/dsh-tui-command-first-interaction-v1/` 跟踪；两者共享命令目录、owner 合同、session status projection 与 durable command events。
 
 ## 1. 产品结论
 

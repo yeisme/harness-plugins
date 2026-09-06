@@ -1,16 +1,12 @@
 /**
  * DSH Command Experience Client Export
  *
- * Client-side exports for Web/TUI integration.
+ * Client-side exports for Web integration.
  * This is loaded via the ModuleLoader system in the browser.
  */
 
-// Re-export core types and utilities for Web/TUI adapters
+// Re-export core types and utilities for the Web adapter.
 export * from '@yeisme/dsh-client-ui-command-experience-core';
-
-import { commandExperienceTuiAdapter } from '@yeisme/dsh-client-ui-command-experience-tui';
-
-export { commandExperienceTuiAdapter };
 
 // Web adapter lives in @yeisme/dsh-client-ui-command-experience-web.
 // React stays external, so this bundle ships a handoff descriptor, not a
@@ -33,7 +29,6 @@ if (typeof window !== 'undefined' && (window as any).__ModuleLoader__) {
       Object.assign(exports, {
         // Core exports will be added here
         commandExperienceWebAdapterRef,
-        commandExperienceTuiAdapter,
       });
 
       return module.exports;

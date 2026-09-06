@@ -15,7 +15,7 @@ export function commandFixture(
     description: `${partial.canonicalName} command`,
     category: 'session',
     input: {},
-    surfaces: ['web', 'tui'],
+    surfaces: ['web'],
     actionKind: 'owner-action',
     owner: 'dsh',
     danger: 'safe',

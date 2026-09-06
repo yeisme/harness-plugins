@@ -80,7 +80,7 @@ function sanitizedEntry(input: {
       ...(input.selectorKey === undefined ? {} : { selectorKey: input.selectorKey }),
       schemaKey: input.schemaKey,
     },
-    surfaces: ['web', 'tui'],
+    surfaces: ['web'],
     actionKind: input.actionKind,
     owner: 'host',
     danger: 'safe',

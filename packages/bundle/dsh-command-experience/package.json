@@ -1,7 +1,7 @@
 {
   "name": "@yeisme/dsh-command-experience",
   "version": "0.1.0-rc.1",
-  "description": "DSH Codex command experience bundle: unified / commands across Web and TUI with /agent thread picker, /resume session picker, and Codex-style command coverage",
+  "description": "DSH Codex command experience bundle for Web with /agent thread picker, /resume session picker, and Codex-style command coverage",
   "main": "lib/index.js",
   "scripts": {
     "test": "vitest run",
@@ -64,7 +64,6 @@
   },
   "dependencies": {
     "@yeisme/dsh-client-ui-command-experience-core": "workspace:*",
-    "@yeisme/dsh-client-ui-command-experience-tui": "workspace:*",
     "@yeisme/dsh-command-experience-host": "workspace:*"
   },
   "devDependencies": {

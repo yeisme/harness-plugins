@@ -198,7 +198,7 @@ export function seedToEntry(seed: ConvergenceCommandSeed): CommandExperienceEntr
     description: seed.description,
     category: seed.category,
     input: { schemaKey: seed.schemaKey },
-    surfaces: ['web', 'tui'],
+    surfaces: ['web'],
     actionKind: seed.actionKind,
     owner: seed.owner,
     danger: seed.danger,
