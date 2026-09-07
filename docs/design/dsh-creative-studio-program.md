@@ -10,11 +10,11 @@
 |---|---|---|---|
 | 项目画布、位置、Draft、选区与恢复 | fit；DSH 插件 host 保存呈现数据 | 项目 Pane | [画布](../../openspec/changes/dsh-project-canvas-continuity-v1/tasks.md) |
 | 可执行连接、范围预览与运行观察 | split-owner；插件编辑草案，领域 owner/Ordo 执行 | 画布节点、运行 Inspector | [工作流](../../openspec/changes/dsh-creative-workflow-v1/tasks.md) |
-| 图像生成、修改与资产 | split-owner；Eikona | [生成台](dsh-eikona-studio.md) | [Eikona](../../openspec/changes/dsh-eikona-studio-v1/tasks.md) |
-| 视频分析、证据与参考提取 | split-owner；Anatomia | [分析台](dsh-anatomia-analysis-studio.md) | [Anatomia](../../openspec/changes/dsh-anatomia-analysis-studio-v1/tasks.md) |
-| 镜头级制作、编排与交付 | split-owner；Scaena | [制作台](dsh-scaena-production-studio.md) | [Scaena](../../openspec/changes/dsh-scaena-production-studio-v1/tasks.md) |
-| 小说、剧本和文本版本 | split-owner；Auctra | [文本台](dsh-auctra-writing-studio.md) | [Auctra](../../openspec/changes/dsh-auctra-writing-studio-v1/tasks.md) |
-| 配音、音乐、音效、字幕与交接 | split-owner；Sonora | [声音台](dsh-sonora-audio-studio.md) | [Sonora](../../openspec/changes/dsh-sonora-audio-studio-v1/tasks.md) |
+| 图像生成、修改与资产 | split-owner；Eikona | [生成台](../../openspec/changes/dsh-eikona-studio-v1/design.md) | [Eikona](../../openspec/changes/dsh-eikona-studio-v1/tasks.md) |
+| 视频分析、证据与参考提取 | split-owner；Anatomia | [分析台](../../openspec/changes/dsh-anatomia-analysis-studio-v1/design.md) | [Anatomia](../../openspec/changes/dsh-anatomia-analysis-studio-v1/tasks.md) |
+| 镜头级制作、编排与交付 | split-owner；Scaena | [制作台](../../openspec/changes/dsh-scaena-production-studio-v1/design.md) | [Scaena](../../openspec/changes/dsh-scaena-production-studio-v1/tasks.md) |
+| 小说、剧本和文本版本 | split-owner；Auctra | [文本台](../../openspec/changes/dsh-auctra-writing-studio-v1/design.md) | [Auctra](../../openspec/changes/dsh-auctra-writing-studio-v1/tasks.md) |
+| 配音、音乐、音效、字幕与交接 | split-owner；Sonora | [声音台](../../openspec/changes/dsh-sonora-audio-studio-v1/design.md) | [Sonora](../../openspec/changes/dsh-sonora-audio-studio-v1/tasks.md) |
 | 完整创作路径及跨项目故障恢复 | split-owner；各 owner 维护自身状态 | 共用画布和 Pane | [综合验收](../../openspec/changes/dsh-creative-cross-owner-journeys-v1/tasks.md) |
 
 五个专业 Pane 都是 required，分别交付；任何一个 Pane 都不以其他专业 Pane、画布或 Ordo 完成为其直接操作前置。单领域内部 workflow 使用该 owner 的原引擎；跨领域调度使用 Ordo，不在浏览器或插件 host 新建执行循环。
