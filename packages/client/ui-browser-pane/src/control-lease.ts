@@ -50,11 +50,11 @@ export function reduceBrowserControlLease(
       }
       return { holder: event.holder }
     case 'invalidated':
-      return state.holder === 'human-pending' ? { holder: 'agent' } : state
+      return state.holder === 'none' ? state : { holder: 'agent' }
   }
 }
 
 /** Input may flow locally only while the human lease is granted (non-bearer). */
-export function controlLeaseAllowsLocalInput(state: BrowserControlLeaseState): boolean {
-  return state.holder === 'human'
+export function controlLeaseAllowsLocalInput(state: BrowserControlLeaseState, now = Date.now()): boolean {
+  return state.holder === 'human' && Date.parse(state.expiresAt) > now
 }

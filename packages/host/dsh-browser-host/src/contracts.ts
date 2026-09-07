@@ -59,6 +59,14 @@ export interface BrowserPaneSnapshotV1 {
   readonly pages: readonly BrowserPageSummaryV1[]
   readonly activePageRef: BrowserAutomationPageRef | undefined
   readonly controlHolder: 'agent' | 'human' | 'none'
+  /** Owner-authored controls; absent means the pane renders no mutation controls. */
+  readonly actions?: readonly BrowserActionDescriptorV1[]
+  readonly environment?: {
+    readonly name: string
+    readonly workspaceRef: string
+    readonly status: 'ready' | 'starting' | 'offline' | 'unknown'
+    readonly identity: 'known' | 'unknown'
+  }
 }
 
 export type BrowserAutomationEventKind =
@@ -104,6 +112,21 @@ export interface BrowserActionReceiptV1 {
   readonly actionId: string
   readonly receiptRef: string
   readonly reasonCode: string | undefined
+  /** Present only when a takeover receipt grants the real owner lease. */
+  readonly controlLease?: BrowserControlLeaseV1
+}
+
+export interface BrowserActionReconcileRequestV1 {
+  readonly binding: BrowserAutomationBindingV1
+  readonly actionId: string
+  readonly idempotencyKey: string
+}
+
+export interface BrowserActionReconcileResultV1 {
+  readonly actionId: string
+  readonly idempotencyKey: string
+  readonly settled: boolean
+  readonly snapshot: BrowserPaneSnapshotV1
 }
 
 /** Exclusive human takeover lease; agent input pauses while held. */
@@ -117,6 +140,8 @@ export interface BrowserControlLeaseV1 {
 /** Opaque handle the injected Transport resolves locally to a MediaStream. */
 export interface BrowserViewportLeaseV1 {
   readonly pageRef: BrowserAutomationPageRef
+  readonly generation: number
+  readonly sessionRef: BrowserAutomationSessionRef
   readonly leaseToken: string
   readonly expiresAt: string
 }
@@ -130,6 +155,10 @@ export interface BrowserPaneHostV1 {
   snapshot(binding: BrowserAutomationBindingV1): Promise<BrowserPaneSnapshotV1>
   dispatch(request: BrowserActionRequestV1): Promise<BrowserActionReceiptV1>
   reconcile(binding: BrowserAutomationBindingV1): Promise<BrowserPaneSnapshotV1>
+  /** Optional exact-action reconciliation; ordinary snapshots never settle unknown actions. */
+  reconcileAction?(request: BrowserActionReconcileRequestV1): Promise<BrowserActionReconcileResultV1>
+  /** Optional supported viewport seam.  Absence is an honest non-embedded preview. */
+  viewportLease?(binding: BrowserAutomationBindingV1, pageRef: BrowserAutomationPageRef): Promise<BrowserViewportLeaseV1 | undefined>
 }
 
 /** Owner-side provider (session discovery + safe projection). */

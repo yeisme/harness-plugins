@@ -13,6 +13,7 @@ describe('bundle definition & dependencies (browser-pane 3.5)', () => {
     const pkg = JSON.parse(source('package.json')) as { name: string; version: string; dependencies: Record<string, string> }
     expect(pkg.name).toBe('@yeisme/dsh-browser-pane')
     expect(pkg.version).toBe('0.1.0-rc.1')
+    expect(JSON.parse(source('package.json')).dsh.client).toEqual({ platform: 'web', inject: [] })
     expect(Object.keys(pkg.dependencies)).toEqual(['@yeisme/dsh-browser-host', '@yeisme/dsh-client-ui-browser-pane'])
   })
 
@@ -43,7 +44,7 @@ describe('bundle definition & dependencies (browser-pane 3.5)', () => {
       registerView: () => { disposers.push(1); return () => { disposers.pop() } },
       registerCommand: () => () => {},
     }
-    const result = await applyBrowserPaneRegistration({ pane, provider: createFakeBrowserAutomationProvider(), viewportTransportAvailable: false })
+    const result = await applyBrowserPaneRegistration({ pane, provider: createFakeBrowserAutomationProvider(), viewportTransportAvailable: false, component: () => null })
     expect(result.registered).toBe(true)
     result.dispose()
     result.dispose()

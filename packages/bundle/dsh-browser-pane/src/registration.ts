@@ -11,13 +11,17 @@
  *
  * @module @yeisme/dsh-browser-pane
  */
-import { BROWSER_PANE_CLIENT_VIEW_KIND } from '@yeisme/dsh-client-ui-browser-pane'
+import { BROWSER_PANE_CLIENT_VIEW_KIND } from '@yeisme/dsh-client-ui-browser-pane/contracts'
+import type { BrowserPaneTranslator } from '@yeisme/dsh-client-ui-browser-pane'
 import { DSH_BROWSER_PANE_HOST_CONTEXT_KEY } from '@yeisme/dsh-browser-host'
-import type { BrowserAutomationProviderV1, BrowserPaneHostV1 } from '@yeisme/dsh-browser-host'
+import type { BrowserAutomationBindingV1, BrowserAutomationProviderV1, BrowserPaneHostV1 } from '@yeisme/dsh-browser-host'
+import type { BrowserViewportTransportV1 } from '@yeisme/dsh-client-ui-browser-pane'
 
 export const BROWSER_PANE_PLUGIN_ID: 'dsh-browser-pane' = 'dsh-browser-pane' as const
 export const BROWSER_OPEN_COMMAND_ID = 'browser.open' as const
 export const BROWSER_SLASH_COMMAND = '/browser' as const
+export const DSH_BROWSER_AUTOMATION_PROVIDER_CONTEXT_KEY = 'dsh.browserAutomationProvider' as const
+export const DSH_BROWSER_AUTOMATION_BINDING_CONTEXT_KEY = 'dsh.browserAutomationBinding' as const
 
 /** Optional capabilities published only when the probe succeeds (§3.3). */
 export interface BrowserLauncherCapabilitiesV1 {
@@ -26,15 +30,23 @@ export interface BrowserLauncherCapabilitiesV1 {
 }
 
 export interface BrowserPaneRegistrationInputV1 {
+  /** Supplied by the Client face; the Host installer never imports React UI. */
+  readonly component?: (() => unknown) | undefined
   readonly pane: {
     registerView(input: unknown): () => void
     registerCommand(input: unknown): () => void
+    openView?(request: unknown): void
   } | undefined
   /** Provider face from the Cordis context; absent = needs_contract. */
   readonly provider: BrowserAutomationProviderV1 | undefined
   /** Whether a viewport transport was injected locally. */
   readonly viewportTransportAvailable: boolean
+  /** Frozen owner binding for this workspace/session; absent keeps the view disabled. */
+  readonly binding?: BrowserAutomationBindingV1 | undefined
+  /** Optional local transport, never a URL or credential bridge. */
+  readonly viewportTransport?: BrowserViewportTransportV1 | undefined
   readonly labels?: { readonly open?: string | undefined } | undefined
+  readonly translator?: BrowserPaneTranslator | undefined
 }
 
 export interface BrowserPaneRegistrationResultV1 {
@@ -55,7 +67,7 @@ export async function applyBrowserPaneRegistration(input: BrowserPaneRegistratio
   let disposed = false
   let capabilities: BrowserLauncherCapabilitiesV1 = { automation: false, viewportTransport: input.viewportTransportAvailable }
 
-  if (input.provider === undefined) {
+  if (input.pane === undefined || input.component === undefined || input.provider === undefined) {
     return { pluginId: BROWSER_PANE_PLUGIN_ID, registered: false, unavailableReason: 'needs_contract', capabilities, dispose: () => {} }
   }
   try {
@@ -80,7 +92,7 @@ export async function applyBrowserPaneRegistration(input: BrowserPaneRegistratio
         singleton: false,
       },
       presentation: { icon: 'window', defaultEdge: 'right' },
-      component: () => null,
+      component: input.component,
     }))
     disposers.push(input.pane.registerCommand({
       descriptor: {
@@ -89,7 +101,7 @@ export async function applyBrowserPaneRegistration(input: BrowserPaneRegistratio
         slash: { name: 'browser', hint: 'open a browser pane', category: 'pane' },
         presentation: { launcher: true },
       },
-      execute: () => { /* view open goes through the pane workbench openView */ },
+      execute: () => input.pane?.openView?.({ kind: BROWSER_PANE_CLIENT_VIEW_KIND, role: 'content', preferredRegion: 'right', retention: 'keep-alive', singleton: false }),
     }))
   }
 

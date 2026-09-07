@@ -17,7 +17,8 @@ export type BrowserUiActionId =
 
 /** Local intent → typed request; the owner owns every effect. */
 export function buildBrowserUiAction(input: {
-  readonly actionId: BrowserUiActionId
+  /** Exact owner descriptor identity; the UI never substitutes its kind. */
+  readonly actionId: string
   readonly binding: BrowserActionRequestV1['binding']
   readonly pageRef: string | undefined
   readonly navigationDraft?: string | undefined

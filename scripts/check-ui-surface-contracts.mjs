@@ -8,7 +8,7 @@ const allowPending = process.argv.includes('--allow-pending')
 /** @type {Record<string, 'adopted'|'embed'|'excluded'|'pending'>} */
 const clientCatalog = {
   'ui-agent-preset': 'adopted',
-  'ui-browser-pane': 'excluded', // pure view-model/state logic; React rendering lands with the live factory slice
+  'ui-browser-pane': 'adopted', // live Browser Pane view consumes the shared Surface
   'ui-ai-drama-director': 'adopted',
   'ui-command-experience-web': 'adopted',
   'ui-conversation-rewrite': 'adopted',
@@ -65,6 +65,7 @@ const dynamicStyleAllowlist = new Map([
   ['packages/client/ui-pane-workbench/src/chrome/split-tree.tsx', 'split ratio flex and virtual row translate geometry'],
   ['packages/client/ui-ai-drama-director/src/client/show-control-views.tsx', 'measured show-control timeline and pane geometry'],
   ['packages/client/ui-creator-studio/src/projection-components.tsx', 'measured storyboard grid and progress geometry'],
+  ['packages/client/ui-creator-studio/src/artifact-workspace.tsx', 'owner-bounded media time range start and width percentages'],
   ['packages/client/ui-desktop-workbench/src/client/docx-preview.tsx', 'measured document preview container geometry'],
   ['packages/client/ui-creator-studio/src/views.tsx', 'progress and waveform values'],
   ['packages/client/ui-pane-subagent/src/view.ts', 'tree depth indentation'],

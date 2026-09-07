@@ -1442,7 +1442,16 @@ importers:
       '@yeisme/dsh-browser-host':
         specifier: workspace:0.1.0-rc.1
         version: link:../../host/dsh-browser-host
+      '@yeisme/dsh-client-ui-surface':
+        specifier: workspace:^
+        version: link:../ui-surface
+      '@yeisme/dsh-client-ui-visual-kit':
+        specifier: workspace:^
+        version: link:../ui-visual-kit
     devDependencies:
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: 0.1.0-rc.6
+        version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@types/react':
         specifier: ^18.3.1
         version: 18.3.31

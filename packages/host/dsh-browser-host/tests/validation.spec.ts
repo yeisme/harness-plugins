@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   BROWSER_PAGE_BUDGET,
   validateBrowserActionRequest,
+  validateBrowserActionReceipt,
   validateBrowserPaneEvent,
   validateBrowserPaneSnapshot,
+  validateBrowserViewportLease,
 } from '../src/validation.js'
 
 function snapshot(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -61,6 +63,27 @@ describe('browser action request validation', () => {
     expect(validateBrowserActionRequest({ ...request, idempotencyKey: 'short' })).toBeUndefined()
     expect(validateBrowserActionRequest({ ...request, navigationDraft: 'x'.repeat(3_000) })).toBeUndefined()
     expect(validateBrowserActionRequest({ ...request, navigationDraft: 'https://user:pass@evil.example' })).toBeUndefined()
+  })
+})
+
+describe('browser action receipt validation', () => {
+  it('requires the exact action identity and a live owner control lease', () => {
+    const receipt = { status: 'ok', actionId: 'control.take', receiptRef: 'receipt:one', reasonCode: undefined, controlLease: { holder: 'human', issuedAt: '2026-01-01T00:00:00Z', expiresAt: '2999-01-01T00:00:00Z', agentInputPaused: true } }
+    expect(validateBrowserActionReceipt(receipt, 'control.take')).toEqual(receipt)
+    expect(validateBrowserActionReceipt({ ...receipt, actionId: 'other' }, 'control.take')).toBeUndefined()
+    expect(validateBrowserActionReceipt({ ...receipt, controlLease: { ...receipt.controlLease, expiresAt: '2025-01-01T00:00:00Z' } }, 'control.take')).toBeUndefined()
+  })
+})
+
+describe('browser viewport lease validation', () => {
+  it('accepts only a current page, generation, and session lease', () => {
+    const binding = { tenantRef: 't:1', workspaceRef: 'w:1', principalRef: 'p:1', contextRevision: 1, sessionRef: 's:1' }
+    const lease = { pageRef: 'page:1', generation: 4, sessionRef: 's:1', leaseToken: 'lease:1', expiresAt: '2999-01-01T00:00:00Z' }
+    expect(validateBrowserViewportLease(lease, binding, 4, 'page:1')).toEqual(lease)
+    expect(validateBrowserViewportLease({ ...lease, generation: 3 }, binding, 4, 'page:1')).toBeUndefined()
+    expect(validateBrowserViewportLease({ ...lease, pageRef: 'page:2' }, binding, 4, 'page:1')).toBeUndefined()
+    expect(validateBrowserViewportLease({ ...lease, sessionRef: 's:2' }, binding, 4, 'page:1')).toBeUndefined()
+    expect(validateBrowserViewportLease({ ...lease, expiresAt: '2025-01-01T00:00:00Z' }, binding, 4, 'page:1')).toBeUndefined()
   })
 })
 

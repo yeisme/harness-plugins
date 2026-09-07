@@ -14,6 +14,7 @@ import {
   BROWSER_AUTOMATION_PROJECTION_SCHEMA,
   BROWSER_AUTOMATION_ACTION_SCHEMA,
   type BrowserActionRequestV1,
+  type BrowserActionReceiptV1,
   type BrowserPaneEventV1,
   type BrowserPaneSnapshotV1,
 } from './contracts.js'
@@ -43,6 +44,21 @@ const pageSchema = z.object({
   agentActivityCount: count,
 }).strict()
 
+const environmentSchema = z.object({
+  name: safeText,
+  workspaceRef: opaqueRef,
+  status: z.enum(['ready', 'starting', 'offline', 'unknown']),
+  identity: z.enum(['known', 'unknown']),
+}).strict()
+
+const actionDescriptorSchema = z.object({
+  actionId: z.string().min(1).max(160),
+  label: safeText,
+  kind: z.enum(['navigate', 'history_back', 'history_forward', 'reload', 'stop', 'open_page', 'close_page', 'activate_page', 'download_authorize', 'evidence_request', 'take_control', 'release_control']),
+  requiresConfirmation: z.enum(['none', 'confirm', 'approval']),
+  disabledReason: safeText.optional(),
+}).strict()
+
 export const browserPaneSnapshotSchema = z.object({
   schemaVersion: z.literal(BROWSER_AUTOMATION_PROJECTION_SCHEMA),
   generation: count,
@@ -52,6 +68,31 @@ export const browserPaneSnapshotSchema = z.object({
   pages: z.array(pageSchema).max(BROWSER_PAGE_BUDGET),
   activePageRef: opaqueRef.nullish().transform(value => value ?? undefined),
   controlHolder: z.enum(['agent', 'human', 'none']),
+  actions: z.array(actionDescriptorSchema).max(32).optional(),
+  environment: environmentSchema.optional(),
+}).strict()
+
+const viewportLeaseSchema = z.object({
+  pageRef: opaqueRef,
+  generation: count,
+  sessionRef: opaqueRef,
+  leaseToken: opaqueRef,
+  expiresAt: isoTimestamp,
+}).strict()
+
+const controlLeaseSchema = z.object({
+  holder: z.literal('human'),
+  issuedAt: isoTimestamp,
+  expiresAt: isoTimestamp,
+  agentInputPaused: z.literal(true),
+}).strict()
+
+const actionReceiptSchema = z.object({
+  status: z.enum(['ok', 'rejected', 'needs_confirm', 'unknown']),
+  actionId: z.string().min(1).max(160),
+  receiptRef: opaqueRef,
+  reasonCode: opaqueRef.optional(),
+  controlLease: controlLeaseSchema.optional(),
 }).strict()
 
 export const browserPaneEventSchema = z.object({
@@ -96,4 +137,22 @@ export function validateBrowserPaneEvent(input: unknown): BrowserPaneEventV1 | u
 export function validateBrowserActionRequest(input: unknown): BrowserActionRequestV1 | undefined {
   const parsed = browserActionRequestSchema.safeParse(input)
   return parsed.success ? parsed.data as BrowserActionRequestV1 : undefined
+}
+
+/** Fail-closed receipt validation with exact action identity and live lease. */
+export function validateBrowserActionReceipt(input: unknown, actionId: string, now = Date.now()): BrowserActionReceiptV1 | undefined {
+  const parsed = actionReceiptSchema.safeParse(input)
+  if (!parsed.success || parsed.data.actionId !== actionId) return undefined
+  const lease = parsed.data.controlLease
+  if (lease !== undefined && (Date.parse(lease.expiresAt) <= now || Date.parse(lease.issuedAt) > now)) return undefined
+  return parsed.data as BrowserActionReceiptV1
+}
+
+export function validateBrowserViewportLease(input: unknown, binding: BrowserActionRequestV1['binding'], generation: number, pageRef: string): import('./contracts.js').BrowserViewportLeaseV1 | undefined {
+  const parsed = viewportLeaseSchema.safeParse(input)
+  if (!parsed.success) return undefined
+  const lease = parsed.data
+  return lease.sessionRef === binding.sessionRef && lease.generation === generation && lease.pageRef === pageRef && Date.parse(lease.expiresAt) > Date.now()
+    ? lease as import('./contracts.js').BrowserViewportLeaseV1
+    : undefined
 }

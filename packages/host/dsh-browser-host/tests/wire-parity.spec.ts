@@ -40,7 +40,7 @@ describe('wire parity (browser-pane 1.7)', () => {
     expect(contracts.BROWSER_VIEWPORT_ATTACHMENT_SCHEMA).toBe('browser.viewport.attachment.v0.1')
   })
 
-  it('the host face keeps exactly five methods plus capability markers', async () => {
+  it('the host face keeps the five baseline methods plus additive exact-action reconciliation', async () => {
     const { createBrowserPaneHost } = await import('../src/remote.js')
     const { createFakeBrowserAutomationProvider } = await import('../src/fake-provider.js')
     const provider = createFakeBrowserAutomationProvider()
@@ -51,7 +51,7 @@ describe('wire parity (browser-pane 1.7)', () => {
       dispatch: async () => { throw new Error('unused') },
       reconcile: async () => { throw new Error('unused') },
     })
-    for (const method of ['probe', 'listSessions', 'snapshot', 'dispatch', 'reconcile'] as const) {
+    for (const method of ['probe', 'listSessions', 'snapshot', 'dispatch', 'reconcile', 'reconcileAction'] as const) {
       expect(typeof host[method], method).toBe('function')
     }
     expect(host.capability).toBe('browser.pane.host')

@@ -44,7 +44,7 @@ export function reduceBrowserPane(state: BrowserPaneStateV1, action: BrowserPane
     case 'snapshot': {
       const generationJump = state.generation !== 0 && action.snapshot.generation !== state.generation
       return {
-        phase: action.snapshot.freshness === 'offline' ? 'stale' : 'live',
+        phase: action.snapshot.freshness === 'fresh' ? 'live' : 'stale',
         snapshot: action.snapshot,
         lastSequence: action.snapshot.cursor,
         generation: action.snapshot.generation,

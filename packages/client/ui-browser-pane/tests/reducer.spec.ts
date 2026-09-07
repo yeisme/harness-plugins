@@ -22,6 +22,11 @@ describe('browser pane reducer (browser-pane 2.2)', () => {
     expect(state).toMatchObject({ phase: 'live', lastSequence: 10, generation: 2, activePageRef: 'page:1' })
   })
 
+  it('stale owner projections remain read-only rather than becoming live', () => {
+    const state = reduceBrowserPane(BROWSER_PANE_INITIAL_STATE, { type: 'snapshot', snapshot: { ...snapshot(), freshness: 'stale' } })
+    expect(state.phase).toBe('stale')
+  })
+
   it('duplicate events drop; gaps invalidate to reconciling', () => {
     const dup = reduceBrowserPane(live(), { type: 'event', event: event(10) })
     expect(dup).toEqual(live()) // duplicate drops without new facts

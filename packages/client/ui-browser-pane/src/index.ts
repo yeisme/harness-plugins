@@ -8,8 +8,7 @@
  *
  * @module @yeisme/dsh-client-ui-browser-pane
  */
-export const BROWSER_PANE_CLIENT_VIEW_KIND = 'dsh.browser' as const
-export const BROWSER_PANE_CLIENT_EXPERIMENTAL = 'browser.pane.client.experimental.v0.1' as const
+export { BROWSER_PANE_CLIENT_VIEW_KIND, BROWSER_PANE_CLIENT_EXPERIMENTAL } from './contracts.js'
 export * from './reducer.js'
 export * from './phases.js'
 export * from './view-model.js'
@@ -18,3 +17,7 @@ export * from './control-lease.js'
 export * from './navigation.js'
 export * from './actions.js'
 export * from './teardown.js'
+export * from './locales.js'
+export { browserPaneStyles } from './styles.js'
+export { BrowserPaneProviderView, BrowserPaneView } from './view.js'
+export type { BrowserPaneProviderViewProps, BrowserPaneViewProps } from './view.js'

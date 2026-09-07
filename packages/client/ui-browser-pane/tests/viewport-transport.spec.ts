@@ -15,11 +15,22 @@ describe('viewport transport (browser-pane 2.5)', () => {
 
   it('input requires the local control lease; detached input never lands', () => {
     const transport = createFakeViewportTransport()
-    expect(transport.sendInput({ type: 'key', summary: 'Enter' }, false)).toMatchObject({ accepted: false, reason: 'no_control_lease' })
-    expect(transport.sendInput({ type: 'pointer', summary: 'click' }, true)).toMatchObject({ accepted: true, reason: 'ok' })
+    const modifiers = { alt: false, ctrl: false, meta: false, shift: false }
+    expect(transport.sendInput({ type: 'key', phase: 'down', key: 'Enter', code: 'Enter', repeat: false, modifiers }, false)).toMatchObject({ accepted: false, reason: 'no_control_lease' })
+    expect(transport.sendInput({ type: 'pointer', phase: 'down', x: 0.25, y: 0.75, button: 0, buttons: 1, modifiers }, true)).toMatchObject({ accepted: true, reason: 'ok' })
     transport.detach()
-    expect(transport.sendInput({ type: 'key', summary: 'x' }, true)).toMatchObject({ accepted: false, reason: 'detached' })
+    expect(transport.sendInput({ type: 'key', phase: 'up', key: 'x', code: 'KeyX', repeat: false, modifiers }, true)).toMatchObject({ accepted: false, reason: 'detached' })
     expect(transport.inputs).toHaveLength(2)
+  })
+
+  it('rejects out-of-bounds or control-character input before recording it', () => {
+    const transport = createFakeViewportTransport()
+    const modifiers = { alt: false, ctrl: false, meta: false, shift: false }
+    expect(transport.sendInput({ type: 'pointer', phase: 'move', x: 1.1, y: 0.5, button: -1, buttons: 0, modifiers }, true)).toMatchObject({ accepted: false, reason: 'invalid_input' })
+    expect(transport.sendInput({ type: 'key', phase: 'down', key: '\n', code: 'Enter', repeat: false, modifiers }, true)).toMatchObject({ accepted: false, reason: 'invalid_input' })
+    expect(transport.sendInput({ type: 'key', phase: 'down', key: 'a', code: 'KeyA', repeat: false, modifiers: { ...modifiers, ctrl: 'yes' } } as never, true)).toMatchObject({ accepted: false, reason: 'invalid_input' })
+    expect(transport.sendInput({ type: 'pointer', phase: 'wheel', x: 0.5, y: 0.5, button: -1, buttons: 0, modifiers } as never, true)).toMatchObject({ accepted: false, reason: 'invalid_input' })
+    expect(transport.inputs).toHaveLength(0)
   })
 
   it('detach is idempotent and stops media tracks exactly once', () => {

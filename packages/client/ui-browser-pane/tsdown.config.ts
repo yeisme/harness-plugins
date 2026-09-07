@@ -1,8 +1,8 @@
 import { defineConfig } from 'tsdown'
 
-export default defineConfig([
+export default defineConfig(['index', 'contracts'].map(name => (
   {
-    entry: ['lib/types/index.js'],
+    entry: [`lib/types/${name}.js`],
     outDir: 'lib',
     format: ['esm'],
     platform: 'browser',
@@ -10,5 +10,5 @@ export default defineConfig([
     dts: false,
     clean: false,
     outputOptions: { codeSplitting: false },
-  },
-])
+  }
+)))
