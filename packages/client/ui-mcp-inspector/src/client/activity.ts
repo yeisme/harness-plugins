@@ -17,6 +17,8 @@ export interface ActivityToolResultNode {
   callTime: number | null
   isError: boolean
   error?: { readonly name?: string; readonly code?: string }
+  /** Host-computed render intent from the paired tool/call wire view; opaque here. */
+  callView?: unknown
 }
 
 /** 运行中调用的结构化视图（来自 runningCalls）。 */
@@ -44,6 +46,23 @@ export interface McpServerActivity {
 
 export type ToolActivityFamily = 'mcp' | 'skill' | 'native'
 
+/**
+ * Owner-authored safe execution summary for one landed call.
+ *
+ * Only presentation-vocabulary fields the tool itself declared for display are
+ * carried: `title` (command or one-line operation summary), optional
+ * `description`, optional `kind` and bounded model-facing `locations` paths.
+ * `rawInput`, diff bodies and working directories are never projected even when
+ * the render intent carries them.
+ */
+export interface SafeCallSummary {
+  readonly title: string
+  readonly truncated: boolean
+  readonly kind?: string
+  readonly description?: string
+  readonly locations: readonly string[]
+}
+
 export interface ToolActivityRecord {
   readonly itemId: `mcp:${string}` | `tool:${string}` | null
   readonly family: ToolActivityFamily
@@ -56,6 +75,7 @@ export interface ToolActivityRecord {
   readonly errorCode?: string
   readonly errorName?: string
   readonly sequence: number
+  readonly summary?: SafeCallSummary
 }
 
 export interface ToolActivitySnapshot {
@@ -86,6 +106,51 @@ function parseToolActivity(name: string): Pick<ToolActivityRecord, 'itemId' | 'f
   return { itemId: `tool:${name}`, family: 'native', tool: name }
 }
 
+const SUMMARY_DISPLAY_LIMIT = 600
+const SUMMARY_TITLE_LIMIT = 2000
+const SUMMARY_DESCRIPTION_LIMIT = 300
+const SUMMARY_LOCATION_LIMIT = 200
+const SUMMARY_LOCATIONS = 3
+const SAFE_CALL_KIND = /^(read|edit|delete|move|search|execute|fetch|other)$/
+const SAFE_SUMMARY_CARD = new Set(['generic', 'terminal', 'diff'])
+
+function boundedText(value: unknown, limit: number): string | undefined {
+  if (typeof value !== 'string' || value.length === 0 || value.length > limit) return undefined
+  // Control characters (except spaces) never belong in a display summary.
+  return /[\x00-\x08\x0e-\x1f\x7f]/.test(value) ? undefined : value
+}
+
+/**
+ * Narrow one host render intent to a safe display summary. Unknown shapes,
+ * missing titles or oversized fields yield `undefined` — the caller then shows
+ * an explicit "no safe summary" state instead of guessing from raw arguments.
+ */
+export function deriveSafeCallSummary(callView: unknown): SafeCallSummary | undefined {
+  if (typeof callView !== 'object' || callView === null) return undefined
+  const view = callView as { card?: unknown; title?: unknown; kind?: unknown; description?: unknown; locations?: unknown }
+  if (typeof view.card !== 'string' || !SAFE_SUMMARY_CARD.has(view.card)) return undefined
+  const title = boundedText(view.title, SUMMARY_TITLE_LIMIT)
+  if (title === undefined) return undefined
+  const kind = typeof view.kind === 'string' && SAFE_CALL_KIND.test(view.kind) ? view.kind : undefined
+  const description = boundedText(view.description, SUMMARY_DESCRIPTION_LIMIT)
+  const locations: string[] = []
+  if (Array.isArray(view.locations)) {
+    for (const location of view.locations) {
+      if (locations.length >= SUMMARY_LOCATIONS) break
+      const path = boundedText((location as { path?: unknown })?.path, SUMMARY_LOCATION_LIMIT)
+      if (path !== undefined) locations.push(path)
+    }
+  }
+  const truncated = title.length > SUMMARY_DISPLAY_LIMIT
+  return {
+    title: truncated ? title.slice(0, SUMMARY_DISPLAY_LIMIT) : title,
+    truncated,
+    ...(kind !== undefined ? { kind } : {}),
+    ...(description !== undefined ? { description } : {}),
+    locations,
+  }
+}
+
 /**
  * 统一派生会话工具活动；只读取 safe call name/timing/error，不读取 arguments/result。
  * summary 统计全部合法记录，records 只保留最近 200 条供 UI 渲染。
@@ -114,6 +179,7 @@ export function deriveToolActivity(
     if (typeof name !== 'string') continue
     const parsed = parseToolActivity(name)
     if (parsed === null) continue
+    const summary = node.callView === undefined ? undefined : deriveSafeCallSummary(node.callView)
     land({
       ...parsed,
       time: node.time,
@@ -123,6 +189,7 @@ export function deriveToolActivity(
       sequence: node.seq,
       ...(node.error?.code && /^[A-Za-z0-9_.:-]{1,120}$/.test(node.error.code) ? { errorCode: node.error.code } : {}),
       ...(node.error?.name && /^[A-Za-z0-9_. -]{1,120}$/.test(node.error.name) ? { errorName: node.error.name } : {}),
+      ...(summary !== undefined ? { summary } : {}),
     })
   }
   records.sort((a, b) => b.time - a.time || b.sequence - a.sequence || a.tool.localeCompare(b.tool))

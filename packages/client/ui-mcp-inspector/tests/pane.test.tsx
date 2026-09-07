@@ -17,7 +17,7 @@ function observable<T>(initial: T) {
   const listeners = new Set<() => void>()
   return { getSnapshot: () => state, subscribe: (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn) } }, set: (next: T) => { state = next; for (const fn of listeners) fn() }, listeners }
 }
-function snapshot(tool: string) { return { legacy: { nodes: [{ kind: 'tool-result', seq: 1, time: 2000, callTime: 1000, call: { name: tool }, isError: true }], runningCalls: [] } } }
+function snapshot(tool: string, callView?: unknown) { return { legacy: { nodes: [{ kind: 'tool-result', seq: 1, time: 2000, callTime: 1000, call: { name: tool }, isError: true, ...(callView !== undefined ? { callView } : {}) }], runningCalls: [] } } }
 const t = (key: keyof typeof en) => en[key]
 const catalog = { ok: true, specVersion: '1.0', complete: true, generation: 1, skillsAvailable: true, toolsAvailable: true, mcpInventoryAvailable: true, items: [] }
 function harness() {
@@ -152,4 +152,97 @@ it('focuses the first item after the portal measurement pass becomes visible', a
   menu.style.visibility = 'visible'
   await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('menuitem')))
   view.unmount()
+})
+
+describe('execution summary and reveal lifecycle', () => {
+  it('renders the owner command summary in a code area with a bounded missing state', () => {
+    const h = harness()
+    act(() => h.a.set(snapshot('read_a', { card: 'terminal', title: 'npm run check', description: 'Run gates' })))
+    const view = render(<ToolsPane {...h.props} sessionId="a" />)
+    fireEvent.click(view.container.querySelector('.tools-record-name')!)
+    expect(view.container.querySelector('.tools-call-command')?.textContent).toBe('npm run check')
+    expect(view.container.textContent).toContain('Run gates')
+    expect(view.container.textContent).not.toContain('argsRaw')
+    view.unmount()
+    const plain = harness()
+    const view2 = render(<ToolsPane {...plain.props} sessionId="a" />)
+    fireEvent.click(view2.container.querySelector('.tools-record-name')!)
+    expect(view2.container.textContent).toContain(en['activity.summaryUnavailable'])
+    view2.unmount()
+  })
+
+  it('marks a located row after a successful reveal and replaces the previous marker', () => {
+    const h = harness()
+    act(() => h.a.set({ legacy: { nodes: [
+      { kind: 'tool-result', seq: 1, time: 2000, callTime: 1000, call: { name: 'read_a' }, isError: true },
+      { kind: 'tool-result', seq: 2, time: 3000, callTime: 2500, call: { name: 'read_b' }, isError: true },
+    ], runningCalls: [] } }))
+    const reveal = vi.fn(() => true)
+    const view = render(<ToolsPane {...h.props} sessionId="a" onRevealCall={reveal} />)
+    // Rows are newest-first: the read_a row (seq 1) sits below read_b (seq 2).
+    const rowFor = (tool: string) => view.container.querySelector(`.tools-activity-row:nth-child(${tool === 'read_a' ? 2 : 1})`)!
+    fireEvent.click(rowFor('read_a').querySelector('.tools-record-name')!)
+    fireEvent.click(screen.getByRole('button', { name: en['activity.reveal'] }))
+    expect(reveal).toHaveBeenCalledWith(expect.objectContaining({ tool: 'read_a', sequence: 1 }))
+    expect(rowFor('read_a').getAttribute('data-located')).toBe('true')
+    expect(view.container.textContent).toContain(en['activity.located'])
+    fireEvent.click(rowFor('read_b').querySelector('.tools-record-name')!)
+    fireEvent.click(screen.getByRole('button', { name: en['activity.reveal'] }))
+    expect(reveal).toHaveBeenLastCalledWith(expect.objectContaining({ tool: 'read_b', sequence: 2 }))
+    expect(rowFor('read_a').getAttribute('data-located')).toBe(null)
+    expect(rowFor('read_b').getAttribute('data-located')).toBe('true')
+    expect(view.container.textContent).not.toContain(en['activity.revealFailed'])
+    view.unmount()
+  })
+
+  it('locates by call reference, not by tool name: same-named rows stay distinct', () => {
+    const h = harness()
+    act(() => h.a.set({ legacy: { nodes: [
+      { kind: 'tool-result', seq: 11, time: 2000, callTime: 1000, call: { name: 'bash' }, isError: false },
+      { kind: 'tool-result', seq: 12, time: 3000, callTime: 2500, call: { name: 'bash' }, isError: false },
+    ], runningCalls: [] } }))
+    const reveal = vi.fn(() => true)
+    const view = render(<ToolsPane {...h.props} sessionId="a" onRevealCall={reveal} />)
+    const rows = view.container.querySelectorAll('.tools-activity-row')
+    fireEvent.click(rows[1].querySelector('.tools-record-name')!)
+    fireEvent.click(screen.getByRole('button', { name: en['activity.reveal'] }))
+    expect(reveal).toHaveBeenCalledWith(expect.objectContaining({ tool: 'bash', sequence: 11 }))
+    expect(rows[0].getAttribute('data-located')).toBe(null)
+    expect(rows[1].getAttribute('data-located')).toBe('true')
+    view.unmount()
+  })
+
+  it('keeps the details and explains when reveal fails, without marking any row', () => {
+    const h = harness()
+    const reveal = vi.fn(() => false)
+    const view = render(<ToolsPane {...h.props} sessionId="a" onRevealCall={reveal} />)
+    fireEvent.click(view.container.querySelector('.tools-record-name')!)
+    fireEvent.click(screen.getByRole('button', { name: en['activity.reveal'] }))
+    expect(reveal).toHaveBeenCalled()
+    expect(view.container.querySelector('.tools-call-details')).toBeTruthy()
+    expect(view.container.textContent).toContain(en['activity.revealFailed'])
+    expect(view.container.querySelector('.tools-activity-row')?.getAttribute('data-located')).toBe(null)
+    view.unmount()
+  })
+
+  it('exposes reveal as a focusable native button and marks the target on activation', async () => {
+    const h = harness(), reveal = vi.fn(() => true)
+    const view = render(<ToolsPane {...h.props} sessionId="a" onRevealCall={reveal} />)
+    const row = view.container.querySelector('.tools-record-name') as HTMLButtonElement
+    row.focus()
+    expect(document.activeElement).toBe(row)
+    fireEvent.click(row)
+    const button = screen.getByRole('button', { name: en['activity.reveal'] }) as HTMLButtonElement
+    expect(button.tagName).toBe('BUTTON')
+    expect(button.disabled).toBe(false)
+    button.focus()
+    expect(document.activeElement).toBe(button)
+    fireEvent.click(button)
+    expect(reveal).toHaveBeenCalledWith(expect.objectContaining({ tool: 'read_a', sequence: 1 }))
+    expect(view.container.querySelector('.tools-activity-row')?.getAttribute('data-located')).toBe('true')
+    // Escape returns to the initiating row without losing the details state.
+    fireEvent.keyDown(view.container.querySelector('.tools-call-details')!, { key: 'Escape' })
+    await waitFor(() => expect(document.activeElement).toBe(view.container.querySelector('.tools-activity-row .tools-record-name')))
+    view.unmount()
+  })
 })

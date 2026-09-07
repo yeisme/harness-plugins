@@ -65,9 +65,11 @@ export interface ToolsInspectorTreeProps {
   readonly contextLabel?: string
   readonly readOnlyCatalog?: boolean
   readonly globalManagement?: boolean
-  readonly onRevealCall?: ((record: ToolActivityRecord) => void) | undefined
+  readonly onRevealCall?: ((record: ToolActivityRecord) => boolean | void) | undefined
   readonly selectedCall?: string | undefined
   readonly onSelectCall?: (key: string | undefined) => void
+  readonly revealedCall?: string | undefined
+  readonly onRevealLocated?: ((key: string) => void) | undefined
   readonly onQueryChange: (query: string) => void
   readonly onFamilyChange: (family: FamilyFilter) => void
   readonly onEnabledChange: (enabled: EnabledFilter) => void
@@ -218,10 +220,12 @@ function timelineStyle(record: ToolActivityRecord, records: readonly ToolActivit
   } as CSSProperties
 }
 
-function ActivityPanel({ activity, mode, filter, now, text, onMode, onFilter, selectedCall, onSelectCall, onRevealCall }: {
+function ActivityPanel({ activity, mode, filter, now, text, onMode, onFilter, selectedCall, onSelectCall, onRevealCall, revealedCall, onRevealLocated }: {
   readonly selectedCall?: string | undefined
   readonly onSelectCall?: ((key: string | undefined) => void) | undefined
-  readonly onRevealCall?: ((record: ToolActivityRecord) => void) | undefined
+  readonly onRevealCall?: ((record: ToolActivityRecord) => boolean | void) | undefined
+  readonly revealedCall?: string | undefined
+  readonly onRevealLocated?: ((key: string) => void) | undefined
   readonly activity: ToolActivitySnapshot
   readonly mode: ActivityMode
   readonly filter: ActivityFilter
@@ -232,7 +236,15 @@ function ActivityPanel({ activity, mode, filter, now, text, onMode, onFilter, se
 }): JSX.Element {
   const activityRoot = useRef<HTMLElement>(null)
   const detailsBack = useRef<HTMLButtonElement>(null)
+  const [revealState, setRevealState] = useState<'idle' | 'located' | 'failed'>('idle')
   useEffect(() => { if (selectedCall) detailsBack.current?.focus() }, [selectedCall])
+  /** Reveal lifecycle: a successful locate replaces the current target marker; a failure keeps the details and explains. */
+  const reveal = (record: ToolActivityRecord): void => {
+    const outcome = onRevealCall?.(record)
+    if (outcome === false) { setRevealState('failed'); return }
+    setRevealState('located')
+    onRevealLocated?.(`${record.sequence}-${record.time}-${record.tool}`)
+  }
   const closeDetails = () => {
     const target = activityRoot.current?.querySelector<HTMLButtonElement>('.tools-record-name[aria-pressed=true]')
     onSelectCall?.(undefined)
@@ -257,15 +269,22 @@ function ActivityPanel({ activity, mode, filter, now, text, onMode, onFilter, se
         <button ref={detailsBack} type="button" className="vk-btn" onClick={closeDetails}>{text('action.back')}</button>
         <strong className="tools-call-title">{recordName(selected, text)}</strong><p>{recordStatus(selected, text)} · {formatTime(selected.time)}</p>
         {selected.isError && <p>{selected.errorCode ? text('activity.errorSummary', { name: selected.errorName ?? 'Error', code: selected.errorCode }) : text('activity.errorSummaryUnavailable')}</p>}
-        <button type="button" className="vk-btn" disabled={!onRevealCall || selected.running} title={!onRevealCall ? text('activity.navigationUnavailable') : undefined} onClick={() => onRevealCall?.(selected)}>{text('activity.reveal')}</button>
+        {selected.summary ? <>
+          <pre className="tools-call-command" data-truncated={selected.summary.truncated ? 'true' : undefined}>{selected.summary.title}</pre>
+          {selected.summary.description ? <p className="tools-call-command-note">{selected.summary.description}</p> : null}
+          {selected.summary.truncated ? <p className="tools-call-command-note" role="note">{text('activity.summaryTruncated')}</p> : null}
+          {selected.summary.locations.length > 0 ? <p className="tools-call-command-note">{text('activity.summaryTargets')} {selected.summary.locations.join(' · ')}</p> : null}
+        </> : <p className="tools-reason">{text('activity.summaryUnavailable')}</p>}
+        {revealState === 'failed' && <p className="tools-reason" role="status">{text('activity.revealFailed')}</p>}
+        <button type="button" className="vk-btn" disabled={!onRevealCall || selected.running} title={!onRevealCall ? text('activity.navigationUnavailable') : undefined} onClick={() => reveal(selected)}>{text('activity.reveal')}</button>
       </section>}
       {records.length === 0 ? <div className="vk-empty tools-empty"><p>{text('empty.activity')}</p><small>{text('empty.activity.hint')}</small></div> : mode === 'list' ? (
         <ol className="tools-activity-list">
           {records.map(record => (
-            <li key={`${record.sequence}-${record.time}-${record.tool}`} className="tools-activity-row" data-running={record.running} data-selected={selectedCall === callKey(record)}>
+            <li key={`${record.sequence}-${record.time}-${record.tool}`} className="tools-activity-row" data-running={record.running} data-selected={selectedCall === callKey(record)} data-located={revealedCall === callKey(record) ? 'true' : undefined}>
               <button type="button" className="tools-record-name tools-record-select" aria-pressed={selectedCall === callKey(record)} onClick={() => onSelectCall?.(callKey(record))}>
               <i className="vk-dot" data-tone={record.running ? 'info' : record.isError ? 'critical' : 'positive'} aria-hidden="true" />
-              <span className="tools-record-label" title={recordName(record, text)}>{recordName(record, text)}</span>
+              <span className="tools-record-label" title={recordName(record, text)}>{recordName(record, text)}{revealedCall === callKey(record) ? <span className="vk-badge tools-located-badge">{text('activity.located')}</span> : null}</span>
               <time>{formatTime(record.time)}</time>
               <span className="tools-record-status">{recordStatus(record, text)}</span>
               </button>
@@ -276,9 +295,9 @@ function ActivityPanel({ activity, mode, filter, now, text, onMode, onFilter, se
         <ol className="tools-timeline" aria-label={text('mode.timeline')}>
           <li className="tools-timeline-scale">{text('activity.timelineRange', { start: formatTime(Math.min(...records.map(record => record.running ? record.time : record.time - (record.durationMs ?? 0)))), end: formatTime(Math.max(...records.map(record => record.running ? now : record.time))) })}</li>
           {records.map(record => (
-            <li key={`${record.sequence}-${record.time}-${record.tool}`} className="tools-timeline-row" data-selected={selectedCall === callKey(record)}>
+            <li key={`${record.sequence}-${record.time}-${record.tool}`} className="tools-timeline-row" data-selected={selectedCall === callKey(record)} data-located={revealedCall === callKey(record) ? 'true' : undefined}>
               <button type="button" className="tools-record-name tools-record-select" aria-pressed={selectedCall === callKey(record)} onClick={() => onSelectCall?.(callKey(record))}>
-              <span className="tools-record-label" title={recordName(record, text)}>{recordName(record, text)}</span>
+              <span className="tools-record-label" title={recordName(record, text)}>{recordName(record, text)}{revealedCall === callKey(record) ? <span className="vk-badge tools-located-badge">{text('activity.located')}</span> : null}</span>
               <span className="tools-timeline-track" aria-label={`${recordName(record, text)} · ${recordStatus(record, text)}`}><i style={timelineStyle(record, records, now)} data-tone={record.running ? 'info' : record.isError ? 'critical' : 'positive'} /></span>
               <span className="tools-record-status">{recordStatus(record, text)}</span>
               </button>
@@ -414,7 +433,7 @@ export function renderToolsInspectorTree(props: ToolsInspectorTreeProps): JSX.El
 
         <div className="tools-right-column" data-section="right">
           <nav hidden className="tools-right-tabs" aria-label={text('view.tools')}><button type="button" aria-pressed={rightContent === 'activity'} onClick={() => props.onActiveSectionChange?.('activity')}>{text('tab.activity')}</button><button type="button" aria-pressed={rightContent === 'details'} disabled={selected === undefined} onClick={() => props.onActiveSectionChange?.('details')}>{text('tab.details')}</button></nav>
-          {rightContent === 'details' ? <DetailsPanel item={selected} activity={activity} healthAvailable={healthAvailable} now={now} text={text} onBack={() => props.onActiveSectionChange?.('catalog')} /> : <ActivityPanel selectedCall={props.selectedCall} onSelectCall={props.onSelectCall} onRevealCall={props.onRevealCall} activity={activity} mode={props.activityMode ?? 'list'} filter={props.activityFilter ?? 'all'} now={now} text={text} onMode={mode => props.onActivityModeChange?.(mode)} onFilter={filter => props.onActivityFilterChange?.(filter)} />}
+          {rightContent === 'details' ? <DetailsPanel item={selected} activity={activity} healthAvailable={healthAvailable} now={now} text={text} onBack={() => props.onActiveSectionChange?.('catalog')} /> : <ActivityPanel selectedCall={props.selectedCall} onSelectCall={props.onSelectCall} onRevealCall={props.onRevealCall} revealedCall={props.revealedCall} onRevealLocated={props.onRevealLocated} activity={activity} mode={props.activityMode ?? 'list'} filter={props.activityFilter ?? 'all'} now={now} text={text} onMode={mode => props.onActivityModeChange?.(mode)} onFilter={filter => props.onActivityFilterChange?.(filter)} />}
         </div>
       </div>
     </Surface>
@@ -444,7 +463,7 @@ export function ToolsInspectorContent({ activity, binding, controller, t, initia
   readonly contextLabel?: string
   readonly readOnlyCatalog?: boolean
   readonly globalManagement?: boolean
-  readonly onRevealCall?: ((record: ToolActivityRecord) => void) | undefined
+  readonly onRevealCall?: ((record: ToolActivityRecord) => boolean | void) | undefined
   readonly initialFamily?: FamilyFilter
   readonly sessionNotice?: string | undefined
 }): JSX.Element {
@@ -455,7 +474,7 @@ export function ToolsInspectorContent({ activity, binding, controller, t, initia
   const pendingId = useSyncExternalStore(hub.subscribe.bind(hub), hub.pendingIdSnapshot.bind(hub), hub.pendingIdSnapshot.bind(hub))
   const [fallbackState] = useState(() => new ToolsViewState(initialFamily, 'catalog'))
   const shared = viewState ?? fallbackState
-  const { query, family, enabled, selectedId, selectedCall, activeSection, activityMode, activityFilter } = useSyncExternalStore(shared.subscribe, shared.getSnapshot, shared.getSnapshot)
+  const { query, family, enabled, selectedId, selectedCall, activeSection, activityMode, activityFilter, revealedCall } = useSyncExternalStore(shared.subscribe, shared.getSnapshot, shared.getSnapshot)
   const setQuery = (value: string) => shared.set('query', value)
   const setFamily = (value: FamilyFilter) => shared.set('family', value)
   const setEnabled = (value: EnabledFilter) => shared.set('enabled', value)
@@ -487,6 +506,7 @@ export function ToolsInspectorContent({ activity, binding, controller, t, initia
   }, [activity, selectedCall, shared])
   return renderToolsInspectorTree({
     catalogState, toolbarActions, ...(globalManagement === undefined ? {} : { globalManagement }), ...(contextLabel === undefined ? {} : { contextLabel }), ...(readOnlyCatalog === undefined ? {} : { readOnlyCatalog }), ...(onRevealCall === undefined ? {} : { onRevealCall }), selectedCall, onSelectCall: key => shared.set('selectedCall', key),
+    revealedCall, onRevealLocated: key => shared.set('revealedCall', key),
     ...(pendingId === undefined ? {} : { pendingId }),
     query,
     family,

@@ -176,6 +176,11 @@ ${S} .tools-call-title{display:block;margin-top:8px;overflow-wrap:anywhere}
 ${S} .tools-call-details{min-width:0;min-height:0;box-sizing:border-box;overflow-wrap:anywhere}
 ${S} .tools-call-details .vk-btn{max-width:100%;white-space:normal}
 ${S} .tools-call-details pre{max-width:100%;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+${S} .tools-call-command{margin:8px 0 0;padding:8px;font-family:var(--vk-font-mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:var(--vk-font-small);background:var(--vk-bg-inset,var(--vk-fill-secondary));border:1px solid var(--vk-border-l1);border-radius:var(--vk-radius-sm);max-height:9em;overflow:auto}
+${S} .tools-call-command[data-truncated='true']{border-style:dashed}
+${S} .tools-call-command-note{margin:6px 0 0;color:var(--vk-text-tertiary);font-size:var(--vk-font-small);overflow-wrap:anywhere}
+${S} .tools-located-badge{margin-left:6px;flex:none}
+${S} .tools-activity-row[data-located='true'] .tools-located-badge{color:var(--vk-state-positive)}
 
 ${S} button.tools-record-name{text-align:left;border:0;background:transparent;color:inherit;cursor:pointer;padding:3px}
 ${S} .tools-activity-row[data-selected='true'],${S} .tools-timeline-row[data-selected='true']{background:var(--vk-fill-selected);box-shadow:inset 2px 0 var(--vk-accent)}

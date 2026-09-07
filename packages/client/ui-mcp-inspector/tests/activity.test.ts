@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { deriveMcpActivity, deriveToolActivity, splitMcpToolName, type ActivityToolResultNode } from '../src/client/activity.ts'
+import { deriveMcpActivity, deriveSafeCallSummary, deriveToolActivity, splitMcpToolName, type ActivityToolResultNode } from '../src/client/activity.ts'
 
 function landed(name: string, callTime: number, time: number, isError = false, seq = 1): ActivityToolResultNode {
   return { kind: 'tool-result', seq, time, call: { name }, callTime, isError }
@@ -81,5 +81,64 @@ describe('deriveToolActivity', () => {
     expect(activity.calls).toBe(240)
     expect(activity.records).toHaveLength(200)
     expect(activity.records[0].time).toBe(240)
+  })
+})
+
+describe('deriveSafeCallSummary', () => {
+  test('projects only owner presentation fields and drops raw slots', () => {
+    const summary = deriveSafeCallSummary({
+      card: 'terminal', title: 'npm run check', description: 'Run repository gates',
+      cwd: '/private/absolute/path', rawInput: { secret: 'token' },
+      locations: [{ path: 'package.json', line: 3 }, { path: 'scripts/run.mjs' }, { path: 'c' }, { path: 'd' }, { path: 'e' }],
+    })
+    expect(summary).toEqual({ title: 'npm run check', truncated: false, description: 'Run repository gates', locations: ['package.json', 'scripts/run.mjs', 'c'] })
+    expect(JSON.stringify(summary)).not.toContain('rawInput')
+    expect(JSON.stringify(summary)).not.toContain('secret')
+    expect(JSON.stringify(summary)).not.toContain('/private')
+  })
+
+  test('diff cards keep only the title; bodies never project', () => {
+    const summary = deriveSafeCallSummary({ card: 'diff', title: 'Write foo.txt', diffs: [{ path: 'foo.txt', oldText: null, newText: 'body' }] })
+    expect(summary).toEqual({ title: 'Write foo.txt', truncated: false, locations: [] })
+    expect(JSON.stringify(summary)).not.toContain('body')
+  })
+
+  test('marks display truncation beyond 600 characters', () => {
+    const summary = deriveSafeCallSummary({ card: 'generic', title: 'x'.repeat(650) })
+    expect(summary?.title).toHaveLength(600)
+    expect(summary?.truncated).toBe(true)
+  })
+
+  test('rejects unknown cards, missing or unsafe fields', () => {
+    expect(deriveSafeCallSummary(undefined)).toBeUndefined()
+    expect(deriveSafeCallSummary({ card: 'unknown', title: 'x' })).toBeUndefined()
+    expect(deriveSafeCallSummary({ card: 'generic' })).toBeUndefined()
+    expect(deriveSafeCallSummary({ card: 'generic', title: '' })).toBeUndefined()
+    expect(deriveSafeCallSummary({ card: 'generic', title: 'x'.repeat(2001) })).toBeUndefined()
+    expect(deriveSafeCallSummary({ card: 'generic', title: `bad${String.fromCharCode(7)}char` })).toBeUndefined()
+    expect(deriveSafeCallSummary({ card: 'generic', title: 'ok', kind: 'shell' })?.kind).toBeUndefined()
+    expect(deriveSafeCallSummary({ card: 'generic', title: 'ok', kind: 'execute' })?.kind).toBe('execute')
+  })
+})
+
+describe('deriveToolActivity summaries', () => {
+  test('attaches summaries to landed records only and never carries raw arguments', () => {
+    const node: ActivityToolResultNode = {
+      kind: 'tool-result', seq: 2, time: 3_000, callTime: 2_000,
+      call: { name: 'read_file', argsRaw: '{"path":"/private/secret"}' } as never,
+      isError: false, callView: { card: 'generic', title: 'Read notes.md', kind: 'read' } as never,
+    }
+    const activity = deriveToolActivity([node], [{ name: 'read_file', time: 5_000 }])
+    const landed = activity.records.find(record => !record.running)
+    const running = activity.records.find(record => record.running)
+    expect(landed?.summary?.title).toBe('Read notes.md')
+    expect(running?.summary).toBeUndefined()
+    expect(JSON.stringify(activity)).not.toContain('argsRaw')
+    expect(JSON.stringify(activity)).not.toContain('/private/secret')
+  })
+
+  test('nodes without a render intent keep an explicit missing summary', () => {
+    const activity = deriveToolActivity([landed('read_file', 1_000, 2_000, false, 1)])
+    expect(activity.records[0].summary).toBeUndefined()
   })
 })

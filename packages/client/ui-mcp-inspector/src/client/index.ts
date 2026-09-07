@@ -103,7 +103,8 @@ export function apply(ctx: ClientContext): () => void {
     }
     return true
   }
-  const reveal = (sessionId: string, record: ToolActivityRecord) => { navigation()?.open(sessionId, 'chat', `tool-result:${record.sequence}`) }
+  /** Returns whether the host navigation accepted the locate; false surfaces an explicit failure reason. */
+  const reveal = (sessionId: string, record: ToolActivityRecord): boolean => navigation()?.open(sessionId, 'chat', `tool-result:${record.sequence}`) ?? false
   const mount = (next: PaneFace | undefined): void => {
     if (next === pane) return
     disposePane(); pane = next; disposePane = () => {}

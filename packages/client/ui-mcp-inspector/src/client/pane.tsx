@@ -44,7 +44,7 @@ export interface ToolsPaneProps {
   readonly onOpenSession?: (() => void) | undefined
   readonly onManage?: (() => void) | undefined
   readonly onSessionSelected?: ((id: string) => void) | undefined
-  readonly onRevealCall?: ((record: ToolActivityRecord) => void) | undefined
+  readonly onRevealCall?: ((record: ToolActivityRecord) => boolean | void) | undefined
 }
 
 /** Explicit affinity: global current is never used to bind this view. */

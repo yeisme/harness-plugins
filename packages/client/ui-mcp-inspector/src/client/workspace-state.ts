@@ -8,13 +8,15 @@ import { sessionCatalogRemote } from './session-catalog.ts'
 export interface ToolsSelection {
   query: string; family: FamilyFilter; enabled: EnabledFilter; selectedId: string | undefined
   selectedCall: string | undefined; activeSection: ToolsSection; activityMode: ActivityMode; activityFilter: ActivityFilter
+  /** Current reveal target row key; replaced by the next successful reveal. */
+  revealedCall: string | undefined
 }
 /** Presentation only; never stores calls, arguments or tool results. */
 export class ToolsViewState {
   private value: ToolsSelection
   private listeners = new Set<() => void>()
   constructor(family: FamilyFilter = 'all', section: ToolsSection = 'activity') {
-    this.value = { query: '', family, enabled: 'all', selectedId: undefined, selectedCall: undefined, activeSection: section, activityMode: 'list', activityFilter: 'all' }
+    this.value = { query: '', family, enabled: 'all', selectedId: undefined, selectedCall: undefined, activeSection: section, activityMode: 'list', activityFilter: 'all', revealedCall: undefined }
   }
   getSnapshot = (): ToolsSelection => this.value
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }

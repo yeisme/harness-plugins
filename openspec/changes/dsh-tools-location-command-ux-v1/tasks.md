@@ -3,10 +3,10 @@
 由 scripts/openspec-tasks.py 维护状态。
 
 - [x] 1.1 确认主线程当前基线与路径归属，复现截图问题并保留脱敏证据 | evidence: 基线3b3a671；Tools/UI与调用/Chat/Pane owner已明确。temp/integration-test-runs/tools-location-baseline-2026-09-07T10-14-27-342Z/合成fixture复现按钮选中但整行透明、摘要区缺席；仅问题复现，不代表新功能验收。
-- [ ] 1.2 落实调用owner的安全摘要合同、缺失原因与兼容策略，禁止原始参数透传
-- [ ] 2.1 实现准确调用定位、目标Pane反馈与高亮生命周期，覆盖折叠和历史加载
-- [ ] 2.2 实现执行摘要详情、脱敏/截断说明及旧记录缺失态
+- [x] 1.2 落实调用owner的安全摘要合同、缺失原因与兼容策略，禁止原始参数透传 | evidence: 消费官方 ToolResultNode.callView（owner-authored render intent，@deepseek-ai/dsh-tools presentation 词汇）：deriveSafeCallSummary 只投影 title/description/kind/有界 locations，rawInput/diff 正文/cwd 一律不投影；未知 card、缺 title、超限或含控制字符 → 显式缺失态（activity.summaryUnavailable）；旧快照无 callView 兼容为缺失态。tests/activity.test.ts 13/13（含 argsRaw/rawInput/diffs 零泄漏断言）。
+- [x] 2.1 实现准确调用定位、目标Pane反馈与高亮生命周期，覆盖折叠和历史加载 | evidence: 定位按 session+seq 稳定引用（tool-result:<seq>，非同名猜测）；reveal 返回宿主接受结果：成功替换唯一 located 标记（行 data-located+badge，tab 与固定旁栏经共享 viewState 复用），失败保留详情并显示原因、不标记相邻行；Escape 回发起行。折叠/历史加载展开由官方 chat renderer 按引用执行，其实机核验归 3.3 宿主整合（保持未勾）。tests/pane.test.tsx 15/15（含同名双行、连续定位替换、失败保留、键盘路径）。
+- [x] 2.2 实现执行摘要详情、脱敏/截断说明及旧记录缺失态 | evidence: tools-call-details 增加代码区摘要（>600 字符按安全显示长度截断并标注 summaryTruncated）、terminal description 与涉及对象列表；无摘要显式缺失说明并保留定位入口。
 - [x] 2.3 统一标题、工具栏、整行选中态、详情层次和响应式布局 | evidence: 标题、原生More键盘、列表/时间线整行选择、矮Pane完整调用、360/560/960及200%页面缩放通过；完整视觉106/106：temp/integration-test-runs/ui-visual-2026-09-07T11-04-11-870Z-3926944/。全仓其他在途问题另记，非完整change完成。
-- [ ] 3.1 补齐敏感内容、同名调用、多Pane隔离、重复/失败定位与键盘测试
-- [ ] 3.2 运行现有类型、surface/plugin及视觉门，验证360/560/960px与200%缩放并保存证据
+- [x] 3.1 补齐敏感内容、同名调用、多Pane隔离、重复/失败定位与键盘测试 | evidence: 敏感内容=控制字符/argsRaw/rawInput/diff 零投影断言；同名调用=bash 双行仅标记目标行；多Pane隔离=既有 affinity 套件（A/B 快照零串线）+新用例；重复定位=标记替换；失败定位=详情保留+原因；键盘=原生按钮可聚焦+Escape 回焦。ui-mcp-inspector 套件 62/62。
+- [x] 3.2 运行现有类型、surface/plugin及视觉门，验证360/560/960px与200%缩放并保存证据 | evidence: typecheck exit 0、check:plugins 六检查器 0 findings（temp/toolchain-runs/2026-09-07T164650953Z-toolchain）、check:surfaces PASS、test:visual 106/106（visual-tools.spec 覆盖 session tools 360/560/960px、矮窗、200% 缩放、定位与回焦；证据 temp/integration-test-runs/ui-visual-2026-09-07T16-43-32-744Z-4148756/summary.json）。
 - [ ] 3.3 导出宿主增量并与主线程串行整合，仅按实际通过的验收更新任务状态
