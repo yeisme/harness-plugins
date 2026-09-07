@@ -29,3 +29,10 @@
 - Do not treat repo-wide visual snapshot drift on concurrent dirty packages as an introduced failure of this change.
 - Do not update unrelated visual baselines to green a global `test:visual` run.
 - Additive query schema `session.insights.snapshot.v1alpha1`; keep `snapshot()` / `refreshBalance()` signatures.
+
+## 2026-09-07: vendor dsh-pentest (pentest-mode tab plugin) + tab-development guide
+
+- Vendored upstream `howmp/dsh-pentest` @ `5d24ba7` (MIT, v0.1.0-rc.26) as self-contained bundle `packages/bundle/dsh-pentest/` (release shape: `lib/` prebuilt + `preset/` + patch; excluded upstream per-package build outputs / lockfile / process docs). Provenance + upgrade flow: `packages/bundle/dsh-pentest/YEISME-VENDORED.md`. User web profile install verified (`--dump-config` rows + boot smoke errors=0).
+- Vendored-bundle carve-outs now first-class: `.gitignore` negation keeps the pinned `lib/` in git (no local build); declaration-lint treats any bundle dir with `YEISME-VENDORED.md` as record-only (upstream patches legally use full cordis grammar: id-override rows without `name`, multiple top-level inserts — the repo-converged parser fail-louds on them otherwise). Regression tests in `declaration-lint.spec.ts` (26/26 toolchain suite green).
+- New extraction doc `docs/plugin-tab-development.md`: tab/pane/overlay seam selection, two package shapes, host four registration points (tools / systemPrompt.section / sessionProjections / storageDomain), per-session `conversation.view` tab pattern (sessions.list ancestry + cycle guard), pane + honest-degradation pattern (capability probe + disabledReason), visualization window-view rules, preset-root registration. Skill source: root `.skills/yeisme/project-development/dsh-tab-plugin-development/` (target: `agent/harness-plugins.txt`, synced).
+- Constraint: do not rename the vendored package or rewrite its patch into the repo-converged grammar — byte-fidelity vs upstream is the upgrade mechanism; changes go through the YEISME-VENDORED.md upgrade flow instead.
