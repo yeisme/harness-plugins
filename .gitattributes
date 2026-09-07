@@ -1,0 +1,2 @@
+# Verbatim historical snapshots from retired repositories must stay byte-identical.
+docs/migrations/workbench-retirement/source/** whitespace=-trailing-space,-space-before-tab

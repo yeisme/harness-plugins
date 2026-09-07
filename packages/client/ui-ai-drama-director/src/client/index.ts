@@ -23,7 +23,6 @@ import {
   createDramaPaneViews,
   dramaHelpCopy,
   mapDramaCommandError,
-  validateWorkbenchHandoff,
   type BridgeV2Intent,
   type DramaCommandEntryV1,
   type DramaCommandIdV1,
@@ -58,10 +57,7 @@ import {
   type DramaHandoffGateResult,
 } from './handoff-gate.js'
 import {
-  createWorkbenchLaunchAdapter,
-  describeWorkbenchLaunch,
   type WorkbenchLaunchActivationV1,
-  type WorkbenchLaunchAdapter,
 } from './launch-adapter.js'
 import {
   createDramaKeymap,
@@ -356,18 +352,6 @@ function createRuntime(input: {
     for (const listener of listeners) listener()
   }
 
-  let launchAdapterInstance: WorkbenchLaunchAdapter | undefined
-  const launchAdapter = (): WorkbenchLaunchAdapter | undefined => {
-    const channel = input.dramaHost?.requestBridgeLaunch
-    if (channel === undefined) return undefined
-    if (launchAdapterInstance === undefined) {
-      launchAdapterInstance = createWorkbenchLaunchAdapter({
-        requestLaunch: request => channel(request),
-      })
-    }
-    return launchAdapterInstance
-  }
-
   const evidenceForLaunch = (activation: WorkbenchLaunchActivationV1): void => {
     if (activation.state === 'launched') emitter.emit('handoff_opened', { reasonCategory: 'bridge_v2' })
     else if (activation.state === 'legacy_bridge') emitter.emit('handoff_opened', { reasonCategory: 'legacy_bridge' })
@@ -376,12 +360,13 @@ function createRuntime(input: {
   }
 
   const activateWorkbenchLaunch = async (intent: BridgeV2Intent): Promise<WorkbenchLaunchActivationV1> => {
-    const adapter = launchAdapter()
-    const activation = adapter === undefined
-      ? { state: 'disabled' as const, legacy: false, contractVersion: BRIDGE_V2_CONTRACT, intent, disabledReason: 'target_unavailable' as const }
-      : await adapter.activate(intent)
+    // The standalone target is retired. Cached capabilities must never reopen it.
+    const activation: WorkbenchLaunchActivationV1 = {
+      state: 'disabled', legacy: false, contractVersion: BRIDGE_V2_CONTRACT,
+      intent, disabledReason: 'target_unavailable',
+    }
     lastLaunch = activation
-    setMessage(describeWorkbenchLaunch(activation))
+    setMessage("Standalone Workbench has been retired. Continue in the DSH project panes.")
     evidenceForLaunch(activation)
     return activation
   }
@@ -502,35 +487,7 @@ function createRuntime(input: {
 
     if (spec.command === 'handoff') {
       const intent: BridgeV2Intent = context.episodeRef === undefined ? 'open_show' : 'open_episode'
-      // V2 path: host-approved launcher with an opaque launchRef only. The
-      // client never composes a URL and never auto-retries unknown outcomes.
-      if (transport.requestBridgeLaunch !== undefined && launchAdapter() !== undefined) {
-        await activateWorkbenchLaunch(intent)
-        return
-      }
-      // Legacy V1 path, visibly labeled; legacy success is never reported as
-      // V2 consumption.
-      if (transport.requestHandoff === undefined) {
-        setMessage('drama owner does not sign workbench handoffs yet')
-        emitter.emit('command_needs_contract', { reasonCategory: 'handoff' })
-        return
-      }
-      const signed = await transport.requestHandoff({
-        contextRef: context.showRef,
-        targetSurface: 'workbench',
-        presentationIntent: 'open_show',
-      })
-      const envelope = signed as { readonly handoff?: unknown } | undefined
-      if (envelope === null || typeof envelope !== 'object' || !validateWorkbenchHandoff(envelope.handoff)) {
-        setMessage('drama owner returned an invalid handoff envelope')
-        const evidence = handoffRejectionEvidence('contract')
-        emitter.emit(evidence.kind, { reasonCategory: evidence.reasonCategory })
-        return
-      }
-      lastLaunch = { state: 'legacy_bridge', legacy: true, contractVersion: BRIDGE_V2_CONTRACT, intent }
-      emitter.emit('handoff_opened', { reasonCategory: 'legacy_bridge' })
-      setMessage('[legacy_bridge] Handoff issued; open Workbench to continue.')
-      emitChange()
+      await activateWorkbenchLaunch(intent)
       return
     }
 

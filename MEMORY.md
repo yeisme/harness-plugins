@@ -1,5 +1,12 @@
 # harness-plugins memory
 
+## 2026-09-07: parallel subagent advance (search owner + G21 day 7 + seam recheck)
+
+- Dispatch: 3 children, parallel, no overlapping write leases. Root integrated; no commit/push.
+- Search 3.7: wired current-profile `ctx.sessions.list` as `PaneConversationSearchHostV1` (`packages/client/ui-pane-workbench/src/conversation-search-host.ts` + `client.ts` inject, owner-provided host wins). Empty list = available+empty; missing seam = unavailable. Vitest 399/399 + typecheck green. 3.7 stays `[ ]` (`live_query=not_verified`, `mock_query=verified`). Evidence `temp/integration-test-runs/workspace-search-conversation-owner-2026-09-07T04-23-26-839Z-2293966/`. Host-chain not re-run.
+- G21 4.3: day 7/14 recorded. `pnpm run check:plugins` exit 0, six checkers 0 findings (`temp/toolchain-runs/2026-09-07T040407631Z-toolchain`). Interactive `pnpm dsh:dev` not observed in-session. Checkbox still `[ ]` until 2026-09-14.
+- External recheck: local installed `@deepseek-ai/*` still 0.1.2-rc.1; awaited seams still 0 hits. Explorer could not live-fetch npm/upstream HEAD. 14 remaining active changes still external/user-gated. Do not treat current-profile session list as long-term history.
+
 ## 2026-09-06 PM: spec goal session — search 5.2–5.5, two closes, external rechecks
 
 - `dsh-workspace-search-experience-v1` 20→24/25: 5.2–5.5 done. New host-chain runner `scripts/run-workspace-search-host-chain.mjs` (self-boots official dsh web profile + 32 bundles, 13/13 checks incl. identity-across-filter, honest unavailable history, singleton relaunch, theme tokens). Six gates green (surfaces/visual 92/plugins 0 findings/typecheck/build/bundles 27/27). Delivery doc `docs/delivery/dsh-workspace-search-experience-2026-09-06.md` + Agent Note `.agents/notes/proposed/architecture/2026-09-06-workspace-search-experience.md`. Only 3.7 (live history owner) stays open.

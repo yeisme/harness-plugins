@@ -2,11 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { PaneCommandDescriptorSchema, PaneViewDescriptorSchema } from '@yeisme/dsh-pane-protocol'
 import {
-  BRIDGE_V2_CONTRACT,
   createWorkbenchHandoff,
-  createWorkbenchLaunchProvider,
-  createWorkbenchBridgeTargetRegistry,
-  type BridgeV2Intent,
   type DramaContextV1,
   type DramaEvidenceRecordV1,
   type SignedWorkbenchHandoffV1,
@@ -125,141 +121,24 @@ function setup(options: Parameters<typeof fakeRemote>[0] = {}, extras: Record<st
   return { ctx, pane, remote, records, face }
 }
 
-describe('drama client workbench V2 bridge activation', () => {
-  const NOW = 1_800_000_000_000
-
-  function v2Remote(options: { target?: 'v2' | 'legacy-only' | 'stale' | 'none'; intent?: BridgeV2Intent } = {}) {
-    const registry = createWorkbenchBridgeTargetRegistry()
-    if (options.target !== 'none') {
-      registry.register({
-        targetSurfaceId: 'workbench.agent.spatial',
-        targetApplication: 'yeisme-workbench',
-        supportedContracts: options.target === 'legacy-only'
-          ? ['drama.workbench-handoff.v1']
-          : ['dsh.workbench_ai_drama_bridge.v2', 'drama.workbench-handoff.v1'],
-        capabilityVersion: 'wb-2026.08',
-        ...(options.target === 'stale' ? { probedAtMs: Date.now() - 300_001 } : { probedAtMs: Date.now() }),
+describe('retired standalone Workbench launch', () => {
+  it('rejects every launch intent without contacting either V2 or legacy transport', async () => {
+    const { ctx, pane, remote, records, face } = setup()
+    let requests = 0
+    Object.assign(remote.remote.dramaDirector, {
+      requestBridgeLaunch: async () => { requests++; throw new Error('retired target contacted') },
+      requestHandoff: async () => { requests++; throw new Error('retired legacy contacted') },
+    })
+    const dispose = await apply(ctx as never)
+    await flush()
+    for (const intent of ['open_show', 'open_episode', 'open_artifact', 'open_review', 'open_evidence'] as const) {
+      expect(await face().activateWorkbenchLaunch(intent)).toMatchObject({
+        state: 'disabled', disabledReason: 'target_unavailable', intent,
       })
     }
-    const provider = createWorkbenchLaunchProvider({ registry, enabled: true })
-    const launchRequests: unknown[] = []
-    const dramaDirector = {
-      snapshot: async () => contextV1(),
-      dispatch: async () => ({ kind: 'submitted', reason: 'accepted', retried: false }),
-      requestBridgeLaunch: async (input: { readonly intent: BridgeV2Intent }) => {
-        launchRequests.push(input)
-        return provider.issue({
-          v2: {
-            sourceSurfaceId: 'dsh.drama.director',
-            workspaceRef: 'ws:1',
-            projectRef: 'pr:1',
-            showRef: 'show:1',
-            resourceRef: 'show:1',
-            contextRevision: 1,
-            presentationIntent: input.intent,
-            ttlMs: 300_000,
-          },
-          legacy: {
-            contextRef: 'show:1',
-            targetSurface: 'workbench',
-            presentationIntent: 'open_show',
-            nonce: 'legacy-e2e-nonce',
-            expiresAt: Date.now() + 60_000,
-          },
-        })
-      },
-    }
-    return { remote: { creatorStudio: { snapshot: async () => ({}) }, dramaDirector }, launchRequests, provider }
-  }
-
-  function setupV2(remoteOptions: Parameters<typeof v2Remote>[0] = {}) {
-    const ctx = new Context()
-    const pane = fakePane()
-    const v2 = v2Remote(remoteOptions)
-    const records: DramaEvidenceRecordV1[] = []
-    ctx.provide('paneWorkbench', pane)
-    ctx.provide('remote', v2.remote)
-    ctx.provide('dramaEvidenceSink', (record: DramaEvidenceRecordV1) => records.push(record))
-    return { ctx, pane, records, v2, face: () => ctx.get('dramaDirector') as DramaDirectorClientFace }
-  }
-
-  it('activates the host-approved launcher with the opaque launchRef for every intent', async () => {
-    for (const intent of ['open_show', 'open_episode', 'open_artifact', 'open_review', 'open_evidence'] as const) {
-      const { ctx, records, v2, face } = setupV2()
-      const dispose = await apply(ctx as never)
-      await flush()
-      const activation = await face().activateWorkbenchLaunch(intent)
-      expect(activation).toMatchObject({ state: 'launched', legacy: false, contractVersion: BRIDGE_V2_CONTRACT, intent })
-      expect(activation.lensLabel).toBeDefined()
-      expect(v2.launchRequests).toEqual([{ intent }])
-      expect(records.some(record => record.kind === 'handoff_opened' && record.reasonCategory === 'bridge_v2')).toBe(true)
-      dispose()
-    }
-  })
-
-  it('runs the /drama handoff command through the V2 channel and surfaces the lens summary', async () => {
-    const { ctx, pane, records } = setupV2()
-    const dispose = await apply(ctx as never)
-    await flush()
     await pane.commands.get('drama.handoff')?.execute()
-    await flush()
-    expect(records.some(record => record.kind === 'handoff_opened' && record.reasonCategory === 'bridge_v2')).toBe(true)
-    expect(records.some(record => record.kind === 'handoff_opened' && record.reasonCategory === 'legacy_bridge')).toBe(false)
-    dispose()
-  })
-
-  it('degrades to the labeled legacy bridge when the consumer is legacy-only', async () => {
-    const { ctx, records, face } = setupV2({ target: 'legacy-only' })
-    const dispose = await apply(ctx as never)
-    await flush()
-    const activation = await face().activateWorkbenchLaunch('open_show')
-    expect(activation).toMatchObject({ state: 'legacy_bridge', legacy: true })
-    expect(records.some(record => record.kind === 'handoff_opened' && record.reasonCategory === 'legacy_bridge')).toBe(true)
-    expect(records.some(record => record.kind === 'handoff_opened' && record.reasonCategory === 'bridge_v2')).toBe(false)
-    dispose()
-  })
-
-  it('disables launch with a stable reason for a stale capability probe', async () => {
-    const { ctx, records, face } = setupV2({ target: 'stale' })
-    const dispose = await apply(ctx as never)
-    await flush()
-    const activation = await face().activateWorkbenchLaunch('open_show')
-    expect(activation).toMatchObject({ state: 'disabled', disabledReason: 'stale' })
-    expect(records.some(record => record.kind === 'command_needs_contract' && record.reasonCategory === 'stale')).toBe(true)
-    dispose()
-  })
-
-  it('reports unknown when the launch channel throws; no evidence of consumption', async () => {
-    const ctx = new Context()
-    const pane = fakePane()
-    const records: DramaEvidenceRecordV1[] = []
-    ctx.provide('paneWorkbench', pane)
-    ctx.provide('remote', {
-      creatorStudio: { snapshot: async () => ({}) },
-      dramaDirector: {
-        snapshot: async () => contextV1(),
-        requestBridgeLaunch: async () => {
-          throw new Error('transport dropped')
-        },
-      },
-    })
-    ctx.provide('dramaEvidenceSink', (record: DramaEvidenceRecordV1) => records.push(record))
-    const dispose = await apply(ctx as never)
-    await flush()
-    const face = ctx.get('dramaDirector') as DramaDirectorClientFace
-    const activation = await face.activateWorkbenchLaunch('open_show')
-    expect(activation).toMatchObject({ state: 'unknown' })
-    expect(records.some(record => record.kind === 'command_unknown')).toBe(true)
-    dispose()
-  })
-
-  it('rolls back cleanly: provider disabled yields the labeled legacy path', async () => {
-    const { ctx, face, v2 } = setupV2()
-    v2.provider.setEnabled(false)
-    const dispose = await apply(ctx as never)
-    await flush()
-    const activation = await face().activateWorkbenchLaunch('open_show')
-    expect(activation).toMatchObject({ state: 'legacy_bridge', legacy: true })
+    expect(requests).toBe(0)
+    expect(records.some(record => record.kind === 'handoff_opened')).toBe(false)
     dispose()
   })
 })
@@ -547,15 +426,14 @@ describe('drama client handoff consumption', () => {
     dispose()
   })
 
-  it('issues a signed handoff through the owner transport labeled legacy_bridge', async () => {
+  it('keeps the legacy handoff command unavailable after retirement', async () => {
     const { ctx, pane, records } = setup()
     const dispose = await apply(ctx as never)
     await flush()
     await pane.commands.get('drama.handoff')?.execute()
     await flush()
-    // Without the V2 launch channel the V1 path stays visibly labeled
-    // legacy_bridge and is never reported as V2 consumption.
-    expect(records.some(record => record.kind === 'handoff_opened' && record.reasonCategory === 'legacy_bridge')).toBe(true)
+    expect(records.some(record => record.kind === 'command_needs_contract' && record.reasonCategory === 'target_unavailable')).toBe(true)
+    expect(records.some(record => record.kind === 'handoff_opened' && record.reasonCategory === 'legacy_bridge')).toBe(false)
     expect(records.some(record => record.kind === 'handoff_opened' && record.reasonCategory === 'bridge_v2')).toBe(false)
     const snapshot = (ctx.get('dramaDirector') as DramaDirectorClientFace)
     dispose()

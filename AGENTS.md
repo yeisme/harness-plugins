@@ -2,6 +2,8 @@
 
 ## Product Mission
 
+2026-09-07 用户决定退役独立 `client/yeisme-workbench` 及远程仓库，主要交互由本仓 DSH Pane 承接。画布/连续性见 `openspec/changes/dsh-project-canvas-continuity-v1/`，成果/引用复用 `dsh-prompt-reference-creative-workspace-v1`；历史提取材料在 `docs/migrations/workbench-retirement/`，不是 active spec 或完成证据。允许 host 通过已批准的 storage seam 保存项目布局/Draft/安全引用；不持有领域正文、版本、调度或审批真相，不引入 Workbench BFF/TaskService 或第二主壳。旧 Workbench launch 目标退役；保留 DSH 自身 workbench/Panes/预览命名和功能。
+
 Yeisme 自研 DeepSeek Harness（DSH）插件聚合仓库。它把 Ordo Agent Ops 的 host/client 插件、/ordo 命令、组合预览投影等能力，打包成可通过 `dsh plugin add` 安装的 bundle 层，并作为独立 Git 仓库发布 `@yeisme/dsh-*` 包。
 
 Ordo 是 run/task/session/lease/approval/verification/evidence/closeout 的唯一 owner；本仓库只做 DSH 侧的安全只读投影、命令入口、UI 面板与组合摘要，不造第二个 scheduler、task ledger 或 terminal state。

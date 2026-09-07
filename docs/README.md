@@ -4,6 +4,12 @@
 
 ## 入口
 
+- [Workbench 退役与可复用知识](migrations/workbench-retirement/README.md)：原文快照、任务去向与 owner 边界；[DSH 项目画布与连续性 tasks](../openspec/changes/dsh-project-canvas-continuity-v1/tasks.md) 是新增实施入口，复用既有引用与成果工作区。
+
+- [DSH URL Session 契约（规格已冻结）](protocols/dsh-url-session.md)：一个链接对应一个会话（`/s/<id>` 与 `?s=` 别名）；[OpenSpec 与任务](../openspec/changes/dsh-url-session-v1/proposal.md)。
+
+- [提示词引用与创作工作台（实施中）](design/dsh-prompt-reference-creative-workspace.md)：可编辑提示词引用、紧凑输入框、发送预览及侧边成果创作；[OpenSpec 与任务](../openspec/changes/dsh-prompt-reference-creative-workspace-v1/proposal.md)。
+
 - [会话工具工作区（已验证）](design/dsh-session-tools-workspace.md)：会话工具 Tab、固定旁栏、Pane 标题会话管理与目录恢复；[正式验收计划](qa/dsh-session-tools-workspace-acceptance.md)。
 
 - [Pane 风格交互与后续支持](design/dsh-pane-interaction-completion.md)：Explorer、选区工具条、MCP 入口及侧栏/布局快捷键。
