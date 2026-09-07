@@ -1,6 +1,6 @@
 # 会话工具 Tab、固定旁栏与标题管理
 
-核心功能已实现，Tools 浏览器链路和动态发现的插件入口已验证；全仓最终门仍在独立 checkout 中复核。实施真源为 [OpenSpec](../../openspec/changes/dsh-session-tools-workspace-v2/proposal.md)，决策和接口见 [设计](../../openspec/changes/dsh-session-tools-workspace-v2/design.md)，进度由 [tasks](../../openspec/changes/dsh-session-tools-workspace-v2/tasks.md) 维护。
+会话工具工作区已实现并验证；独立 checkout 的构建、类型、插件与 surface 门、完整测试及后续包复验、98项视觉验收已通过。实施真源为 [OpenSpec](../../openspec/changes/dsh-session-tools-workspace-v2/proposal.md)，决策和接口见 [设计](../../openspec/changes/dsh-session-tools-workspace-v2/design.md)，进度由 [tasks](../../openspec/changes/dsh-session-tools-workspace-v2/tasks.md) 维护。
 
 ## 用户路径
 

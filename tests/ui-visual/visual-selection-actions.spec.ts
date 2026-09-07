@@ -375,10 +375,11 @@ test('S7 a pinned toolbar ignores scroll while an unpinned one dismisses', async
   await expect(unpinned).toBeHidden()
 })
 
+// The compact Pane-style toolbar uses the host layer-1 chrome, not overlay.
 const s8Themes = [
   { name: 'light', theme: 'light', colorScheme: 'light', background: 'rgb(255, 255, 255)' },
-  { name: 'dark', theme: 'dark', colorScheme: 'dark', background: 'rgb(42, 42, 47)' },
-  { name: 'system-dark', theme: 'system', colorScheme: 'dark', background: 'rgb(42, 42, 47)' },
+  { name: 'dark', theme: 'dark', colorScheme: 'dark', background: 'rgb(30, 30, 33)' },
+  { name: 'system-dark', theme: 'system', colorScheme: 'dark', background: 'rgb(30, 30, 33)' },
   { name: 'system-light', theme: 'system', colorScheme: 'light', background: 'rgb(255, 255, 255)' },
 ] as const
 

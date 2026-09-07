@@ -107,3 +107,7 @@ Skills.list 增加可选 includeModelInvocable 请求与 catalogComplete 响应�
 全插件实际检查另发现 client-modules 新版忽略子路径入口，影响 Pentest 和 Terminal。兼容补丁只接纳显式导出 `<subpath>/package.json` 的 Web seat，普通 Host 子路径继续排除。Terminal 增加 manifest alias，浏览器注册 ID 对齐现有 Host row。bundle 检查仅接受具有对应 Host 导出和 manifest alias 的同包子路径，仍拒绝任意 banner ID。
 
 补丁重建只逐字比较本任务拥有的文件；其他并行任务修改的 staging 文件不纳入本任务导出。先前完整补丁链仍在干净 checkout 依次应用，并重放当前包验证幂等。
+
+## 8. 最终门的环境隔离与既有断言同步
+
+视觉测试依赖构建产物，不能与清理这些产物的全仓 build 并行执行。最终门在只包含本任务源码的临时 checkout 先完成 build/typecheck/test，再顺序执行视觉验收。已有选区工具栏在 b7ec388 切到 Pane 的 bg-layer-1；对应主题测试仍引用 overlay 的旧颜色。本轮按既有产品设计修正断言和 canonical override token，不改产品样式、截图或阈值，不扩展为其他业务修复。

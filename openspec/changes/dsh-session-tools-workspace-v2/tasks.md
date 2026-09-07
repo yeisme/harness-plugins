@@ -20,6 +20,6 @@
 - [x] 5.2 扩展现有 integration 入口：可丢弃 profile/storage 中验证真实装载、remote 查询、全局启停及失败恢复，保存六件套 | evidence: temp/integration-test-runs/2026-09-07T09-40-34-468Z-2724973/；真实Loader+Include+Storage+DomainFacility+Gateway，外部来源明确fixture，六件套完整。
 - [x] 5.3 扩展现有真实浏览器场景：A/B会话Tab和旁栏、关闭来源标签、刷新恢复、标题管理、详情定位与4个以上Pane交互 | evidence: temp/integration-test-runs/pane-interactions-2026-09-07T09-33-28-245Z/；会话Tab/旁栏、标题改绑定、关源/恢复/详情原消息、四Pane循环与原有Explorer打开路径通过。
 - [x] 5.4 按运行时 inventory 验收全部本地 bundle 的安装/装载/适用入口，输出逐插件结果与依赖原因；不得硬编码33或宣称全部业务功能通过 | evidence: temp/integration-test-runs/pane-interactions-2026-09-07T09-33-28-245Z/artifacts/plugin-smoke.json；动态发现33/33加载和适用入口通过，无外部业务执行声明。
-- [ ] 5.5 执行最终类型/构建、bundle/plugin/surface/92项现有视觉及新增Tools视觉门；Mac真机不可得时明确未验证，不用模拟替代 | evidence: 未完成：独立checkout全仓typecheck/build、bundle/plugin/surface门通过，完整测试后缺生成产物的剩余包复验通过；全视觉98项仍66失败，独立复现旧选区dark/system-dark两项颜色基线失败。见docs/qa/dsh-session-tools-workspace-delivery.md；Mac真机未验证，不改旧截图掩盖差异。
-- [x] 6.1 更新当前使用指南和交付报告，交叉更新旧Tools首屏规格适用范围，只有实际通过的实现任务才标完成 | evidence: docs/design/dsh-session-tools-workspace.md、docs/runtime/dsh-workbench.md、docs/qa/dsh-session-tools-workspace-delivery.md已同步；旧首屏要求通过MODIFIED delta明确替代，最终门失败保留未完成。
-- [x] 6.2 提交自有插件改动、规格和验证记录，再提交根仓submodule指针；保留无关脏改动，不推送或修改真实外部配置 | evidence: 插件自有实现/规格/记录已提交 f03e7b8；根仓指针已提交 61c17a21；未推送，其他脏改动保留。最终视觉门5.5仍未完成，不归档OpenSpec。
+- [x] 5.5 执行最终类型/构建、bundle/plugin/surface/92项现有视觉及新增Tools视觉门；Mac真机不可得时明确未验证，不用模拟替代 | evidence: 独立checkout全仓typecheck/build、bundle/plugin/surface通过；完整测试加未完成包复验通过；isolated-ui-visual-2026-09-07T10-06-13-486Z-3383577完整98/98通过。仅修正既有Pane layer-1主题断言，未改旧截图。Mac真机未验证，边界与失败归因见交付记录。
+- [x] 6.1 更新当前使用指南和交付报告，交叉更新旧Tools首屏规格适用范围，只有实际通过的实现任务才标完成 | evidence: 设计、运行指南、验收矩阵和交付报告已按最终通过结果同步；旧首屏要求由MODIFIED delta明确替代，失败原因与Mac未验证边界保留。
+- [x] 6.2 提交自有插件改动、规格和验证记录，再提交根仓submodule指针；保留无关脏改动，不推送或修改真实外部配置 | evidence: 插件实现f03e7b8、任务存档cfaa58e已提交；根仓指针61c17a21/74ab8ea5已同步。最终门证据已补齐，未推送，其他脏改动保留。

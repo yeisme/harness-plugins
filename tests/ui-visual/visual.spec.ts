@@ -16,7 +16,7 @@ const namedCases = ['creator', 'source-control', 'desktop-git', 'command-dialog'
 
 const referenceThemeCases = [
   { name: 'light', theme: 'light', colorScheme: 'light', toolbarBackground: 'rgb(255, 255, 255)' },
-  { name: 'dark', theme: 'dark', colorScheme: 'dark', toolbarBackground: 'rgb(42, 42, 47)' },
+  { name: 'dark', theme: 'dark', colorScheme: 'dark', toolbarBackground: 'rgb(30, 30, 33)' },
   { name: 'system-light', theme: 'system', colorScheme: 'light', toolbarBackground: 'rgb(255, 255, 255)' },
 ] as const
 
@@ -96,7 +96,7 @@ test('reference action follows real host aliases through light, dark, system, fa
   await expect(actions.locator('button[data-action-id="dsh:reference"]')).toHaveText('Add to chat')
   await expect(actions.locator('.sa-toolbar')).toHaveCSS('background-color', 'rgb(255, 255, 255)')
   await page.emulateMedia({ colorScheme: 'dark' })
-  await expect(actions.locator('.sa-toolbar')).toHaveCSS('background-color', 'rgb(42, 42, 47)')
+  await expect(actions.locator('.sa-toolbar')).toHaveCSS('background-color', 'rgb(30, 30, 33)')
 
   await page.goto('/selection?reference=true&theme=fallback')
   await page.locator('#sample').evaluate(element => {
@@ -106,8 +106,8 @@ test('reference action follows real host aliases through light, dark, system, fa
     window.getSelection()?.addRange(range)
     document.dispatchEvent(new Event('selectionchange'))
   })
-  await expect(page.locator('[data-dsh-selection-actions] .sa-toolbar')).toHaveCSS('background-color', 'rgb(42, 42, 47)')
-  await page.locator('[data-dsh-selection-actions]').evaluate(element => element.style.setProperty('--dsw-alias-bg-elevated', 'rgb(1, 2, 3)'))
+  await expect(page.locator('[data-dsh-selection-actions] .sa-toolbar')).toHaveCSS('background-color', 'rgb(30, 30, 33)')
+  await page.locator('[data-dsh-selection-actions]').evaluate(element => element.style.setProperty('--dsw-alias-bg-layer-1', 'rgb(1, 2, 3)'))
   await expect(page.locator('[data-dsh-selection-actions] .sa-toolbar')).toHaveCSS('background-color', 'rgb(1, 2, 3)')
 })
 

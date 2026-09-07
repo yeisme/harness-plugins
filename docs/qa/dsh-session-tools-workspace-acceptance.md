@@ -1,6 +1,6 @@
 # 会话工具工作区正式验收计划
 
-状态：Tools 核心链路及全部本地 bundle 入口已实测；最终全仓门复核中。实际结果与失败归因以 [交付记录](dsh-session-tools-workspace-delivery.md) 为准，以下矩阵保留为持续验收标准。
+状态：本轮正式验收已完成；Tools 核心链路、全部本地 bundle 入口、独立最终门与98项视觉已验证。实际结果与失败归因以 [交付记录](dsh-session-tools-workspace-delivery.md) 为准，以下矩阵保留为持续验收标准。
 
 ## 验收矩阵
 
