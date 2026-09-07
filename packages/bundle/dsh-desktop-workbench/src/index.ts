@@ -187,10 +187,10 @@ export function apply(ctx: DesktopWorkbenchNodeContext): () => void {
   const referenceOwnerProviders = new Map<string, ComposerReferenceOwnerV1>()
   const localOwner: ComposerReferenceOwnerV1 = {
     resolve(input, signal) {
-      return opaqueRefs.resolveComposerReference(input.cwd, input.reference, signal, input.authorization?.revealToken)
+      return opaqueRefs.resolveComposerReference(input.cwd, input.reference, signal, input.revealGrant?.revealToken)
     },
     refresh(input, signal) {
-      return opaqueRefs.refreshComposerReference(input.cwd, input.reference, signal, input.authorization?.revealToken)
+      return opaqueRefs.refreshComposerReference(input.cwd, input.reference, signal, input.revealGrant?.revealToken)
     },
   }
   const terminalOwner: ComposerReferenceOwnerV1 = {

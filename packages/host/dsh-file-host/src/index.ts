@@ -317,7 +317,7 @@ export interface ComposerReferenceOwnerV1 {
     readonly sessionId: string
     readonly cwd: string
     readonly reference: ComposerReferenceOwnerClaimV1
-    readonly authorization?: { readonly revealToken: string }
+    readonly revealGrant?: { readonly revealToken: string }
   }, signal: AbortSignal): Promise<ComposerReferenceOwnerResolutionV1 | undefined>
   /**
    * Explicitly reauthorize the same opaque object and selection bounds against
@@ -327,7 +327,7 @@ export interface ComposerReferenceOwnerV1 {
     readonly sessionId: string
     readonly cwd: string
     readonly reference: ComposerReferenceOwnerClaimV1
-    readonly authorization?: { readonly revealToken: string }
+    readonly revealGrant?: { readonly revealToken: string }
   }, signal: AbortSignal): Promise<ComposerReferenceOwnerResolutionV1 | undefined>
 }
 
