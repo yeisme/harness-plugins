@@ -62,12 +62,12 @@ try {
   await page.waitForTimeout(200)
   assert.equal(await page.locator('[data-workspace-split][aria-orientation=horizontal]').count(), 1)
   const before = await workspace.boundingBox()
-  await page.keyboard.press('Control+b')
+  await page.keyboard.press('Meta+b')
   await page.waitForTimeout(250)
   const after = await workspace.boundingBox()
   assert(after.width > before.width)
-  await page.keyboard.press('Control+b')
-  checks.push('layout shortcuts switch orientation and Ctrl+B toggles the sidebar')
+  await page.keyboard.press('Meta+b')
+  checks.push('layout shortcuts switch orientation and Meta+B toggles the sidebar')
   stage = 'mcp-command'
   const conversation = page.locator('[data-workspace-tab^="conversation:"]').first()
   await conversation.click()
@@ -82,6 +82,51 @@ try {
   assert.equal(await page.locator('[data-workspace-pane]:visible > [role=alert]').count(), 0)
   assert.equal(await page.getByText('Pane Workbench is not installed', { exact: true }).count(), 0)
   checks.push('bare /mcp opens the installed Tools pane through the browser command chooser')
+  stage = 'tmux-prefix-multiple-panes'
+  const prefix = async key => { await page.keyboard.press('Control+b'); await page.keyboard.press(key); await page.waitForTimeout(120) }
+  const composer = page.locator('[contenteditable=true]:visible').first()
+  await conversation.click()
+  await composer.focus()
+  const draftBefore = await composer.textContent()
+  await prefix('o')
+  assert.equal(await composer.textContent(), draftBefore)
+  for (let i = 0; i < 2; i++) {
+    await prefix(i === 0 ? 'Shift+5' : 'Shift+Quote')
+    const dialog = page.getByRole('dialog', { name: /^(Add pane|添加面板)$/ })
+    await dialog.waitFor()
+    const used = await page.locator('[data-workspace-tab]').evaluateAll(elements => elements.map(el => el.dataset.workspaceTab))
+    const choices = dialog.locator('[data-workspace-catalog-session]')
+    let chosen = false
+    for (let j = 0; j < await choices.count(); j++) {
+      const candidate = choices.nth(j)
+      if (!used.includes(`conversation:${await candidate.getAttribute('data-workspace-catalog-session')}`)) { await candidate.click(); chosen = true; break }
+    }
+    assert(chosen)
+  }
+  const groups = page.locator('[data-workspace-group]')
+  const count = await groups.count()
+  assert(count >= 4)
+  const focused = () => page.locator('[data-workspace-group][data-focused]').getAttribute('data-workspace-group')
+  const start = await focused()
+  for (let i = 0; i < count * 2; i++) await prefix('o')
+  assert.equal(await focused(), start)
+  for (let i = 0; i < count; i++) await prefix('Shift+o')
+  assert.equal(await focused(), start)
+  const identities = await page.locator('[data-workspace-tab]').evaluateAll(elements => elements.map(el => el.dataset.workspaceTab).sort())
+  for (let i = 0; i < 4; i++) await prefix('Space')
+  assert.equal(await groups.count(), count)
+  assert.deepEqual(await page.locator('[data-workspace-tab]').evaluateAll(elements => elements.map(el => el.dataset.workspaceTab).sort()), identities)
+  await page.keyboard.press('Control+b')
+  await page.keyboard.press('Escape')
+  assert.equal(await page.getByRole('status').filter({ hasText: /Pane:/ }).count(), 0)
+  const widthBeforePrefix = (await workspace.boundingBox()).width
+  await prefix('b')
+  assert.notEqual((await workspace.boundingBox()).width, widthBeforePrefix)
+  await prefix('b')
+  await page.keyboard.press('Control+b')
+  await page.waitForTimeout(2100)
+  assert.equal(await page.getByRole('status').filter({ hasText: /Pane[:：]/ }).count(), 0)
+  checks.push('macOS modifier events and editor prefix preserve drafts; four panes split, wrap in both directions and cycle layouts without replacing identities')
   assert.equal(errors.length, 0)
 } catch (error) {
   failure = `${stage}: ${error instanceof assert.AssertionError ? 'assertion failed' : 'browser operation did not complete'}`

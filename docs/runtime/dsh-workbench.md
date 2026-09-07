@@ -24,7 +24,7 @@ pnpm dsh:workbench -- --rebuild --prepare-only
 
 源码位于 `temp/dsh-unified-host-source`；Git 存档的事实源是按顺序应用的 `upstream-prs/unified-multi-pane-workbench`、`composer-multi-reference-v1`、`workbench-runtime-cleanup`。不要整体导出脏 staging；新增修复只导出自有文件增量。不要把临时 checkout 删掉后仍保留指向它的安装链接。
 
-快捷键增量接续应用 `upstream-prs/pane-interaction-completion`；`dsh:workbench` 会检查并准备该补丁。交互与按键说明见 [Pane 风格交互](../design/dsh-pane-interaction-completion.md)。
+多 Pane 前缀循环接续应用 `upstream-prs/pane-keyboard-cycle`。快捷键基础增量应用 `upstream-prs/pane-interaction-completion`；`dsh:workbench` 会检查并准备该补丁。交互与按键说明见 [Pane 风格交互](../design/dsh-pane-interaction-completion.md)。
 
 ## 全局入口与旧版清理
 

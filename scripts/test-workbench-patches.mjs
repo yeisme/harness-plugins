@@ -22,15 +22,22 @@ function run(command, args, cwd = root) {
 }
 try {
   run('git', ['worktree', 'add', '--detach', checkout, WORKBENCH_BASE], source)
-  for (const packet of ['unified-multi-pane-workbench', 'composer-multi-reference-v1', 'workbench-runtime-cleanup', 'pane-interaction-completion']) {
+  for (const packet of ['unified-multi-pane-workbench', 'composer-multi-reference-v1', 'workbench-runtime-cleanup', 'pane-interaction-completion', 'pane-keyboard-cycle']) {
     run('bash', [`upstream-prs/${packet}/apply.sh`, checkout])
   }
   run('bash', ['upstream-prs/workbench-runtime-cleanup/apply.sh', checkout])
+  run('bash', ['upstream-prs/pane-keyboard-cycle/apply.sh', checkout])
   const applied = await readFile(resolve(checkout, 'packages/client/ui-conversation/src/client/apply.ts'), 'utf8')
   assert(!applied.includes('createReferenceTargetControl'), 'Fresh reconstruction must omit Target registration')
   const renderer = await readFile(resolve(checkout, 'packages/client/ui-renderer/src/client/scoped-slots.tsx'), 'utf8')
   assert(renderer.includes('props.sessionId'), 'Fresh reconstruction must retain explicit session binding')
   for (const path of [
+    'packages/client/ui-layout/src/client/keyboard.ts',
+    'packages/client/ui-layout/src/client/Workbench.tsx',
+    'packages/client/ui-layout/tests/keyboard.client.spec.ts',
+    'packages/client/ui-layout/README.md',
+    'packages/client/locale/src/locales/en.ts',
+    'packages/client/locale/src/locales/zh.ts',
     '.agents/notes/implemented/architecture/2026-09-05-unified-workspace-panes.md',
     'packages/client/ui-conversation/src/client/apply.ts',
     'packages/client/ui-conversation/src/client/reference-target-chooser.tsx',

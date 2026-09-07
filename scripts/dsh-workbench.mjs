@@ -57,6 +57,9 @@ try {
   if (!existsSync(resolve(source, 'packages/client/ui-layout/src/client/keyboard.ts'))) {
     await run('bash', ['upstream-prs/pane-interaction-completion/apply.sh', source])
   }
+  if (!readFileSync(resolve(source, 'packages/client/ui-layout/src/client/keyboard.ts'), 'utf8').includes('panePrefixKey')) {
+    await run('bash', ['upstream-prs/pane-keyboard-cycle/apply.sh', source])
+  }
   let compatibleBundle = false
   try { checkWorkbenchRuntime(root); compatibleBundle = true } catch { /* Rebuild incomplete or stale local artifacts below. */ }
   if (rebuild || !compatibleBundle || !existsSync(resolve(source, 'apps/cli/lib/bin.js')) || !existsSync(resolve(source, 'apps/web/dist/index.html'))) {
