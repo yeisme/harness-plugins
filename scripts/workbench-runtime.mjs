@@ -19,7 +19,7 @@ export function checkWorkbenchRuntime(root) {
   const checks = [
     ['apps/cli/lib/bin.js', text => text.length > 0],
     ['apps/web/dist/index.html', text => text.length > 0],
-    ['packages/client/ui-layout/lib/client.js', text => text.includes('workspace.unified.v1') && text.includes('workbenchShortcut') && text.includes('panePrefixKey')],
+    ['packages/client/ui-layout/lib/client.js', text => text.includes('workspace.unified.v1') && text.includes('workbenchShortcut') && text.includes('cyclePane') && text.includes('group-') && !text.includes('panePrefixKey')],
     ['packages/client/ui-renderer/lib/client.js', text => text.includes('props.sessionId') && text.includes('ExplicitScopeProvider')],
     ['packages/client/ui-workspace/lib/client.js', text => text.includes('data-workspace-session-id')],
     ['packages/client/ui-conversation/lib/client.js', text => !text.includes('data-composer-reference-target"') && !text.includes('data-composer-reference-target]') && text.includes('data-composer-reference-target-option')],

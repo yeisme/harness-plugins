@@ -22,11 +22,11 @@ function run(command, args, cwd = root) {
 }
 try {
   run('git', ['worktree', 'add', '--detach', checkout, WORKBENCH_BASE], source)
-  for (const packet of ['unified-multi-pane-workbench', 'composer-multi-reference-v1', 'workbench-runtime-cleanup', 'pane-interaction-completion', 'pane-keyboard-cycle']) {
+  for (const packet of ['unified-multi-pane-workbench', 'composer-multi-reference-v1', 'workbench-runtime-cleanup', 'pane-interaction-completion', 'pane-keyboard-cycle', 'pane-editor-shortcuts']) {
     run('bash', [`upstream-prs/${packet}/apply.sh`, checkout])
   }
   run('bash', ['upstream-prs/workbench-runtime-cleanup/apply.sh', checkout])
-  run('bash', ['upstream-prs/pane-keyboard-cycle/apply.sh', checkout])
+  run('bash', ['upstream-prs/pane-editor-shortcuts/apply.sh', checkout])
   const applied = await readFile(resolve(checkout, 'packages/client/ui-conversation/src/client/apply.ts'), 'utf8')
   assert(!applied.includes('createReferenceTargetControl'), 'Fresh reconstruction must omit Target registration')
   const renderer = await readFile(resolve(checkout, 'packages/client/ui-renderer/src/client/scoped-slots.tsx'), 'utf8')

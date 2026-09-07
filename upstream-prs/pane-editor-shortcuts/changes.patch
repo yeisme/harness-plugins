@@ -1,0 +1,183 @@
+diff --git a/packages/client/ui-layout/src/client/keyboard.ts b/packages/client/ui-layout/src/client/keyboard.ts
+index b3c3b8c..92cb50c 100644
+--- a/packages/client/ui-layout/src/client/keyboard.ts
++++ b/packages/client/ui-layout/src/client/keyboard.ts
+@@ -2,2 +2,2 @@ import type { LayoutNode, WorkspaceSnapshot } from './workspace-model.ts'
+-export type PaneShortcut = 'navigation' | 'single' | 'columns' | 'rows' | 'menu' | 'next' | 'previous' | 'cycle' | 'split-right' | 'split-bottom'
+-/** Physical codes avoid Option-generated characters on macOS. */
++export type PaneShortcut = 'navigation' | 'single' | 'columns' | 'rows' | 'menu' | 'next' | 'previous' | 'cycle' | 'split-right' | 'split-bottom' | `group-${number}`
++/** Direct editor-style shortcuts; physical codes survive macOS Option characters. */
+@@ -5,3 +5,2 @@ export function workbenchShortcut(event: KeyboardEvent): PaneShortcut | null {
+-  if (event.defaultPrevented || event.isComposing || event.repeat || !(event.ctrlKey || event.metaKey) || event.shiftKey) return null
+-  if (event.target instanceof Element && event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],.monaco-editor,.cm-editor,.xterm,dialog')) return null
+-  if (!event.altKey) return (event.code === 'KeyB' || event.key.toLowerCase() === 'b') && event.metaKey ? 'navigation' : null
++  if (event.defaultPrevented || event.isComposing || event.repeat || !(event.ctrlKey || event.metaKey)) return null
++  if (event.target instanceof Element && event.target.closest('.xterm,dialog,[role="dialog"]')) return null
+@@ -8,0 +8,11 @@ export function workbenchShortcut(event: KeyboardEvent): PaneShortcut | null {
++  if (!event.altKey) {
++    if (key === 'Backslash' || event.key === '\\') return event.shiftKey ? 'split-bottom' : 'split-right'
++    if (event.shiftKey) return null
++    if (key === 'KeyB' || event.key.toLowerCase() === 'b') return 'navigation'
++    const digit = key.match(/^(?:Digit)?([1-9])$/)?.[1]
++    return digit ? `group-${Number(digit)}` : null
++  }
++  if (event.shiftKey) return null
++  if (key === 'ArrowRight') return 'next'
++  if (key === 'ArrowLeft') return 'previous'
++  if (key === 'Digit0' || key === '0') return 'cycle'
+@@ -15,16 +24,0 @@ export function workbenchShortcut(event: KeyboardEvent): PaneShortcut | null {
+-export function panePrefixKey(event: KeyboardEvent): boolean {
+-  return event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && (event.code === 'KeyB' || event.key.toLowerCase() === 'b')
+-}
+-export function panePrefixAction(event: KeyboardEvent): PaneShortcut | null {
+-  if (event.ctrlKey || event.metaKey || event.altKey) return null
+-  const key = event.code || event.key
+-  if (key === 'KeyO' || event.key.toLowerCase() === 'o') return event.shiftKey ? 'previous' : 'next'
+-  if (key === 'ArrowRight' || key === 'ArrowDown') return 'next'
+-  if (key === 'ArrowLeft' || key === 'ArrowUp') return 'previous'
+-  if (key === 'Space' || event.key === ' ') return 'cycle'
+-  if (event.key === '%' || key === 'Digit5' && event.shiftKey) return 'split-right'
+-  if (event.key === '"' || key === 'Quote' && event.shiftKey) return 'split-bottom'
+-  if (key === 'KeyZ' || event.key === 'z') return 'single'
+-  if (key === 'KeyB' || event.key === 'b') return 'navigation'
+-  return null
+-}
+diff --git a/packages/client/ui-layout/src/client/Workbench.tsx b/packages/client/ui-layout/src/client/Workbench.tsx
+index befe8aa..861f936 100644
+--- a/packages/client/ui-layout/src/client/Workbench.tsx
++++ b/packages/client/ui-layout/src/client/Workbench.tsx
+@@ -8 +8 @@ import css from './Workbench.module.css'
+-import { arrangePanes, cyclePane, panePrefixKey, panePrefixAction, workbenchShortcut, type PaneShortcut } from './keyboard.ts'
++import { arrangePanes, cyclePane, paneGroupOrder, workbenchShortcut, type PaneShortcut } from './keyboard.ts'
+@@ -76 +75,0 @@ export function Workbench(props: Props) {
+-  const [prefixActive, setPrefixActive] = useState(false)
+@@ -116,2 +115,3 @@ export function Workbench(props: Props) {
+-    else if (action === 'next' || action === 'previous') {
+-      const id = cyclePane(context.live, action === 'next' ? 1 : -1)
++    else if (action === 'next' || action === 'previous' || action.startsWith('group-')) {
++      const groupId = action.startsWith('group-') ? paneGroupOrder(context.live)[Number(action.slice(6)) - 1] : undefined
++      const id = action.startsWith('group-') ? context.live.groups[groupId ?? '']?.active : cyclePane(context.live, action === 'next' ? 1 : -1)
+@@ -126 +126 @@ export function Workbench(props: Props) {
+-    else applyLayout(action)
++    else if (action === 'single' || action === 'columns' || action === 'rows') applyLayout(action)
+@@ -129,3 +128,0 @@ export function Workbench(props: Props) {
+-    let armed = false
+-    let timer: ReturnType<typeof setTimeout> | undefined
+-    const clear = () => { armed = false; clearTimeout(timer); setPrefixActive(false) }
+@@ -133,15 +129,0 @@ export function Workbench(props: Props) {
+-      if (event.isComposing || event.repeat || event.defaultPrevented) return
+-      if (event.target instanceof Element && event.target.closest('.xterm,dialog,[role="dialog"]')) { clear(); return }
+-      if (panePrefixKey(event)) {
+-        event.preventDefault(); event.stopPropagation()
+-        clear(); armed = true; setPrefixActive(true); timer = setTimeout(clear, 2000)
+-        return
+-      }
+-      if (armed) {
+-        if (['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) return
+-        const action = panePrefixAction(event)
+-        clear()
+-        if (action || event.key === 'Escape') { event.preventDefault(); event.stopPropagation() }
+-        if (action) performShortcut(action)
+-        return
+-      }
+@@ -149,2 +131,2 @@ export function Workbench(props: Props) {
+-      if (action === null || action === 'navigation') return
+-      event.preventDefault(); performShortcut(action)
++      if (action === null) return
++      event.preventDefault(); event.stopPropagation(); performShortcut(action)
+@@ -153,2 +135 @@ export function Workbench(props: Props) {
+-    window.addEventListener('blur', clear)
+-    return () => { clearTimeout(timer); document.removeEventListener('keydown', handle, true); window.removeEventListener('blur', clear) }
++    return () => document.removeEventListener('keydown', handle, true)
+@@ -468 +448,0 @@ export function Workbench(props: Props) {
+-    {prefixActive && <div role="status" className={css.layoutMenu}>{t('wb.prefixHelp')}</div>}
+@@ -485,6 +465,6 @@ export function Workbench(props: Props) {
+-      <button onClick={() => { performShortcut('next'); setLayouts(false) }}>{t('wb.nextPane')} · Ctrl+B o</button>
+-      <button onClick={() => { performShortcut('previous'); setLayouts(false) }}>{t('wb.previousPane')} · Ctrl+B ⇧O</button>
+-      <button onClick={() => { performShortcut('cycle'); setLayouts(false) }}>{t('wb.cycleLayout')} · Ctrl+B Space</button>
+-      <button disabled={!live.focused || live.floating.some(f => f.groupId === live.focused)} onClick={() => { splitFocused('right'); setLayouts(false) }}>{t('wb.right')} · Ctrl+B %</button>
+-      <button disabled={!live.focused || live.floating.some(f => f.groupId === live.focused)} onClick={() => { splitFocused('bottom'); setLayouts(false) }}>{t('wb.bottom')} · Ctrl+B &quot;</button>
+-      <button aria-keyshortcuts="Control+Alt+1 Meta+Alt+1" disabled={!live.focused} onClick={() => { applyLayout('single'); setLayouts(false) }}>{t('wb.singleLayout')} · Ctrl+B z</button>
++      <button onClick={() => { performShortcut('next'); setLayouts(false) }}>{t('wb.nextPane')} · Ctrl/⌘+Alt+→</button>
++      <button onClick={() => { performShortcut('previous'); setLayouts(false) }}>{t('wb.previousPane')} · Ctrl/⌘+Alt+←</button>
++      <button onClick={() => { performShortcut('cycle'); setLayouts(false) }}>{t('wb.cycleLayout')} · Ctrl/⌘+Alt+0</button>
++      <button disabled={!live.focused || live.floating.some(f => f.groupId === live.focused)} onClick={() => { splitFocused('right'); setLayouts(false) }}>{t('wb.right')} · Ctrl/⌘+&#92;</button>
++      <button disabled={!live.focused || live.floating.some(f => f.groupId === live.focused)} onClick={() => { splitFocused('bottom'); setLayouts(false) }}>{t('wb.bottom')} · Ctrl/⌘+Shift+&#92;</button>
++      <button aria-keyshortcuts="Control+Alt+1 Meta+Alt+1" disabled={!live.focused} onClick={() => { applyLayout('single'); setLayouts(false) }}>{t('wb.singleLayout')} · Ctrl/⌘+Alt+1</button>
+diff --git a/packages/client/ui-layout/tests/keyboard.client.spec.ts b/packages/client/ui-layout/tests/keyboard.client.spec.ts
+index 93b42c6..eabe03a 100644
+--- a/packages/client/ui-layout/tests/keyboard.client.spec.ts
++++ b/packages/client/ui-layout/tests/keyboard.client.spec.ts
+@@ -3 +3,2 @@ import { describe, expect, it } from 'vitest'
+-import { arrangePanes, cyclePane, paneGroupOrder, panePrefixAction, panePrefixKey, workbenchShortcut } from '../src/client/keyboard.ts'
++import { arrangePanes, cyclePane, paneGroupOrder, workbenchShortcut } from '../src/client/keyboard.ts'
++import { emptyWorkspace, openPane, movePane, focusPane } from '../src/client/workspace-model.ts'
+@@ -5,9 +6,12 @@ import { arrangePanes, cyclePane, paneGroupOrder, panePrefixAction, panePrefixKe
+-describe('workbench keyboard actions', () => {
+-  it('recognizes navigation and layout without changing bare editing keys', () => {
+-    expect(workbenchShortcut(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true }))).toBeNull()
+-    expect(workbenchShortcut(new KeyboardEvent('keydown', { key: 'b', metaKey: true }))).toBe('navigation')
+-    for (const [key, expected] of [['1', 'single'], ['2', 'columns'], ['3', 'rows'], ['l', 'menu']] as const) {
+-      expect(workbenchShortcut(new KeyboardEvent('keydown', { key, ctrlKey: true, altKey: true }))).toBe(expected)
+-    }
+-    expect(workbenchShortcut(new KeyboardEvent('keydown', { key: 'b' }))).toBeNull()
+-    expect(workbenchShortcut(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true, isComposing: true }))).toBeNull()
++describe('direct editor-style pane shortcuts', () => {
++  it.each(['ctrlKey', 'metaKey'])('supports direct shortcuts with %s', modifier => {
++    const action = (code: string, extra = {}) => workbenchShortcut(new KeyboardEvent('keydown', { code, [modifier]: true, ...extra }))
++    expect(action('KeyB')).toBe('navigation')
++    expect(action('Backslash')).toBe('split-right')
++    expect(action('Backslash', { shiftKey: true })).toBe('split-bottom')
++    expect(action('Digit3')).toBe('group-3')
++    expect(action('ArrowRight', { altKey: true })).toBe('next')
++    expect(action('ArrowLeft', { altKey: true })).toBe('previous')
++    expect(action('Digit0', { altKey: true })).toBe('cycle')
++    expect(action('Digit2', { key: '™', altKey: true })).toBe('columns')
++    expect(action('KeyB', { isComposing: true })).toBeNull()
+@@ -15,3 +19,4 @@ describe('workbench keyboard actions', () => {
+-  it('leaves editor, form, terminal, and already handled events untouched', () => {
+-    for (const element of [document.createElement('input'), document.createElement('textarea'), document.createElement('div')]) {
+-      if (element.tagName === 'DIV') element.setAttribute('contenteditable', 'true')
++  it('works in composers but leaves terminal, dialogs and ordinary typing untouched', () => {
++    for (const [selector, expected] of [['input', 'navigation'], ['textarea', 'navigation'], ['terminal', null], ['dialog', null]] as const) {
++      const element = document.createElement(selector === 'terminal' ? 'div' : selector)
++      if (selector === 'terminal') element.className = 'xterm'
+@@ -20 +25 @@ describe('workbench keyboard actions', () => {
+-      expect(workbenchShortcut(event)).toBeNull()
++      expect(workbenchShortcut(event)).toBe(expected)
+@@ -21,0 +27 @@ describe('workbench keyboard actions', () => {
++    for (const key of ['o', 'O', ' ', '%', '"', 'z', 'b']) expect(workbenchShortcut(new KeyboardEvent('keydown', { key }))).toBeNull()
+@@ -26,11 +31,0 @@ describe('workbench keyboard actions', () => {
+-})
+-
+-import { emptyWorkspace, openPane, movePane, focusPane } from '../src/client/workspace-model.ts'
+-describe('macOS prefix and unbounded pane cycling', () => {
+-  it('handles physical Option codes and tmux shifted keys', () => {
+-    expect(workbenchShortcut(new KeyboardEvent('keydown', { key: '™', code: 'Digit2', metaKey: true, altKey: true }))).toBe('columns')
+-    expect(panePrefixKey(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', ctrlKey: true }))).toBe(true)
+-    for (const [key, code, shiftKey, expected] of [['o', 'KeyO', false, 'next'], ['O', 'KeyO', true, 'previous'], ['%', 'Digit5', true, 'split-right'], ['"', 'Quote', true, 'split-bottom'], [' ', 'Space', false, 'cycle'], ['Escape', 'Escape', false, null]] as const) {
+-      expect(panePrefixAction(new KeyboardEvent('keydown', { key, code, shiftKey }))).toBe(expected)
+-    }
+-  })
+diff --git a/packages/client/ui-layout/README.md b/packages/client/ui-layout/README.md
+index 934c6ad..b870390 100644
+--- a/packages/client/ui-layout/README.md
++++ b/packages/client/ui-layout/README.md
+@@ -94 +94 @@ None.
+-Press Ctrl+B, release, then press o / Shift+O to wrap forward / backward through every docked and floating pane group. Space cycles columns, rows and grid; % / double quote opens a picker to split the focused docked group right / below; z toggles focus; b toggles the sidebar. Escape, window blur and a two-second timeout cancel the prefix. Terminal and modal input remain local. The explicit prefix works in composers; Cmd+B remains the sidebar shortcut outside editing fields. Ctrl/Cmd+Alt+1/2/3/L remain direct layout shortcuts, matched by physical key code for macOS Option layouts.
++Use direct editor-style shortcuts, with Cmd on macOS and Ctrl on Windows/Linux: B toggles the sidebar, backslash splits right, Shift+backslash splits down, and digits 1–9 focus a pane group. Alt+Left/Right wraps through every pane group. Alt+0 cycles columns, rows and grid; Alt+1 maximizes/restores the focused group; Alt+2/3 arrange columns/rows; Alt+L opens the layout menu. Layout cycling and vertical splitting are workbench extensions to the editor-style scheme, not claims of exact VS Code defaults.
+@@ -96 +96 @@ Press Ctrl+B, release, then press o / Shift+O to wrap forward / backward through
+-Split creation reuses the existing pane picker and workspace service. Choosing an existing pane moves it; it never clones a session. Reflow preserves all group/tab identities and floating geometry. No two-pane limit is imposed; usable simultaneous geometry remains bounded by the viewport.
++There is no tmux prefix or waiting mode. Shortcuts work in composers, with terminal, modal and IME input preserved. Split creation uses the existing picker and workspace service. Choosing an existing pane moves it rather than cloning its session. Reflow preserves group/tab identities and floating geometry. There is no two-pane limit; usable simultaneous geometry is bounded by the viewport.
+diff --git a/packages/client/locale/src/locales/en.ts b/packages/client/locale/src/locales/en.ts
+index 54d484c..4974387 100644
+--- a/packages/client/locale/src/locales/en.ts
++++ b/packages/client/locale/src/locales/en.ts
+@@ -33 +32,0 @@ export const en = {
+-  'wb.prefixHelp': 'Pane: o next · Shift+O previous · Space layout · % / " split · z zoom · b sidebar · Esc cancel',
+diff --git a/packages/client/locale/src/locales/zh.ts b/packages/client/locale/src/locales/zh.ts
+index b558d52..cfca410 100644
+--- a/packages/client/locale/src/locales/zh.ts
++++ b/packages/client/locale/src/locales/zh.ts
+@@ -31 +30,0 @@ export const zh = {
+-  'wb.prefixHelp': 'Pane：o 下一栏 · Shift+O 上一栏 · 空格布局 · % / " 分屏 · z 聚焦 · b 侧栏 · Esc 取消',

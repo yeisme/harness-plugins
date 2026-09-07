@@ -57,8 +57,11 @@ try {
   if (!existsSync(resolve(source, 'packages/client/ui-layout/src/client/keyboard.ts'))) {
     await run('bash', ['upstream-prs/pane-interaction-completion/apply.sh', source])
   }
-  if (!readFileSync(resolve(source, 'packages/client/ui-layout/src/client/keyboard.ts'), 'utf8').includes('panePrefixKey')) {
+  if (!readFileSync(resolve(source, 'packages/client/ui-layout/src/client/keyboard.ts'), 'utf8').includes('cyclePane')) {
     await run('bash', ['upstream-prs/pane-keyboard-cycle/apply.sh', source])
+  }
+  if (!readFileSync(resolve(source, 'packages/client/ui-layout/src/client/keyboard.ts'), 'utf8').includes('Direct editor-style shortcuts')) {
+    await run('bash', ['upstream-prs/pane-editor-shortcuts/apply.sh', source])
   }
   let compatibleBundle = false
   try { checkWorkbenchRuntime(root); compatibleBundle = true } catch { /* Rebuild incomplete or stale local artifacts below. */ }
