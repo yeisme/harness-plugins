@@ -2,6 +2,17 @@
 
 本说明记录 `dsh-web-composer-references-theme-v1` 的插件侧接入边界。官方 DSH host 仍拥有亮色、暗色和系统偏好；插件不读取或保存主题偏好。
 
+## 可编辑提示词引用的增量方案（待实施）
+
+后续设计见 [提示词引用与创作工作台](dsh-prompt-reference-creative-workspace.md)，所属变更为 [dsh-prompt-reference-creative-workspace-v1](../../openspec/changes/dsh-prompt-reference-creative-workspace-v1/proposal.md)。原 change 已归档，本节只说明新旧方案关系，不将新功能记为已实现。
+
+- 新模式将插入时授权的有界内容固定为可编辑提示词正文；客户端显示紧凑内容块，支持原位源码编辑和按需发送预览。
+- 当前正文与来源证明分开，改写不影响源文件，也不继续声称正文等于来源原文。刷新来源先比较并显式确认。
+- 既有 V1 和结构化引用事件／回执保留原合同。新模式必须协商正文投影能力，不能作为旧接口失败或宿主 seam 缺失后的静默拼接 fallback。
+- 媒体仍使用实际授权附件或可解析资源及范围；描述不能代替媒体。Agent／技能／工具提及不自动执行。
+- 成果候选、采纳和写回属于侧边创作面板及成果 owner，普通引用无需经过版本采纳。
+- 新引用与成果 UI 继续使用下文主题桥接及项目统一视觉规范，不添加独立主题状态。
+
 ## 主题桥接
 
 `ui-visual-kit` 的 `panelVar` 解析顺序固定为：项目 canonical override、官方 DSH alias、原 canonical fallback。这样已存在的 `--dsw-alias-text-primary` 等自定义主题继续优先，而官方 ThemeRuntime 仅提供 `label-primary`、`bg-overlay`、`interactive-bg-*`、`state-*-primary` 时，所有消费 `--vk-*` 的自有 surface 仍随 host 更新。

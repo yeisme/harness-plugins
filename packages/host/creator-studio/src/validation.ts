@@ -15,6 +15,7 @@ import {
   type CreatorAssetPageV1,
   type CreatorAssetQueryV1,
   type CreatorAssetV1,
+  type CreatorArtifactContentV1,
   type CreatorMediaAccessV1,
   type CreatorOwnerSnapshotV1,
   type CreatorOwnerAssetListV1,
@@ -57,6 +58,67 @@ const metricSchema = z.object({
 const textPreviewSchema = z.object({
   before: z.string().max(1_200).optional(),
   after: z.string().max(1_200).optional(),
+}).strict()
+
+const artifactCandidateSchema = z.object({
+  ref: safeRef,
+  version: z.string().min(1).max(160),
+  title: safeText,
+  status: z.enum(['draft', 'ready', 'adopted', 'superseded', 'conflict']),
+  sourceVersion: z.string().min(1).max(160).optional(),
+  artifact: ArtifactRefSchema.optional(),
+  textPreview: textPreviewSchema.optional(),
+  referenceProof: z.object({
+    id: safeRef,
+    kind: z.enum(['file', 'directory', 'selection', 'message', 'terminal', 'image', 'image-region', 'agent', 'skill', 'tool']),
+    intent: z.literal('content'),
+    scope: z.enum(['artifact/body', 'artifact/media']),
+    digest: z.string().min(1).max(160),
+    freshness: z.enum(['fresh', 'stale', 'frozen', 'unavailable']),
+    unavailableReason: safeText.optional(),
+  }).strict().optional(),
+}).strict()
+
+const artifactActionBindingSchema = z.object({
+  descriptorRef: safeRef,
+  contentField: safeKey.optional(),
+  contentRevisionField: safeKey.optional(),
+  candidateRefField: safeKey.optional(),
+  candidateVersionField: safeKey.optional(),
+  sourceVersionField: safeKey.optional(),
+  rangeField: safeKey.optional(),
+  annotationField: safeKey.optional(),
+}).strict()
+
+const artifactLifecycleActionsSchema = z.object({
+  saveDraft: artifactActionBindingSchema.optional(),
+  createCandidate: artifactActionBindingSchema.optional(),
+  compare: artifactActionBindingSchema.optional(),
+  adopt: artifactActionBindingSchema.optional(),
+  writeback: artifactActionBindingSchema.optional(),
+  attachContext: artifactActionBindingSchema.optional(),
+  openEnvironment: artifactActionBindingSchema.optional(),
+}).strict()
+
+const artifactWorkspaceItemSchema = z.object({
+  artifact: ArtifactRefSchema,
+  acceptedVersion: z.string().min(1).max(160),
+  sourceVersion: z.string().min(1).max(160).optional(),
+  textPreview: textPreviewSchema.optional(),
+  referenceProof: artifactCandidateSchema.shape.referenceProof,
+  media: z.object({
+    width: z.number().finite().positive().max(1_000_000).optional(),
+    height: z.number().finite().positive().max(1_000_000).optional(),
+    durationMs: z.number().finite().positive().max(604_800_000).optional(),
+  }).strict().optional(),
+  candidates: z.array(artifactCandidateSchema).max(128),
+  actions: artifactLifecycleActionsSchema.optional(),
+}).strict()
+
+const artifactWorkspaceSchema = z.object({
+  status: z.enum(['ready', 'partial', 'needs_contract']),
+  safeMessage: safeText,
+  artifacts: z.array(artifactWorkspaceItemSchema).max(1_000),
 }).strict()
 
 const resourceSchema = z.object({
@@ -267,6 +329,7 @@ const creatorOwnerSnapshotBaseSchema = z.object({
   production: productionSchema.optional(),
   reviews: z.array(reviewSchema).max(500).optional(),
   jobs: z.array(jobSchema).max(500).optional(),
+  artifactWorkspace: artifactWorkspaceSchema.optional(),
 }).strict()
 
 export const creatorOwnerSnapshotSchema = creatorOwnerSnapshotBaseSchema.superRefine((value, ctx) => {
@@ -279,7 +342,69 @@ export const creatorOwnerSnapshotSchema = creatorOwnerSnapshotBaseSchema.superRe
       ctx.addIssue({ code: 'custom', path: ['actions', index, 'context'], message: 'action context must match snapshot context' })
     }
   })
+  validateArtifactWorkspaceBindings(value, ctx)
 })
+
+function validateArtifactWorkspaceBindings(value: { owner: string; actions: readonly PaneActionDescriptorV1[]; artifactWorkspace?: z.infer<typeof artifactWorkspaceSchema> | undefined }, ctx: z.RefinementCtx): void {
+  const descriptors = new Map(value.actions.map(action => [action.descriptorRef, action]))
+  const fieldFor = (descriptor: PaneActionDescriptorV1, key: string | undefined) => key === undefined ? undefined : descriptor.fields.find(field => field.key === key)
+  const boundedStringField = (descriptor: PaneActionDescriptorV1, key: string | undefined, allowSelect = false): boolean => {
+    if (key === undefined) return true
+    const field = fieldFor(descriptor, key)
+    return (allowSelect && field?.kind === 'select') || ((field?.kind === 'text' || field?.kind === 'textarea') && field.maxLength !== undefined)
+  }
+  const fieldAllows = (descriptor: PaneActionDescriptorV1, key: string | undefined, projected: readonly string[]): boolean => {
+    if (key === undefined) return projected.length === 0
+    const field = fieldFor(descriptor, key)
+    if (field === undefined) return false
+    if (field.kind === 'select') return projected.every(candidate => field.options?.some(option => option.value === candidate) === true)
+    if ((field.kind !== 'text' && field.kind !== 'textarea') || field.maxLength === undefined) return false
+    return projected.every(candidate => candidate.length >= (field.minLength ?? 0) && candidate.length <= field.maxLength!)
+  }
+  const proofMatches = (mediaType: string, proof: z.infer<typeof artifactCandidateSchema>['referenceProof']): boolean => {
+    if (proof === undefined) return true
+    if (proof.freshness === 'unavailable' && proof.unavailableReason === undefined) return false
+    if (proof.intent !== 'content') return false
+    if (mediaType.startsWith('image/')) return proof.scope === 'artifact/media' && (proof.kind === 'image' || proof.kind === 'image-region')
+    if (mediaType.startsWith('audio/') || mediaType.startsWith('video/')) return proof.scope === 'artifact/media' && (proof.kind === 'file' || proof.kind === 'selection')
+    return proof.scope === 'artifact/body' && (proof.kind === 'file' || proof.kind === 'selection' || proof.kind === 'directory')
+  }
+  value.artifactWorkspace?.artifacts.forEach((item, index) => {
+    const basePath = ['artifactWorkspace', 'artifacts', index] as const
+    if (item.artifact.owner !== value.owner) ctx.addIssue({ code: 'custom', path: [...basePath, 'artifact', 'owner'], message: 'artifact owner must match snapshot owner' })
+    if (!proofMatches(item.artifact.mediaType, item.referenceProof)) ctx.addIssue({ code: 'custom', path: [...basePath, 'referenceProof'], message: 'reference proof must match artifact media and availability' })
+    item.candidates.forEach((candidate, candidateIndex) => {
+      const candidatePath = [...basePath, 'candidates', candidateIndex] as const
+      if (candidate.artifact !== undefined && (candidate.artifact.owner !== value.owner || candidate.artifact.version !== candidate.version)) ctx.addIssue({ code: 'custom', path: [...candidatePath, 'artifact'], message: 'candidate artifact must keep owner and candidate version' })
+      if (candidate.referenceProof !== undefined && candidate.artifact === undefined) ctx.addIssue({ code: 'custom', path: [...candidatePath, 'referenceProof'], message: 'candidate reference proof requires its exact artifact projection' })
+      if (candidate.artifact !== undefined && !proofMatches(candidate.artifact.mediaType, candidate.referenceProof)) ctx.addIssue({ code: 'custom', path: [...candidatePath, 'referenceProof'], message: 'candidate reference proof must match its artifact media' })
+    })
+    Object.entries(item.actions ?? {}).forEach(([actionName, binding]) => {
+      if (binding === undefined) return
+      const descriptor = descriptors.get(binding.descriptorRef)
+      const bindingPath: PropertyKey[] = [...basePath, 'actions', actionName]
+      if (descriptor === undefined) { ctx.addIssue({ code: 'custom', path: bindingPath, message: 'workspace action must reference a current owner descriptor' }); return }
+      if (descriptor.targetRef !== item.artifact.ref || descriptor.targetVersion !== item.artifact.version) ctx.addIssue({ code: 'custom', path: bindingPath, message: 'workspace action descriptor must target the projected artifact version' })
+      const bindingKeys = [binding.contentField, binding.contentRevisionField, binding.candidateRefField, binding.candidateVersionField, binding.sourceVersionField, binding.rangeField, binding.annotationField].filter((key): key is string => key !== undefined)
+      if (new Set(bindingKeys).size !== bindingKeys.length) ctx.addIssue({ code: 'custom', path: bindingPath, message: 'workspace binding roles must use distinct descriptor fields' })
+      if (binding.contentField !== undefined) {
+        const content = fieldFor(descriptor, binding.contentField)
+        if (content?.kind !== 'textarea' || content.maxLength === undefined) ctx.addIssue({ code: 'custom', path: bindingPath, message: 'workspace content binding must use a bounded textarea field' })
+      }
+      for (const key of [binding.contentRevisionField, binding.sourceVersionField, binding.rangeField, binding.annotationField]) {
+        if (!boundedStringField(descriptor, key, key === binding.sourceVersionField)) ctx.addIssue({ code: 'custom', path: bindingPath, message: 'runtime workspace values require bounded text or textarea fields' })
+      }
+      if ((actionName === 'saveDraft' || actionName === 'createCandidate' || actionName === 'writeback') && binding.contentField !== undefined && binding.contentRevisionField === undefined) ctx.addIssue({ code: 'custom', path: bindingPath, message: 'content mutations require an explicit content revision field' })
+      if (item.candidates.length > 0 && (actionName === 'compare' || actionName === 'adopt' || actionName === 'writeback' || actionName === 'attachContext') && (binding.candidateRefField === undefined || binding.candidateVersionField === undefined)) ctx.addIssue({ code: 'custom', path: bindingPath, message: 'candidate actions require exact candidate ref and version fields' })
+      if (!fieldAllows(descriptor, binding.candidateRefField, binding.candidateRefField === undefined ? [] : item.candidates.map(candidate => candidate.ref)) || !fieldAllows(descriptor, binding.candidateVersionField, binding.candidateVersionField === undefined ? [] : item.candidates.map(candidate => candidate.version))) ctx.addIssue({ code: 'custom', path: bindingPath, message: 'candidate binding fields must accept every projected candidate identity' })
+      if (actionName === 'writeback' && binding.sourceVersionField === undefined) ctx.addIssue({ code: 'custom', path: bindingPath, message: 'writeback requires an explicit source version field' })
+      if (actionName === 'writeback') {
+        const sourceVersions = item.candidates.length === 0 ? [item.sourceVersion].filter((source): source is string => source !== undefined) : item.candidates.map(candidate => candidate.sourceVersion ?? item.sourceVersion).filter((source): source is string => source !== undefined)
+        if (sourceVersions.length !== Math.max(1, item.candidates.length) || !fieldAllows(descriptor, binding.sourceVersionField, sourceVersions)) ctx.addIssue({ code: 'custom', path: bindingPath, message: 'writeback source binding must accept every projected source version' })
+      }
+    })
+  })
+}
 
 const ownerProjectionSchema = creatorOwnerSnapshotBaseSchema.omit({ context: true, transport: true }).extend({
   transport: z.enum(['local', 'service', 'unavailable']),
@@ -297,6 +422,7 @@ const ownerProjectionSchema = creatorOwnerSnapshotBaseSchema.omit({ context: tru
       ctx.addIssue({ code: 'custom', path: ['actions', index, 'context'], message: 'action context must match snapshot context' })
     }
   })
+  validateArtifactWorkspaceBindings(value, ctx)
 })
 
 export const creatorStudioSnapshotSchema = z.object({
@@ -331,6 +457,13 @@ const mediaAccessSchema = z.object({
   expiresAt: isoTimestamp,
 }).strict()
 
+const artifactContentSchema = z.object({
+  artifact: ArtifactRefSchema,
+  contentRevision: z.string().min(1).max(160),
+  // Editor bodies are deliberately not a safe projection and never enter snapshots/logs.
+  content: z.string().max(256 * 1024),
+}).strict()
+
 export function validateCreatorStudioContext(input: unknown): CreatorStudioContextV1 | undefined {
   const parsed = creatorStudioContextSchema.safeParse(input)
   return parsed.success ? Object.freeze({ ...parsed.data }) as CreatorStudioContextV1 : undefined
@@ -359,6 +492,11 @@ export function validateCreatorActionReceipt(input: unknown): PaneActionReceiptV
 export function validateCreatorMediaAccess(input: unknown): CreatorMediaAccessV1 | undefined {
   const parsed = mediaAccessSchema.safeParse(input)
   return parsed.success ? parsed.data : undefined
+}
+
+export function validateCreatorArtifactContent(input: unknown): CreatorArtifactContentV1 | undefined {
+  const parsed = artifactContentSchema.safeParse(input)
+  return parsed.success ? parsed.data as CreatorArtifactContentV1 : undefined
 }
 
 export function validateCreatorAssetQuery(input: unknown): CreatorAssetQueryV1 | undefined {

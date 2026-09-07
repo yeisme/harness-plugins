@@ -387,6 +387,99 @@ describe('@yeisme/dsh-file-host/node', () => {
     }, new AbortController().signal)).resolves.toMatchObject({ version: proof.version, snapshot: { type: 'text', text: content } })
   })
 
+  it('refreshes an unchanged opaque selection range with a newly attested version and body', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-reference-refresh-v1-'))
+    const before = 'prefix OLD_CONTEXT suffix'
+    const after = 'prefix NEW_CONTEXT suffix'
+    await writeFile(join(root, 'notes.txt'), before)
+    const refs = createOpaqueFileRefRegistry()
+    const entry = (await refs.list(root)).find(item => item.name === 'notes.txt')!
+    const proof = await refs.inspectV2(root, entry.id)
+    const window = { start: Buffer.byteLength('prefix '), end: Buffer.byteLength('prefix OLD_CONTEXT') }
+    const digest = createHash('sha256').update(Buffer.from(before)).update(`:${window.start}:${window.end}`).digest('hex')
+    const claim = {
+      id: `selection:${entry.id}:${window.start}:${window.end}`,
+      owner: 'dsh.local' as const,
+      ref: entry.id,
+      kind: 'selection' as const,
+      intent: 'content' as const,
+      version: proof.version,
+      digest,
+      scope: 'file/raw',
+      window,
+    }
+    await writeFile(join(root, 'notes.txt'), after)
+    await expect(refs.resolveComposerReference(root, claim, new AbortController().signal)).resolves.toBeUndefined()
+    await expect(refs.refreshComposerReference(root, claim, new AbortController().signal)).resolves.toMatchObject({
+      id: claim.id,
+      ref: entry.id,
+      version: expect.not.stringMatching(new RegExp(`^${proof.version}$`)),
+      window,
+      snapshot: { type: 'text', text: 'NEW_CONTEXT' },
+    })
+  })
+
+  it('requires current sensitive reveal authorization for Composer resolve and refresh', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-reference-sensitive-v1-'))
+    const before = 'SECRET=before\n'
+    await writeFile(join(root, '.env'), before)
+    const refs = createOpaqueFileRefRegistry()
+    const entry = (await refs.list(root)).find(item => item.name === '.env')!
+    const proof = await refs.inspectV2(root, entry.id)
+    const bytes = Buffer.from(before)
+    const window = { start: 0, end: bytes.byteLength }
+    const claim = {
+      id: `file:${entry.id}`,
+      owner: 'dsh.local' as const,
+      ref: entry.id,
+      kind: 'file' as const,
+      intent: 'content' as const,
+      version: proof.version,
+      digest: createHash('sha256').update(bytes).update(`:${window.start}:${window.end}`).digest('hex'),
+      scope: 'file/full',
+      window,
+    }
+    await expect(refs.resolveComposerReference(root, claim, new AbortController().signal)).rejects.toThrow(/sensitive reveal/)
+    const reveal = await refs.issueSensitiveReveal(root, entry.id, proof.version)
+    await expect(refs.resolveComposerReference(root, claim, new AbortController().signal, reveal.token))
+      .resolves.toMatchObject({ snapshot: { type: 'text', text: before } })
+    await writeFile(join(root, '.env'), 'SECRET=after-and-longer\n')
+    await expect(refs.refreshComposerReference(root, claim, new AbortController().signal, reveal.token)).rejects.toThrow(/sensitive reveal/)
+  })
+
+  it('refreshes file full/prefix bounds from the current owner while selections stay strict', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yeisme-reference-growth-v1-'))
+    const before = Buffer.from('four')
+    await writeFile(join(root, 'notes.txt'), before)
+    const refs = createOpaqueFileRefRegistry()
+    const entry = (await refs.list(root)).find(item => item.name === 'notes.txt')!
+    const proof = await refs.inspectV2(root, entry.id)
+    const full = {
+      id: `file:${entry.id}`,
+      owner: 'dsh.local' as const,
+      ref: entry.id,
+      kind: 'file' as const,
+      intent: 'content' as const,
+      version: proof.version,
+      digest: createHash('sha256').update(before).update(':0:4').digest('hex'),
+      scope: 'file/full',
+      window: { start: 0, end: 4 },
+    }
+    const grown = Buffer.from('eight888')
+    await writeFile(join(root, 'notes.txt'), grown)
+    await expect(refs.refreshComposerReference(root, full, new AbortController().signal)).resolves.toMatchObject({
+      scope: 'file/full', window: { start: 0, end: grown.byteLength }, snapshot: { type: 'text', text: 'eight888' },
+    })
+    const long = Buffer.alloc(20_000, 97)
+    await writeFile(join(root, 'notes.txt'), long)
+    await expect(refs.refreshComposerReference(root, full, new AbortController().signal)).resolves.toMatchObject({
+      scope: 'file/prefix', window: { start: 0, end: 16_384 }, snapshot: { type: 'text', truncated: true },
+    })
+    const selection = { ...full, id: `selection:${entry.id}`, kind: 'selection' as const, scope: 'file/raw', window: { start: 2, end: 6 } }
+    await writeFile(join(root, 'notes.txt'), 'x')
+    await expect(refs.refreshComposerReference(root, selection, new AbortController().signal)).resolves.toBeUndefined()
+  })
+
   it('derives file and selection scope from the owner window instead of trusting a client label', async () => {
     const root = await mkdtemp(join(tmpdir(), 'yeisme-reference-scope-v1-'))
     const bytes = Buffer.from('0123456789')

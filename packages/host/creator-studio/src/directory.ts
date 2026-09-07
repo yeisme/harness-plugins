@@ -4,6 +4,7 @@ import {
   type CreatorMediaAccessV1,
   type CreatorOwnerAdapterV1,
   type CreatorStudioContextV1,
+  type CreatorArtifactContentV1,
   type CreatorStudioOwner,
   type CreatorStudioTransportPolicyV1,
   type CreatorStudioTransportPreference,
@@ -63,5 +64,9 @@ export class CreatorStudioOwnerDirectory {
 
   async resolveArtifact(owner: CreatorStudioOwner, artifact: ArtifactRefV1, context: CreatorStudioContextV1): Promise<CreatorMediaAccessV1 | undefined> {
     return this.selected(owner)?.resolveArtifact?.(artifact, context)
+  }
+
+  async readArtifactContent(owner: CreatorStudioOwner, artifact: ArtifactRefV1, context: CreatorStudioContextV1): Promise<CreatorArtifactContentV1 | undefined> {
+    return this.selected(owner)?.readArtifactContent?.(artifact, context)
   }
 }

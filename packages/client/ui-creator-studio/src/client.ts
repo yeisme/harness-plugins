@@ -14,7 +14,7 @@ import {
   type PanePluginDefinitionV1,
 } from '@yeisme/dsh-pane-protocol'
 import type { CreatorStudioOwner } from '@yeisme/dsh-creator-studio-host/contracts'
-import type { PaneIntentHandlerRegistrationV1, PaneRuntimePluginV1 } from '@yeisme/dsh-client-ui-pane-workbench'
+import { COMPOSER_REFERENCE_BRIDGE_CONTEXT_KEY, type ComposerReferenceBridgeV1, type PaneIntentHandlerRegistrationV1, type PaneRuntimePluginV1 } from '@yeisme/dsh-client-ui-pane-workbench'
 import { CreatorStudioController, type CreatorStudioRemote } from './controller.ts'
 import {
   defaultCreatorStudioTranslator,
@@ -231,6 +231,8 @@ function pluginDefinition(t: CreatorStudioTranslator): PanePluginDefinitionV1 {
 
 function registerViews(ctx: ClientContext, controller: CreatorStudioController, pane: CreatorPaneWorkbenchFace, t: CreatorStudioTranslator): () => void {
   const definition = pluginDefinition(t)
+  let composerBridge: ComposerReferenceBridgeV1 | undefined
+  try { composerBridge = ctx.get(COMPOSER_REFERENCE_BRIDGE_CONTEXT_KEY as never) as ComposerReferenceBridgeV1 | undefined } catch { composerBridge = undefined }
   const onOpenMode = (mode: CreatorStudioViewMode): void => openMode(pane, mode, t)
   const resolveDirector = (): { readonly applyPreset?: () => unknown; readonly applyShowControlPreset?: () => unknown; readonly probe?: { readonly showControl?: { readonly available?: boolean } } } | undefined => {
     try { return ctx.get('dramaDirector' as never) as { readonly applyPreset?: () => unknown; readonly applyShowControlPreset?: () => unknown; readonly probe?: { readonly showControl?: { readonly available?: boolean } } } | undefined } catch { return undefined }
@@ -252,6 +254,7 @@ function registerViews(ctx: ClientContext, controller: CreatorStudioController, 
       pane,
       onOpenMode,
       onOpenDrama,
+      ...(composerBridge === undefined ? {} : { composerBridge }),
       ...(onOpenShowControl === undefined ? {} : { onOpenShowControl }),
       t,
       onDirty: dirty => {

@@ -42,9 +42,11 @@ export default defineConfig([
       '@yeisme/dsh-creator-studio-host/contracts': fileURLToPath(new URL('../../host/creator-studio/src/contracts.ts', import.meta.url)),
       '@yeisme/dsh-client-ui-pane-workbench': fileURLToPath(new URL('../../client/ui-pane-workbench/src/index.ts', import.meta.url)),
       '@yeisme/dsh-pane-protocol': fileURLToPath(new URL('../../host/pane-protocol/src/index.ts', import.meta.url)),
-      // Creator Studio uses the shared preview surface only. Pointing at the
-      // leaf avoids linking unrelated legacy Rich Media workbench exports.
-      '@yeisme/dsh-rich-media/client': fileURLToPath(new URL('../dsh-rich-media/src/client/media-preview-pane.tsx', import.meta.url)),
+      // The creative workspace now consumes public table, compare, image and
+      // playback exports as well as the preview surface. Preserve that API.
+      '@yeisme/dsh-rich-media/client': fileURLToPath(new URL('../dsh-rich-media/src/client/index.ts', import.meta.url)),
+      '@yeisme/dsh-workbench-core/client': fileURLToPath(new URL('../dsh-workbench-core/src/client/index.ts', import.meta.url)),
+      '@yeisme/dsh-workbench-core': fileURLToPath(new URL('../dsh-workbench-core/src/index.ts', import.meta.url)),
     },
     deps: {
       alwaysBundle: [/^@yeisme\//u],
@@ -52,6 +54,7 @@ export default defineConfig([
     },
     outputOptions: {
       codeSplitting: false,
+      exports: 'named',
       entryFileNames: 'client.js',
       banner: 'window.__ModuleLoader__.load({ id: "@yeisme/dsh-creator-studio", factory: (require) => {',
       footer: 'return module.exports; } });',

@@ -9,7 +9,7 @@
  * @module @yeisme/dsh-rich-media/client
  */
 
-import { useState } from 'react'
+import { useRef, useState, type PointerEvent } from 'react'
 import type { MediaRefV1 } from '../host/types.ts'
 
 /** Lazy-loader boundary for heavy enhancers (wavesurfer.js, hls.js). */
@@ -43,6 +43,8 @@ export interface MediaImageRendererLabels {
   noDescription?: string
   background?: string
   metadata?: string
+  selection?: string
+  cropPreview?: string
 }
 
 const DEFAULT_IMAGE_LABELS: Required<MediaImageRendererLabels> = {
@@ -57,12 +59,21 @@ const DEFAULT_IMAGE_LABELS: Required<MediaImageRendererLabels> = {
   noDescription: 'No description provided',
   background: 'Background',
   metadata: 'Metadata',
+  selection: 'Selected image region',
+  cropPreview: 'Crop preview',
+}
+
+export interface MediaImageSelectionV1 {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
 }
 
 /** Image renderer with fit/zoom/pan/rotate tools and a decode budget. */
 export function MediaImageRenderer({
-  media, url, labels,
-}: { media: MediaRefV1; url: string | undefined; labels?: MediaImageRendererLabels | undefined }) {
+  media, url, labels, selection, onSelectionChange,
+}: { media: MediaRefV1; url: string | undefined; labels?: MediaImageRendererLabels | undefined; selection?: MediaImageSelectionV1 | undefined; onSelectionChange?: ((selection: MediaImageSelectionV1) => void) | undefined }) {
   const text = { ...DEFAULT_IMAGE_LABELS, ...labels }
   const [mode, setMode] = useState<ImageFitMode>('fit')
   const [rotation, setRotation] = useState<ImageRotation>(0)
@@ -70,42 +81,94 @@ export function MediaImageRenderer({
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [animationAllowed, setAnimationAllowed] = useState(false)
   const [background, setBackground] = useState<'dark' | 'light' | 'checker'>('dark')
+  const dragStart = useRef<{ readonly x: number; readonly y: number } | undefined>(undefined)
   const pixels = pixelsOf(media)
   const overBudget = pixels !== undefined && pixels > IMAGE_PIXEL_BUDGET
   const animated = media.mediaType === 'image/gif' || media.mediaType === 'image/apng'
   const holdAnimation = animated && prefersReducedMotion() && !animationAllowed
-  const objectFit = mode === 'fill' ? 'cover' : mode === 'fit' ? 'contain' : 'none'
+  const selecting = onSelectionChange !== undefined
+  const objectFit = selecting ? 'contain' : mode === 'fill' ? 'cover' : mode === 'fit' ? 'contain' : 'none'
+  const pointOf = (event: PointerEvent<HTMLDivElement>): { readonly x: number; readonly y: number } | undefined => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return undefined
+    return {
+      x: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
+      y: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)),
+    }
+  }
+  const finishSelection = (event: PointerEvent<HTMLDivElement>): void => {
+    const start = dragStart.current
+    const end = pointOf(event)
+    dragStart.current = undefined
+    if (start === undefined || end === undefined || onSelectionChange === undefined) return
+    const round = (value: number): number => Math.round(value * 1_000_000) / 1_000_000
+    const next = {
+      x: round(Math.min(start.x, end.x)),
+      y: round(Math.min(start.y, end.y)),
+      width: round(Math.abs(start.x - end.x)),
+      height: round(Math.abs(start.y - end.y)),
+    }
+    if (next.width <= 0 || next.height <= 0) return
+    onSelectionChange(next)
+  }
   return (
     <figure data-dsh-media-image data-fit={mode} data-rotation={rotation} data-background={background} style={{ display: 'grid', gap: 6, margin: 0 }}>
       {url !== undefined && !overBudget && (
-        <div style={{ overflow: 'hidden', position: 'relative', minHeight: 120, background: background === 'light' ? '#f4f4f5' : background === 'checker' ? 'repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50% / 16px 16px' : '#111' }}>
-          <img
-            src={url}
-            alt={media.title || text.noDescription}
-            loading="lazy"
-            decoding="async"
-            data-hold-animation={holdAnimation || undefined}
-            style={{
-              width: '100%', height: '100%', objectFit, transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg)`, transformOrigin: 'center',
-            }}
-          />
-          {holdAnimation && (
-            <button type="button" onClick={() => { setAnimationAllowed(true) }} style={{ position: 'absolute', inset: 0 }}>
-              {text.playAnimation}
-            </button>
-          )}
+        <div data-dsh-media-image-canvas style={{ overflow: 'hidden', minHeight: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', background: background === 'light' ? '#f4f4f5' : background === 'checker' ? 'repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50% / 16px 16px' : '#111' }}>
+          <div
+            tabIndex={selecting ? 0 : undefined}
+            aria-label={selecting ? text.selection : undefined}
+            data-dsh-media-image-selection-stage
+            data-selection-transform-locked={selecting || undefined}
+            onPointerDown={event => { const point = pointOf(event); if (point !== undefined) dragStart.current = point }}
+            onPointerUp={finishSelection}
+            style={{ position: 'relative', display: selecting ? 'inline-block' : 'block', width: selecting ? 'fit-content' : '100%', maxWidth: '100%', lineHeight: 0, touchAction: selecting ? 'none' : undefined, cursor: selecting ? 'crosshair' : undefined }}
+          >
+            <img
+              src={url}
+              alt={media.title || text.noDescription}
+              loading="lazy"
+              decoding="async"
+              data-hold-animation={holdAnimation || undefined}
+              style={selecting
+                ? { display: 'block', width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: 520, objectFit, transform: 'none' }
+                : { width: '100%', height: '100%', objectFit, transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg)`, transformOrigin: 'center' }}
+            />
+            {selection !== undefined && <div
+              aria-hidden="true"
+              data-dsh-media-image-selection
+              data-selection-x={selection.x}
+              data-selection-y={selection.y}
+              data-selection-width={selection.width}
+              data-selection-height={selection.height}
+              style={{ position: 'absolute', left: `${selection.x * 100}%`, top: `${selection.y * 100}%`, width: `${selection.width * 100}%`, height: `${selection.height * 100}%`, border: '2px solid var(--vk-accent)', background: 'color-mix(in srgb,var(--vk-accent) 14%,transparent)', boxShadow: '0 0 0 9999px rgba(0,0,0,.42)', pointerEvents: 'none' }}
+            />}
+            {holdAnimation && (
+              <button type="button" onClick={() => { setAnimationAllowed(true) }} style={{ position: 'absolute', inset: 0 }}>
+                {text.playAnimation}
+              </button>
+            )}
+          </div>
         </div>
       )}
+      {url !== undefined && selection !== undefined && <figure data-dsh-media-image-crop-preview style={{ display: 'grid', gap: 4, margin: 0 }}>
+        <figcaption>{text.cropPreview}</figcaption>
+        <div style={{ overflow: 'hidden', maxHeight: 220, border: '1px solid var(--vk-border-l2)', borderRadius: 'var(--vk-radius-sm)' }}>
+          {media.width !== undefined && media.height !== undefined
+            ? <svg role="img" aria-label={`${media.title} · ${text.cropPreview}`} viewBox={`${selection.x * media.width} ${selection.y * media.height} ${selection.width * media.width} ${selection.height * media.height}`} style={{ display: 'block', width: '100%', maxHeight: 220 }}><image href={url} width={media.width} height={media.height} /></svg>
+            : <img src={url} alt={`${media.title} · ${text.cropPreview}`} style={{ display: 'block', width: '100%', clipPath: `inset(${selection.y * 100}% ${(1 - selection.x - selection.width) * 100}% ${(1 - selection.y - selection.height) * 100}% ${selection.x * 100}%)` }} />}
+        </div>
+      </figure>}
       {overBudget && <p role="status">{text.tooLarge}</p>}
       <div role="group" aria-label={text.fit} style={{ display: 'flex', gap: 6 }}>
-        <button type="button" aria-pressed={mode === 'fit' || undefined} onClick={() => { setMode('fit') }}>{text.fit}</button>
-        <button type="button" aria-pressed={mode === 'fill' || undefined} onClick={() => { setMode('fill') }}>{text.fill}</button>
-        <button type="button" aria-pressed={mode === 'actual' || undefined} onClick={() => { setMode('actual') }}>{text.actual}</button>
-        <button type="button" aria-label={text.zoomIn} onClick={() => { setZoom(value => Math.min(8, value * 1.5)) }}>+</button>
-        <button type="button" aria-label={text.zoomOut} onClick={() => { setZoom(value => Math.max(1, value / 1.5)) }}>&#8722;</button>
-        <button type="button" aria-label={text.rotate} onClick={() => { setRotation(value => ((value + 90) % 360) as ImageRotation) }}>&#8635;</button>
-        <button type="button" aria-label="Pan left" onClick={() => { setPan(value => ({ ...value, x: value.x - 24 })) }}>&#8592;</button>
-        <button type="button" aria-label="Pan right" onClick={() => { setPan(value => ({ ...value, x: value.x + 24 })) }}>&#8594;</button>
+        <button type="button" disabled={selecting} title={selecting ? text.selection : undefined} aria-pressed={mode === 'fit' || undefined} onClick={() => { setMode('fit') }}>{text.fit}</button>
+        <button type="button" disabled={selecting} title={selecting ? text.selection : undefined} aria-pressed={mode === 'fill' || undefined} onClick={() => { setMode('fill') }}>{text.fill}</button>
+        <button type="button" disabled={selecting} title={selecting ? text.selection : undefined} aria-pressed={mode === 'actual' || undefined} onClick={() => { setMode('actual') }}>{text.actual}</button>
+        <button type="button" disabled={selecting} title={selecting ? text.selection : undefined} aria-label={text.zoomIn} onClick={() => { setZoom(value => Math.min(8, value * 1.5)) }}>+</button>
+        <button type="button" disabled={selecting} title={selecting ? text.selection : undefined} aria-label={text.zoomOut} onClick={() => { setZoom(value => Math.max(1, value / 1.5)) }}>&#8722;</button>
+        <button type="button" disabled={selecting} title={selecting ? text.selection : undefined} aria-label={text.rotate} onClick={() => { setRotation(value => ((value + 90) % 360) as ImageRotation) }}>&#8635;</button>
+        <button type="button" disabled={selecting} title={selecting ? text.selection : undefined} aria-label="Pan left" onClick={() => { setPan(value => ({ ...value, x: value.x - 24 })) }}>&#8592;</button>
+        <button type="button" disabled={selecting} title={selecting ? text.selection : undefined} aria-label="Pan right" onClick={() => { setPan(value => ({ ...value, x: value.x + 24 })) }}>&#8594;</button>
         <button type="button" aria-pressed={background === 'dark' || undefined} onClick={() => { setBackground('dark') }}>{text.background} dark</button>
         <button type="button" aria-pressed={background === 'light' || undefined} onClick={() => { setBackground('light') }}>{text.background} light</button>
         <button type="button" aria-pressed={background === 'checker' || undefined} onClick={() => { setBackground('checker') }}>{text.background} checker</button>
@@ -183,11 +246,11 @@ export function canPlayNatively(mediaType: string): boolean {
   return verdict !== ''
 }
 
-const UNSAFE_PLAYBACK = /^(?:javascript|data|file|blob):/i
+const UNSAFE_PLAYBACK = /^(?:javascript|data|file):/i
 
 /** Reject untrusted playback URLs and caption tracks before a renderer mounts. */
-export function rejectUnsafePlayback(url: string | undefined, tracks: readonly { src?: string; kind?: string }[] = []): string | undefined {
-  if (url !== undefined && (UNSAFE_PLAYBACK.test(url) || url.includes('javascript:'))) return 'unsafe source'
+export function rejectUnsafePlayback(url: string | undefined, tracks: readonly { src?: string; kind?: string }[] = [], options: { readonly allowBlobUrl?: boolean } = {}): string | undefined {
+  if (url !== undefined && (UNSAFE_PLAYBACK.test(url) || (url.startsWith('blob:') && options.allowBlobUrl !== true) || url.includes('javascript:'))) return 'unsafe source'
   for (const track of tracks) {
     if (track.src !== undefined && UNSAFE_PLAYBACK.test(track.src)) return 'unsafe track'
     if (track.kind !== undefined && !['captions', 'subtitles', 'descriptions', 'chapters', 'metadata'].includes(track.kind)) return 'unsafe track kind'
@@ -216,6 +279,7 @@ export interface MediaPlaybackRendererLabels {
   speed?: string
   trackStatus?: string
   fit?: string
+  playSelection?: string
 }
 
 const DEFAULT_PLAYBACK_LABELS: Required<MediaPlaybackRendererLabels> = {
@@ -228,6 +292,12 @@ const DEFAULT_PLAYBACK_LABELS: Required<MediaPlaybackRendererLabels> = {
   speed: 'Speed',
   trackStatus: 'Track status',
   fit: 'Fit',
+  playSelection: 'Play selected range',
+}
+
+export interface MediaTimeSelectionV1 {
+  readonly startMs: number
+  readonly endMs: number
 }
 
 export type MediaPlaybackFitMode = 'contain' | 'cover'
@@ -305,7 +375,7 @@ export function seekChapterCurrentTime(startMs: number): number {
  * Fullscreen API.
  */
 export function MediaPlaybackRenderer({
-  media, url, labels, loadHls, tracks = [], chapters = [],
+  media, url, labels, loadHls, tracks = [], chapters = [], selection, allowBlobUrl = false,
 }: {
   media: MediaRefV1
   url: string | undefined
@@ -313,9 +383,13 @@ export function MediaPlaybackRenderer({
   loadHls?: LazyEnhancerLoader<unknown> | undefined
   tracks?: readonly { src?: string; kind?: string }[] | undefined
   chapters?: readonly MediaChapterCueV1[] | undefined
+  selection?: MediaTimeSelectionV1 | undefined
+  allowBlobUrl?: boolean | undefined
 }) {
   const text = { ...DEFAULT_PLAYBACK_LABELS, ...labels }
-  const unsafe = rejectUnsafePlayback(url, tracks)
+  const mediaElement = useRef<HTMLMediaElement | null>(null)
+  const [playbackRate, setPlaybackRate] = useState(1)
+  const unsafe = rejectUnsafePlayback(url, tracks, { allowBlobUrl })
   if (unsafe !== undefined) {
     return <p role="alert" data-dsh-media-unsafe={unsafe}>{text.unsafe}</p>
   }
@@ -326,26 +400,47 @@ export function MediaPlaybackRenderer({
   const safeChapters = selectSafeChapters(chapters)
   const captionTracks = selectSafeTextTracks(tracks)
   const rates = playbackRateOptions()
+  const playSelection = (): void => {
+    if (selection === undefined || mediaElement.current === null) return
+    mediaElement.current.currentTime = selection.startMs / 1000
+    void mediaElement.current.play().catch(() => {})
+  }
+  const stopAtSelectionEnd = (): void => {
+    if (selection !== undefined && mediaElement.current !== null && mediaElement.current.currentTime * 1000 >= selection.endMs) mediaElement.current.pause()
+  }
+  const stepFrame = (direction: -1 | 1): void => {
+    if (mediaElement.current === null) return
+    const duration = Number.isFinite(mediaElement.current.duration) ? mediaElement.current.duration : Number.POSITIVE_INFINITY
+    mediaElement.current.currentTime = Math.max(0, Math.min(duration, mediaElement.current.currentTime + direction / 30))
+  }
+  const changePlaybackRate = (next: number): void => {
+    setPlaybackRate(next)
+    if (mediaElement.current !== null) mediaElement.current.playbackRate = next
+  }
+  const seekChapter = (startMs: number): void => {
+    if (mediaElement.current !== null) mediaElement.current.currentTime = seekChapterCurrentTime(startMs)
+  }
   return (
     <div data-dsh-media-playback data-mode={mode} data-fit="contain" style={{ display: 'grid', gap: 4 }}>
       {media.kind === 'video' ? (
-        <video src={url} controls preload="metadata" aria-label={media.title} data-frame-step="1/30" data-object-fit="contain">
+        <video ref={element => { mediaElement.current = element }} src={url} controls preload="metadata" aria-label={media.title} data-frame-step="1/30" data-object-fit="contain" onTimeUpdate={stopAtSelectionEnd}>
           {captionTracks.map(track => (
             <track key={`${track.kind}:${track.src}`} kind={track.kind} src={track.src} />
           ))}
         </video>
       ) : (
-        <audio src={url} controls preload="metadata" aria-label={media.title} />
+        <audio ref={element => { mediaElement.current = element }} src={url} controls preload="metadata" aria-label={media.title} onTimeUpdate={stopAtSelectionEnd} />
       )}
+      {selection !== undefined && <button type="button" data-dsh-media-play-selection data-range-start-ms={selection.startMs} data-range-end-ms={selection.endMs} onClick={playSelection}>{text.playSelection}</button>}
       {media.kind === 'video' && (
         <div role="group" style={{ display: 'flex', gap: 6 }}>
-          <button type="button" aria-label={text.frameBack}>&#8722;1f</button>
-          <button type="button" aria-label={text.frameForward}>+1f</button>
+          <button type="button" aria-label={text.frameBack} onClick={() => stepFrame(-1)}>&#8722;1f</button>
+          <button type="button" aria-label={text.frameForward} onClick={() => stepFrame(1)}>+1f</button>
         </div>
       )}
       <label>
         {text.speed}
-        <select aria-label={text.speed} defaultValue="1" data-dsh-media-speed>
+        <select aria-label={text.speed} value={String(playbackRate)} data-dsh-media-speed onChange={event => changePlaybackRate(Number(event.currentTarget.value))}>
           {rates.map(rate => (
             <option key={rate} value={String(rate)}>{`${rate}x`}</option>
           ))}
@@ -361,6 +456,7 @@ export function MediaPlaybackRenderer({
                   type="button"
                   data-chapter-id={chapter.id}
                   data-chapter-start={String(seekChapterCurrentTime(chapter.startMs))}
+                  onClick={() => seekChapter(chapter.startMs)}
                 >
                   {chapter.label}
                 </button>

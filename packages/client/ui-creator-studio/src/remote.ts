@@ -6,6 +6,7 @@ import {
 } from '@yeisme/dsh-pane-protocol'
 import {
   validateCreatorMediaAccess,
+  validateCreatorArtifactContent,
   validateCreatorApprovalDecision,
   validateCreatorAssetPage,
   validateCreatorAssetQuery,
@@ -30,6 +31,15 @@ const mediaSchema: StrictSchema = {
     if (value === null) return null
     const parsed = validateCreatorMediaAccess(value)
     if (parsed === undefined) throw new TypeError('creatorStudio.resolveArtifact contract mismatch')
+    return parsed
+  },
+}
+
+const contentSchema: StrictSchema = {
+  parse(value) {
+    if (value === null) return null
+    const parsed = validateCreatorArtifactContent(value)
+    if (parsed === undefined) throw new TypeError('creatorStudio.readArtifactContent contract mismatch')
     return parsed
   },
 }
@@ -82,6 +92,13 @@ export const creatorStudioRemoteContribution = {
       invocation: { kind: 'direct' },
       parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('ArtifactRefV1', ArtifactRefSchema) }],
       result: strict('CreatorMediaAccessV1 | null', mediaSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.readArtifactContent@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'readArtifactContent',
+      invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('ArtifactRefV1', ArtifactRefSchema) }],
+      result: strict('CreatorArtifactContentV1 | null', contentSchema),
     },
     {
       id: '@yeisme/dsh-creator-studio-host/creatorStudio.assets@1',

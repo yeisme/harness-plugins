@@ -62,6 +62,10 @@ import { ComposedDesktopWorkbench } from './composed-workbench.tsx'
 
 export const inject = ['slots', 'workspaces']
 
+const LEGACY_WINDOW_REFERENCE_OWNERS = new Set([
+  'dsh.local', 'dsh.terminal', 'dsh.message', 'dsh.agent-presets', 'dsh.skills', 'dsh.tools',
+])
+
 interface PaneWorkbenchFace {
   registerView(input: unknown): () => void
   registerExplorerRuntime?(runtime: ExplorerRuntimeV2): () => void
@@ -398,6 +402,15 @@ async function fileReferenceDigest(bytes: Uint8Array, window: { readonly start: 
   return sha256(combined)
 }
 
+/** Keep a byte-bounded capture valid UTF-8; never create a replacement rune. */
+function utf8Capture(bytes: Uint8Array, maxBytes: number): { readonly body: string; readonly end: number } {
+  const limit = Math.min(bytes.byteLength, maxBytes)
+  for (let end = limit; end >= Math.max(0, limit - 3); end -= 1) {
+    try { return { body: new TextDecoder('utf-8', { fatal: true }).decode(bytes.slice(0, end)), end } } catch { /* try the preceding code point boundary */ }
+  }
+  return { body: '', end: 0 }
+}
+
 async function imageRegionDigest(bytes: Uint8Array, region: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }): Promise<string> {
   const suffix = new TextEncoder().encode(`\0image-region\0${JSON.stringify(region)}`)
   const combined = new Uint8Array(bytes.byteLength + suffix.byteLength)
@@ -451,6 +464,17 @@ function canonicalReference(value: unknown): ComposerReferenceV2 | undefined {
   if ((row.kind === 'selection') !== (window !== undefined)) return undefined
   if ((row.kind === 'image-region') !== (region !== undefined)) return undefined
   if (row.kind !== 'selection' && row.kind !== 'file' && window !== undefined) return undefined
+  const prompt = row.prompt
+  if (prompt !== undefined && (typeof prompt !== 'object' || prompt === null || prompt.version !== 1
+    || typeof prompt.body !== 'string' || typeof prompt.originalBody !== 'string'
+    || typeof prompt.source !== 'object' || prompt.source === null
+    || prompt.source.owner !== row.owner || prompt.source.ref !== row.ref || prompt.source.version !== row.version
+    || prompt.source.scope !== row.scope || prompt.source.digest !== row.digest)) return undefined
+  if (row.projection !== undefined && row.projection !== 'editable-prompt') return undefined
+  if (row.editableGrant !== undefined && (typeof row.editableGrant !== 'string'
+    || row.editableGrant === '' || row.editableGrant.length > 256)) return undefined
+  if ((prompt !== undefined) !== (row.projection === 'editable-prompt')
+    || (row.projection === 'editable-prompt') !== (row.editableGrant !== undefined)) return undefined
   return {
     id: row.id,
     kind: row.kind,
@@ -464,6 +488,13 @@ function canonicalReference(value: unknown): ComposerReferenceV2 | undefined {
     freshness: row.freshness === 'stale' || row.freshness === 'frozen' || row.freshness === 'unavailable' ? row.freshness : 'fresh',
     ...(typeof row.unavailableReason === 'string' ? { unavailableReason: row.unavailableReason } : {}),
     ...(typeof row.preview === 'string' ? { preview: row.preview.slice(0, 240) } : {}),
+    ...(prompt === undefined ? {} : { prompt: {
+      version: 1 as const, body: prompt.body, originalBody: prompt.originalBody,
+      source: { owner: row.owner, ref: row.ref, version: row.version, scope: row.scope, digest: row.digest },
+      ...(prompt.edited === true ? { edited: true } : {}),
+    } }),
+    ...(prompt === undefined ? {} : { projection: 'editable-prompt' as const }),
+    ...(row.editableGrant === undefined ? {} : { editableGrant: row.editableGrant }),
     ...(window === undefined ? {} : { window: { start: window.start, end: window.end } }),
     ...(region === undefined ? {} : { region: { x: region.x, y: region.y, width: region.width, height: region.height } }),
   }
@@ -545,7 +576,22 @@ function validImageRegion(region: FileImageRegionReferenceDetailV1['region']): b
     && region.x + region.width <= 1 && region.y + region.height <= 1
 }
 
-function requestReferenceInsertion(detail: ComposerReferenceAddToMainDetailV1, signal: AbortSignal): Promise<{ readonly ok: boolean; readonly reason?: string }> {
+function requestReferenceInsertion(ctx: ClientContext, detail: ComposerReferenceAddToMainDetailV1, signal: AbortSignal): Promise<{ readonly ok: boolean; readonly reason?: string }> {
+  const bridge = composerReferenceBridge(ctx)
+  if (bridge?.insertReference !== undefined) {
+    return bridge.insertReference(detail, signal).then(result => ({ ok: result.ok, ...(result.reason === undefined ? {} : { reason: result.reason }) }))
+  }
+  return requestReferenceInsertionThroughEvents(detail, signal)
+}
+
+/** Compatibility transport when the Host exposes only the V1 Window event seam. */
+function requestReferenceInsertionThroughEvents(detail: ComposerReferenceAddToMainDetailV1, signal: AbortSignal): Promise<{ readonly ok: boolean; readonly reason?: string }> {
+  if (detail.reference.prompt !== undefined || detail.reference.projection !== undefined || detail.reference.editableGrant !== undefined) {
+    return Promise.resolve({ ok: false, reason: 'editable reference insertion requires the private Host bridge' })
+  }
+  if (!LEGACY_WINDOW_REFERENCE_OWNERS.has(detail.reference.owner)) {
+    return Promise.resolve({ ok: false, reason: 'reference owner requires the private Host bridge' })
+  }
   if (typeof window === 'undefined') return Promise.resolve({ ok: false, reason: 'browser reference bridge is unavailable' })
   let hostAvailable = false
   let hostReason = 'structured conversation insert capability is unavailable'
@@ -716,6 +762,16 @@ export function apply(ctx: ClientContext): () => void {
       return { status: 'available', reference: { id: referenceId('selection', source.ref, `${source.version}:${source.window.start}:${source.window.end}:${digest}`), kind: 'selection', intent: 'content', owner: source.owner, ref: source.ref, version: source.version, label: opened.name, scope: source.scope, digest, freshness: 'fresh', preview: input.quote.replace(/\s+/gu, ' ').trim().slice(0, 240), window: source.window } }
     },
   }))
+  const prepareCatalogReference = async (
+    target: Parameters<ComposerReferenceCatalogV1['list']>[0],
+    reference: ComposerReferenceV2,
+    signal: AbortSignal,
+  ): Promise<ComposerReferenceV2 | undefined> => {
+    const bridge = composerReferenceBridge(ctx)
+    if (bridge?.prepareReference === undefined) return undefined
+    const prepared = await bridge.prepareReference({ target, reference }, signal)
+    return prepared.status === 'available' ? prepared.reference : undefined
+  }
   const referenceCatalog: ComposerReferenceCatalogV1 = {
     async list(target, query, signal) {
       if (target.conversationId !== currentSessionId(ctx)) return []
@@ -731,9 +787,10 @@ export function apply(ctx: ClientContext): () => void {
             const listing = await fileHost.treeV2.listChildren(node.ref, { limit: 200 })
             const entries = listing.nodes.map(item => ({ name: item.name, kind: item.kind === 'directory' ? 'directory' as const : 'file' as const }))
             const digest = await sha256(JSON.stringify({ ref: node.ref, revision: listing.revision, entries, truncated: listing.truncated }))
-            candidates.push({
+            const reference = await prepareCatalogReference(target, { id: referenceId('directory', node.ref, `${listing.revision}:${digest}`), kind: 'directory', intent: 'content', owner: 'dsh.local', ref: node.ref, version: listing.revision, label: node.name, scope: 'directory/children', digest, freshness: 'fresh', preview: entries.slice(0, 8).map(item => item.name).join('\n') }, signal)
+            if (reference !== undefined) candidates.push({
               name: `${node.name}/`, description: entries.slice(0, 4).map(item => item.name).join(', '), section: 'Files & folders',
-              reference: { id: referenceId('directory', node.ref, `${listing.revision}:${digest}`), kind: 'directory', intent: 'content', owner: 'dsh.local', ref: node.ref, version: listing.revision, label: node.name, scope: 'directory/children', digest, freshness: 'fresh', preview: entries.slice(0, 8).map(item => item.name).join('\n') },
+              reference,
             })
             continue
           }
@@ -760,10 +817,15 @@ export function apply(ctx: ClientContext): () => void {
           if (read === undefined || read.binary || read.truncated || read.version !== proof.version) continue
           const bytes = new TextEncoder().encode(read.content)
           if (bytes.byteLength === 0) continue
-          const window = { start: 0, end: Math.min(bytes.byteLength, 16_384) }
-          candidates.push({
+          const capture = utf8Capture(bytes, 16_384)
+          if (capture.end === 0) continue
+          const window = { start: 0, end: capture.end }
+          const scope = bytes.byteLength > window.end ? 'file/prefix' as const : 'file/full' as const
+          const digest = await fileReferenceDigest(bytes, window)
+          const reference = await prepareCatalogReference(target, { id: referenceId('file', node.ref, proof.version), kind: 'file', intent: 'content', owner: 'dsh.local', ref: node.ref, version: proof.version, label: node.name, scope, digest, freshness: 'fresh', preview: capture.body.replace(/\s+/gu, ' ').trim().slice(0, 240), window }, signal)
+          if (reference !== undefined) candidates.push({
             name: node.name, ...(proof.resource?.mediaType === undefined ? {} : { description: proof.resource.mediaType }), section: 'Files & folders',
-            reference: { id: referenceId('file', node.ref, proof.version), kind: 'file', intent: 'content', owner: 'dsh.local', ref: node.ref, version: proof.version, label: node.name, scope: bytes.byteLength > window.end ? 'file/prefix' : 'file/full', digest: await fileReferenceDigest(bytes, window), freshness: 'fresh', preview: read.content.replace(/\s+/gu, ' ').trim().slice(0, 240), window },
+            reference,
           })
         }
       }
@@ -773,9 +835,10 @@ export function apply(ctx: ClientContext): () => void {
         if (!result.ok || result.value === undefined) throw new Error('terminal reference owner catalog rejected the request')
         for (const row of result.value.terminals) {
           if (query !== '' && !(row.name ?? row.terminalId).toLocaleLowerCase().includes(query.toLocaleLowerCase())) continue
-          candidates.push({
+          const reference = await prepareCatalogReference(target, { id: referenceId('terminal', row.terminalId, row.version), kind: 'terminal', intent: 'content', owner: 'dsh.terminal', ref: row.terminalId, version: row.version, label: row.name ?? row.terminalId, scope: row.scope, digest: row.digest, freshness: 'fresh', preview: row.preview }, signal)
+          if (reference !== undefined) candidates.push({
             name: row.name ?? row.terminalId, description: row.status, section: 'Terminals',
-            reference: { id: referenceId('terminal', row.terminalId, row.version), kind: 'terminal', intent: 'content', owner: 'dsh.terminal', ref: row.terminalId, version: row.version, label: row.name ?? row.terminalId, scope: row.scope, digest: row.digest, freshness: 'fresh', preview: row.preview },
+            reference,
           })
         }
       } else {
@@ -788,9 +851,10 @@ export function apply(ctx: ClientContext): () => void {
             const read = await terminalRemote.read({ sessionId: target.conversationId, terminalId: row.terminalId, offset: 0, count: 200 })
             if (!read.ok || typeof read.text !== 'string' || typeof read.totalLines !== 'number' || typeof read.lineBegin !== 'number' || typeof read.lineEnd !== 'number' || typeof read.truncated !== 'boolean') continue
             const proof = await terminalReferenceProof(row, read as Required<Pick<typeof read, 'text' | 'totalLines' | 'lineBegin' | 'lineEnd' | 'truncated'>>)
-            candidates.push({
+            const reference = await prepareCatalogReference(target, { id: referenceId('terminal', row.terminalId, proof.version), kind: 'terminal', intent: 'content', owner: 'dsh.terminal', ref: row.terminalId, version: proof.version, label: row.name ?? row.terminalId, scope: 'terminal/scrollback', digest: proof.digest, freshness: 'fresh', preview: read.text.replace(/\s+/gu, ' ').trim().slice(0, 240) }, signal)
+            if (reference !== undefined) candidates.push({
               name: row.name ?? row.terminalId, description: row.status.kind, section: 'Terminals',
-              reference: { id: referenceId('terminal', row.terminalId, proof.version), kind: 'terminal', intent: 'content', owner: 'dsh.terminal', ref: row.terminalId, version: proof.version, label: row.name ?? row.terminalId, scope: 'terminal/scrollback', digest: proof.digest, freshness: 'fresh', preview: read.text.replace(/\s+/gu, ' ').trim().slice(0, 240) },
+              reference,
             })
           }
         }
@@ -909,7 +973,7 @@ export function apply(ctx: ClientContext): () => void {
           && (item.reference.kind === 'file' || item.reference.kind === 'directory' || item.reference.kind === 'image'))
         if (candidate === undefined) return { ok: false, reason: 'file owner could not produce a current reference proof' }
         const requestId = referenceRequestId('explorer-reference')
-        return requestReferenceInsertion({
+        return requestReferenceInsertion(ctx, {
           version: COMPOSER_REFERENCE_PROTOCOL_VERSION,
           requestId,
           target,
@@ -1099,6 +1163,16 @@ export function apply(ctx: ClientContext): () => void {
         ?? Promise.resolve({ status: 'unavailable' as const, reason: 'structured conversation reference bridge is unavailable' }),
       chooseTarget: signal => underlyingReferenceBridge?.chooseTarget?.(signal)
         ?? Promise.resolve({ status: 'unavailable' as const, reason: 'conversation target chooser is unavailable' }),
+      prepareReference: (input, signal) => underlyingReferenceBridge?.prepareReference?.(input, signal)
+        ?? Promise.resolve({ status: 'unavailable' as const, reason: 'editable reference preparation is unavailable' }),
+      insertReference: (detail, signal) => underlyingReferenceBridge?.insertReference?.(detail, signal)
+        ?? requestReferenceInsertionThroughEvents(detail, signal ?? new AbortController().signal).then(result => ({
+          version: COMPOSER_REFERENCE_PROTOCOL_VERSION,
+          ...(detail.requestId === undefined ? {} : { requestId: detail.requestId }),
+          target: detail.target,
+          ...result,
+        })),
+      referenceInsertion: input => underlyingReferenceBridge?.referenceInsertion?.(input) ?? { status: 'unknown' },
     }
     const resolveUnderlyingBridge = (): ComposerReferenceBridgeV1 | undefined => {
       const resolved = composerReferenceBridge(referenceBridgeContext)
@@ -1172,6 +1246,7 @@ export function apply(ctx: ClientContext): () => void {
       const target = detail.target
       const reference = canonicalReference(detail.reference)
       if (detail.version !== COMPOSER_REFERENCE_PROTOCOL_VERSION || target === undefined || reference === undefined
+        || reference.prompt !== undefined || reference.projection !== undefined || reference.editableGrant !== undefined
         || typeof target.workspaceId !== 'string' || target.workspaceId === ''
         || typeof target.conversationId !== 'string' || target.conversationId === '') return undefined
       const caret = target.caret
@@ -1354,7 +1429,7 @@ export function apply(ctx: ClientContext): () => void {
         }
         const digest = await imageRegionDigest(binary.bytes, detail.region)
         const regionKey = `${detail.region.x}:${detail.region.y}:${detail.region.width}:${detail.region.height}`
-        const result = await requestReferenceInsertion({
+        const result = await requestReferenceInsertion(ctx, {
           version: COMPOSER_REFERENCE_PROTOCOL_VERSION,
           requestId: detail.requestId,
           target,

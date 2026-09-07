@@ -40,6 +40,7 @@ import {
   type CreatorStudioTranslator,
 } from './locales.ts'
 import { creatorStudioStyles } from './styles.ts'
+import { CreatorArtifactWorkspace, type CreatorComposerBridge } from './artifact-workspace.tsx'
 
 export type CreatorStudioViewMode = 'home' | 'text' | 'visual' | 'audio' | 'production' | 'context' | 'assets' | 'analysis' | 'generation' | 'approvals' | 'review' | 'jobs'
 
@@ -322,7 +323,7 @@ function ApprovalsView({ snapshot, state, controller, legacyKind = false, t }: {
   </SurfaceSection></div>
 }
 
-function WorkspaceView({ meta, owner, snapshot, state, controller, pane, onDirty, t }: { meta: (typeof MODE_META)[CreatorStudioViewMode]; owner: CreatorOwnerProjectionV1; snapshot: CreatorStudioSnapshotV1; state: CreatorStudioViewState; controller: CreatorStudioController; pane: CreatorPaneFace; onDirty?(dirty: boolean): void; t: CreatorStudioTranslator }): ReactNode {
+function WorkspaceView({ meta, owner, snapshot, state, controller, pane, composerBridge, onDirty, t }: { meta: (typeof MODE_META)[CreatorStudioViewMode]; owner: CreatorOwnerProjectionV1; snapshot: CreatorStudioSnapshotV1; state: CreatorStudioViewState; controller: CreatorStudioController; pane: CreatorPaneFace; composerBridge?: CreatorComposerBridge; onDirty?(dirty: boolean): void; t: CreatorStudioTranslator }): ReactNode {
   const [intentReceipt, setIntentReceipt] = useState<PaneActionReceiptV1 | undefined>()
   const onIntent = async (intent: ArtifactIntentV1): Promise<void> => {
     if (pane.dispatchIntent === undefined) return
@@ -335,6 +336,7 @@ function WorkspaceView({ meta, owner, snapshot, state, controller, pane, onDirty
         {owner.resources.length === 0 ? <SurfaceState phase="empty" title={t('owner.resources.empty')} description={t('owner.resources.empty.description', { owner: owner.owner })} /> : <div className="cs-resource-grid ys-grid">{owner.resources.map(resource => <SharedCreatorResourceCard key={resource.ref} resource={resource} owner={owner.owner} t={t} onIntent={intent => void onIntent(intent)} />)}</div>}
         {intentReceipt !== undefined && <div className="cs-receipt" data-status={intentReceipt.status}>{intentReceipt.summary ?? intentReceipt.reconcileReason ?? intentReceipt.receiptRef}</div>}
       </SurfaceSection>
+      <CreatorArtifactWorkspace owner={owner} snapshot={snapshot} state={state} runtime={controller} t={t} {...(composerBridge === undefined ? {} : { composerBridge })} {...(onDirty === undefined ? {} : { onDirty })} />
       {meta.task === undefined ? null : <SharedCreatorActionComposer owner={owner} task={meta.task} snapshot={snapshot} state={state} controller={controller} t={t} {...onDirty === undefined ? {} : { onDirty }} />}
     </div>
   </div>
@@ -348,6 +350,7 @@ export interface CreatorStudioViewProps {
   readonly onOpenDrama?: () => void
   readonly onOpenShowControl?: () => void
   readonly onDirty?: (dirty: boolean) => void
+  readonly composerBridge?: CreatorComposerBridge
   readonly t?: CreatorStudioTranslator
 }
 
@@ -365,7 +368,7 @@ function LifecycleNav({ mode, onOpenMode, onOpenDrama, t }: { mode: CreatorStudi
   </div>
 }
 
-export function CreatorStudioView({ mode, controller, pane, onOpenMode, onOpenDrama, onOpenShowControl, onDirty, t = defaultCreatorStudioTranslator }: CreatorStudioViewProps): ReactNode {
+export function CreatorStudioView({ mode, controller, pane, onOpenMode, onOpenDrama, onOpenShowControl, onDirty, composerBridge, t = defaultCreatorStudioTranslator }: CreatorStudioViewProps): ReactNode {
   const state = useSyncExternalStore(controller.store.subscribe, controller.store.getSnapshot, controller.store.getSnapshot)
   const meta = MODE_META[mode]
   const snapshot = state.snapshot
@@ -394,7 +397,7 @@ export function CreatorStudioView({ mode, controller, pane, onOpenMode, onOpenDr
                   : mode === 'approvals' ? <ApprovalsView snapshot={snapshot} state={state} controller={controller} t={t} />
                     : mode === 'review' ? <ApprovalsView snapshot={snapshot} state={state} controller={controller} legacyKind t={t} />
                       : owner === undefined ? <div className="cs-body ys-body"><SurfaceState phase="partial" title={t('state.ownerUnavailable')} /></div>
-                        : <WorkspaceView meta={meta} owner={owner} snapshot={snapshot} state={state} controller={controller} pane={pane} t={t} {...onDirty === undefined ? {} : { onDirty }} />}
+                        : <WorkspaceView meta={meta} owner={owner} snapshot={snapshot} state={state} controller={controller} pane={pane} t={t} {...(composerBridge === undefined ? {} : { composerBridge })} {...onDirty === undefined ? {} : { onDirty }} />}
   </Surface>
 }
 

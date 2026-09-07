@@ -16,6 +16,10 @@ it('materializes the real browser artifact without importing the runtime client 
         requests.push(name)
         if (name === '@deepseek-ai/dsh-client-runtime/client') throw new Error(`Unavailable browser module: ${name}`)
         if (name.startsWith('@deepseek-ai/')) return {}
+        // React DOM belongs to the shared UI/Host platform, not this installer.
+        if (name === 'react-dom' || name === 'react-dom/client') {
+          return createRequire(new URL('../../../client/ui-creator-studio/package.json', import.meta.url))(name)
+        }
         return require(name)
       })
       expect(exports).toEqual(expect.objectContaining({ apply: expect.any(Function) }))

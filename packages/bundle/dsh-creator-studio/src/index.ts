@@ -7,10 +7,13 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { ComposerReferenceOwnerRegistryV1 } from '@yeisme/dsh-desktop-workbench'
+import { createCreatorReferenceOwner } from './reference-owner.js'
 import {
   CREATOR_STUDIO_OWNER_DIRECTORY,
   CreatorStudioGateway,
   CreatorStudioOwnerDirectory,
+  CREATOR_STUDIO_OWNERS,
   type CreatorOwnerAdapterV1,
   type CreatorStudioTransportPolicyV1,
 } from '@yeisme/dsh-creator-studio-host'
@@ -28,11 +31,19 @@ export {
   validateCreatorAssetQuery,
   validateCreatorOwnerAssetList,
   validateCreatorMediaAccess,
+  validateCreatorArtifactContent,
   validateCreatorOwnerSnapshot,
   validateCreatorStudioContext,
   validateCreatorStudioSnapshot,
 } from '@yeisme/dsh-creator-studio-host'
 export type {
+  CreatorArtifactActionBindingV1,
+  CreatorArtifactCandidateV1,
+  CreatorArtifactContentV1,
+  CreatorArtifactLifecycleActionsV1,
+  CreatorArtifactReferenceProofV1,
+  CreatorArtifactWorkspaceItemV1,
+  CreatorArtifactWorkspaceV1,
   CreatorApprovalDecisionV1,
   CreatorApprovalV1,
   CreatorAssetPageV1,
@@ -78,6 +89,7 @@ const creatorStudioTypertContribution = {
         { kind: 'method', name: 'snapshot', signature: 'snapshot(): Promise<CreatorStudioSnapshotV1>' },
         { kind: 'method', name: 'dispatch', signature: 'dispatch(input: unknown): Promise<PaneActionReceiptV1>' },
         { kind: 'method', name: 'resolveArtifact', signature: 'resolveArtifact(input: unknown): Promise<CreatorMediaAccessV1 | null>' },
+        { kind: 'method', name: 'readArtifactContent', signature: 'readArtifactContent(input: unknown): Promise<CreatorArtifactContentV1 | null>' },
         { kind: 'method', name: 'assets', signature: 'assets(input: unknown): Promise<CreatorAssetPageV1>' },
         { kind: 'method', name: 'decideApproval', signature: 'decideApproval(input: unknown): Promise<PaneActionReceiptV1>' },
       ],
@@ -107,6 +119,13 @@ const creatorStudioTypertContribution = {
       result: { mode: 'src-json' },
     },
     {
+      id: '@yeisme/dsh-creator-studio-host#creatorStudio/readArtifactContent',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'readArtifactContent',
+      invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }],
+      result: { mode: 'src-json' },
+    },
+    {
       id: '@yeisme/dsh-creator-studio-host#creatorStudio/assets',
       service: 'creatorStudio', namespace: 'creatorStudio', method: 'assets',
       invocation: { kind: 'direct' },
@@ -124,6 +143,7 @@ const creatorStudioTypertContribution = {
 } as const
 
 type SharedCreatorStudioMount = {
+  referenceOwnerMount?: FiberHandle | undefined
   references: number
   tail: Promise<void>
   bridge?: FiberHandle | undefined
@@ -188,6 +208,22 @@ async function acquireCreatorStudio(ctx: Context): Promise<() => Promise<void>> 
     if (current.bridge === undefined && root.get('creatorStudio') === undefined) {
       current.bridge = await root.plugin(CreatorStudioGateway)
     }
+    if (current.referenceOwnerMount === undefined) {
+      current.referenceOwnerMount = root.inject(['composerReferenceOwners'] as never, (scope: Context) => {
+        const registry = scope.get('composerReferenceOwners' as never) as ComposerReferenceOwnerRegistryV1 | undefined
+        const gateway = root.get('creatorStudio') as CreatorStudioGateway | undefined
+        if (registry?.version !== 1 || typeof registry.register !== 'function' || gateway === undefined) return
+        const workspaceForSession = (sessionId: string): string | undefined => {
+          const workspaces = root.get('workspaceRegistry' as never) as { list(): readonly { id: string; sessionIds: readonly string[] }[] } | undefined
+          return workspaces?.list().find(workspace => workspace.sessionIds.includes(sessionId))?.id
+        }
+        const disposers: Array<() => void> = []
+        try {
+          for (const owner of CREATOR_STUDIO_OWNERS) disposers.push(registry.register(owner, createCreatorReferenceOwner(gateway, owner, workspaceForSession)))
+        } catch (error) { for (const dispose of disposers.reverse()) dispose(); throw error }
+        return () => { for (const dispose of disposers.reverse()) dispose() }
+      })
+    }
     if (current.unregisterTypert === undefined) {
       current.unregisterTypert = (root.get('typert') as TypertRegistryFace | undefined)?.register(creatorStudioTypertContribution)
     }
@@ -214,11 +250,14 @@ async function releaseCreatorStudio(root: Context, mount: SharedCreatorStudioMou
     const bridge = mount.bridge
     const disposeDirectory = mount.disposeDirectory
     const unregisterTypert = mount.unregisterTypert
+    const referenceOwnerMount = mount.referenceOwnerMount
+    mount.referenceOwnerMount = undefined
     mount.bridge = undefined
     mount.directory = undefined
     mount.disposeDirectory = undefined
     mount.unregisterTypert = undefined
     await unregisterTypert?.()
+    await referenceOwnerMount?.dispose()
     await bridge?.dispose()
     disposeDirectory?.()
     const store = mounts()

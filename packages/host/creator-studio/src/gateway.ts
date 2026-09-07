@@ -32,6 +32,7 @@ import {
   validateCreatorAsset,
   validateCreatorAssetPage,
   validateCreatorAssetQuery,
+  validateCreatorArtifactContent,
   validateCreatorOwnerAssetList,
   validateCreatorMediaAccess,
   validateCreatorOperationsDecisionOutcome,
@@ -438,6 +439,23 @@ export class CreatorStudioGateway extends TypertRemoteService {
     if (directory === undefined) return null
     try {
       return validateCreatorMediaAccess(await directory.resolveArtifact(owner, artifact.data, this.expectedContext)) ?? null
+    } catch {
+      return null
+    }
+  }
+
+  /** Explicit ephemeral editor-body read; never composed into a snapshot. */
+  @Remote('readArtifactContent')
+  async readArtifactContent(input: unknown) {
+    const artifact = ArtifactRefSchema.safeParse(input)
+    if (!artifact.success || this.expectedContext === undefined) return null
+    const owner = artifact.data.owner as CreatorStudioOwner
+    if (!CREATOR_STUDIO_OWNERS.includes(owner)) return null
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    if (directory === undefined) return null
+    try {
+      const content = validateCreatorArtifactContent(await directory.readArtifactContent(owner, artifact.data, this.expectedContext))
+      return content?.artifact.owner === owner && content.artifact.ref === artifact.data.ref && content.artifact.version === artifact.data.version ? content : null
     } catch {
       return null
     }

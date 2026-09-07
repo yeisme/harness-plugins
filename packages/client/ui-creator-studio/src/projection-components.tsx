@@ -4,6 +4,7 @@ import type {
   ArtifactIntentV1,
   ArtifactRefV1,
   PaneActionDescriptorV1,
+  PaneActionReceiptV1,
   PaneActionValueV1,
   PaneContextV1,
 } from '@yeisme/dsh-pane-protocol'
@@ -126,6 +127,12 @@ export function CreatorActionComposer({
   controller,
   onDirty,
   t = defaultCreatorStudioTranslator,
+  descriptorRef,
+  initialValues,
+  retainValuesOnPartial = false,
+  retainValuesOnAccepted = false,
+  onReceipt,
+  lockedValueKeys = [],
 }: {
   readonly owner: CreatorOwnerProjectionV1
   readonly task: CreatorStudioTask
@@ -134,13 +141,38 @@ export function CreatorActionComposer({
   readonly controller: Pick<CreatorStudioRuntimeV1, 'dispatchAction'>
   readonly onDirty?: (dirty: boolean) => void
   readonly t?: CreatorStudioTranslator
+  /** Pins a server-authored descriptor for an embedded lifecycle action. */
+  readonly descriptorRef?: string
+  /** Ephemeral values supplied by the current editor; never persisted locally. */
+  readonly initialValues?: Readonly<Record<string, PaneActionValueV1>>
+  /** Lifecycle editors retain local input when the owner reports partial settlement. */
+  readonly retainValuesOnPartial?: boolean
+  /** Keep values after an owner acceptance when a second Host receipt is still required. */
+  readonly retainValuesOnAccepted?: boolean
+  readonly onReceipt?: (receipt: PaneActionReceiptV1) => void
+  /** Owner-bound selection/body values are rendered by their dedicated control, not editable again in the generic form. */
+  readonly lockedValueKeys?: readonly string[]
 }): ReactNode {
-  const descriptors = owner.actions.filter(action => action.presentation?.task === task || action.presentation?.task === undefined)
+  const descriptors = descriptorRef === undefined
+    ? owner.actions.filter(action => action.presentation?.task === task || action.presentation?.task === undefined)
+    : owner.actions.filter(action => action.descriptorRef === descriptorRef)
   const [selectedRef, setSelectedRef] = useState<string | undefined>(descriptors[0]?.descriptorRef)
   const descriptor = descriptors.find(item => item.descriptorRef === selectedRef) ?? descriptors[0]
-  const [values, setValues] = useState<Readonly<Record<string, PaneActionValueV1>>>({})
+  const [values, setValues] = useState<Readonly<Record<string, PaneActionValueV1>>>(initialValues ?? {})
   const [confirmed, setConfirmed] = useState(false)
-  useEffect(() => { setSelectedRef(descriptors[0]?.descriptorRef); setValues({}); setConfirmed(false) }, [owner.snapshotRef, task])
+  const lockedValueSignature = lockedValueKeys.join('\u0000')
+  useEffect(() => { setSelectedRef(descriptors[0]?.descriptorRef); setValues(initialValues ?? {}); setConfirmed(false) }, [task, descriptorRef])
+  useEffect(() => {
+    setValues(current => {
+      const next = { ...current }
+      for (const key of lockedValueKeys) {
+        const value = initialValues?.[key]
+        if (value === undefined) delete next[key]
+        else next[key] = value
+      }
+      return next
+    })
+  }, [initialValues, lockedValueSignature])
   const dirty = Object.keys(values).length > 0
   useEffect(() => { onDirty?.(dirty); return () => onDirty?.(false) }, [dirty, onDirty])
   const artifacts = snapshot.owners.flatMap(item => item.resources.flatMap(resource => resource.artifact === undefined ? [] : [resource.artifact]))
@@ -153,7 +185,8 @@ export function CreatorActionComposer({
   const disabledReason = stale ? t('action.stale') : pending ? t('action.disabled.pending') : requiredMissing ? t('action.disabled.required') : confirmationMissing ? t('action.disabled.confirmation') : undefined
   const submit = async (): Promise<void> => {
     const receipt = await controller.dispatchAction(descriptor, values)
-    if (receipt.status === 'accepted' || receipt.status === 'completed' || receipt.status === 'partial') {
+    onReceipt?.(receipt)
+    if (((receipt.status === 'accepted' || receipt.status === 'completed') && !retainValuesOnAccepted) || (receipt.status === 'partial' && !retainValuesOnPartial)) {
       setValues({})
       setConfirmed(false)
       onDirty?.(false)
@@ -164,7 +197,7 @@ export function CreatorActionComposer({
     {descriptors.length > 1 && <label className="cs-field ys-field"><span>{t('action.label')}</span><select value={descriptor.descriptorRef} onChange={event => { setSelectedRef(event.currentTarget.value); setValues({}); setConfirmed(false) }}>{descriptors.map(item => <option key={item.descriptorRef} value={item.descriptorRef}>{item.label}</option>)}</select></label>}
     {descriptor.preview.cost !== undefined && <div className="cs-metric" data-tone="warning">{t('action.estimatedCost', { currency: descriptor.preview.cost.currency, amount: descriptor.preview.cost.amount })}</div>}
     {descriptor.preview.rights !== undefined && <div className="cs-receipt" data-status={descriptor.preview.rights.status}>{descriptor.preview.rights.summary}</div>}
-    {descriptor.fields.map(field => <ActionField key={field.key} field={field} value={values[field.key]} artifacts={artifacts} t={t} onChange={value => setValues(current => value === undefined ? Object.fromEntries(Object.entries(current).filter(([key]) => key !== field.key)) : { ...current, [field.key]: value })} />)}
+    {descriptor.fields.filter(field => !lockedValueKeys.includes(field.key)).map(field => <ActionField key={field.key} field={field} value={values[field.key]} artifacts={artifacts} t={t} onChange={value => setValues(current => value === undefined ? Object.fromEntries(Object.entries(current).filter(([key]) => key !== field.key)) : { ...current, [field.key]: value })} />)}
     {descriptor.confirmation !== 'none' && <label className="cs-confirm"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.currentTarget.checked)} /><span>{t(descriptor.confirmation === 'approval' ? 'action.confirmApproval' : 'action.confirmMutation')}</span></label>}
     {disabledReason === undefined ? null : <p className={stale ? 'cs-alert' : 'cs-disabled-reason'} role="status">{disabledReason}</p>}
     <span data-risk={descriptor.risk}><Button className="cs-button" size="sm" variant="primary" type="button" disabled={disabled} title={disabledReason} onClick={() => void submit()}>{pending ? t('action.pending') : t(descriptor.confirmation === 'approval' ? 'action.submitApproval' : 'action.execute')}</Button></span>

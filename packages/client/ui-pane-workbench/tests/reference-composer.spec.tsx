@@ -91,6 +91,33 @@ describe('ComposerReferenceDraftControllerV2', () => {
     expect(controller.draftFor(selected)?.references.map(item => item.id)).toEqual(['next'])
   })
 
+  it('never retains editable bodies in the cross-pane draft mirror', () => {
+    const controller = new ComposerReferenceDraftControllerV2()
+    controller.setHostAvailability(true)
+    const selected = target('conversation-a')
+    const source = reference('edited', {
+      prompt: { version: 1, body: 'captured', originalBody: 'captured', source: { owner: 'dsh.selection', ref: 'selection:edited', version: 'v1', scope: 'selection', digest: 'digest-edited' } },
+    })
+    controller.insert(selected, source)
+    expect(controller.draftFor(selected)?.references).toMatchObject([{ id: 'edited' }])
+    expect(controller.draftFor(selected)?.references[0]).not.toHaveProperty('prompt')
+  })
+
+  it('refreshes only after comparison revision still matches and never overwrites an intervening edit', () => {
+    const controller = new ComposerReferenceDraftControllerV2()
+    controller.setHostAvailability(true)
+    const selected = target('conversation-a')
+    const source = reference('refresh', {
+      prompt: { version: 1, body: 'old body', originalBody: 'old body', source: { owner: 'dsh.selection', ref: 'selection:refresh', version: 'v1', scope: 'selection', digest: 'digest-refresh' } },
+      projection: 'editable-prompt',
+    })
+    controller.insert(selected, source)
+    const comparedRevision = controller.draftFor(selected)!.revision
+    controller.insert(selected, reference('intervening'))
+    expect(controller.refresh(selected, 'refresh', comparedRevision, { ...source, version: 'v2', digest: 'digest-next', prompt: { version: 1, body: 'new source', originalBody: 'new source', source: { owner: 'dsh.selection', ref: 'selection:refresh', version: 'v2', scope: 'selection', digest: 'digest-next' } }, projection: 'editable-prompt' })).toMatchObject({ ok: false, reason: expect.stringContaining('changed') })
+    expect(controller.draftFor(selected)?.references[0]).not.toHaveProperty('prompt')
+  })
+
   it('rejects a prepared snapshot without discarding the original reference', () => {
     const controller = new ComposerReferenceDraftControllerV2()
     controller.setHostAvailability(true)

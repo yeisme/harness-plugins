@@ -258,12 +258,35 @@ describe('desktop workbench client apply', () => {
     provided.set('remote.referenceTerminals', { list })
     const legacyList = vi.fn()
     provided.set('remote.terminalPane', { list: legacyList, read: vi.fn() })
-    const ctx = fakeClientContext({ provided, fileHost: fileHost() })
+    const target = { workspaceId: 'workspace-main', conversationId: 's-1' }
+    const ctx = fakeClientContext({
+      provided,
+      fileHost: fileHost(),
+      composerReferenceBridge: {
+        snapshot: () => ({ available: true, target, references: [] }),
+        subscribe: () => () => {},
+        resolveSelection: vi.fn(),
+        prepareReference: vi.fn(async ({ reference }: { reference: Record<string, unknown> }) => ({
+          status: 'available',
+          reference: {
+            ...reference,
+            projection: 'editable-prompt',
+            editableGrant: 'terminal-grant',
+            prompt: {
+              version: 1,
+              body: 'terminal body',
+              originalBody: 'terminal body',
+              source: { owner: reference.owner, ref: reference.ref, version: reference.version, scope: reference.scope, digest: reference.digest },
+            },
+          },
+        })),
+      },
+    })
     const dispose = apply(ctx)
     const catalog = provided.get('composerReferenceCatalog') as {
       list(target: { workspaceId: string; conversationId: string }, query: string, signal: AbortSignal): Promise<readonly { reference: unknown }[]>
     }
-    await expect(catalog.list({ workspaceId: 'workspace-main', conversationId: 's-1' }, '', new window.AbortController().signal)).resolves.toEqual([
+    await expect(catalog.list(target, '', new window.AbortController().signal)).resolves.toEqual([
       expect.objectContaining({
         name: 'reference-terminal', section: 'Terminals',
         reference: expect.objectContaining({
@@ -373,6 +396,33 @@ describe('desktop workbench client apply', () => {
     const decorated = provided.get('composerReferenceBridge') as { snapshot(): { features?: { activation?: boolean } } }
     expect(decorated.snapshot().features?.activation).toBe(false)
     dispose()
+  })
+
+  it('never sends editable bodies or new Creator owners through the legacy Window bridge', async () => {
+    const provided = new Map<string, unknown>()
+    const target = { workspaceId: 'workspace-main', conversationId: 's-1', draftRevision: 4 }
+    const hostInsert = vi.fn()
+    window.addEventListener('dsh-composer-reference:insert', hostInsert)
+    try {
+      const underlying = { snapshot: () => ({ available: true, target, references: [] }), subscribe: () => () => {}, resolveSelection: vi.fn() }
+      const dispose = apply(fakeClientContext({ provided, composerReferenceBridge: underlying }))
+      const decorated = provided.get('composerReferenceBridge') as {
+        insertReference(detail: Record<string, unknown>): Promise<{ ok: boolean; reason?: string }>
+      }
+      const base = { id: 'editable', kind: 'file', intent: 'content', owner: 'dsh.local', ref: 'opaque', version: 'v1', label: 'secret.txt', scope: 'file/full', digest: 'proof', freshness: 'fresh', window: { start: 0, end: 6 } }
+      await expect(decorated.insertReference({
+        version: 1, requestId: 'editable-window', target,
+        reference: { ...base, projection: 'editable-prompt', editableGrant: 'grant', prompt: { version: 1, body: 'secret', originalBody: 'secret', source: { owner: 'dsh.local', ref: 'opaque', version: 'v1', scope: 'file/full', digest: 'proof' } } },
+      })).resolves.toMatchObject({ ok: false, reason: 'editable reference insertion requires the private Host bridge' })
+      await expect(decorated.insertReference({
+        version: 1, requestId: 'creator-window', target,
+        reference: { ...base, owner: 'eikona', ref: 'artifact:1', scope: 'artifact/body' },
+      })).resolves.toMatchObject({ ok: false, reason: 'reference owner requires the private Host bridge' })
+      expect(hostInsert).not.toHaveBeenCalled()
+      dispose()
+    } finally {
+      window.removeEventListener('dsh-composer-reference:insert', hostInsert)
+    }
   })
 
   it('binds an in-flight request id to its exact target, proof, and activation until the original receipt settles', async () => {

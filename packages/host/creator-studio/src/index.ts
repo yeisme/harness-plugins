@@ -15,6 +15,7 @@ export {
   validateCreatorActionReceipt,
   validateCreatorApprovalDecision,
   validateCreatorAsset,
+  validateCreatorArtifactContent,
   validateCreatorAssetPage,
   validateCreatorAssetQuery,
   validateCreatorOwnerAssetList,

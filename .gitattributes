@@ -1,2 +1,4 @@
 # Verbatim historical snapshots from retired repositories must stay byte-identical.
 docs/migrations/workbench-retirement/source/** whitespace=-trailing-space,-space-before-tab
+# Generated patch files keep the exact bytes git diff produced.
+upstream-prs/**/*.patch whitespace=-trailing-space,-space-before-tab

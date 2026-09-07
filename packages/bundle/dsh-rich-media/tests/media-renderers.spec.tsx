@@ -38,6 +38,13 @@ describe('MediaImageRenderer', () => {
     expect(html).toContain('decode budget')
     expect(html).not.toContain('<img')
   })
+  it('renders an owner-consumer selection overlay and crop preview', () => {
+    const html = renderToStaticMarkup(<MediaImageRenderer media={image(800, 600)} url="https://cdn.example/safe.png" selection={{ x: 0.1, y: 0.2, width: 0.5, height: 0.6 }} onSelectionChange={() => {}} />)
+    expect(html).toContain('data-dsh-media-image-selection')
+    expect(html).toContain('data-selection-x="0.1"')
+    expect(html).toContain('data-selection-width="0.5"')
+    expect(html).toContain('data-dsh-media-image-crop-preview')
+  })
 })
 
 describe('MediaCompareRenderer', () => {
@@ -70,6 +77,13 @@ describe('MediaPlaybackRenderer', () => {
     expect(html).toContain('aria-label="Step forward"')
     expect(html).not.toContain('autoplay')
   })
+  it('exposes the exact selected playback range', () => {
+    const media: MediaRefV1 = { owner: 'dsh', kind: 'audio', ref: 'a1', version: '1', mediaType: 'audio/mpeg', title: 'Take', capabilities: ['play'] }
+    const html = renderToStaticMarkup(<MediaPlaybackRenderer media={media} url="https://cdn.example/safe.mp3" selection={{ startMs: 2_500, endMs: 9_000 }} />)
+    expect(html).toContain('data-dsh-media-play-selection')
+    expect(html).toContain('data-range-start-ms="2500"')
+    expect(html).toContain('data-range-end-ms="9000"')
+  })
   it('playbackMode prefers native, then an injected enhancer, else honest unavailable', () => {
     const never = (): boolean => false
     const always = (): boolean => true
@@ -80,6 +94,8 @@ describe('MediaPlaybackRenderer', () => {
   })
   it('rejects unsafe sources and track kinds before mounting playback', () => {
     expect(rejectUnsafePlayback('javascript:alert(1)')).toBe('unsafe source')
+    expect(rejectUnsafePlayback('blob:https://owner.example/media')).toBe('unsafe source')
+    expect(rejectUnsafePlayback('blob:https://owner.example/media', [], { allowBlobUrl: true })).toBeUndefined()
     expect(rejectUnsafePlayback('https://cdn.example/safe.mp4', [{ src: 'file:///etc/passwd', kind: 'captions' }])).toBe('unsafe track')
     expect(rejectUnsafePlayback('https://cdn.example/safe.mp4', [{ kind: 'script' }])).toBe('unsafe track kind')
     const media: MediaRefV1 = { owner: 'dsh', kind: 'video', ref: 'v1', version: '1', mediaType: 'video/mp4', title: 'Clip', capabilities: ['play'] }

@@ -8,6 +8,7 @@ import CreatorStudioPlugin, {
   apply,
   creatorStudioBundleV1,
   registerCreatorStudioOwner,
+  validateCreatorArtifactContent,
   type CreatorOwnerAdapterV1,
   type CreatorStudioContextV1,
 } from '../src/index.ts'
@@ -66,6 +67,11 @@ function eikonaAdapter(): CreatorOwnerAdapterV1 {
 }
 
 describe('@yeisme/dsh-creator-studio bundle', () => {
+  it('exposes the artifact content validator from the installable entry', () => {
+    expect(validateCreatorArtifactContent).toBeTypeOf('function')
+    expect(validateCreatorArtifactContent({ body: 'unattested' })).toBeUndefined()
+  })
+
   it('mounts one shared directory and one safe Remote', async () => {
     const ctx = new Context()
     contexts.push(ctx)
@@ -75,7 +81,8 @@ describe('@yeisme/dsh-creator-studio bundle', () => {
     registerCreatorStudioOwner(ctx, eikonaAdapter())
 
     expect(ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY)).toBeDefined()
-    const remote = ctx.get('creatorStudio') as { snapshot(): Promise<{ owners: readonly { owner: string; status: string }[] }> }
+    const remote = ctx.get('creatorStudio') as { snapshot(): Promise<{ owners: readonly { owner: string; status: string }[] }>; readArtifactContent(input: unknown): Promise<unknown> }
+    expect(remote.readArtifactContent).toBeTypeOf('function')
     const snapshot = await remote.snapshot()
     expect(snapshot.owners.find(owner => owner.owner === 'eikona')).toMatchObject({ status: 'ready' })
     expect(snapshot.owners).toHaveLength(6)
@@ -85,6 +92,7 @@ describe('@yeisme/dsh-creator-studio bundle', () => {
         expect.objectContaining({ namespace: 'creatorStudio', method: 'snapshot' }),
         expect.objectContaining({ namespace: 'creatorStudio', method: 'dispatch' }),
         expect.objectContaining({ namespace: 'creatorStudio', method: 'resolveArtifact' }),
+        expect.objectContaining({ namespace: 'creatorStudio', method: 'readArtifactContent', parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }], result: { mode: 'src-json' } }),
         expect.objectContaining({ namespace: 'creatorStudio', method: 'assets' }),
         expect.objectContaining({ namespace: 'creatorStudio', method: 'decideApproval' }),
       ]),
@@ -109,6 +117,40 @@ describe('@yeisme/dsh-creator-studio bundle', () => {
     expect(ctx.get('creatorStudio')).toBeDefined()
     await second.dispose()
     expect(ctx.get('creatorStudio')).toBeUndefined()
+  })
+
+  it('registers Creator references through the real gateway and rejects stale or cross-target proof', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    provideTypert(ctx)
+    const context = expectedContext()
+    ctx.provide(CREATOR_STUDIO_EXPECTED_CONTEXT, context)
+    ctx.provide('workspaceRegistry' as never, { list: () => [{ id: context.workspaceRef, sessionIds: [context.sessionRef] }] } as never)
+    const providers = new Map<string, { resolve(input: unknown, signal: AbortSignal): Promise<unknown> }>()
+    ctx.provide('composerReferenceOwners' as never, { version: 1, register: (owner: string, provider: { resolve(input: unknown, signal: AbortSignal): Promise<unknown> }) => { providers.set(owner, provider); return () => { providers.delete(owner) } } } as never)
+    const mounted = await ctx.plugin(CreatorStudioPlugin)
+    const artifact = { schema: 'pane.artifact.v1alpha1' as const, owner: 'eikona', kind: 'text' as const, ref: 'artifact:reference', version: '1', mediaType: 'text/markdown', title: 'Reference', evidenceRefs: [], capabilities: ['preview' as const] }
+    const proof = { id: 'proof:one', kind: 'file' as const, intent: 'content' as const, scope: 'artifact/body' as const, digest: 'digest:one', freshness: 'fresh' as const }
+    let revoked = false
+    const original = eikonaAdapter()
+    const read = vi.fn(async () => ({ artifact, contentRevision: 'body:1', content: 'Owner-authorized body' }))
+    registerCreatorStudioOwner(ctx, { ...original, snapshot: async input => ({ ...await original.snapshot(input), status: revoked ? 'permission_denied' : 'ready', artifactWorkspace: { status: 'ready', safeMessage: 'Ready', artifacts: [{ artifact, acceptedVersion: '1', candidates: [], referenceProof: proof }] } }), readArtifactContent: read })
+    await vi.waitFor(() => expect(providers.size).toBe(6))
+    const gateway = ctx.get('creatorStudio') as { snapshot(): Promise<{ owners: unknown[] }> }
+    expect((await gateway.snapshot()).owners[0]).toMatchObject({ owner: 'eikona', status: 'ready', artifactWorkspace: { artifacts: [{ referenceProof: proof }] } })
+    const owner = providers.get('eikona')!
+    const claim = { id: proof.id, owner: artifact.owner, ref: artifact.ref, kind: proof.kind, intent: proof.intent, scope: proof.scope, digest: proof.digest, version: artifact.version }
+    const resolve = (reference = claim, sessionId = context.sessionRef) => owner.resolve({ sessionId, cwd: '', reference }, new AbortController().signal)
+    await expect(resolve()).resolves.toMatchObject({ label: 'Reference', snapshot: { type: 'text', text: 'Owner-authorized body', truncated: false } })
+    read.mockClear()
+    await expect(resolve({ ...claim, digest: 'forged' })).resolves.toBeUndefined()
+    await expect(resolve(claim, 'session:other')).resolves.toBeUndefined()
+    expect(read).not.toHaveBeenCalled()
+    revoked = true
+    await expect(resolve()).resolves.toBeUndefined()
+    expect(read).not.toHaveBeenCalled()
+    await mounted.dispose()
+    expect(providers.size).toBe(0)
   })
 
   it('publishes one profile row and a versioned ecosystem descriptor', async () => {

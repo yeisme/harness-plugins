@@ -29,12 +29,20 @@ import {
   COMPOSER_REFERENCE_OWNER_CONTEXT_KEY,
   createFileHostPlaceholder,
   type ComposerReferenceOwnerClaimV1,
+  type ComposerReferenceOwnerV1,
   type ComposerReferenceOwnerRegistryV1,
   type FileHostV1,
 } from '@yeisme/dsh-file-host'
 import { createOpaqueFileRefRegistry, FILE_OPAQUE_REF_HOST_CONTEXT_KEY, handleYeismeFilesApi, NodeFileResourceMutationOwner, NodeFileTransferOwner } from '@yeisme/dsh-file-host/node'
 import { createTerminalHostPlaceholder, type TerminalHostV1, type TerminalHostV2 } from '@yeisme/dsh-terminal-host'
 import { createNotificationHostPlaceholder, type NotificationHostV1 } from '@yeisme/dsh-notify-host'
+
+export type {
+  ComposerReferenceOwnerClaimV1,
+  ComposerReferenceOwnerResolutionV1,
+  ComposerReferenceOwnerRegistryV1,
+  ComposerReferenceOwnerV1,
+} from '@yeisme/dsh-file-host'
 
 /**
  * Bundle descriptor. The `hosts` accessors resolve late: the session host
@@ -176,13 +184,18 @@ export function apply(ctx: DesktopWorkbenchNodeContext): () => void {
     return owner
   }
   const unprovide = ctx.provide?.(FILE_OPAQUE_REF_HOST_CONTEXT_KEY, opaqueRefs)
-  const referenceOwners: ComposerReferenceOwnerRegistryV1 = {
-    version: 1,
+  const referenceOwnerProviders = new Map<string, ComposerReferenceOwnerV1>()
+  const localOwner: ComposerReferenceOwnerV1 = {
+    resolve(input, signal) {
+      return opaqueRefs.resolveComposerReference(input.cwd, input.reference, signal, input.authorization?.revealToken)
+    },
+    refresh(input, signal) {
+      return opaqueRefs.refreshComposerReference(input.cwd, input.reference, signal, input.authorization?.revealToken)
+    },
+  }
+  const terminalOwner: ComposerReferenceOwnerV1 = {
     async resolve(input, signal) {
       signal.throwIfAborted()
-      if (input.reference.owner === 'dsh.local') {
-        return opaqueRefs.resolveComposerReference(input.cwd, input.reference, signal)
-      }
       if (input.reference.owner !== 'dsh.terminal' || input.reference.kind !== 'terminal'
         || input.reference.intent !== 'content' || input.reference.scope !== 'terminal/scrollback'
         || input.reference.window !== undefined || input.reference.region !== undefined) return undefined
@@ -208,6 +221,22 @@ export function apply(ctx: DesktopWorkbenchNodeContext): () => void {
         preview: read.text.replace(/\s+/gu, ' ').trim().slice(0, 240),
         snapshot: { type: 'terminal', text: read.text.slice(0, 16_384), truncated: read.truncated || read.text.length > 16_384 },
       }
+    },
+  }
+  referenceOwnerProviders.set('dsh.local', localOwner)
+  referenceOwnerProviders.set('dsh.terminal', terminalOwner)
+  const referenceOwners: ComposerReferenceOwnerRegistryV1 = {
+    version: 1,
+    register(owner, provider) {
+      if (owner === '' || referenceOwnerProviders.has(owner)) throw new Error(`composer reference owner ${JSON.stringify(owner)} is already registered`)
+      referenceOwnerProviders.set(owner, provider)
+      return () => { if (referenceOwnerProviders.get(owner) === provider) referenceOwnerProviders.delete(owner) }
+    },
+    resolve(input, signal) {
+      return referenceOwnerProviders.get(input.reference.owner)?.resolve(input, signal) ?? Promise.resolve(undefined)
+    },
+    refresh(input, signal) {
+      return referenceOwnerProviders.get(input.reference.owner)?.refresh?.(input, signal) ?? Promise.resolve(undefined)
     },
   }
   const unprovideReferenceOwners = ctx.provide?.(COMPOSER_REFERENCE_OWNER_CONTEXT_KEY, referenceOwners)

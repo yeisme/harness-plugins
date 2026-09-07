@@ -312,13 +312,29 @@ export interface ComposerReferenceOwnerResolutionV1 {
 }
 
 /** Optional same-process owner registry. Session admission calls it before any prompt mutation. */
-export interface ComposerReferenceOwnerRegistryV1 {
-  readonly version: 1
+export interface ComposerReferenceOwnerV1 {
   resolve(input: {
     readonly sessionId: string
     readonly cwd: string
     readonly reference: ComposerReferenceOwnerClaimV1
+    readonly authorization?: { readonly revealToken: string }
   }, signal: AbortSignal): Promise<ComposerReferenceOwnerResolutionV1 | undefined>
+  /**
+   * Explicitly reauthorize the same opaque object and selection bounds against
+   * its current source version. Absent owners do not support Composer refresh.
+   */
+  refresh?(input: {
+    readonly sessionId: string
+    readonly cwd: string
+    readonly reference: ComposerReferenceOwnerClaimV1
+    readonly authorization?: { readonly revealToken: string }
+  }, signal: AbortSignal): Promise<ComposerReferenceOwnerResolutionV1 | undefined>
+}
+
+/** Extensible same-process owner registry. One provider owns each exact owner id. */
+export interface ComposerReferenceOwnerRegistryV1 extends ComposerReferenceOwnerV1 {
+  readonly version: 1
+  register(owner: string, provider: ComposerReferenceOwnerV1): () => void
 }
 
 export function isSafeFileTreeNodeV2(node: FileTreeNodeV2): boolean {

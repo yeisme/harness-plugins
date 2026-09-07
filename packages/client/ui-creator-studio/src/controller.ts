@@ -11,12 +11,14 @@ import {
 } from '@yeisme/dsh-pane-protocol'
 import {
   validateCreatorAssetPage,
+  validateCreatorArtifactContent,
   validateCreatorAssetQuery,
   validateCreatorMediaAccess,
   validateCreatorStudioSnapshot,
   type CreatorAssetQueryV1,
   type CreatorAssetV1,
   type CreatorMediaAccessV1,
+  type CreatorArtifactContentV1,
   type CreatorStudioOwner,
   type CreatorStudioSnapshotV1,
 } from '@yeisme/dsh-creator-studio-host/contracts'
@@ -25,6 +27,7 @@ export interface CreatorStudioRemote {
   snapshot(): Promise<RemoteResult<CreatorStudioSnapshotV1>>
   dispatch(request: unknown): Promise<RemoteResult<PaneActionReceiptV1>>
   resolveArtifact(artifact: ArtifactRefV1): Promise<RemoteResult<CreatorMediaAccessV1 | null>>
+  readArtifactContent?(artifact: ArtifactRefV1): Promise<RemoteResult<CreatorArtifactContentV1 | null>>
   assets?(query: CreatorAssetQueryV1): Promise<RemoteResult<unknown>>
   decideApproval?(input: { readonly decisionRef: string }): Promise<RemoteResult<PaneActionReceiptV1>>
 }
@@ -215,6 +218,16 @@ export class CreatorStudioController {
     } catch {
       return undefined
     }
+  }
+
+  async readArtifactContent(artifact: ArtifactRefV1): Promise<CreatorArtifactContentV1 | undefined> {
+    if (this.disposed || this.remote.readArtifactContent === undefined) return undefined
+    try {
+      const result = await this.remote.readArtifactContent(artifact)
+      if (!result.ok || result.value === null) return undefined
+      const content = validateCreatorArtifactContent(result.value)
+      return content !== undefined && content.artifact.owner === artifact.owner && content.artifact.ref === artifact.ref && content.artifact.version === artifact.version ? content : undefined
+    } catch { return undefined }
   }
 
   reset(): void {

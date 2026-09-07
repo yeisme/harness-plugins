@@ -357,6 +357,27 @@ export class OpaqueFileRefRegistry {
     cwd: string,
     claim: ComposerReferenceOwnerClaimV1,
     signal: AbortSignal,
+    revealToken?: string,
+  ): Promise<ComposerReferenceOwnerResolutionV1 | undefined> {
+    return this.readComposerReference(cwd, claim, signal, false, revealToken)
+  }
+
+  /** Reauthorize one unchanged opaque target/range against its current source. */
+  async refreshComposerReference(
+    cwd: string,
+    claim: ComposerReferenceOwnerClaimV1,
+    signal: AbortSignal,
+    revealToken?: string,
+  ): Promise<ComposerReferenceOwnerResolutionV1 | undefined> {
+    return this.readComposerReference(cwd, claim, signal, true, revealToken)
+  }
+
+  private async readComposerReference(
+    cwd: string,
+    claim: ComposerReferenceOwnerClaimV1,
+    signal: AbortSignal,
+    refresh: boolean,
+    revealToken?: string,
   ): Promise<ComposerReferenceOwnerResolutionV1 | undefined> {
     signal.throwIfAborted()
     if (claim.owner !== 'dsh.local' || claim.intent !== 'content' || claim.ref === '' || claim.version === '' || claim.digest === '') return undefined
@@ -373,7 +394,7 @@ export class OpaqueFileRefRegistry {
       if (page === undefined) return undefined
       const entries = page.nodes.map(node => ({ name: node.name, kind: node.kind === 'directory' ? 'directory' as const : 'file' as const }))
       const digest = createHash('sha256').update(JSON.stringify({ ref: claim.ref, revision: page.revision, entries, truncated: page.truncated })).digest('hex')
-      if (claim.version !== page.revision || claim.digest !== digest) return undefined
+      if (!refresh && (claim.version !== page.revision || claim.digest !== digest)) return undefined
       return {
         id: claim.id,
         owner: 'dsh.local',
@@ -393,7 +414,11 @@ export class OpaqueFileRefRegistry {
     try {
       const { bytes, info } = opened
       const version = textVersion(info.size, info.mtimeMs, bytes)
-      if (version !== claim.version) return undefined
+      const workspace = await realpath(requireAbsolute(cwd))
+      if (sensitiveName(basename(record.target)) && !this.revealAllowed(workspace, claim.ref, version, revealToken)) {
+        throw new YeismeFilesError('forbidden', 'sensitive reveal confirmation required', 403)
+      }
+      if (!refresh && version !== claim.version) return undefined
       if (claim.kind === 'image' || claim.kind === 'image-region') {
         const mediaType = opaqueMediaType(basename(record.target), opaqueEntryKind(basename(record.target), false))
         if (mediaType?.startsWith('image/') !== true || bytes.byteLength > DEFAULT_BINARY_READ_LIMIT) return undefined
@@ -402,20 +427,25 @@ export class OpaqueFileRefRegistry {
         const digest = claim.kind === 'image-region' && claim.region !== undefined
           ? imageRegionDigest(bytes, claim.region)
           : createHash('sha256').update(bytes).digest('hex')
-        if (claim.digest !== digest) return undefined
+        if (!refresh && claim.digest !== digest) return undefined
         return {
           id: claim.id, owner: 'dsh.local', ref: claim.ref, kind: claim.kind, intent: 'content', version, digest,
           scope: claim.scope, label: basename(record.target), ...(claim.region === undefined ? {} : { region: claim.region }),
           snapshot: { type: 'image', mediaType, bytes },
         }
       }
-      const window = claim.window
+      const window = refresh && claim.kind === 'file'
+        ? { start: 0, end: utf8CaptureEnd(bytes, 16_384) }
+        : claim.window
       if (window === undefined || !validByteWindow(window, bytes.byteLength)) return undefined
-      if (claim.kind === 'file' && claim.scope === 'file/full' && (window.start !== 0 || window.end !== bytes.byteLength)) return undefined
-      if (claim.kind === 'file' && claim.scope === 'file/prefix' && (window.start !== 0 || window.end >= bytes.byteLength)) return undefined
+      const scope = claim.kind === 'file'
+        ? (window.end === bytes.byteLength ? 'file/full' as const : 'file/prefix' as const)
+        : claim.scope
+      if (claim.kind === 'file' && window.start !== 0) return undefined
+      if (!refresh && claim.kind === 'file' && scope !== claim.scope) return undefined
       const selected = bytes.subarray(window.start, window.end)
       const digest = createHash('sha256').update(bytes).update(`:${window.start}:${window.end}`).digest('hex')
-      if (claim.digest !== digest) return undefined
+      if (!refresh && claim.digest !== digest) return undefined
       const text = selected.toString('utf8')
       if (Buffer.from(text, 'utf8').compare(selected) !== 0) return undefined
       return {
@@ -426,7 +456,7 @@ export class OpaqueFileRefRegistry {
         intent: 'content',
         version,
         digest,
-        scope: claim.scope,
+        scope,
         label: basename(record.target),
         preview: text.replace(/\s+/gu, ' ').trim().slice(0, 240),
         window,
@@ -491,6 +521,20 @@ function validByteWindow(window: { readonly start: number; readonly end: number 
   return Number.isSafeInteger(window.start) && Number.isSafeInteger(window.end)
     && window.start >= 0 && window.end > window.start && window.end <= size
     && window.end - window.start <= 16_384
+}
+
+function utf8CaptureEnd(bytes: Uint8Array, limit: number): number {
+  let end = Math.min(bytes.byteLength, limit)
+  const decoder = new TextDecoder('utf-8', { fatal: true })
+  while (end > 0) {
+    try {
+      decoder.decode(bytes.subarray(0, end))
+      return end
+    } catch {
+      end -= 1
+    }
+  }
+  return 0
 }
 
 function validNormalizedRegion(region: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }): boolean {

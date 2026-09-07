@@ -48,7 +48,13 @@ let stdout = '', stderr = ''
 for (const name of checks) {
   const command = `pnpm run ${name}`
   const started = Date.now()
-  const child = spawn('pnpm', ['run', name], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] })
+  // Verification must report dependency drift rather than letting pnpm 11's
+  // default "install" mode mutate the shared dependency tree before a gate.
+  const child = spawn('pnpm', ['run', name], {
+    cwd: root,
+    env: { ...process.env, pnpm_config_verify_deps_before_run: 'warn' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
   let out = '', err = ''
   child.stdout.on('data', chunk => { out += chunk })
   child.stderr.on('data', chunk => { err += chunk })
@@ -64,7 +70,7 @@ const exitCode = results.some(result => result.exit_code) ? 1 : 0
 await Promise.all([
   writeFile(resolve(dir, 'stdout.log'), stdout), writeFile(resolve(dir, 'stderr.log'), stderr),
   writeFile(resolve(dir, 'command.txt'), checks.map(name => `pnpm run ${name}`).join('\n') + '\n'),
-  writeFile(resolve(dir, 'env.json'), JSON.stringify({ node: process.version, platform: process.platform, redacted: true }, null, 2)),
+  writeFile(resolve(dir, 'env.json'), JSON.stringify({ node: process.version, platform: process.platform, dependency_verification: 'warn_without_install', redacted: true }, null, 2)),
   writeFile(resolve(dir, 'summary.json'), JSON.stringify({ schema_version: 'yeisme.integration_test_evidence.v1', run_id: runId, status: exitCode ? 'failed' : 'passed', exit_code: exitCode, results, redacted: true }, null, 2)),
 ])
 console.log(`Full plugin evidence: ${relative(root, dir)}`)

@@ -148,6 +148,8 @@ export interface SelectionReferenceBridge {
   }): Promise<SelectionReferenceResolution>
   /** Host-owned picker / conversation creation; the plugin never builds a session list. */
   chooseTarget?(signal?: AbortSignal): Promise<SelectionReferenceChooseTargetResult>
+  /** Host-owned preparation and insertion; raw reference bodies stay private to the Composer. */
+  insertReference?(detail: ComposerReferenceAddDetail, signal?: AbortSignal): Promise<ComposerReferenceAddResultDetail>
 }
 
 export interface ComposerReferenceRecord {
@@ -163,6 +165,16 @@ export interface ComposerReferenceRecord {
   readonly freshness: string
   readonly preview?: string
   readonly window?: Readonly<{ readonly start: number; readonly end: number }>
+  /** Additive owner-authorized snapshot; absent references retain the V1 path. */
+  readonly prompt?: {
+    readonly version: 1
+    readonly body: string
+    readonly originalBody: string
+    readonly source: Pick<ComposerReferenceRecord, 'owner' | 'ref' | 'version' | 'scope' | 'digest'>
+    readonly edited?: boolean
+  }
+  /** Server validates proof but sends only the Composer's editable projection. */
+  readonly projection?: 'editable-prompt'
 }
 
 export interface ComposerReferenceAddDetail {
@@ -1193,7 +1205,12 @@ function mountV2(input: {
     void bridge.resolveSelection({ anchor, context: state.context, quote, source }).then(result => {
       if (generation !== resolutionGeneration || pendingAnchor !== anchor) return
       if (result.status === 'available') {
-        selectionReference = { anchor, source, targetKey: referenceTargetKey(target), reference: result.reference }
+        selectionReference = {
+          anchor,
+          source,
+          targetKey: referenceTargetKey(target),
+          reference: result.reference,
+        }
         selectionUnavailableReason = undefined
       } else {
         selectionReference = undefined
@@ -1320,15 +1337,23 @@ function mountV2(input: {
     pendingReferenceRequests.set(requestId, pending)
     pendingReferenceIdentities.set(identity, requestId)
     activeReferenceRequestId = requestId
-    view.dispatchEvent(new CustomEvent(COMPOSER_REFERENCE_ADD_EVENT, {
-      detail: {
-        version: 1,
-        requestId,
-        target,
-        reference: resolved.reference,
-        ...(activation ? { activation: { focus: 'composer' as const } } : {}),
-      } satisfies ComposerReferenceAddDetail,
-    }))
+    const detail = {
+      version: 1 as const,
+      requestId,
+      target,
+      reference: resolved.reference,
+      ...(activation ? { activation: { focus: 'composer' as const } } : {}),
+    } satisfies ComposerReferenceAddDetail
+    const bridge = ensureReferenceBridge()
+    if (bridge?.insertReference !== undefined) {
+      void bridge.insertReference(detail).then(result => {
+        view.dispatchEvent(new CustomEvent(COMPOSER_REFERENCE_ADD_RESULT_EVENT, { detail: result }))
+      }).catch(() => {
+        view.dispatchEvent(new CustomEvent(COMPOSER_REFERENCE_ADD_RESULT_EVENT, { detail: { version: 1, requestId, target, ok: false, reason: 'reference insertion failed' } satisfies ComposerReferenceAddResultDetail }))
+      })
+    } else {
+      view.dispatchEvent(new CustomEvent(COMPOSER_REFERENCE_ADD_EVENT, { detail }))
+    }
     pending.timer = view.setTimeout(() => {
       const current = pendingReferenceRequests.get(requestId)
       if (current === undefined) return

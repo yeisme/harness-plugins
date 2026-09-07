@@ -25,7 +25,7 @@ export { createMediaLibraryView, createMediaResourceView, registerMediaPaneViews
 export { MediaLifecycleController, MediaLifecycleError } from './media-lifecycle.ts'
 export type { BoundedMediaMemory, MediaLifecyclePhase } from './media-lifecycle.ts'
 export { MediaImageRenderer, MediaCompareRenderer, MediaPlaybackRenderer, canPlayNatively, playbackMode, prefersReducedMotion, pixelsOf, rejectUnsafePlayback, IMAGE_PIXEL_BUDGET } from './media-renderers.tsx'
-export type { CompareItem, CompareMode, ImageFitMode, ImageRotation, LazyEnhancerLoader, MediaImageRendererLabels, MediaPlaybackRendererLabels } from './media-renderers.tsx'
+export type { CompareItem, CompareMode, ImageFitMode, ImageRotation, LazyEnhancerLoader, MediaImageRendererLabels, MediaImageSelectionV1, MediaPlaybackRendererLabels, MediaTimeSelectionV1 } from './media-renderers.tsx'
 export type { MediaPaneSurface, MediaPaneViewDeps, PaneLocalProps } from './pane-views.tsx'
 export type { MediaGalleryItem } from './media-gallery.tsx'
 export { MediaNodeView, mediaNodeDefinition } from './media-node.tsx'

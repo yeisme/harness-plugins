@@ -38,6 +38,15 @@ export type ComposerReferenceKindV2 =
 export type ComposerReferenceIntentV2 = 'content' | 'collaborator' | 'guidance' | 'capability'
 export type ComposerReferenceFreshnessV2 = 'fresh' | 'stale' | 'frozen' | 'unavailable'
 
+/** Additive Host draft payload; V1 structured references deliberately omit it. */
+export interface EditablePromptReferenceV1 {
+  readonly version: 1
+  readonly body: string
+  readonly originalBody: string
+  readonly source: Pick<ComposerReferenceV2, 'owner' | 'ref' | 'version' | 'scope' | 'digest'>
+  readonly edited?: boolean
+}
+
 /** Main-conversation identity captured by the source surface, never inferred from DOM focus. */
 export interface ComposerReferenceTargetV2 {
   readonly workspaceId: string
@@ -61,6 +70,12 @@ export interface ComposerReferenceV2 {
   readonly freshness: ComposerReferenceFreshnessV2
   readonly unavailableReason?: string
   readonly preview?: string
+  /** Owner-authorized source snapshot, editable only inside the Host Composer. */
+  readonly prompt?: EditablePromptReferenceV1
+  /** Server validates the source proof but does not inject its text again. */
+  readonly projection?: 'editable-prompt'
+  /** Opaque Host grant retained only in the Composer draft. */
+  readonly editableGrant?: string
   readonly window?: { readonly start: number; readonly end: number }
   readonly region?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
 }
@@ -71,6 +86,8 @@ export interface ComposerReferenceBridgeFeaturesV1 {
   readonly activation?: boolean
   /** Host owns an explicit conversation picker / creation entry (chooseTarget). */
   readonly chooseTarget?: boolean
+  /** Host can retain an editable body inside the existing Composer. */
+  readonly editablePrompt?: boolean
 }
 
 export interface ComposerReferenceBridgeSnapshotV1 {
@@ -109,6 +126,22 @@ export interface ComposerReferenceBridgeV1 {
   }): Promise<{ readonly status: 'available'; readonly reference: ComposerReferenceV2 } | { readonly status: 'unavailable'; readonly reason: string }>
   /** Host-owned picker / conversation creation; the plugin never builds a session list. */
   chooseTarget?(signal?: AbortSignal): Promise<ComposerReferenceChooseTargetResultV1>
+  /** Prepare owner content privately; raw body never crosses a Window event. */
+  prepareReference?(input: {
+    readonly target: ComposerReferenceTargetV2
+    readonly reference: ComposerReferenceV2
+    readonly ownerAuthorization?: { readonly revealToken: string }
+  }, signal?: AbortSignal): Promise<
+    | { readonly status: 'available'; readonly reference: ComposerReferenceV2 }
+    | { readonly status: 'unavailable'; readonly reason: string }
+  >
+  /** Prepare and insert through the Host-owned target/revision transaction. */
+  insertReference?(detail: ComposerReferenceAddToMainDetailV1, signal?: AbortSignal): Promise<ComposerReferenceAddToMainResultV1>
+  /** Reconcile one exact private insertion without inferring success from draft membership. */
+  referenceInsertion?(input: {
+    readonly requestId: string
+    readonly target: Pick<ComposerReferenceTargetV2, 'workspaceId' | 'conversationId'>
+  }): ComposerReferenceInsertionStatusV1
 }
 
 export interface ComposerReferenceCatalogCandidateV1 {
@@ -144,7 +177,20 @@ export interface ComposerReferenceAddToMainResultV1 {
   readonly reason?: string
   /** Present only when the host confirmed (true) or denied (false) composer activation. */
   readonly activated?: boolean
+  /** Exact inserted occurrence and media/range attribution, when insertion succeeded. */
+  readonly reference?: {
+    readonly id: string
+    readonly occurrenceId?: number
+    readonly kind: ComposerReferenceKindV2
+    readonly window?: { readonly start: number; readonly end: number }
+    readonly region?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
+  }
 }
+
+export type ComposerReferenceInsertionStatusV1 =
+  | { readonly status: 'unknown' }
+  | { readonly status: 'pending' }
+  | { readonly status: 'settled'; readonly receipt: ComposerReferenceAddToMainResultV1 }
 
 export interface ComposerReferenceHostInsertDetailV1 {
   readonly version: typeof COMPOSER_REFERENCE_PROTOCOL_VERSION
@@ -185,6 +231,8 @@ export interface ComposerReferenceDraftV2 {
   readonly prepared?: {
     readonly submissionId: string
     readonly referenceIds: readonly string[]
+    /** Frozen instance snapshots; acknowledgements never consume later edits. */
+    readonly referenceIdentities: Readonly<Record<string, string>>
   }
 }
 
@@ -205,6 +253,12 @@ function targetEqual(left: ComposerReferenceTargetV2, right: ComposerReferenceTa
 
 function isUsable(reference: ComposerReferenceV2): boolean {
   return reference.freshness === 'fresh' || reference.freshness === 'frozen'
+}
+
+/** Browser handoff may carry an authorized body once; draft mirrors retain proof only. */
+function safeDraftReference(reference: ComposerReferenceV2): ComposerReferenceV2 {
+  const { prompt: _prompt, editableGrant: _editableGrant, ...safe } = reference
+  return safe
 }
 
 /** Exact owner-issued attachment identity; distinct windows/regions never collapse. */
@@ -268,7 +322,8 @@ export class ComposerReferenceDraftControllerV2 {
     const current = this.drafts.get(key) ?? { target, revision: 0, references: [] }
     const identity = referenceIdentity(reference)
     const existing = current.references.find(item => referenceIdentity(item) === identity)
-    const references = existing === undefined ? [...current.references, reference] : current.references.map(item => item.id === existing.id ? reference : item)
+    const stored = safeDraftReference(reference)
+    const references = existing === undefined ? [...current.references, stored] : current.references.map(item => item.id === existing.id ? stored : item)
     this.drafts.set(key, { target, revision: current.revision + 1, references, ...(current.prepared === undefined ? {} : { prepared: current.prepared }) })
     this.activeTarget = target
     this.publish()
@@ -283,7 +338,7 @@ export class ComposerReferenceDraftControllerV2 {
       const identity = referenceIdentity(reference)
       if (seen.has(identity)) continue
       seen.add(identity)
-      unique.push(reference)
+      unique.push(safeDraftReference(reference))
     }
     const key = targetKey(target)
     const current = this.drafts.get(key)
@@ -323,13 +378,46 @@ export class ComposerReferenceDraftControllerV2 {
     this.publish()
   }
 
+  /**
+   * Apply an owner-authorized refresh only against the exact draft revision
+   * used to open comparison. Callers must re-run comparison after any edit.
+   */
+  refresh(target: ComposerReferenceTargetV2, referenceId: string, expectedRevision: number, refreshed: ComposerReferenceV2): { readonly ok: boolean; readonly reason?: string } {
+    const key = targetKey(target)
+    const current = this.drafts.get(key)
+    if (current === undefined) return { ok: false, reason: 'reference draft is unavailable' }
+    if (current.revision !== expectedRevision) return { ok: false, reason: 'reference draft changed; compare the current body again' }
+    const existing = current.references.find(item => item.id === referenceId)
+    if (existing === undefined) return { ok: false, reason: 'reference is unavailable' }
+    if (existing.owner !== refreshed.owner || existing.ref !== refreshed.ref || existing.kind !== refreshed.kind || refreshed.prompt === undefined || refreshed.projection !== 'editable-prompt') {
+      return { ok: false, reason: 'refreshed source no longer matches this editable reference' }
+    }
+    this.drafts.set(key, {
+      ...current,
+      revision: current.revision + 1,
+      references: current.references.map(item => item.id === referenceId ? refreshed : item),
+      prepared: undefined,
+    })
+    this.publish()
+    return { ok: true }
+  }
+
   prepare(target: ComposerReferenceTargetV2, submissionId: string): { readonly ok: boolean; readonly reason?: string; readonly references?: readonly ComposerReferenceV2[] } {
     const current = this.drafts.get(targetKey(target))
     if (current === undefined) return { ok: true, references: [] }
     const blocked = current.references.find(item => !isUsable(item))
     if (blocked !== undefined) return { ok: false, reason: blocked.unavailableReason ?? 'reference is stale; refresh or remove it before sending' }
     const references = current.references.map(item => ({ ...item, freshness: 'frozen' as const }))
-    this.drafts.set(targetKey(target), { ...current, revision: current.revision + 1, references, prepared: { submissionId, referenceIds: references.map(item => item.id) } })
+    this.drafts.set(targetKey(target), {
+      ...current,
+      revision: current.revision + 1,
+      references,
+      prepared: {
+        submissionId,
+        referenceIds: references.map(item => item.id),
+        referenceIdentities: Object.fromEntries(references.map(item => [item.id, referenceIdentity(item)])),
+      },
+    })
     this.publish()
     return { ok: true, references }
   }
@@ -338,8 +426,13 @@ export class ComposerReferenceDraftControllerV2 {
     const key = targetKey(target)
     const current = this.drafts.get(key)
     if (current?.prepared?.submissionId !== submissionId) return
-    const submitted = new Set(current.prepared.referenceIds)
-    this.drafts.set(key, { ...current, revision: current.revision + 1, references: current.references.filter(item => !submitted.has(item.id)) })
+    const prepared = current.prepared
+    this.drafts.set(key, {
+      ...current,
+      revision: current.revision + 1,
+      references: current.references.filter(item => prepared.referenceIdentities[item.id] !== referenceIdentity(item)),
+      prepared: undefined,
+    })
     this.publish()
   }
 

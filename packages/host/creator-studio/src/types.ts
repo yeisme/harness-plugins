@@ -38,6 +38,87 @@ export interface CreatorTextPreviewV1 {
   readonly after?: string
 }
 
+/** Bounded candidate projection; the artifact owner retains canonical state. */
+export interface CreatorArtifactCandidateV1 {
+  readonly ref: string
+  readonly version: string
+  readonly title: string
+  readonly status: 'draft' | 'ready' | 'adopted' | 'superseded' | 'conflict'
+  readonly sourceVersion?: string
+  readonly artifact?: ArtifactRefV1
+  readonly textPreview?: CreatorTextPreviewV1
+  /** Owner-authorized proof used only to construct a Host Composer reference. */
+  readonly referenceProof?: CreatorArtifactReferenceProofV1
+}
+
+export interface CreatorArtifactReferenceProofV1 {
+  readonly id: string
+  readonly kind: 'file' | 'directory' | 'selection' | 'message' | 'terminal' | 'image' | 'image-region' | 'agent' | 'skill' | 'tool'
+  readonly intent: 'content'
+  readonly scope: 'artifact/body' | 'artifact/media'
+  readonly digest: string
+  readonly freshness: 'fresh' | 'stale' | 'frozen' | 'unavailable'
+  readonly unavailableReason?: string
+}
+
+/** A server-authored descriptor binding for one optional artifact operation. */
+export interface CreatorArtifactActionBindingV1 {
+  readonly descriptorRef: string
+  /** Field that accepts current ephemeral editor text, if the owner offers one. */
+  readonly contentField?: string
+  /** Owner content revision/CAS field paired with contentField. */
+  readonly contentRevisionField?: string
+  /** Owner-declared action fields that bind the selected candidate snapshot. */
+  readonly candidateRefField?: string
+  readonly candidateVersionField?: string
+  /** Owner-declared source revision/CAS field for writeback or adoption. */
+  readonly sourceVersionField?: string
+  /** Owner-declared bounded range field for media selections. */
+  readonly rangeField?: string
+  /** Owner-declared annotation field accompanying a media selection. */
+  readonly annotationField?: string
+}
+
+/** Authorized editor body; this may only cross into ephemeral editor state. */
+export interface CreatorArtifactContentV1 {
+  readonly artifact: ArtifactRefV1
+  readonly contentRevision: string
+  readonly content: string
+}
+
+/** All operations are optional and resolve to current owner action descriptors. */
+export interface CreatorArtifactLifecycleActionsV1 {
+  readonly saveDraft?: CreatorArtifactActionBindingV1
+  readonly createCandidate?: CreatorArtifactActionBindingV1
+  readonly compare?: CreatorArtifactActionBindingV1
+  readonly adopt?: CreatorArtifactActionBindingV1
+  readonly writeback?: CreatorArtifactActionBindingV1
+  readonly attachContext?: CreatorArtifactActionBindingV1
+  readonly openEnvironment?: CreatorArtifactActionBindingV1
+}
+
+export interface CreatorArtifactWorkspaceItemV1 {
+  readonly artifact: ArtifactRefV1
+  readonly acceptedVersion: string
+  readonly sourceVersion?: string
+  readonly textPreview?: CreatorTextPreviewV1
+  readonly referenceProof?: CreatorArtifactReferenceProofV1
+  readonly media?: {
+    readonly width?: number
+    readonly height?: number
+    readonly durationMs?: number
+  }
+  readonly candidates: readonly CreatorArtifactCandidateV1[]
+  readonly actions?: CreatorArtifactLifecycleActionsV1
+}
+
+/** Additive owner projection for the Creator artifact workspace. */
+export interface CreatorArtifactWorkspaceV1 {
+  readonly status: 'ready' | 'partial' | 'needs_contract'
+  readonly safeMessage: string
+  readonly artifacts: readonly CreatorArtifactWorkspaceItemV1[]
+}
+
 export interface CreatorResourceV1 {
   readonly ref: string
   readonly version: string
@@ -198,6 +279,7 @@ export interface CreatorOwnerSnapshotV1 {
   readonly production?: CreatorProductionV1
   readonly reviews?: readonly CreatorReviewV1[]
   readonly jobs?: readonly CreatorJobV1[]
+  readonly artifactWorkspace?: CreatorArtifactWorkspaceV1
 }
 
 export interface CreatorOwnerProjectionV1 extends Omit<CreatorOwnerSnapshotV1, 'transport' | 'context'> {
@@ -238,6 +320,8 @@ export interface CreatorOwnerAdapterV1 {
   listAssets?(query: CreatorOwnerAssetQueryV1, context: CreatorStudioContextV1): CreatorOwnerAssetListV1 | Promise<CreatorOwnerAssetListV1>
   dispatch(request: PaneActionRequestV1, context: CreatorStudioContextV1): PaneActionReceiptV1 | Promise<PaneActionReceiptV1>
   resolveArtifact?(artifact: ArtifactRefV1, context: CreatorStudioContextV1): CreatorMediaAccessV1 | undefined | Promise<CreatorMediaAccessV1 | undefined>
+  /** Optional full-body seam for direct editing; never part of a snapshot. */
+  readArtifactContent?(artifact: ArtifactRefV1, context: CreatorStudioContextV1): CreatorArtifactContentV1 | undefined | Promise<CreatorArtifactContentV1 | undefined>
 }
 
 export interface CreatorStudioTransportPolicyV1 {

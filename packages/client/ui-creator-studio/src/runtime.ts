@@ -5,6 +5,7 @@ import type {
   PaneActionValueV1,
 } from '@yeisme/dsh-pane-protocol'
 import type { CreatorAssetQueryV1 } from '@yeisme/dsh-creator-studio-host/contracts'
+import type { CreatorArtifactContentV1 } from '@yeisme/dsh-creator-studio-host/contracts'
 import { CreatorStudioController, type CreatorStudioViewState } from './controller.ts'
 
 export type { CreatorStudioViewState } from './controller.ts'
@@ -28,6 +29,7 @@ export interface CreatorStudioRuntimeV1 {
   refresh(): Promise<void>
   loadAssets(query: CreatorAssetQueryV1, append?: boolean): Promise<void>
   resolveArtifact(artifact: ArtifactRefV1): Promise<string | undefined>
+  readArtifactContent(artifact: ArtifactRefV1): Promise<CreatorArtifactContentV1 | undefined>
   dispatchAction(
     descriptor: PaneActionDescriptorV1,
     values: Readonly<Record<string, PaneActionValueV1>>,
@@ -46,6 +48,7 @@ export function createCreatorStudioRuntime(controller: CreatorStudioController):
     refresh: () => controller.refresh(),
     loadAssets: (query: CreatorAssetQueryV1, append = false) => controller.loadAssets(query, append),
     resolveArtifact: (artifact: ArtifactRefV1) => controller.resolveArtifact(artifact),
+    readArtifactContent: (artifact: ArtifactRefV1) => controller.readArtifactContent(artifact),
     dispatchAction: (
       descriptor: PaneActionDescriptorV1,
       values: Readonly<Record<string, PaneActionValueV1>>,
