@@ -16,22 +16,23 @@ const entry: FileEntryV1 = {
   capabilities: ['preview', 'open', 'edit'],
 }
 
-function languageHost(overrides: Partial<LanguageIntelligenceHostV1> = {}): LanguageIntelligenceHostV1 {
+function languageHost(overrides: Partial<LanguageIntelligenceHostV1> = {}, body: Record<string, string> = { 'file-safe': 'export const value = 1\n' }): LanguageIntelligenceHostV1 {
   return {
     version: '0.1.0-rc.1',
     capability: LANGUAGE_INTELLIGENCE_CAPABILITY,
     async probe() { return { capability: LANGUAGE_INTELLIGENCE_CAPABILITY, engine: 'ast-only', languageId: 'typescript', features: ['structure'], reason: 'ready' } },
-    async open() {
+    async open(input) {
+      const ref = (input as { ref?: string }).ref ?? 'file-safe'
       return {
         capability: LANGUAGE_INTELLIGENCE_CAPABILITY,
         engine: 'ast-only',
         languageId: 'typescript',
         features: ['structure'],
         reason: 'AST fallback active',
-        handleId: 'handle-safe',
-        modelUri: 'dsh-resource://model/handle-safe',
-        title: 'example.ts',
-        text: 'export const value = 1\n',
+        handleId: `handle-${ref === 'file-safe' ? 'safe' : ref}`,
+        modelUri: `dsh-resource://model/handle-${ref === 'file-safe' ? 'safe' : ref}`,
+        title: `${ref === 'file-safe' ? 'example' : ref}.ts`,
+        text: body[ref] ?? body['file-safe'] ?? 'export const value = 1\n',
         truncated: false,
         readOnly: false,
         fileVersion: 'v1',
@@ -121,5 +122,58 @@ describe('SemanticFileEditor', () => {
     await waitFor(() => { expect(apply).toHaveBeenCalledWith('session-safe', 'preview-safe') })
     await waitFor(() => { expect(didSave).toHaveBeenCalledWith('handle-safe', 'v2') })
     expect((screen.getByRole('textbox', { name: 'example.ts 源码' }) as HTMLTextAreaElement).value).toContain('// formatted')
+  })
+})
+
+describe('renderer buffer independence across layout restore', () => {
+  const first: FileEntryV1 = { ...entry, id: 'file-a', name: 'alpha.ts' }
+  const second: FileEntryV1 = { ...entry, id: 'file-b', name: 'beta.ts' }
+  const bodies = { 'file-a': 'export const alpha = 1\n', 'file-b': 'export const beta = 2\n' }
+  const host = () => languageHost({}, bodies)
+  const listing = async () => [first, second]
+
+  function twoEditors() {
+    return <div>
+      <SemanticFileEditor entry={first} fileHost={{ ...fileHost(), listEntries: listing }} languageHost={host()} sessionId="session-layout" />
+      <SemanticFileEditor entry={second} fileHost={{ ...fileHost(), listEntries: listing }} languageHost={host()} sessionId="session-layout" />
+    </div>
+  }
+
+  it('keeps two unsaved bodies independent while mounted and never swaps bindings on remount', async () => {
+    const { unmount } = render(twoEditors())
+    const alphaBox = await screen.findByRole('textbox', { name: 'alpha.ts 源码' })
+    const betaBox = await screen.findByRole('textbox', { name: 'beta.ts 源码' })
+    expect((alphaBox as HTMLTextAreaElement).value).toBe('export const alpha = 1\n')
+    expect((betaBox as HTMLTextAreaElement).value).toBe('export const beta = 2\n')
+    // Both editors carry unsaved local edits; dirty state stays per instance.
+    fireEvent.change(alphaBox, { target: { value: 'export const alpha = 11 // unsaved\n' } })
+    fireEvent.change(betaBox, { target: { value: 'export const beta = 22 // unsaved\n' } })
+    expect((alphaBox as HTMLTextAreaElement).value).toContain('alpha = 11')
+    expect((betaBox as HTMLTextAreaElement).value).toContain('beta = 22')
+    expect((alphaBox as HTMLTextAreaElement).value).not.toContain('beta')
+    // Layout restore remounts the renderer: each pane reopens its own entry and
+    // one pane's unsaved body never surfaces in the other pane.
+    unmount()
+    render(twoEditors())
+    const nextAlpha = await screen.findByRole('textbox', { name: 'alpha.ts 源码' })
+    const nextBeta = await screen.findByRole('textbox', { name: 'beta.ts 源码' })
+    expect((nextAlpha as HTMLTextAreaElement).value).toBe('export const alpha = 1\n')
+    expect((nextBeta as HTMLTextAreaElement).value).toBe('export const beta = 2\n')
+    expect((nextAlpha as HTMLTextAreaElement).value).not.toContain('beta')
+    expect((nextBeta as HTMLTextAreaElement).value).not.toContain('alpha')
+  })
+
+  it('does not let one pane save into the other entry after remount', async () => {
+    const writeText = vi.fn(async () => ({ status: 'ok' as const, version: 'v2' }))
+    const { unmount } = render(twoEditors())
+    await screen.findAllByRole('textbox')
+    unmount()
+    const hosts = host()
+    render(<SemanticFileEditor entry={first} fileHost={{ ...fileHost(writeText), listEntries: listing }} languageHost={hosts} sessionId="session-layout" />)
+    const box = await screen.findByRole('textbox', { name: 'alpha.ts 源码' })
+    fireEvent.change(box, { target: { value: 'export const alpha = 3\n' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => { expect(writeText).toHaveBeenCalledWith(first, 'export const alpha = 3\n', 'v1') })
+    expect(writeText).toHaveBeenCalledTimes(1)
   })
 })
