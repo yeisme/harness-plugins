@@ -14,6 +14,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { createElement } from 'react'
 import type { ToolsTranslator } from './McpInspectorView.tsx'
 import { en, NS, zh } from './locales.ts'
+import { SessionToolsWorkspace } from './workspace-state.ts'
+import type { ToolActivityRecord } from './activity.ts'
 import { ToolsPane } from './pane.tsx'
 
 export { McpInspectorView, renderToolsInspectorTree } from './McpInspectorView.tsx'
@@ -53,56 +55,91 @@ export { en, NS, zh } from './locales.ts'
 export type { McpInspectorKey } from './locales.ts'
 
 export const name = 'client-ui-mcp-inspector'
-export const inject = ['locale', 'sessions'] as const
+export const inject = ['locale', 'sessions', 'slots'] as const
 
 interface PaneFace {
-  registerView(input: {
-    descriptor: Record<string, unknown>
-    i18n: { namespace: string; labelKey: string }
-    component: () => unknown
-  }): () => void
+  registerView(input: { descriptor: Record<string, unknown>; i18n: { namespace: string; labelKey: string }; component: (props: { view: { id: string; metadata?: Record<string, unknown>; resourceKey: string } }) => unknown }): () => void
   openView(input: unknown): unknown
+  controller?: {
+    getSnapshot(): { views: Record<string, { id: string; kind: string; resourceKey: string; groupId: string; metadata?: Record<string, unknown> }> }
+    dispatch(intent: Record<string, unknown>): unknown
+  }
 }
-
+interface Navigation { open(sessionId: string, view: string, focus?: string): boolean }
+export interface SessionToolsFace {
+  openSessionTools(input: { sessionId?: string; presentation: 'tab' | 'pane' }): boolean
+  openGlobalTools(): void
+  rebindPane(paneId: string, sessionId: string): boolean
+}
 function asPane(value: unknown): PaneFace | undefined {
   const pane = value as Partial<PaneFace> | undefined
   return typeof pane?.registerView === 'function' && typeof pane.openView === 'function' ? pane as PaneFace : undefined
 }
 
-/** Optional service probe also handles sibling load order and hot unload. */
+/** Session tabs and explicitly bound companion panes share one presentation controller. */
 export function apply(ctx: ClientContext): () => void {
   const disposeLocale = ctx.locale.register(NS, { zh, en })
   const t = ctx.locale.bind(NS) as unknown as ToolsTranslator
   const sessions = ctx.get('sessions') as ISessions
+  const workspace = new SessionToolsWorkspace(ctx)
+  const get = (key: string): unknown => { try { return ctx.get(key as never) } catch { return undefined } }
+  const navigation = () => get('conversationNavigation') as Navigation | undefined
   let pane: PaneFace | undefined
   let disposePane = () => {}
+  const descriptor = (global: boolean) => ({ kind: global ? 'tools-manager' : 'mcp-inspector', label: t(global ? 'view.globalTools' : 'view.tools'), componentKey: global ? 'tools-manager' : 'mcp-inspector', role: 'inspector', preferredRegion: 'right', retention: 'keep-alive', singleton: global })
+  const openGlobalTools = () => { pane?.openView({ ...descriptor(true), resourceKey: 'tools-manager', title: t('view.globalTools'), pinned: true }) }
+  const title = (id: string) => `${sessions.list.getSnapshot().byId?.[id as never]?.displayTitle ?? id.slice(0,8)} · ${t('view.tools')}`
+  const openSessionTools = ({ sessionId, presentation }: { sessionId?: string; presentation: 'tab' | 'pane' }): boolean => {
+    if (!sessionId) { openGlobalTools(); return pane !== undefined }
+    if (presentation === 'tab') return navigation()?.open(sessionId, 'mcp-inspector') ?? false
+    if (!pane) return false
+    const before = Object.values(pane.controller?.getSnapshot().views ?? {})
+    const existing = before.find(view => view.kind === 'mcp-inspector' && view.resourceKey === `session:${sessionId}`)
+    const source = before.find(view => view.kind === 'conversation' && view.metadata?.sessionId === sessionId)
+    pane.openView({ ...descriptor(false), resourceKey: `session:${sessionId}`, metadata: { sessionId }, title: title(sessionId), pinned: true })
+    if (!existing && source) {
+      const opened = Object.values(pane.controller?.getSnapshot().views ?? {}).find(view => view.kind === 'mcp-inspector' && view.resourceKey === `session:${sessionId}`)
+      if (opened) pane.controller?.dispatch({ type: 'split_with_view', viewId: opened.id, targetGroupId: source.groupId, edge: 'right' })
+    }
+    return true
+  }
+  const reveal = (sessionId: string, record: ToolActivityRecord) => { navigation()?.open(sessionId, 'chat', `tool-result:${record.sequence}`) }
   const mount = (next: PaneFace | undefined): void => {
     if (next === pane) return
-    disposePane()
-    disposePane = () => {}
-    pane = next
-    if (next === undefined) return
-    disposePane = next.registerView({
-      descriptor: {
-        kind: 'mcp-inspector', label: t('view.tools'), componentKey: 'mcp-inspector',
-        role: 'inspector', preferredRegion: 'right', retention: 'recreate', singleton: true,
+    disposePane(); pane = next; disposePane = () => {}
+    if (!next) return
+    const disposers = [false, true].map(manager => next.registerView({
+      descriptor: descriptor(manager), i18n: { namespace: NS, labelKey: manager ? 'view.globalTools' : 'view.tools' },
+      component: ({ view }) => {
+        const sessionId = manager ? undefined : typeof view.metadata?.sessionId === 'string' ? view.metadata.sessionId : undefined
+        return createElement(ToolsPane, { ctx, sessions, workspace, t, sessionId, manager,
+          ...(manager && typeof (get('settingsNavigation') as { open?: unknown } | undefined)?.open === 'function' ? { onSettings: () => { (get('settingsNavigation') as { open(section: string): void }).open('plugins') } } : {}),
+          onSessionSelected: id => { rebindPane(view.id, id) },
+          ...(!sessionId || !navigation() ? {} : { onOpenSession: () => { navigation()?.open(sessionId, 'chat') }, onRevealCall: (record: ToolActivityRecord) => reveal(sessionId, record) }),
+          ...(!manager ? { onManage: openGlobalTools } : {}),
+        })
       },
-      i18n: { namespace: NS, labelKey: 'view.tools' },
-      component: () => createElement(ToolsPane, { ctx, sessions, t }),
-    })
+    }))
+    disposePane = () => { for (const off of disposers) off() }
   }
-  let offService = () => {}
-  try {
-    let initial: unknown
-    try { initial = ctx.get('paneWorkbench' as never) } catch { /* optional host capability */ }
-    mount(asPane(initial))
-    offService = ctx.on('internal/service', (service, value) => {
-      if (service === 'paneWorkbench') mount(asPane(value))
-    }, { global: true })
-  } catch (error) {
-    disposePane()
-    disposeLocale()
-    throw error
+  const slots = ctx.get('slots') as unknown as { inject(name: string, factory: () => () => void): () => void; register(options: unknown, component: (props: { boundSessionId: string }) => unknown): () => void }
+  const offTab = slots.inject('conversation.view', () => slots.register({ name: 'conversation.view', id: 'mcp-inspector', order: 30, locale: NS, label: () => t('view.tools'), inject: (sessionId: string) => ({ boundSessionId: sessionId }) }, ({ boundSessionId }) => createElement('div', { 'data-conversation-readonly-view': true, 'data-tools-session-tab': true }, createElement(ToolsPane, {
+    ctx, sessions, workspace, t, sessionId: boundSessionId,
+    ...(pane ? { onPin: () => { openSessionTools({ sessionId: boundSessionId, presentation: 'pane' }) } } : {}),
+    onManage: openGlobalTools, ...(navigation() ? { onRevealCall: (record: ToolActivityRecord) => reveal(boundSessionId, record) } : {}),
+  }))))
+  function rebindPane(paneId: string, sessionId: string): boolean {
+    if (!openSessionTools({ sessionId, presentation: 'pane' })) return false
+    const target = Object.values(pane?.controller?.getSnapshot().views ?? {}).find(view => view.kind === 'mcp-inspector' && view.resourceKey === `session:${sessionId}`)
+    if (target && paneId !== target.id) pane?.controller?.dispatch({ type: 'close_view', viewId: paneId })
+    return true
   }
-  return () => { offService(); disposePane(); disposeLocale() }
+  const offFace = ctx.provide('sessionTools' as never, { openSessionTools, openGlobalTools, rebindPane } as never)
+  mount(asPane(get('paneWorkbench')))
+  const offService = ctx.on('internal/service', (service, value) => {
+    if (service === 'paneWorkbench') mount(asPane(value))
+    if (['remote', 'paneWorkbench', 'conversationNavigation', 'settingsNavigation'].includes(String(service)) || String(service).startsWith('remote.')) workspace.refreshActive()
+  }, { global: true })
+  const offReset = ctx.on('connection/reset' as never, (() => workspace.refreshActive()) as never)
+  return () => { offReset(); offService(); offFace(); offTab(); disposePane(); workspace.dispose(); disposeLocale() }
 }

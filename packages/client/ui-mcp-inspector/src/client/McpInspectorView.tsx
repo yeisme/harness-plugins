@@ -6,8 +6,9 @@
  *
  * @module @yeisme/dsh-client-ui-mcp-inspector/client
  */
-import { useEffect, useState, useSyncExternalStore, type CSSProperties, type JSX } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type JSX, type ReactNode } from 'react'
 import type { ConvViewProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import { ToolsViewState } from './workspace-state.ts'
 import { Surface } from '@yeisme/dsh-client-ui-surface'
 import {
   deriveToolActivity,
@@ -59,6 +60,14 @@ export interface ToolsInspectorTreeProps {
   readonly now?: number
   readonly canRefresh?: boolean
   readonly t?: ToolsTranslator
+  readonly viewState?: ToolsViewState
+  readonly toolbarActions?: ReactNode
+  readonly contextLabel?: string
+  readonly readOnlyCatalog?: boolean
+  readonly globalManagement?: boolean
+  readonly onRevealCall?: ((record: ToolActivityRecord) => void) | undefined
+  readonly selectedCall?: string | undefined
+  readonly onSelectCall?: (key: string | undefined) => void
   readonly onQueryChange: (query: string) => void
   readonly onFamilyChange: (family: FamilyFilter) => void
   readonly onEnabledChange: (enabled: EnabledFilter) => void
@@ -209,7 +218,10 @@ function timelineStyle(record: ToolActivityRecord, records: readonly ToolActivit
   } as CSSProperties
 }
 
-function ActivityPanel({ activity, mode, filter, now, text, onMode, onFilter }: {
+function ActivityPanel({ activity, mode, filter, now, text, onMode, onFilter, selectedCall, onSelectCall, onRevealCall }: {
+  readonly selectedCall?: string | undefined
+  readonly onSelectCall?: ((key: string | undefined) => void) | undefined
+  readonly onRevealCall?: ((record: ToolActivityRecord) => void) | undefined
   readonly activity: ToolActivitySnapshot
   readonly mode: ActivityMode
   readonly filter: ActivityFilter
@@ -218,9 +230,17 @@ function ActivityPanel({ activity, mode, filter, now, text, onMode, onFilter }: 
   readonly onMode: (mode: ActivityMode) => void
   readonly onFilter: (filter: ActivityFilter) => void
 }): JSX.Element {
-  const records = activity.records.filter(record => filter === 'all' || (filter === 'errors' ? record.isError : record.running))
+  const activityRoot = useRef<HTMLElement>(null)
+  const closeDetails = () => {
+    const target = activityRoot.current?.querySelector<HTMLButtonElement>('.tools-record-name[aria-pressed=true]')
+    onSelectCall?.(undefined)
+    requestAnimationFrame(() => { if (target?.isConnected) target.focus() })
+  }
+  const records = activity.records.filter(record => filter === 'all' || (filter === 'errors' ? record.isError : record.running)).sort((a,b) => Number(b.running) - Number(a.running))
+  const callKey = (record: ToolActivityRecord) => `${record.sequence}-${record.time}-${record.tool}`
+  const selected = activity.records.find(record => callKey(record) === selectedCall)
   return (
-    <section className="tools-pane tools-activity-pane" data-section="right" data-content="activity" aria-label={text('section.activity')}>
+    <section ref={activityRoot} onKeyDown={event => { if (event.key === 'Escape' && selected) { event.preventDefault(); event.stopPropagation(); closeDetails() } }} className="tools-pane tools-activity-pane" data-section="right" data-content="activity" aria-label={text('section.activity')}>
       <header className="tools-pane-header">
         <div><h2>{text('section.activity')}</h2><p>{text('summary.calls', { count: activity.calls })} · {text('summary.errors', { count: activity.errors })} · {text('summary.running', { count: activity.running })}</p></div>
         <div className="tools-compact-controls" role="toolbar" aria-label={text('section.activity')}>
@@ -230,12 +250,19 @@ function ActivityPanel({ activity, mode, filter, now, text, onMode, onFilter }: 
       <div className="tools-compact-controls tools-activity-filter" role="toolbar" aria-label={text('section.activity')}>
         {(['all', 'errors', 'running'] as const).map(value => <button key={value} type="button" className="tools-chip" aria-pressed={filter === value} onClick={() => onFilter(value)}>{text(`activity.${value}`)}</button>)}
       </div>
+      <p className="tools-window-note">{text('activity.window', { shown: activity.records.length, total: activity.calls })}</p>
+      {selected && <section className="tools-call-details" aria-label={text('tab.details')}>
+        <button type="button" className="vk-btn" onClick={closeDetails}>{text('action.back')}</button>
+        <strong>{recordName(selected, text)}</strong><p>{recordStatus(selected, text)} · {formatTime(selected.time)}</p>
+        {selected.isError && <p>{selected.errorCode ? text('activity.errorSummary', { name: selected.errorName ?? 'Error', code: selected.errorCode }) : text('activity.errorSummaryUnavailable')}</p>}
+        <button type="button" className="vk-btn" disabled={!onRevealCall || selected.running} title={!onRevealCall ? text('activity.navigationUnavailable') : undefined} onClick={() => onRevealCall?.(selected)}>{text('activity.reveal')}</button>
+      </section>}
       {records.length === 0 ? <div className="vk-empty tools-empty"><p>{text('empty.activity')}</p><small>{text('empty.activity.hint')}</small></div> : mode === 'list' ? (
         <ol className="tools-activity-list">
           {records.map(record => (
-            <li key={`${record.sequence}-${record.time}-${record.tool}`} className="tools-activity-row">
+            <li key={`${record.sequence}-${record.time}-${record.tool}`} className="tools-activity-row" data-running={record.running}>
               <i className="vk-dot" data-tone={record.running ? 'info' : record.isError ? 'critical' : 'positive'} aria-hidden="true" />
-              <span className="tools-record-name">{recordName(record, text)}</span>
+              <button type="button" className="tools-record-name" aria-pressed={selectedCall === callKey(record)} onClick={() => onSelectCall?.(callKey(record))}>{recordName(record, text)}</button>
               <time>{formatTime(record.time)}</time>
               <span className="tools-record-status">{recordStatus(record, text)}</span>
             </li>
@@ -245,7 +272,7 @@ function ActivityPanel({ activity, mode, filter, now, text, onMode, onFilter }: 
         <ol className="tools-timeline" aria-label={text('mode.timeline')}>
           {records.map(record => (
             <li key={`${record.sequence}-${record.time}-${record.tool}`} className="tools-timeline-row">
-              <span className="tools-record-name">{recordName(record, text)}</span>
+              <button type="button" className="tools-record-name" aria-pressed={selectedCall === callKey(record)} onClick={() => onSelectCall?.(callKey(record))}>{recordName(record, text)}</button>
               <span className="tools-timeline-track" aria-label={`${recordName(record, text)} · ${recordStatus(record, text)}`}><i style={timelineStyle(record, records, now)} data-tone={record.running ? 'info' : record.isError ? 'critical' : 'positive'} /></span>
               <span className="tools-record-status">{recordStatus(record, text)}</span>
             </li>
@@ -269,7 +296,7 @@ function DetailsPanel({ item, activity, healthAvailable, now, text, onBack }: {
   const stale = item?.health !== undefined && now - item.health.observedAt > 60_000
   return (
     <section className="tools-pane tools-details-pane" data-section="right" data-content="details" aria-label={text('section.details')}>
-      <header className="tools-pane-header"><div><h2>{text('section.details')}</h2><p>{item?.label ?? text('tab.details')}</p></div><button type="button" className="vk-btn" onClick={onBack}>{text('action.backToActivity')}</button></header>
+      <header className="tools-pane-header"><div><h2>{text('section.details')}</h2><p>{item?.label ?? text('tab.details')}</p></div><button type="button" className="vk-btn" onClick={onBack}>{text('action.backToCatalog')}</button></header>
       {item === undefined ? <div className="vk-empty"><p>{text('tab.details')}</p></div> : (
         <div className="tools-details-body">
           <div className="tools-detail-title"><i className="vk-dot" data-tone={availabilityTone(item)} aria-hidden="true" /><strong>{item.label}</strong><span className="vk-badge">{familyLabel(item.family, text)}</span></div>
@@ -295,7 +322,7 @@ export function renderToolsInspectorTree(props: ToolsInspectorTreeProps): JSX.El
   const text = textReader(props.t)
   const now = props.now ?? Date.now()
   const activity = props.activity ?? activityFromServers(props.servers ?? [])
-  const items = props.catalogState.status === 'ready' ? props.catalogState.catalog.items : []
+  const items = 'catalog' in props.catalogState ? props.catalogState.catalog?.items ?? [] : []
   const visible = filterCatalog(items, { query: props.query, family: props.family, enabled: props.enabled })
   const families = countByFamily(items)
   const coverage = countByAvailability(items)
@@ -307,23 +334,24 @@ export function renderToolsInspectorTree(props: ToolsInspectorTreeProps): JSX.El
   const rightContent = activeSection === 'details' ? 'details' : 'activity'
 
   return (
-    <Surface kind="inspector" data-mcp-inspector="" data-active-section={activeSection} aria-label={text('view.tools')}>
+    <Surface kind="inspector" data-mcp-inspector="" data-catalog-state={props.catalogState.status} data-active-section={activeSection} aria-label={text('view.tools')}>
       <style>{mcpInspectorStyles}</style>
       {props.sessionNotice === undefined ? null : <p className="tools-notice" role="status">{props.sessionNotice}</p>}
       <header className="vk-header tools-header">
-        <div className="tools-title"><strong className="vk-heading">{text('view.tools')}</strong><p className="vk-sub" role="status"><i className="vk-dot" data-tone={headerTone} aria-hidden="true" />{catalogHeading(props.catalogState, text)}</p></div>
+        <div className="tools-title"><strong className="vk-heading">{props.contextLabel ?? text('view.tools')}</strong><p className="vk-sub" role="status"><i className="vk-dot" data-tone={headerTone} aria-hidden="true" />{catalogHeading(props.catalogState, text)}</p></div>
         <div className="tools-summary" aria-label={text('header.subtitle')}>
           {props.catalogState.status === 'ready' ? <><span>{text('summary.items', { count: coverage.all })}</span><span>{text('summary.enabled', { count: coverage.enabled })}</span></> : null}
-          <span>{text('summary.calls', { count: activity.calls })}</span>
+          {!props.globalManagement && <span>{text('summary.calls', { count: activity.calls })}</span>}
           {activity.errors > 0 ? <span data-tone="critical">{text('summary.errors', { count: activity.errors })}</span> : null}
           {activity.running > 0 ? <span data-tone="info">{text('summary.running', { count: activity.running })}</span> : null}
         </div>
-        <button type="button" className="vk-btn tools-recheck" disabled={!props.canRefresh} onClick={props.onRefresh}>{text('action.recheck')}</button>
+        {props.toolbarActions}<button type="button" className="vk-btn tools-recheck" disabled={!props.canRefresh} onClick={props.onRefresh}>{text('action.recheck')}</button>
       </header>
 
+      {'stale' in props.catalogState && props.catalogState.stale && <p className="tools-notice" data-tone="warn" role="status">{text('catalog.stale')}</p>}
       {props.notice ? <p className="tools-notice" data-tone={props.notice.tone} role="status">{text(props.notice.key)}</p> : null}
 
-      {props.catalogState.status === 'ready' && coverage.all > 0 ? (
+      {activeSection === 'catalog' && !props.readOnlyCatalog && props.catalogState.status === 'ready' && coverage.all > 0 ? (
         <div className="tools-coverage" role="group" aria-label={text('coverage.aria', coverage)}>
           {(['enabled', 'disabled', 'unavailable'] as const).map(value => (
             <button key={value} type="button" data-state={value} aria-pressed={props.enabled === value} style={{ flexGrow: Math.max(coverage[value], 1) }} onClick={() => props.onEnabledChange(value)}><span>{text(`filter.${value}`)}</span><strong>{coverage[value]}</strong></button>
@@ -332,7 +360,7 @@ export function renderToolsInspectorTree(props: ToolsInspectorTreeProps): JSX.El
       ) : null}
 
       <nav className="tools-mobile-tabs" aria-label={text('view.tools')}>
-        {(['catalog', 'activity', 'details'] as const).map(section => <button key={section} type="button" aria-pressed={activeSection === section} disabled={section === 'details' && selected === undefined} onClick={() => props.onActiveSectionChange?.(section)}>{text(`tab.${section}`)}</button>)}
+        {(props.globalManagement ? ['catalog'] as const : ['activity', 'catalog'] as const).map(section => <button key={section} type="button" aria-pressed={activeSection === section || section === 'catalog' && activeSection === 'details'} onClick={() => props.onActiveSectionChange?.(section)}>{text(`tab.${section}`)}</button>)}
       </nav>
 
       <div className="tools-workspace" data-active-section={activeSection} data-right-content={rightContent}>
@@ -352,7 +380,7 @@ export function renderToolsInspectorTree(props: ToolsInspectorTreeProps): JSX.El
           {props.catalogState.status === 'unavailable' || props.catalogState.status === 'error' ? (
             <div className="vk-alert tools-catalog-alert" data-tone="warn" role="alert"><strong>{text(catalogErrorKey(errorCode))}</strong><p>{text('catalog.error.hint')}</p><div><button type="button" className="vk-btn" disabled={!props.canRefresh} onClick={props.onRefresh}>{text('action.recheck')}</button><details><summary>{text('catalog.technical')}</summary><code>{errorCode}</code></details></div></div>
           ) : null}
-          {props.catalogState.status === 'ready' && !props.catalogState.catalog.complete ? <div className="vk-alert" data-tone="warn" role="status">{text('catalog.partial')}</div> : null}
+          {props.catalogState.status === 'ready' && !props.catalogState.catalog.complete ? <div className="vk-alert" data-tone="warn" role="status">{text('catalog.partial')} {!props.catalogState.catalog.toolsAvailable && text('catalog.toolsMissing')} {!props.catalogState.catalog.skillsAvailable && text('catalog.skillsMissing')} {!props.readOnlyCatalog && !props.catalogState.catalog.mcpInventoryAvailable && text('catalog.inventoryMissing')}</div> : null}
           {props.catalogState.status === 'ready' && items.length === 0 ? <div className="vk-empty tools-empty"><p>{text('empty.catalog')}</p><small>{text('empty.catalog.hint')}</small></div> : null}
           {props.catalogState.status === 'ready' && items.length > 0 && visible.length === 0 ? <div className="vk-empty tools-empty"><p>{text('empty.matches')}</p><button type="button" className="vk-btn" onClick={props.onClearFilters}>{text('action.clearFilters')}</button></div> : null}
 
@@ -370,7 +398,7 @@ export function renderToolsInspectorTree(props: ToolsInspectorTreeProps): JSX.El
                     <span className="tools-row-meta">{item.source}{item.toolCount !== undefined ? ` · ${text('details.tools')} ${item.toolCount}` : ''}{recent !== undefined ? ` · ${formatTime(recent.time)}` : ''}</span>
                     {health !== null ? <span className="tools-health"><i className="vk-dot" data-tone={healthTone(item.health?.state, stale)} aria-hidden="true" />{health}</span> : null}
                   </button>
-                  <button type="button" className="vk-btn tools-toggle" aria-pressed={item.enabled} disabled={!item.canToggle || props.pendingId === item.id} title={item.canToggle ? undefined : (item.disabledReason ?? text('toggle.unsupported'))} onClick={() => props.onToggle(item.id, !item.enabled)}>{props.pendingId === item.id ? text('toggle.pending') : item.enabled ? text('toggle.disable') : text('toggle.enable')}</button>
+                  {!props.readOnlyCatalog && <button type="button" className="vk-btn tools-toggle" aria-pressed={item.enabled} disabled={props.catalogState.status !== 'ready' || !item.canToggle || props.pendingId !== undefined} title={item.canToggle ? undefined : (item.disabledReason ?? text('toggle.unsupported'))} onClick={() => props.onToggle(item.id, !item.enabled)}>{props.pendingId === item.id ? text('toggle.pending') : item.enabled ? text('toggle.disable') : text('toggle.enable')}</button>}
                 </article>
               )
             })}
@@ -378,8 +406,8 @@ export function renderToolsInspectorTree(props: ToolsInspectorTreeProps): JSX.El
         </section>
 
         <div className="tools-right-column" data-section="right">
-          <nav className="tools-right-tabs" aria-label={text('view.tools')}><button type="button" aria-pressed={rightContent === 'activity'} onClick={() => props.onActiveSectionChange?.('activity')}>{text('tab.activity')}</button><button type="button" aria-pressed={rightContent === 'details'} disabled={selected === undefined} onClick={() => props.onActiveSectionChange?.('details')}>{text('tab.details')}</button></nav>
-          {rightContent === 'details' ? <DetailsPanel item={selected} activity={activity} healthAvailable={healthAvailable} now={now} text={text} onBack={() => props.onActiveSectionChange?.('activity')} /> : <ActivityPanel activity={activity} mode={props.activityMode ?? 'list'} filter={props.activityFilter ?? 'all'} now={now} text={text} onMode={mode => props.onActivityModeChange?.(mode)} onFilter={filter => props.onActivityFilterChange?.(filter)} />}
+          <nav hidden className="tools-right-tabs" aria-label={text('view.tools')}><button type="button" aria-pressed={rightContent === 'activity'} onClick={() => props.onActiveSectionChange?.('activity')}>{text('tab.activity')}</button><button type="button" aria-pressed={rightContent === 'details'} disabled={selected === undefined} onClick={() => props.onActiveSectionChange?.('details')}>{text('tab.details')}</button></nav>
+          {rightContent === 'details' ? <DetailsPanel item={selected} activity={activity} healthAvailable={healthAvailable} now={now} text={text} onBack={() => props.onActiveSectionChange?.('catalog')} /> : <ActivityPanel selectedCall={props.selectedCall} onSelectCall={props.onSelectCall} onRevealCall={props.onRevealCall} activity={activity} mode={props.activityMode ?? 'list'} filter={props.activityFilter ?? 'all'} now={now} text={text} onMode={mode => props.onActivityModeChange?.(mode)} onFilter={filter => props.onActivityFilterChange?.(filter)} />}
         </div>
       </div>
     </Surface>
@@ -399,11 +427,17 @@ export function McpInspectorView({ useSession, binding, controller, t }: ToolsIn
 }
 
 /** Shared content for the legacy exported renderer and the session-following pane. */
-export function ToolsInspectorContent({ activity, binding, controller, t, initialFamily = 'all', sessionNotice }: {
+export function ToolsInspectorContent({ activity, binding, controller, t, initialFamily = 'all', sessionNotice, viewState, toolbarActions, contextLabel, readOnlyCatalog, globalManagement, onRevealCall }: {
   readonly activity: ToolActivitySnapshot
   readonly binding?: ToolsHubBinding | undefined
   readonly controller?: ToolsHubController | undefined
   readonly t?: ToolsTranslator | undefined
+  readonly viewState?: ToolsViewState
+  readonly toolbarActions?: ReactNode
+  readonly contextLabel?: string
+  readonly readOnlyCatalog?: boolean
+  readonly globalManagement?: boolean
+  readonly onRevealCall?: ((record: ToolActivityRecord) => void) | undefined
   readonly initialFamily?: FamilyFilter
   readonly sessionNotice?: string | undefined
 }): JSX.Element {
@@ -412,34 +446,40 @@ export function ToolsInspectorContent({ activity, binding, controller, t, initia
   const hub = bound ?? EMPTY_CONTROLLER
   const catalogState = useSyncExternalStore(hub.subscribe.bind(hub), hub.getSnapshot.bind(hub), hub.getSnapshot.bind(hub))
   const pendingId = useSyncExternalStore(hub.subscribe.bind(hub), hub.pendingIdSnapshot.bind(hub), hub.pendingIdSnapshot.bind(hub))
-  const [query, setQuery] = useState('')
-  const [family, setFamily] = useState<FamilyFilter>(initialFamily)
-  const [enabled, setEnabled] = useState<EnabledFilter>('all')
-  const [selectedId, setSelectedId] = useState<string>()
-  const [activeSection, setActiveSection] = useState<ToolsSection>('catalog')
-  const [activityMode, setActivityMode] = useState<ActivityMode>('list')
-  const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all')
+  const [fallbackState] = useState(() => new ToolsViewState(initialFamily, 'catalog'))
+  const shared = viewState ?? fallbackState
+  const { query, family, enabled, selectedId, selectedCall, activeSection, activityMode, activityFilter } = useSyncExternalStore(shared.subscribe, shared.getSnapshot, shared.getSnapshot)
+  const setQuery = (value: string) => shared.set('query', value)
+  const setFamily = (value: FamilyFilter) => shared.set('family', value)
+  const setEnabled = (value: EnabledFilter) => shared.set('enabled', value)
+  const setSelectedId = (value: string | undefined) => shared.set('selectedId', value)
+  const setActiveSection = (value: ToolsSection | ((previous: ToolsSection) => ToolsSection)) => shared.set('activeSection', value)
+  const setActivityMode = (value: ActivityMode) => shared.set('activityMode', value)
+  const setActivityFilter = (value: ActivityFilter) => shared.set('activityFilter', value)
   const [notice, setNotice] = useState<ToolsNotice>()
 
   useEffect(() => {
-    if (bound === undefined) return
+    if (bound === undefined || viewState !== undefined) return
     void bound.refresh()
     const timer = setInterval(() => {
       if (typeof document === 'undefined' || document.visibilityState !== 'hidden') void bound.refresh()
     }, 30_000)
     return () => clearInterval(timer)
-  }, [bound])
+  }, [bound, viewState])
 
   useEffect(() => {
     if (catalogState.status !== 'ready' || selectedId === undefined) return
     const visible = filterCatalog(catalogState.catalog.items, { query, family, enabled })
     if (visible.some(item => item.id === selectedId)) return
     setSelectedId(undefined)
-    setActiveSection(section => section === 'details' ? 'activity' : section)
+    setActiveSection(section => section === 'details' ? 'catalog' : section)
   }, [catalogState, enabled, family, query, selectedId])
 
+  useEffect(() => {
+    if (selectedCall && !activity.records.some(record => `${record.sequence}-${record.time}-${record.tool}` === selectedCall)) shared.set('selectedCall', undefined)
+  }, [activity, selectedCall, shared])
   return renderToolsInspectorTree({
-    catalogState,
+    catalogState, toolbarActions, ...(globalManagement === undefined ? {} : { globalManagement }), ...(contextLabel === undefined ? {} : { contextLabel }), ...(readOnlyCatalog === undefined ? {} : { readOnlyCatalog }), ...(onRevealCall === undefined ? {} : { onRevealCall }), selectedCall, onSelectCall: key => shared.set('selectedCall', key),
     ...(pendingId === undefined ? {} : { pendingId }),
     query,
     family,

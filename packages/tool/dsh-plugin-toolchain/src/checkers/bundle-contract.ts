@@ -6,7 +6,7 @@ import { report, type CheckerReport, type Finding } from '../types.js'
  * 构建产物级合同检查（自 scripts/check-bundle-contracts.mjs 收编，语义逐字保留）：
  * dsh ModuleLoader 单文件契约下，每个 bundle 的 lib/client.js 必须自包含——
  * 不得残留对 @yeisme/* workspace 包或相对 chunk 的外部 require，
- * 且 banner 注册 id 必须等于包名。须在 build 后运行。
+ * 且 banner 注册 id 必须等于包名或显式导出 manifest 的 Web 子路径。须在 build 后运行。
  */
 export async function runBundleContractCheck(root: string): Promise<CheckerReport> {
   const bundlesRoot = resolve(root, 'packages/bundle')
@@ -60,13 +60,15 @@ export async function runBundleContractCheck(root: string): Promise<CheckerRepor
       })
     }
     const banner = source.match(/window\.__ModuleLoader__\.load\(\{\s*id:\s*"([^"]+)"/)
+    const suffix = pkg.name && banner?.[1]?.startsWith(`${pkg.name}/`) ? `.${banner[1].slice(pkg.name.length)}` : undefined
+    const explicitSeat = suffix !== undefined && pkg.exports?.[suffix] !== undefined && pkg.exports?.[`${suffix}/package.json`] === './package.json'
     if (!banner) {
       findings.push({
         location: `packages/bundle/${name}/lib/client.js`,
         code: 'BUNDLE/NO_BANNER_REGISTRATION',
         message: 'no ModuleLoader banner registration',
       })
-    } else if (banner[1] !== pkg.name) {
+    } else if (banner[1] !== pkg.name && !explicitSeat) {
       findings.push({
         location: `packages/bundle/${name}/lib/client.js`,
         code: 'BUNDLE/BANNER_ID_MISMATCH',

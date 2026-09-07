@@ -84,3 +84,13 @@ describe('ToolsHubController', () => {
     expect(JSON.stringify(state)).not.toMatch(/authorization|secret|HTTP 404/)
   })
 })
+
+it('keeps the last successful catalog explicitly stale after a failed refresh', async () => {
+  let failed=false
+  const remote={list:async()=>{if(failed)throw new Error('network unavailable');return {ok:true as const,specVersion:'1.0' as const,complete:true,generation:1,skillsAvailable:true,toolsAvailable:true,mcpInventoryAvailable:true,items:[]}},setEnabled:async()=>({ok:false as const,code:'toggle-unsupported' as const,message:'No toggle'})}
+  const controller=new ToolsHubController(remote)
+  await controller.refresh();failed=true;await controller.refresh()
+  expect(controller.getSnapshot()).toMatchObject({status:'error',stale:true,catalog:{generation:1}})
+  failed=false;await controller.refresh();expect(controller.getSnapshot()).toMatchObject({status:'ready'})
+  expect(controller.getSnapshot()).not.toHaveProperty('stale');controller.dispose()
+})

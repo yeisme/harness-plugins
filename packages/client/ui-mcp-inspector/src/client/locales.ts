@@ -7,6 +7,26 @@
 export const NS = 'mcpInspector' as const
 
 export const zh = {
+  'catalog.toolsMissing': '工具来源未就绪。',
+  'catalog.skillsMissing': 'Skills 来源未就绪。',
+  'catalog.inventoryMissing': 'MCP 安装目录未就绪。',
+  'activity.navigationUnavailable': '当前宿主未提供会话消息定位能力。',
+  'action.backToCatalog': '返回目录',
+  'action.settings': '安装与连接设置',
+  'action.settingsUnavailable': '当前宿主未提供设置导航，请从侧栏打开设置。',
+  'catalog.stale': '显示上次成功读取的目录；当前状态待重新检测。',
+  'activity.errorSummary': '调用失败：{name} · {code}',
+  'action.back': '返回',
+  'activity.window': '显示最近 {shown} 条 · 共 {total} 次调用',
+  'activity.errorSummaryUnavailable': '本次调用失败。安全错误摘要尚不可用，可定位原消息查看。',
+  'activity.reveal': '定位原消息',
+  'action.pinSession': '固定到旁栏',
+  'action.openSession': '打开会话',
+  'action.manageGlobal': '管理全局工具',
+  'view.globalTools': '全局工具管理',
+  'session.select': '选择绑定会话',
+  'session.missing': '绑定的会话不存在或不可访问。请选择其他会话。',
+
   'session.none': '选择会话以查看工具调用；工具目录仍可使用。',
   'session.unavailable': '当前会话活动不可用；工具目录仍可使用。',
   'view.mcp': '工具',
@@ -103,6 +123,26 @@ export const zh = {
 } as const
 
 export const en = {
+  'catalog.toolsMissing': 'Tool source is not ready.',
+  'catalog.skillsMissing': 'Skills source is not ready.',
+  'catalog.inventoryMissing': 'MCP installation inventory is not ready.',
+  'activity.navigationUnavailable': 'Session message navigation is unavailable in this host.',
+  'action.backToCatalog': 'Back to catalog',
+  'action.settings': 'Installation and connection settings',
+  'action.settingsUnavailable': 'Settings navigation is unavailable; open Settings from the sidebar.',
+  'catalog.stale': 'Showing the last successful catalog; recheck to refresh its status.',
+  'activity.errorSummary': 'Call failed: {name} · {code}',
+  'action.back': 'Back',
+  'activity.window': 'Showing latest {shown} of {total} calls',
+  'activity.errorSummaryUnavailable': 'This call failed. A safe error summary is unavailable; open the original message.',
+  'activity.reveal': 'Reveal original message',
+  'action.pinSession': 'Pin to side pane',
+  'action.openSession': 'Open conversation',
+  'action.manageGlobal': 'Manage global tools',
+  'view.globalTools': 'Global tool management',
+  'session.select': 'Select bound session',
+  'session.missing': 'The bound session is missing or inaccessible. Select another session.',
+
   'session.none': 'Select a session to inspect tool calls. The catalog is still available.',
   'session.unavailable': 'Session activity is unavailable. The catalog is still available.',
   'view.mcp': 'Tools',

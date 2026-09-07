@@ -3,6 +3,7 @@ import { buildPanelStyles } from '@yeisme/dsh-client-ui-visual-kit'
 const S = '[data-mcp-inspector]'
 
 const mcpInspectorExtra = `
+[data-tools-session-tab]{height:100%;min-height:0}
 ${S}{display:flex;flex-direction:column;align-content:flex-start;container-type:inline-size;min-height:0;height:100%;overflow:auto;--vk-font-small:12px;--vk-font-body:13px;--vk-font-strong:14px;--vk-font-heading:15px;--vk-ctrl-button:32px;--vk-ctrl-input:36px}
 ${S} .visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 ${S} .tools-header{display:grid;grid-template-columns:minmax(180px,auto) minmax(0,1fr) auto;gap:12px;padding:10px 14px}
@@ -134,6 +135,56 @@ ${S} .tools-chip,${S} .tools-mobile-tabs button,${S} .tools-right-tabs button,${
 
 @media(prefers-reduced-motion:reduce){
 ${S} .tools-timeline-track>i{transition:none}
+}
+
+/* Session workspace: one primary list, details follow the selection. */
+${S}{overflow:hidden;background:var(--vk-bg-base)}
+${S} .tools-header{display:flex;flex-wrap:wrap;gap:8px;padding:8px 10px;border-bottom:1px solid var(--vk-border-l1)}
+${S} .tools-title{flex:1;gap:8px}
+${S} .tools-context-actions{display:flex;gap:4px;flex-wrap:wrap}
+${S} .tools-mobile-tabs{display:flex;flex:none;margin:0;padding:4px 8px;border:0;border-bottom:1px solid var(--vk-border-l1);border-radius:0;background:transparent}
+${S} .tools-mobile-tabs button{flex:0;min-height:28px;border-radius:var(--vk-radius-sm)}
+${S} .tools-workspace{display:block;flex:1;min-height:0;overflow:hidden;padding:0}
+${S} .tools-pane,${S} .tools-right-column{background:transparent;border:0;border-radius:0;min-height:0;height:100%;box-sizing:border-box}
+${S} .tools-pane{padding:8px 10px;overflow:auto}
+${S} .tools-catalog-pane,${S} .tools-right-column{display:none}
+${S} .tools-workspace[data-active-section='catalog'] .tools-catalog-pane{display:flex;flex-direction:column}
+${S} .tools-workspace[data-active-section='activity'] .tools-right-column,${S} .tools-workspace[data-active-section='details'] .tools-right-column{display:block}
+${S} .tools-right-tabs{display:none}
+${S} .tools-right-column>.tools-activity-pane{display:flex;flex-direction:column;overflow:hidden;gap:6px}
+${S} .tools-activity-pane>.tools-pane-header>div:first-child{display:none}
+${S} .tools-activity-list,${S} .tools-timeline,${S} .tools-catalog-list{flex:1;min-height:0;overflow:auto;margin:0}
+${S} .tools-activity-row{padding:6px 0;min-height:28px}
+${S} button.tools-record-name{text-align:left;border:0;background:transparent;color:inherit;cursor:pointer;padding:3px}
+${S} button.tools-record-name[aria-pressed='true']{background:var(--vk-fill-selected)}
+${S} .tools-window-note{margin:0;color:var(--vk-text-tertiary);font-size:var(--vk-font-small)}
+${S} .tools-call-details{padding:10px;border:1px solid var(--vk-border-l1);border-radius:var(--vk-radius-sm);max-height:40%;overflow:auto;flex:none}
+${S} .tools-empty{min-height:0;padding:16px;border:0;background:transparent}
+@container (min-width:721px){
+${S} .tools-right-column>.tools-activity-pane:has(.tools-call-details){display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);grid-template-rows:auto auto auto minmax(0,1fr)}
+${S} .tools-activity-pane:has(.tools-call-details)>.tools-pane-header,${S} .tools-activity-pane:has(.tools-call-details)>.tools-activity-filter,${S} .tools-activity-pane:has(.tools-call-details)>.tools-window-note{grid-column:1/-1}
+${S} .tools-call-details{grid-column:2;grid-row:4;max-height:none;align-self:start}
+${S} .tools-activity-pane:has(.tools-call-details)>.tools-activity-list,${S} .tools-activity-pane:has(.tools-call-details)>.tools-timeline{grid-column:1;grid-row:4;height:100%}
+}
+@container (max-width:420px){
+${S} .tools-activity-pane:has(.tools-call-details)>.tools-activity-list,${S} .tools-activity-pane:has(.tools-call-details)>.tools-timeline{display:none}
+${S} .tools-call-details{max-height:none;flex:1}
+}
+
+${S}[data-yeisme-surface]{container-type:size}
+@container (max-height:300px){
+${S} .tools-header{padding:2px 6px;gap:4px;flex-wrap:nowrap;min-height:28px;flex:none}
+${S} .tools-title,${S} .tools-summary{display:none}
+${S} .tools-context-actions{flex-wrap:nowrap;overflow-x:auto;min-width:0}
+${S} .tools-context-actions .vk-btn,${S} .tools-recheck{white-space:nowrap;min-height:26px;padding:3px 6px;font-size:11px}
+${S} .tools-mobile-tabs{padding:0 6px}
+${S} .tools-mobile-tabs button{min-height:26px;padding:2px 6px}
+${S} .tools-activity-pane>.tools-pane-header,${S} .tools-window-note{display:none}
+${S} .tools-right-column>.tools-activity-pane{padding:3px 6px;gap:2px}
+${S} .tools-activity-filter{flex:none;min-height:24px}
+${S} .tools-activity-filter button{min-height:24px;padding:2px 6px}
+${S} .tools-call-details{flex:1;max-height:none}
+${S} .tools-activity-pane:has(.tools-call-details)>.tools-activity-list,${S} .tools-activity-pane:has(.tools-call-details)>.tools-timeline{display:none}
 }
 `
 

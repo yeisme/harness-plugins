@@ -105,3 +105,16 @@ describe('unified host compatibility adapter', () => {
     adapter.dispose()
   })
 })
+
+it('persists explicit tool affinity and never inherits global current for unbound Tools', () => {
+  const {host,registry,adapter}=bench()
+  registry.registerView({descriptor:{kind:'mcp-inspector',label:'Tools',componentKey:'tools',role:'inspector',preferredRegion:'right',retention:'keep-alive',singleton:false},component:()=>null})
+  adapter.delegate.dispatch({type:'open_view',request:{...request,kind:'mcp-inspector',resourceKey:'session:b',metadata:{sessionId:'b'}}})
+  expect(host.openPane).toHaveBeenLastCalledWith(expect.objectContaining({sessionId:'b'}))
+  adapter.delegate.dispatch({type:'open_view',request:{...request,kind:'mcp-inspector',resourceKey:'legacy'}})
+  expect(host.openPane).toHaveBeenLastCalledWith(expect.objectContaining({sessionId:undefined}))
+  host.source.getSnapshot=()=>({layout:{workspaceId:'project-a',root:{type:'group',id:'one'},groups:{one:{id:'one',panes:['tools-b'],active:'tools-b'}},panes:{'tools-b':{id:'tools-b',kind:'mcp-inspector',resourceKey:'session:b',sessionId:'b',title:'B Tools',pinned:true}},focused:'one',maximized:null,floating:[]}})
+  const restored=createUnifiedHostAdapter(host,registry,()=>({sessionId:'different-current'}))
+  expect(restored.delegate.getSnapshot().views['tools-b']?.metadata).toMatchObject({sessionId:'b'})
+  restored.dispose();adapter.dispose()
+})

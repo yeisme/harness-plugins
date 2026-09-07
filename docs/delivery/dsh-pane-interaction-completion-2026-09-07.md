@@ -22,3 +22,7 @@
 浏览器截图隐藏文件名；没有发送模型消息、执行 MCP 工具或修改用户文件。之前的失败证据保留用于追踪 Explorer 高度与 Tools 旧接口问题，不计作成功。
 
 操作说明见 [Pane 风格交互](../design/dsh-pane-interaction-completion.md)。本轮规格在 `openspec/changes/dsh-pane-interaction-completion-v1/`，后续规划在 `openspec/changes/dsh-pane-workspace-followups-v1/`，后者仍为 planned。
+
+## 后续规格适用范围
+
+本文记录较早的 Pane 入口与快照兼容结果。会话工具 Tab、固定旁栏、目录连接恢复和原消息定位改由 [会话工具工作区 V2](../design/dsh-session-tools-workspace.md) 及其独立验收记录维护；本文的入口呈现通过不代表 V2 全功能通过。

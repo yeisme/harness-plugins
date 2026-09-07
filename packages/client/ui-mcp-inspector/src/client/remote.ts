@@ -68,37 +68,62 @@ function isRemoteFace(candidate: unknown): candidate is ToolHubRemoteFace {
 }
 
 function unwrapNamespace(namespace: Record<string, unknown>): ToolHubRemoteFace {
-  const list = namespace.list as (() => Promise<RemoteResultLike<ToolHubCatalogAnswerV1>>) | undefined
-  const setEnabled = namespace.setEnabled as ((input: ToolHubSetEnabledInputV1) => Promise<RemoteResultLike<ToolHubSetEnabledAnswerV1>>) | undefined
-  if (typeof list !== 'function' || typeof setEnabled !== 'function') {
-    throw new Error('tool-hub client: mounted toolHub namespace lacks list/setEnabled')
+  const invoke = async (method: 'list' | 'setEnabled', input?: ToolHubSetEnabledInputV1): Promise<unknown> => {
+    const fn = namespace[method]
+    if (typeof fn !== 'function') throw new ToolHubClientError('contract_mismatch')
+    const response: unknown = await fn.call(namespace, ...(input === undefined ? [] : [input]))
+    if (typeof response !== 'object' || response === null) throw new ToolHubClientError('contract_mismatch')
+    const envelope = response as RemoteResultLike<unknown>
+    // Released direct ports return the domain answer; Gateway namespaces wrap it.
+    if ('value' in response || 'error' in response) {
+      if (!envelope.ok) throw normalizeToolHubClientError(envelope.error)
+      return envelope.value
+    }
+    return response
   }
+  const codec = (method: 'list' | 'setEnabled') => toolHubRemoteContribution.descriptors.find(item => item.method === method)!.result.schema
   return {
-    async list() {
-      const answered = await list()
-      if (!answered.ok) throw normalizeToolHubClientError(answered.error)
-      return answered.value as ToolHubCatalogAnswerV1
-    },
-    async setEnabled(input) {
-      const answered = await setEnabled(input)
-      if (!answered.ok) throw normalizeToolHubClientError(answered.error)
-      return answered.value as ToolHubSetEnabledAnswerV1
-    },
+    async list() { return codec('list').parse(await invoke('list')) as ToolHubCatalogAnswerV1 },
+    async setEnabled(input) { return codec('setEnabled').parse(await invoke('setEnabled', input)) as ToolHubSetEnabledAnswerV1 },
   }
 }
 
+const pendingMounts = new WeakMap<object, Promise<boolean>>()
 export async function resolveToolHubRemote(ctx: ClientContext, override?: ToolHubRemoteFace): Promise<ToolHubRemoteFace | undefined> {
   if (override !== undefined) return override
   const remote = optionalLookup(ctx, 'remote')
-  if (isRemoteFace(remote?.toolHub)) return remote.toolHub as ToolHubRemoteFace
-  if (remote !== undefined && typeof (remote as { $mount?: unknown }).$mount === 'function') {
-    try {
-      await (remote as { $mount(contribution: unknown): Promise<() => Promise<void>> }).$mount(toolHubRemoteContribution)
-    } catch {
-      return undefined
-    }
-    const mounted = optionalLookup(ctx, 'remote.toolHub')
-    if (mounted !== undefined) return unwrapNamespace(mounted)
+  const lookup = () => optionalLookup(ctx, 'remote.toolHub') ?? remote?.toolHub as Record<string, unknown> | undefined
+  const existing = lookup()
+  if (isRemoteFace(existing)) return unwrapNamespace(existing as unknown as Record<string, unknown>)
+  if (remote === undefined || typeof remote.$mount !== 'function') return undefined
+  let pending = pendingMounts.get(ctx)
+  if (!pending) {
+    pending = (async () => {
+      let released = false
+      let unmount: (() => Promise<void>) | undefined
+      ctx.effect?.(() => () => { released = true; void unmount?.() })
+      const dispose = await (remote.$mount as (contribution: unknown) => Promise<() => Promise<void>>).call(remote, toolHubRemoteContribution)
+      unmount = dispose
+      if (released) await dispose()
+      return !released
+    })()
+    pendingMounts.set(ctx, pending)
   }
-  return undefined
+  try { if (!await pending) return undefined } catch (error) { throw normalizeToolHubClientError(error) }
+  finally { if (pendingMounts.get(ctx) === pending) pendingMounts.delete(ctx) }
+  const mounted = lookup()
+  return isRemoteFace(mounted) ? unwrapNamespace(mounted as unknown as Record<string, unknown>) : undefined
+}
+
+/** Every query probes again, so a missing namespace is recoverable without remounting the view. */
+export function reconnectingToolHubRemote(ctx: ClientContext): ToolHubRemoteFace {
+  const connect = async () => {
+    const remote = await resolveToolHubRemote(ctx)
+    if (!remote) throw new ToolHubClientError('host_unavailable')
+    return remote
+  }
+  return {
+    list: async () => (await connect()).list(),
+    setEnabled: async input => (await connect()).setEnabled(input),
+  }
 }

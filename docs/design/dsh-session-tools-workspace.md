@@ -1,6 +1,6 @@
 # 会话工具 Tab、固定旁栏与标题管理
 
-本文为已确认、待实施的体验设计，不代表当前预览已经完成。实施真源为 [OpenSpec](../../openspec/changes/dsh-session-tools-workspace-v2/proposal.md)，决策和接口见 [设计](../../openspec/changes/dsh-session-tools-workspace-v2/design.md)，进度由 [tasks](../../openspec/changes/dsh-session-tools-workspace-v2/tasks.md) 维护。
+核心功能已实现，Tools 浏览器链路和动态发现的插件入口已验证；全仓最终门仍在独立 checkout 中复核。实施真源为 [OpenSpec](../../openspec/changes/dsh-session-tools-workspace-v2/proposal.md)，决策和接口见 [设计](../../openspec/changes/dsh-session-tools-workspace-v2/design.md)，进度由 [tasks](../../openspec/changes/dsh-session-tools-workspace-v2/tasks.md) 维护。
 
 ## 用户路径
 
@@ -9,7 +9,7 @@
 3. 需要边看对话边排错时，点击“固定到旁栏”。旁栏标题为“A · 工具”，与 A 的 Tab 共用筛选和选择，数据始终属于 A。
 4. 在其他 Pane 打开 B，A 的工具旁栏保持不变。关闭 A 的对话标签也不关闭旁栏，标题可以重新打开 A。
 5. 在标题的会话标签组中搜索、切换、固定会话。工具旁栏可通过明确的会话选择操作改绑定；现有 B 旁栏优先复用，不生成重复实例。
-6. 切到“可用工具”查看当前会话实际可用能力；“管理全局工具”进入独立管理入口。安装、连接、配置和全局启停不伪装成会话设置。
+6. 切到“目录”查看当前会话实际可用能力；“管理全局工具”进入独立管理入口。安装、连接、配置和全局启停不伪装成会话设置。
 
 ## 目录失败的产品标准
 
@@ -32,3 +32,13 @@
 - 正式测试为 Tools 全功能 + 全部本地插件加载/入口冒烟，不是33个插件逐项完整业务测试。
 
 完整测试矩阵与执行命令见 [验收计划](../qa/dsh-session-tools-workspace-acceptance.md)。旧 Tools 交付文档记录历史，不能据其历史通过状态把本轮目录恢复和会话绑定标为已完成。
+
+## 当前实现与恢复
+
+`/mcp` 使用触发命令的会话打开工具 Tab。未绑定的旧工具 Pane 会要求明确选择；已有绑定通过 layout 的 sessionId 恢复。标题左侧会话按钮支持搜索和显式改绑定；同名会话用短 ID 区分，双击标签或按 Enter 固定标签。
+
+会话目录通过 referenceTools 与 Skills 的会话查询合并，全局安装/启停仍在独立管理入口。服务尚未到达时可以重新检测；刷新失败保留明确标为过期的上次目录，不把失败伪装成零工具。会话目录没有全局开关。
+
+选择调用后显示只读详情，返回按钮或 Escape 返回原行并恢复焦点。没有可公开的错误摘要时明确说明；定位使用绑定会话和 owner 的调用序号，不重试调用。
+
+实际命令、失败归因和验收证据见 [交付记录](../qa/dsh-session-tools-workspace-delivery.md)。

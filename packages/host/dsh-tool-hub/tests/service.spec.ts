@@ -67,3 +67,17 @@ describe('toolHub remote', () => {
     await ctx.fiber.dispose()
   })
 })
+
+it('serializes concurrent CAS writes and never leaks storage errors', async () => {
+  const core = sidecar(new MemoryTable())
+  const results = await Promise.all([
+    core.setEnabled({ id: skillId('writer'), enabled: false, ifGeneration: 1 }),
+    core.setEnabled({ id: skillId('writer'), enabled: true, ifGeneration: 1 }),
+  ])
+  expect(results[0]).toMatchObject({ ok: true })
+  expect(results[1]).toMatchObject({ ok: false, code: 'generation-conflict' })
+  class FailedTable extends MemoryTable { override async put(): Promise<void> { throw new Error('private-storage-detail') } }
+  const failure = await sidecar(new FailedTable()).setEnabled({ id: skillId('writer'), enabled: false, ifGeneration: 1 })
+  expect(failure).toMatchObject({ ok: false, code: 'storage-unavailable' })
+  expect(JSON.stringify(failure)).not.toContain('private-storage-detail')
+})

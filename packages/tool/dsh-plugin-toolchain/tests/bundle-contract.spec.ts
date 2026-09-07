@@ -57,3 +57,19 @@ describe('bundle-contract (收编自 scripts/check-bundle-contracts.mjs)', () =>
     expect(result.error).toContain('no bundles found')
   })
 })
+
+it('accepts only an explicitly exported subpath manifest seat', async () => {
+  const manifest = JSON.parse(bundlePackageJson({}))
+  manifest.exports['./host'] = './lib/host.js'
+  manifest.exports['./host/package.json'] = './package.json'
+  const root = workspace({
+    'packages/bundle/fixture/package.json': JSON.stringify(manifest),
+    'packages/bundle/fixture/lib/client.js': GOOD_CLIENT.replace('dsh-fixture-bundle', 'dsh-fixture-bundle/host'),
+  })
+  expect((await runBundleContractCheck(root)).status).toBe('pass')
+  const invalid = workspace({
+    'packages/bundle/fixture/package.json': bundlePackageJson({}),
+    'packages/bundle/fixture/lib/client.js': GOOD_CLIENT.replace('dsh-fixture-bundle', 'dsh-fixture-bundle/host'),
+  })
+  expect((await runBundleContractCheck(invalid)).findings.map(item => item.code)).toContain('BUNDLE/BANNER_ID_MISMATCH')
+})

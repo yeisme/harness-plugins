@@ -54,3 +54,11 @@ openspec validate dsh-workbench-runtime-cleanup --strict --no-interactive
 ```
 
 浏览器回归通过临时环境变量 `DSH_PREVIEW_URL` 接收启动输出的本地授权 URL，不将 URL 写入日志。脚本使用独立浏览器上下文，不发送业务消息；结果保存在 `temp/integration-test-runs/`。应检查真实拖拽、两栏独立、草稿隔离和 Target 数量为零，不能只检查 tab 的标题或 HTML 返回 200。
+
+## 会话工具工作区
+
+会话内“工具”Tab 默认显示活动；`/mcp` 打开触发命令的会话工具页。点击“固定到旁栏”后，旁栏标题显示会话名与工具类型；关闭对话标签仍保留绑定，重复固定会聚焦已有旁栏。标题左侧会话按钮可搜索并显式改绑定，旧无绑定工具 Pane 必须先选择会话。
+
+“目录”是会话实际可用能力；“管理全局工具”进入独立 CAS 启停入口，安装与连接按钮复用设置页。目录缺失时可重新检测，失败不再显示虚假的零项目成功。新兼容构建还识别显式导出 manifest 的子路径 Web seat，避免 Pentest/Terminal 只有 Host 而没有界面。
+
+使用与验收：[会话工具工作区](../design/dsh-session-tools-workspace.md)、[交付记录](../qa/dsh-session-tools-workspace-delivery.md)。重启后请使用当前进程给出的认证入口；不要把旧进程 token 写入文档或共享链接。

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState, useSyncExternalStore, type JSX } from 'react'
+import { useEffect, useMemo, useSyncExternalStore, type JSX } from 'react'
 import type { ClientContext, ISessions, SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
 import { deriveToolActivity, type ActivityRunningCall, type ActivityToolResultNode } from './activity.ts'
 import { ToolsInspectorContent, type ToolsTranslator } from './McpInspectorView.tsx'
-import { createToolsHubController, type ToolsHubController } from './controller.ts'
-import { resolveToolHubRemote } from './remote.ts'
+import { SessionToolsWorkspace } from './workspace-state.ts'
+import { Surface } from '@yeisme/dsh-client-ui-surface'
+import type { ToolActivityRecord } from './activity.ts'
 
 const EMPTY_ACTIVITY = deriveToolActivity([], [])
 const idleSubscribe = () => () => {}
@@ -30,49 +31,57 @@ function activitySource(ctx: ClientContext, current: string | undefined, session
   return session as unknown as ActivitySource | undefined
 }
 
-/** The host remains the session owner; the pane only subscribes while mounted. */
-export function ToolsPane({ ctx, sessions, t }: {
+export interface ToolsPaneProps {
   readonly ctx: ClientContext
   readonly sessions: ISessions
   readonly t: ToolsTranslator
-}): JSX.Element {
-  const subscribe = useMemo(() => sessions.list.subscribe.bind(sessions.list), [sessions])
-  const read = useMemo(() => () => sessions.list.getSnapshot().current, [sessions])
-  const current = useSyncExternalStore(subscribe, read, read)
-  const session = current === undefined ? undefined : sessions.binding(current)?.session
-  const source = useMemo(() => activitySource(ctx, current, session), [ctx, current, session])
-  // Keying by session drops the old selection, pending UI and snapshot together.
-  return <ToolsPaneSession key={current ?? 'no-session'} ctx={ctx} source={source} t={t}
-    sessionNotice={current === undefined ? t('session.none') : session === undefined ? t('session.unavailable') : undefined} />
+  readonly sessionId?: string | undefined
+  readonly workspace: SessionToolsWorkspace
+  readonly manager?: boolean
+  readonly onSettings?: (() => void) | undefined
+  readonly onPin?: (() => void) | undefined
+  readonly onOpenSession?: (() => void) | undefined
+  readonly onManage?: (() => void) | undefined
+  readonly onSessionSelected?: ((id: string) => void) | undefined
+  readonly onRevealCall?: ((record: ToolActivityRecord) => void) | undefined
 }
 
-function ToolsPaneSession({ ctx, source, t, sessionNotice }: {
-  readonly ctx: ClientContext
-  readonly source?: ActivitySource | undefined
-  readonly t: ToolsTranslator
-  readonly sessionNotice?: string | undefined
-}): JSX.Element {
-  const subscribe = useMemo(() => source?.subscribe.bind(source) ?? idleSubscribe, [source])
-  const read = useMemo(() => source?.getSnapshot.bind(source) ?? emptySnapshot, [source])
-  const snapshot = useSyncExternalStore(subscribe, read, read)
+/** Explicit affinity: global current is never used to bind this view. */
+export function ToolsPane(props: ToolsPaneProps): JSX.Element {
+  const { sessions, sessionId, t } = props
+  const summary = useSyncExternalStore(sessions.list.subscribe.bind(sessions.list), sessions.list.getSnapshot.bind(sessions.list), sessions.list.getSnapshot.bind(sessions.list))
+  const known = sessionId === undefined ? undefined : summary.byId?.[sessionId as never]
+  if (!props.manager && (sessionId === undefined || summary.byId !== undefined && known === undefined)) {
+    return <Surface kind="inspector" data-tools-session-selection="" aria-label={t('session.select')}>
+      <p>{sessionId ? t('session.missing') : t('session.select')}</p>
+      <label className="ys-field"><span>{t('session.select')}</span><select value="" disabled={!props.onSessionSelected} onChange={event => props.onSessionSelected?.(event.target.value)}>
+        <option value="">{t('session.select')}</option>
+        {summary.ids?.map(id => <option key={id} value={id}>{summary.byId[id]?.displayTitle ?? id}</option>)}
+      </select></label>
+    </Surface>
+  }
+  return <BoundToolsPane key={sessionId ?? 'global'} {...props} />
+}
+
+function BoundToolsPane(props: ToolsPaneProps): JSX.Element {
+  const { ctx, sessions, sessionId, workspace, t } = props
+  const resource = useMemo(() => workspace.get(sessionId), [workspace, sessionId])
+  useEffect(() => workspace.retain(sessionId), [workspace, sessionId])
+  useEffect(() => sessionId ? (sessions as unknown as { present?(id: string): () => void }).present?.(sessionId) : undefined, [sessions, sessionId])
+  const session = sessionId === undefined ? undefined : sessions.binding(sessionId as never)?.session
+  const source = useMemo(() => activitySource(ctx, sessionId, session), [ctx, sessionId, session])
+  const snapshot = useSyncExternalStore(source?.subscribe.bind(source) ?? idleSubscribe, source?.getSnapshot.bind(source) ?? emptySnapshot, source?.getSnapshot.bind(source) ?? emptySnapshot)
   const activity = useMemo(() => {
-    if (snapshot === undefined) return EMPTY_ACTIVITY
+    if (!snapshot) return EMPTY_ACTIVITY
     const fields = 'legacy' in snapshot ? snapshot.legacy : snapshot
-    return deriveToolActivity(
-      (fields.nodes ?? []).filter(node => node.kind === 'tool-result') as unknown as ActivityToolResultNode[],
-      fields.runningCalls ?? [],
-    )
+    return deriveToolActivity((fields.nodes ?? []).filter(node => node.kind === 'tool-result') as unknown as ActivityToolResultNode[], fields.runningCalls ?? [])
   }, [snapshot])
-  const [controller, setController] = useState<ToolsHubController>()
-  useEffect(() => {
-    let disposed = false
-    let owned: ToolsHubController | undefined
-    void resolveToolHubRemote(ctx).then(remote => {
-      if (disposed || remote === undefined) return
-      owned = createToolsHubController(remote)
-      setController(owned)
-    }, () => { /* Invalid optional host projection leaves the catalog unavailable. */ })
-    return () => { disposed = true; owned?.dispose() }
-  }, [ctx])
-  return <ToolsInspectorContent activity={activity} controller={controller} t={t} initialFamily="mcp" sessionNotice={sessionNotice} />
+  return <ToolsInspectorContent activity={activity} controller={resource.controller} viewState={resource.state} t={t} readOnlyCatalog={!props.manager} globalManagement={!!props.manager}
+    contextLabel={props.manager ? t('view.globalTools') : t('view.tools')} onRevealCall={props.onRevealCall}
+    toolbarActions={<div className="tools-context-actions">
+      {props.manager && <button type="button" className="vk-btn" disabled={!props.onSettings} title={props.onSettings ? undefined : t('action.settingsUnavailable')} onClick={props.onSettings}>{t('action.settings')}</button>}
+      {props.onPin && <button type="button" className="vk-btn" onClick={props.onPin}>{t('action.pinSession')}</button>}
+      {props.onOpenSession && <button type="button" className="vk-btn" onClick={props.onOpenSession}>{t('action.openSession')}</button>}
+      {props.onManage && <button type="button" className="vk-btn" onClick={props.onManage}>{t('action.manageGlobal')}</button>}
+    </div>} />
 }

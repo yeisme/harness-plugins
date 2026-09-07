@@ -56,6 +56,7 @@ const statusFlowVendor = {
   '/vendor/ui-session-status.mjs': () => readFileSync(new URL('../../packages/client/ui-session-status/lib/index.js', import.meta.url), 'utf8'),
   '/vendor/ui-command-experience-web/index.mjs': () => readFileSync(new URL('../../packages/client/ui-command-experience-web/lib/index.mjs', import.meta.url), 'utf8'),
   '/vendor/ui-command-experience-web/client.mjs': () => readFileSync(new URL('../../packages/client/ui-command-experience-web/lib/client.mjs', import.meta.url), 'utf8'),
+  '/tools-client.js': () => readFileSync(new URL('../../packages/client/ui-mcp-inspector/lib/client.js', import.meta.url), 'utf8'),
   '/status-flow-client.js': () => readFileSync(new URL('../../packages/client/ui-token-usage/lib/client.js', import.meta.url), 'utf8'),
 }
 
@@ -297,6 +298,23 @@ createServer((request, response) => {
   if (vendorAsset !== undefined) {
     response.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' })
     response.end(vendorAsset())
+    return
+  }
+  if (url.pathname === '/session-tools') {
+    const width = [360,560,960].includes(Number(url.searchParams.get('width'))) ? Number(url.searchParams.get('width')) : 560
+    const height = url.searchParams.get('short') === 'true' ? 150 : 650
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+    response.end(`<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#111;color:#eee;font-family:Arial,sans-serif}#tools{width:${width}px;height:${height}px}button,input,select{font:inherit}</style></head><body><main id="tools"></main>
+<script type="importmap">${JSON.stringify(statusFlowImportMap)}</script><script>window.__ModuleLoader__={load(entry){window.__toolsEntry=entry}}</script>
+<script src="/vendor/react.global.js"></script><script src="/vendor/scheduler.global.js"></script><script src="/vendor/react-dom.global.js"></script><script src="/vendor/react-jsx-runtime.global.js"></script><script src="/tools-client.js"></script>
+<script type="module">
+import * as surface from '/vendor/ui-surface.mjs';
+import * as visualKit from '/vendor/ui-visual-kit.mjs';
+const exports=window.__toolsEntry.factory(name=>{if(name==='react')return React;if(name==='react/jsx-runtime')return ReactJsxRuntime;if(name==='@yeisme/dsh-client-ui-surface')return surface;if(name==='@yeisme/dsh-client-ui-visual-kit')return visualKit;throw new Error('Unexpected module '+name)})
+const activity=exports.deriveToolActivity(Array.from({length:30},(_,i)=>({kind:'tool-result',seq:i,time:10000-i*200,callTime:9900-i*200,call:{name:'fixture_tool_'+i},isError:i===0})),[])
+function Fixture(){const [section,setSection]=React.useState('activity'),[call,setCall]=React.useState(),[filter,setFilter]=React.useState('all');return exports.renderToolsInspectorTree({catalogState:{status:'unavailable',message:'catalog_unavailable'},activity,query:'',family:'all',enabled:'all',activeSection:section,selectedCall:call,activityFilter:filter,canRefresh:true,onQueryChange(){},onFamilyChange(){},onEnabledChange(){},onToggle(){},onActiveSectionChange:setSection,onSelectCall:setCall,onActivityFilterChange:setFilter,onRevealCall(){window.__revealed=true},onRefresh(){},toolbarActions:React.createElement('button',{className:'vk-btn'},'Pin to side pane')})}
+ReactDOM.createRoot(document.getElementById('tools')).render(React.createElement(Fixture));document.body.dataset.ready='true'
+</script></body></html>`)
     return
   }
   if (url.pathname === '/status-flow') {

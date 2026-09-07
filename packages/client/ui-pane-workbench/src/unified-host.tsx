@@ -64,7 +64,7 @@ export function createUnifiedHostAdapter(host: UnifiedWorkspaceHost, registry: P
       duplicate: false, closePolicy: request?.closePolicy ?? 'allow',
       status: descriptor ? 'ready' : 'orphaned', attention: request?.attention ?? false,
       offline: request?.offline ?? false, stale: request?.stale ?? false,
-      ...(request?.metadata === undefined ? {} : { metadata: request.metadata }),
+      ...((request?.metadata === undefined && pane.sessionId === undefined) ? {} : { metadata: { ...(request?.metadata as Record<string, unknown> ?? {}), ...(pane.sessionId === undefined ? {} : { sessionId: pane.sessionId }) } as PaneViewInstanceV1['metadata'] }),
     }
   }
   const project = (): PaneWorkspaceV1 => {
@@ -102,7 +102,8 @@ export function createUnifiedHostAdapter(host: UnifiedWorkspaceHost, registry: P
         const existing = Object.values(host.source.getSnapshot().layout.panes).find(p => p.kind === request.kind && (request.singleton || p.resourceKey === request.resourceKey))
         const id = existing?.id ?? request.viewId ?? `plugin:${request.kind}:${encodeURIComponent(request.resourceKey)}`
         requests.set(id, request)
-        host.openPane({ ...context(), id, kind: request.kind, resourceKey: request.resourceKey,
+        const sessionId = typeof (request.metadata as Record<string, unknown> | undefined)?.sessionId === 'string' ? (request.metadata as Record<string, string>).sessionId : undefined
+        host.openPane({ ...context(), ...(request.kind === 'mcp-inspector' || request.kind === 'tools-manager' ? { sessionId } : {}), id, kind: request.kind, resourceKey: request.resourceKey,
           title: request.title ?? descriptor.descriptor.label, icon: descriptor.presentation?.icon,
           pinned: request.pinned ?? !request.preview })
         break

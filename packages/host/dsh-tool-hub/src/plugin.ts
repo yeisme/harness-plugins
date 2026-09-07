@@ -121,27 +121,22 @@ export function createHostCatalogPort(ctx: Context): ToolHubCatalogPort {
       const tools = optionalGet<ToolsFace>(ctx, 'tools')
       const inventory = optionalGet<PluginInventoryFace>(ctx, 'pluginInventory')
       const mcpServers = optionalGet<McpServersFace>(ctx, 'mcpServers')
-      let skillItems: readonly unknown[] | undefined
-      let skillsComplete: boolean | undefined
-      if (skills?.snapshot !== undefined) {
-        const snapshot = await skills.snapshot()
-        skillItems = snapshot.skills
-        skillsComplete = snapshot.complete
-      } else if (skills?.list !== undefined) {
-        skillItems = await skills.list()
-        skillsComplete = true
-      }
-      let pluginEntries: readonly unknown[] | undefined
-      if (inventory?.list !== undefined) {
-        const listed = await inventory.list()
-        pluginEntries = listed.entries
-      }
-      const mcpHealth = mcpServers?.list === undefined ? undefined : await mcpServers.list()
+      // A failing provider must not hide the other authoritative sources.
+      const [skillResult, toolResult, inventoryResult, healthResult] = await Promise.allSettled([
+        Promise.resolve().then(() => skills?.snapshot ? skills.snapshot() : skills?.list ? skills.list().then(items => ({ skills: items, complete: true })) : undefined),
+        Promise.resolve().then(() => tools?.schemas?.()),
+        Promise.resolve().then(() => inventory?.list?.()),
+        Promise.resolve().then(() => mcpServers?.list?.()),
+      ])
+      const skillSnapshot = skillResult.status === 'fulfilled' ? skillResult.value : undefined
+      const toolsSnapshot = toolResult.status === 'fulfilled' ? toolResult.value : undefined
+      const pluginSnapshot = inventoryResult.status === 'fulfilled' ? inventoryResult.value : undefined
+      const healthSnapshot = healthResult.status === 'fulfilled' ? healthResult.value : undefined
       return {
-        ...(skillItems === undefined ? {} : { skills: skillItems as never, skillsComplete: skillsComplete !== false }),
-        ...(tools?.schemas === undefined ? {} : { tools: tools.schemas() }),
-        ...(pluginEntries === undefined ? {} : { pluginEntries: pluginEntries as never }),
-        ...(mcpHealth === undefined ? {} : { mcpHealth: mcpHealth as never }),
+        ...(skillSnapshot?.skills === undefined ? {} : { skills: skillSnapshot.skills as never, skillsComplete: skillSnapshot.complete !== false }),
+        ...(toolsSnapshot === undefined ? {} : { tools: toolsSnapshot }),
+        ...(pluginSnapshot?.entries === undefined ? {} : { pluginEntries: pluginSnapshot.entries as never }),
+        ...(healthSnapshot === undefined ? {} : { mcpHealth: healthSnapshot as never }),
       }
     },
   }

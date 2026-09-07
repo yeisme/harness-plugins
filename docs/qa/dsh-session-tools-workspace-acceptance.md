@@ -1,6 +1,6 @@
 # 会话工具工作区正式验收计划
 
-状态：待执行。本文件定义未来实现的测试要求；此次文档提交只做 OpenSpec 严格校验和文档检查，不执行、也不宣称以下功能验收通过。
+状态：Tools 核心链路及全部本地 bundle 入口已实测；最终全仓门复核中。实际结果与失败归因以 [交付记录](dsh-session-tools-workspace-delivery.md) 为准，以下矩阵保留为持续验收标准。
 
 ## 验收矩阵
 
@@ -33,13 +33,14 @@
 
 ## 执行顺序与命令
 
-以下为实施稳定后的真实命令，均在 agent/harness-plugins 执行；它们当前的成功不能证明尚未补充的V2场景已覆盖。
+以下为实施稳定后的真实命令，均在 agent/harness-plugins 执行；每次执行保留各自结果，不用历史报告替代当前验证。
 
 ```bash
 pnpm --filter @yeisme/dsh-client-ui-mcp-inspector test
 pnpm --filter @yeisme/dsh-tool-hub-host test
 pnpm --filter @yeisme/dsh-mcp-inspector test
-pnpm --filter @yeisme/dsh-client-ui-mcp-inspector test:integration
+node packages/client/ui-mcp-inspector/scripts/run-integration-tests.mjs
+node packages/client/ui-mcp-inspector/scripts/run-integration-tests.mjs --host
 node scripts/test-pane-interactions.mjs
 node scripts/test-workbench-patches.mjs
 pnpm dsh:workbench -- --check

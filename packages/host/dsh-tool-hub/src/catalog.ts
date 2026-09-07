@@ -249,7 +249,7 @@ export function projectCatalog(source: CatalogSource): CatalogProjection {
     .slice(0, MAX_CATALOG_ITEMS)
   return {
     items,
-    complete: (!skillsAvailable || source.skillsComplete !== false),
+    complete: skillsAvailable && toolsAvailable && mcpInventoryAvailable && source.skillsComplete !== false && skills.length + natives.length + mcpFromTools.length + mcpFromInventory.length <= MAX_CATALOG_ITEMS,
     skillsAvailable,
     toolsAvailable,
     mcpInventoryAvailable,

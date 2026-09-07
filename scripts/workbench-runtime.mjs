@@ -17,6 +17,10 @@ export function checkWorkbenchRuntime(root) {
   catch { throw new Error(`Compatible workbench checkout is missing. ${prepare}`) }
   if (base !== WORKBENCH_BASE) throw new Error(`Workbench release base does not match. Preserve the checkout and prepare the supported release. ${prepare}`)
   const checks = [
+    ['packages/client/modules/lib/index.js', text => text.includes('`${loaderName}/package.json`')],
+    ['packages/client/ui-conversation/lib/client.js', text => text.includes('ConversationNavigation')],
+    ['packages/client/ui-settings-general/lib/client.js', text => text.includes('settingsNavigation')],
+    ['packages/api/session-controller/lib/typert.remote-client.js', text => text.includes('includeModelInvocable')],
     ['apps/cli/lib/bin.js', text => text.length > 0],
     ['apps/web/dist/index.html', text => text.length > 0],
     ['packages/client/ui-layout/lib/client.js', text => text.includes('workspace.unified.v1') && text.includes('workbenchShortcut') && text.includes('cyclePane') && text.includes('group-') && !text.includes('panePrefixKey')],

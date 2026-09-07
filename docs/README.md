@@ -4,7 +4,7 @@
 
 ## 入口
 
-- [会话工具工作区（待实施）](design/dsh-session-tools-workspace.md)：会话工具 Tab、固定旁栏、Pane 标题会话管理与目录恢复；[正式验收计划](qa/dsh-session-tools-workspace-acceptance.md)。
+- [会话工具工作区（核心已实现，最终门待收尾）](design/dsh-session-tools-workspace.md)：会话工具 Tab、固定旁栏、Pane 标题会话管理与目录恢复；[正式验收计划](qa/dsh-session-tools-workspace-acceptance.md)。
 
 - [Pane 风格交互与后续支持](design/dsh-pane-interaction-completion.md)：Explorer、选区工具条、MCP 入口及侧栏/布局快捷键。
 

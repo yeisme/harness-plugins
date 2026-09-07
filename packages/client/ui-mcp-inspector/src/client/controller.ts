@@ -15,8 +15,8 @@ export type ToolsHubControllerState =
   | { readonly status: 'idle' }
   | { readonly status: 'loading' }
   | { readonly status: 'ready'; readonly catalog: ToolHubCatalogV1 }
-  | { readonly status: 'unavailable'; readonly message: string; readonly code?: ToolHubClientErrorCode }
-  | { readonly status: 'error'; readonly message: string; readonly code?: ToolHubClientErrorCode }
+  | { readonly status: 'unavailable'; readonly message: string; readonly code?: ToolHubClientErrorCode; readonly catalog?: ToolHubCatalogV1; readonly stale?: true }
+  | { readonly status: 'error'; readonly message: string; readonly code?: ToolHubClientErrorCode; readonly catalog?: ToolHubCatalogV1; readonly stale?: true }
 
 const IDLE: ToolsHubControllerState = Object.freeze({ status: 'idle' })
 const LOADING: ToolsHubControllerState = Object.freeze({ status: 'loading' })
@@ -24,6 +24,7 @@ const LOADING: ToolsHubControllerState = Object.freeze({ status: 'loading' })
 export class ToolsHubController {
   private readonly remote: ToolHubRemoteFace
   private state: ToolsHubControllerState = IDLE
+  private lastCatalog: ToolHubCatalogV1 | undefined
   private readonly listeners = new Set<() => void>()
   private generation = 0
   private served = 0
@@ -55,7 +56,7 @@ export class ToolsHubController {
     if (this.disposed) return
     this.generation += 1
     const generation = this.generation
-    if (this.state.status !== 'ready') this.setState(LOADING)
+    if (this.lastCatalog === undefined) this.setState(LOADING)
     await new Promise<void>(resolve => {
       this.waiters.push({ generation, resolve })
       void this.pump()
@@ -97,12 +98,12 @@ export class ToolsHubController {
         try {
           const answer = await this.remote.list()
           if (this.disposed || serving !== this.generation) continue
-          if (answer.ok) this.setState({ status: 'ready', catalog: answer })
-          else this.setState({ status: 'unavailable', message: answer.code, code: answer.code === 'storage-unavailable' ? 'storage_unavailable' : 'catalog_unavailable' })
+          if (answer.ok) { this.lastCatalog = answer; this.setState({ status: 'ready', catalog: answer }) }
+          else this.setState({ ...(this.lastCatalog ? { catalog: this.lastCatalog, stale: true as const } : {}), status: 'unavailable', message: answer.code, code: answer.code === 'storage-unavailable' ? 'storage_unavailable' : 'catalog_unavailable' })
         } catch (error) {
           if (this.disposed || serving !== this.generation) continue
           const normalized = normalizeToolHubClientError(error)
-          this.setState({ status: 'error', message: normalized.code, code: normalized.code })
+          this.setState({ ...(this.lastCatalog ? { catalog: this.lastCatalog, stale: true as const } : {}), status: 'error', message: normalized.code, code: normalized.code })
         } finally {
           this.served = serving
           this.resolveWaiters(serving)

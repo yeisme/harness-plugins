@@ -43,8 +43,11 @@ const runId = `ui-visual-${startedAt.toISOString().replace(/[:.]/gu, '-')}-${pro
 const runRoot = resolve(projectRoot, 'temp/integration-test-runs', runId)
 const artifacts = resolve(runRoot, 'artifacts')
 const update = process.argv.includes('--update-snapshots')
-const publicCommand = update ? 'pnpm run test:visual:update' : 'pnpm run test:visual'
+const testFile = process.argv.find(arg => /^visual-[a-z-]+\.spec\.ts$/.test(arg))
+const publicCommand = `node scripts/run-ui-visual-tests.mjs${update ? ' --update-snapshots' : ''}${testFile ? ` ${testFile}` : ''}`
 const args = ['exec', 'playwright', 'test', '--config', 'tests/ui-visual/playwright.config.ts', update ? '--update-snapshots=all' : '--update-snapshots=none']
+
+if (testFile) args.push(testFile)
 
 function redact(value) {
   return value

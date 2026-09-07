@@ -16,6 +16,7 @@ export interface ActivityToolResultNode {
   call: { name: string } | null
   callTime: number | null
   isError: boolean
+  error?: { readonly name?: string; readonly code?: string }
 }
 
 /** 运行中调用的结构化视图（来自 runningCalls）。 */
@@ -52,6 +53,8 @@ export interface ToolActivityRecord {
   readonly durationMs: number | null
   readonly isError: boolean
   readonly running: boolean
+  readonly errorCode?: string
+  readonly errorName?: string
   readonly sequence: number
 }
 
@@ -118,6 +121,8 @@ export function deriveToolActivity(
       isError: node.isError,
       running: false,
       sequence: node.seq,
+      ...(node.error?.code && /^[A-Za-z0-9_.:-]{1,120}$/.test(node.error.code) ? { errorCode: node.error.code } : {}),
+      ...(node.error?.name && /^[A-Za-z0-9_. -]{1,120}$/.test(node.error.name) ? { errorName: node.error.name } : {}),
     })
   }
   records.sort((a, b) => b.time - a.time || b.sequence - a.sequence || a.tool.localeCompare(b.tool))

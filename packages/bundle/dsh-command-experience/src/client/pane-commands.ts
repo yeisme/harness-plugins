@@ -8,7 +8,7 @@ interface CommandUi {
   decorate(input: {
     name: string
     available(): boolean
-    ui: { kind: 'popupSelect'; options(): Promise<readonly PaneChoice[]>; onSelect(option: PaneChoice): void }
+    ui: { kind: 'popupSelect'; options(): Promise<readonly PaneChoice[]>; onSelect(option: PaneChoice, session?: { sessionId?: string }): void }
   }): () => void
 }
 interface Context {
@@ -35,10 +35,14 @@ export function bindPaneCommandUi(ctx: Context): () => void {
       const choices = () => pane()?.views.snapshot().filter(row => kind === undefined ? row.showInPicker !== false : row.descriptor.kind === kind) ?? []
       registrations.push(next.decorate({ name, available: () => choices().length > 0,
         ui: { kind: 'popupSelect', options: async () => choices().map(row => ({ id: row.descriptor.kind, label: row.descriptor.label })),
-          onSelect(option) {
+          onSelect(option, session) {
             const service = pane()
             const row = choices().find(row => row.descriptor.kind === option.id)
             if (!service || !row) return
+            if (name === 'mcp') {
+              const tools = get('sessionTools') as { openSessionTools?(input: { sessionId?: string; presentation: 'tab' }): boolean } | undefined
+              if (tools?.openSessionTools) { tools.openSessionTools({ ...(session?.sessionId ? { sessionId: session.sessionId } : {}), presentation: 'tab' }); return }
+            }
             const descriptor = row.descriptor
             service.openView({ kind: descriptor.kind, resourceKey: `command:${descriptor.kind}`, role: descriptor.role ?? 'inspector', preferredRegion: descriptor.preferredRegion ?? 'right', retention: descriptor.retention ?? 'keep-alive', singleton: descriptor.singleton ?? true, title: descriptor.label, pinned: true, ...(name === 'mcp' ? { metadata: { tab: 'mcp' } } : {}) })
           },

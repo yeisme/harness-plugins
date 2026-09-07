@@ -47,7 +47,8 @@
     "./host": {
       "types": "./lib/types/host.d.ts",
       "default": "./lib/host.js"
-    }
+    },
+    "./host/package.json": "./package.json"
   },
   "dependencies": {
     "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.6",

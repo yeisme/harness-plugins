@@ -63,6 +63,9 @@ try {
   if (!readFileSync(resolve(source, 'packages/client/ui-layout/src/client/keyboard.ts'), 'utf8').includes('Direct editor-style shortcuts')) {
     await run('bash', ['upstream-prs/pane-editor-shortcuts/apply.sh', source])
   }
+  if (!existsSync(resolve(source, 'packages/client/ui-conversation/src/client/conversation/navigation.ts'))) {
+    await run('bash', ['upstream-prs/session-tools-workspace/apply.sh', source])
+  }
   let compatibleBundle = false
   try { checkWorkbenchRuntime(root); compatibleBundle = true } catch { /* Rebuild incomplete or stale local artifacts below. */ }
   if (rebuild || !compatibleBundle || !existsSync(resolve(source, 'apps/cli/lib/bin.js')) || !existsSync(resolve(source, 'apps/web/dist/index.html'))) {

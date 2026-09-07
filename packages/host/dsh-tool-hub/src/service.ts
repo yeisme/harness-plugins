@@ -34,6 +34,7 @@ export class ToolHubSidecar {
   private readonly catalog: ToolHubCatalogPort
   private readonly newVersion: () => string
   private generation = 1
+  private mutation: Promise<unknown> = Promise.resolve()
   private memoryDisabled = new Set<string>()
 
   constructor(deps: ToolHubSidecarDeps) {
@@ -60,6 +61,7 @@ export class ToolHubSidecar {
     try {
       const source = await this.catalog.collect()
       const projected = projectCatalog({ ...source, disabledIds: this.disabledIds() })
+      if (!projected.skillsAvailable && !projected.toolsAvailable && !projected.mcpInventoryAvailable) return { ok: false, code: 'catalog-unavailable', message: 'No catalog sources are available' }
       return {
         ok: true,
         specVersion: TOOL_HUB_SPEC_VERSION,
@@ -73,11 +75,17 @@ export class ToolHubSidecar {
         items: projected.items,
       }
     } catch (error) {
-      return { ok: false, code: 'catalog-unavailable', message: error instanceof Error ? error.message : 'catalog unavailable' }
+      return { ok: false, code: 'catalog-unavailable', message: 'Catalog sources are unavailable' }
     }
   }
 
-  async setEnabled(input: ToolHubSetEnabledInputV1): Promise<ToolHubSetEnabledAnswerV1> {
+  setEnabled(input: ToolHubSetEnabledInputV1): Promise<ToolHubSetEnabledAnswerV1> {
+    const result = this.mutation.then(() => this.applyEnabled(input))
+    this.mutation = result.catch(() => undefined)
+    return result
+  }
+
+  private async applyEnabled(input: ToolHubSetEnabledInputV1): Promise<ToolHubSetEnabledAnswerV1> {
     if (input.ifGeneration !== this.generation) {
       return { ok: false, code: 'generation-conflict', message: 'catalog generation moved', generation: this.generation }
     }
@@ -94,7 +102,7 @@ export class ToolHubSidecar {
       this.generation += 1
       return { ok: true, id: input.id, enabled: input.enabled, generation: this.generation }
     } catch (error) {
-      return { ok: false, code: 'storage-unavailable', message: error instanceof Error ? error.message : 'storage unavailable' }
+      return { ok: false, code: 'storage-unavailable', message: 'Tool preferences storage is unavailable' }
     }
   }
 

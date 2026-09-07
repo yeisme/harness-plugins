@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict'
+import {installModuleProbe, verifyPluginInventory} from './plugin-browser-smoke.mjs'
+import {verifySessionTools} from './tools-workspace-browser-checks.mjs'
 import { chromium } from '@playwright/test'
 import { mkdir, writeFile } from 'node:fs/promises'
 
@@ -7,15 +9,16 @@ const run = `pane-interactions-${new Date().toISOString().replace(/[:.]/g, '-')}
 const dir = new URL(`../temp/integration-test-runs/${run}/`, import.meta.url)
 await mkdir(new URL('artifacts/', dir), { recursive: true })
 const checks = []
-let browser, failure, stage = 'startup'
+let browser, page, failure, stage = 'startup'
 try {
   const url = new URL(process.env.DSH_PREVIEW_URL)
   assert(['127.0.0.1', 'localhost'].includes(url.hostname))
   browser = await chromium.launch()
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
-  page.setDefaultTimeout(10000)
+  page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+  page.setDefaultTimeout(15000)
+  await installModuleProbe(page)
   const errors = []
-  page.on('pageerror', () => errors.push('browser-error'))
+  page.on('pageerror', error => { errors.push(error.name); process.stderr.write(`Browser error: ${error.name}: ${error.message.replace(/[a-f0-9]{8}-[a-f0-9-]{27,}/gi, '[ID]').replace(/(token|password|secret|authorization)[=:]\S+/gi, '$1=[REDACTED]')}\n`) })
   await page.goto(url.href)
   const workspace = page.locator('[data-unified-workspace]')
   await workspace.waitFor()
@@ -77,11 +80,13 @@ try {
   const option = page.getByRole('option').filter({ hasText: /Tools|工具/ }).first()
   await option.waitFor()
   await option.click()
-  await page.locator('[data-workspace-tab]').filter({ hasText: /Tools|工具/ }).last().waitFor()
+  await page.getByRole('tab', { name: /^(Tools|工具)$/ }).first().waitFor()
   await page.locator('[data-mcp-inspector]:visible').waitFor()
   assert.equal(await page.locator('[data-workspace-pane]:visible > [role=alert]').count(), 0)
   assert.equal(await page.getByText('Pane Workbench is not installed', { exact: true }).count(), 0)
-  checks.push('bare /mcp opens the installed Tools pane through the browser command chooser')
+  checks.push('bare /mcp opens the source Session Tools tab through the browser command chooser')
+  stage = 'session-tools-affinity'
+  checks.push(...await verifySessionTools(page, dir, (await conversation.getAttribute('data-workspace-tab')).slice('conversation:'.length), name => { stage = `session-tools/${name}` }))
   stage = 'editor-shortcuts-multiple-panes'
   const shortcut = async key => { await page.keyboard.press(key); await page.waitForTimeout(120) }
   const composer = page.locator('[contenteditable=true]:visible').first()
@@ -129,8 +134,13 @@ try {
   assert.equal(await composer.textContent(), `${textBefore}o`)
   assert.equal(await page.getByRole('status').filter({ hasText: /Pane[:：]/ }).count(), 0)
   checks.push('direct editor shortcuts work with Meta and Control; four panes split, wrap, reflow and focus by number; ordinary o input has no prefix behavior')
+  stage = 'all-plugin-entry-smoke'
+  checks.push(await verifyPluginInventory(page, dir))
   assert.equal(errors.length, 0)
 } catch (error) {
+  const diagnostic = String(error?.message ?? '').split('\n').filter(line => !line.includes('<') && /outside|visible|stable|intercepts|Timeout/i.test(line)).map(line => line.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, '[SESSION]')).slice(0,12)
+  const panes = await page?.locator('[data-workspace-pane]').evaluateAll(elements => elements.map(element => { const rect=element.getBoundingClientRect();return {kind:element.dataset.workspacePane?.startsWith('conversation:')?'conversation':'plugin',callLocation:element.querySelector('[data-call-location]')?.getAttribute('data-call-location'),chatAnchors:element.querySelectorAll('[data-chat-anchor-key]').length,callUnavailable:/original call is unavailable|原调用记录不可用/.test(element.textContent??''),focusedAnchor:!!element.querySelector('[data-chat-anchor-key]:focus'),width:rect.width,height:rect.height,x:rect.x,y:rect.y,visible:getComputedStyle(element).display!=='none',toolsGeometry:[...element.querySelectorAll('[data-mcp-inspector],.tools-call-details,.tools-activity-list,.tools-header,.tools-workspace')].map(el=>{const r=el.getBoundingClientRect();return {kind:el.className,containerType:getComputedStyle(el).containerType,x:r.x,y:r.y,height:r.height,width:r.width,hasCompactCss:[...document.querySelectorAll('style')].some(s=>s.textContent.includes('max-height:300px'))}}),toolsTabs:[...element.querySelectorAll('[role=tab]')].filter(tab=>/^(Tools|工具)$/.test(tab.textContent??'')).map(tab=>{const r=tab.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}})} })).catch(()=>[])
+  await writeFile(new URL('artifacts/failure-diagnostic.json', dir),JSON.stringify({stage,diagnostic,panes,redacted:true}))
   failure = `${stage}: ${error instanceof assert.AssertionError ? 'assertion failed' : 'browser operation did not complete'}`
 } finally {
   await browser?.close()

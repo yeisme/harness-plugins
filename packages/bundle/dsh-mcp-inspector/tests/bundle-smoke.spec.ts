@@ -33,7 +33,7 @@ describe('dsh-mcp-inspector bundle entry', () => {
   });
 
   it('declares the locale and session injects', () => {
-    expect(inject).toEqual(['locale', 'sessions']);
+    expect(inject).toEqual(['locale', 'sessions', 'slots']);
   });
 
   it('ships a self-contained Host face so the toolHub Remote is not dropped', () => {

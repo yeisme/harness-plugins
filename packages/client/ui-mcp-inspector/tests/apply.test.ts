@@ -33,27 +33,29 @@ describe('Tools pane registration', () => {
     let serviceChanged = (_name: string, _value: unknown) => {}
     const ctx = {
       locale: { register: () => disposeLocale, bind: () => (key: string) => key === 'view.tools' ? 'Tools' : key },
-      get: (key: string) => key === 'paneWorkbench' ? initial === true ? pane : initial : {},
-      on: (_event: string, fn: typeof serviceChanged) => { serviceChanged = fn; return disposeEvents },
-      slots: { inject: vi.fn(), register: vi.fn() },
+      get: (key: string) => key === 'paneWorkbench' ? initial === true ? pane : initial : key === 'slots' ? ctx.slots : {},
+      provide: vi.fn(() => vi.fn()),
+      on: (event: string, fn: typeof serviceChanged) => { if (event === 'internal/service') serviceChanged = fn; return event === 'internal/service' ? disposeEvents : vi.fn() },
+      slots: { inject: vi.fn((_name: string, register: () => () => void) => register()), register: vi.fn(() => vi.fn()) },
     }
     return { ctx, pane, disposeView, disposeLocale, disposeEvents, change: (value: unknown) => serviceChanged('paneWorkbench', value) }
   }
 
-  test('registers one picker-visible Tools pane without a conversation tab', () => {
+  test('registers session Tools and global management plus the session-scoped tab', () => {
     const h = harness(true)
     const dispose = apply(h.ctx as never)
     expect(name).toBe('client-ui-mcp-inspector')
-    expect(inject).toEqual(['locale', 'sessions'])
-    expect(h.pane.registerView).toHaveBeenCalledOnce()
+    expect(inject).toEqual(['locale', 'sessions', 'slots'])
+    expect(h.pane.registerView).toHaveBeenCalledTimes(2)
     expect(h.pane.registerView.mock.calls[0]?.[0]).toMatchObject({
-      descriptor: { kind: 'mcp-inspector', label: 'Tools', preferredRegion: 'right', retention: 'recreate', singleton: true },
+      descriptor: { kind: 'mcp-inspector', label: 'Tools', preferredRegion: 'right', retention: 'keep-alive', singleton: false },
       i18n: { namespace: 'mcpInspector', labelKey: 'view.tools' },
     })
-    expect(h.ctx.slots.inject).not.toHaveBeenCalled()
+    expect(h.ctx.slots.inject).toHaveBeenCalledWith('conversation.view', expect.any(Function))
+    expect(h.ctx.slots.register).toHaveBeenCalledWith(expect.objectContaining({ name: 'conversation.view', id: 'mcp-inspector' }), expect.any(Function))
     expect(h.pane.openView).not.toHaveBeenCalled()
     dispose()
-    expect(h.disposeView).toHaveBeenCalledOnce()
+    expect(h.disposeView).toHaveBeenCalledTimes(2)
     expect(h.disposeLocale).toHaveBeenCalledOnce()
     expect(h.disposeEvents).toHaveBeenCalledOnce()
   })
@@ -65,13 +67,13 @@ describe('Tools pane registration', () => {
     h.change({ registerView: () => {} })
     h.change(h.pane)
     h.change(h.pane)
-    expect(h.pane.registerView).toHaveBeenCalledOnce()
-    h.change(undefined)
-    expect(h.disposeView).toHaveBeenCalledOnce()
-    h.change(h.pane)
     expect(h.pane.registerView).toHaveBeenCalledTimes(2)
-    dispose()
+    h.change(undefined)
     expect(h.disposeView).toHaveBeenCalledTimes(2)
+    h.change(h.pane)
+    expect(h.pane.registerView).toHaveBeenCalledTimes(4)
+    dispose()
+    expect(h.disposeView).toHaveBeenCalledTimes(4)
   })
 })
 

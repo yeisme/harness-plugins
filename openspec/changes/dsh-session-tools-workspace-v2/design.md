@@ -97,3 +97,13 @@ Canonical data/action/receipt owner 为 DSH session/tools/skills/config 服务�
 启用全部已发现 bundle 的本地配置并保留用户额外插件；不自动重置用户手工禁用的工具、不新增外部凭据或收费调用。工具启停测试在可丢弃 profile/storage 内跑真实 owner 路径；外部依赖用明确标记的 mock，不将它们计为真实连接成功。
 
 按当前兼容基线导出增量补丁并完整重建验证；提交插件仓后更新根仓 submodule 指针，不推送远端。回滚仅移除本轮注册或还原对应提交/补丁，不删除会话、草稿、布局和配置；新旧版本均不应静默重绑定遗留工具 Pane。
+
+## 7. 实施确认与兼容增量
+
+目录现场根因已复现：已经挂载的 Gateway namespace 返回 transport envelope，旧分支把它直接当领域目录，并把 transport 成功内的领域失败误判为成功。统一解包和领域 codec 校验后恢复。首次挂载并发合并；插件卸载先登记清理，挂载晚到仍释放。
+
+Skills.list 增加可选 includeModelInvocable 请求与 catalogComplete 响应，旧请求不变；缺少完整性信息的旧响应显示部分目录。会话导航与 Settings 导航通过宿主服务注入，保持 domain owner。
+
+全插件实际检查另发现 client-modules 新版忽略子路径入口，影响 Pentest 和 Terminal。兼容补丁只接纳显式导出 `<subpath>/package.json` 的 Web seat，普通 Host 子路径继续排除。Terminal 增加 manifest alias，浏览器注册 ID 对齐现有 Host row。bundle 检查仅接受具有对应 Host 导出和 manifest alias 的同包子路径，仍拒绝任意 banner ID。
+
+补丁重建只逐字比较本任务拥有的文件；其他并行任务修改的 staging 文件不纳入本任务导出。先前完整补丁链仍在干净 checkout 依次应用，并重放当前包验证幂等。

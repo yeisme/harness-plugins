@@ -23,22 +23,22 @@ const node = {
 } as const
 
 export default defineConfig([
-  {
+  ...(['host', 'index'] as const).map(entry => ({
     ...node,
     // Bundle the tsc output, not the TypeScript source: Rolldown targets
     // ES2024 and otherwise preserves `@Remote`, which Node cannot parse.
     alias: {
       '@yeisme/dsh-terminal-host': fileURLToPath(new URL('../../host/dsh-terminal-host/lib/types/index.js', import.meta.url)),
     },
-    entry: { host: 'lib/types/host.js' },
+    entry: { [entry]: `lib/types/${entry}.js` },
     deps: {
       alwaysBundle: [/^@yeisme\//u],
       // Typert decorators keep their Remote marker table in module-private
       // state. They must stay external so Host and Gateway share one runtime
       // instance; bundling a second copy makes the endpoint invisible.
-      neverBundle: ['@deepseek-ai/cordis', '@deepseek-ai/dsh-typert-protocol'],
+      neverBundle: ['@deepseek-ai/cordis', '@deepseek-ai/dsh-typert-protocol', ...clientExternals],
     },
-  },
+  })),
   {
     ...node,
     entry: ['lib/types/module.js'],
@@ -66,7 +66,7 @@ export default defineConfig([
       codeSplitting: false,
       entryFileNames: 'host.js',
       entryFileNames: 'client.js',
-      banner: 'window.__ModuleLoader__.load({ id: "@yeisme/dsh-terminal", factory: (require) => {',
+      banner: 'window.__ModuleLoader__.load({ id: "@yeisme/dsh-terminal/host", factory: (require) => {',
       footer: 'return module.exports; } });',
       intro: 'var module = { exports: {} }; var exports = module.exports;',
     },

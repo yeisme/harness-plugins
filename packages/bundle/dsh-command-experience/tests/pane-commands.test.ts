@@ -31,3 +31,13 @@ describe('browser pane command decorations', () => {
     dispose(); expect(off).toHaveBeenCalledOnce()
   })
 })
+
+it('opens the invoking Session tab rather than reading global current at selection time', async () => {
+  const decorations:any[]=[],openSessionTools=vi.fn(()=>true),openView=vi.fn()
+  const ctx={get:(name:string)=>name==='sessionTools'?{openSessionTools}:name==='commandUi'?{decorate:(entry:unknown)=>{decorations.push(entry);return ()=>{}}}:name==='paneWorkbench'?{openView,views:{snapshot:()=>[{descriptor:{kind:'mcp-inspector',label:'Tools'}}]}}:undefined}
+  const dispose=bindPaneCommandUi(ctx)
+  const mcp=decorations.find(row=>row.name==='mcp'),[choice]=await mcp.ui.options()
+  mcp.ui.onSelect(choice,{sessionId:'source-a'})
+  expect(openSessionTools).toHaveBeenCalledWith({sessionId:'source-a',presentation:'tab'})
+  expect(openView).not.toHaveBeenCalled();dispose()
+})

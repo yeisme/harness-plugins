@@ -73,3 +73,20 @@ describe('projectCatalog', () => {
     expect(JSON.stringify(projection)).not.toMatch(/authorization|secret/)
   })
 })
+
+it('never calls missing sources complete', () => {
+  expect(projectCatalog({ disabledIds: new Set() })).toMatchObject({ complete: false, skillsAvailable: false, toolsAvailable: false })
+})
+
+it('isolates synchronous and asynchronous source failures', async () => {
+  const port = createHostCatalogPort({ get: (key: string) => {
+    if (key === 'skills') return { snapshot: () => { throw new Error('private-provider-detail') } }
+    if (key === 'tools') return { schemas: () => [{ name: 'read' }] }
+    if (key === 'pluginInventory') return { list: async () => { throw new Error('offline') } }
+    return undefined
+  } } as never)
+  const source = await port.collect()
+  const result = projectCatalog({ ...source, disabledIds: new Set() })
+  expect(result).toMatchObject({ complete: false, toolsAvailable: true, skillsAvailable: false, items: [{ name: 'read' }] })
+  expect(JSON.stringify(result)).not.toContain('private-provider-detail')
+})

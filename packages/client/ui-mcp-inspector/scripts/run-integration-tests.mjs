@@ -9,8 +9,10 @@ const startedAt = new Date()
 const runId = `${startedAt.toISOString().replace(/[:.]/g, '-')}-${process.pid}`
 const evidenceDir = resolve(projectRoot, 'temp/integration-test-runs', runId)
 const relativeEvidenceDir = relative(projectRoot, evidenceDir)
-const testFile = 'tests/pane.test.tsx'
-const command = `pnpm --filter @yeisme/dsh-client-ui-mcp-inspector exec vitest run ${testFile}`
+const host = process.argv.includes('--host')
+const testPackage = host ? '@yeisme/dsh-tool-hub-host' : '@yeisme/dsh-client-ui-mcp-inspector'
+const testFiles = host ? ['tests/loader-composition.spec.ts', 'tests/gateway.spec.ts', 'tests/service.spec.ts'] : ['tests/pane.test.tsx', 'tests/remote.test.ts', 'tests/session-catalog.test.ts']
+const command = `pnpm --filter ${testPackage} exec vitest run ${testFiles.join(' ')}`
 
 function redact(input) {
   return input.replaceAll(projectRoot, '.')
@@ -30,8 +32,8 @@ writeFileSync(resolve(evidenceDir, 'env.json'), `${JSON.stringify({
 }, null, 2)}\n`)
 
 const result = spawnSync('pnpm', [
-  '--filter', '@yeisme/dsh-client-ui-mcp-inspector',
-  'exec', 'vitest', 'run', testFile,
+  '--filter', testPackage,
+  'exec', 'vitest', 'run', ...testFiles,
 ], {
   cwd: projectRoot,
   encoding: 'utf8',

@@ -1,0 +1,319 @@
+diff --git a/packages/client/modules/src/index.ts b/packages/client/modules/src/index.ts
+index 98b6fa5..6df0202 100644
+--- a/packages/client/modules/src/index.ts
++++ b/packages/client/modules/src/index.ts
+@@ -790 +790,8 @@ export class ClientModuleRegistry extends Service {
+-    if (!pathLike && expectedPackageName === undefined) return undefined
++    if (!pathLike && expectedPackageName === undefined) {
++      // Subpath browser seats must opt in with an explicit manifest export.
++      // Ordinary host-only subpaths remain excluded; never infer the root face.
++      try {
++        const path = createRequire(baseUrl).resolve(`${loaderName}/package.json`)
++        return { path, packageName: loaderName }
++      } catch { return undefined }
++    }
+diff --git a/packages/client/modules/tests/node-half.client.spec.ts b/packages/client/modules/tests/node-half.client.spec.ts
+index 5553c94..0efb988 100644
+--- a/packages/client/modules/tests/node-half.client.spec.ts
++++ b/packages/client/modules/tests/node-half.client.spec.ts
+@@ -841,0 +842,13 @@ describe('module graph order', () => {
++
++ describe('explicit subpath browser seats', () => {
++  it('loads an exported manifest alias but excludes an ordinary host subpath', () => {
++    const path = writePackage('@fixture/subpath', { exports: {
++      './client': './lib/client.js', './package.json': './package.json',
++      './web/package.json': './package.json',
++    }, dsh: { client: { platform: 'web' } } })
++    mkdirSync(dirname(path), { recursive: true })
++    writeFileSync(path, 'module.exports = {}\n')
++    const service = construct(['@fixture/subpath/web', '@fixture/subpath/host'])
++    expect(service.graph().entries.map(entry => entry.id)).toEqual(['@fixture/subpath/web'])
++  })
++})
+diff --git a/packages/api/session-controller/src/skill-catalog.ts b/packages/api/session-controller/src/skill-catalog.ts
+index 82043a4..e0bc7aa 100644
+--- a/packages/api/session-controller/src/skill-catalog.ts
++++ b/packages/api/session-controller/src/skill-catalog.ts
+@@ -77 +77 @@ export class SessionSkillCatalog extends TypertRemoteService {
+-      const skills = (await skillRegistry.list({ cwd, scope })).filter(isUserInvocable)
++      const skills = (await skillRegistry.list({ cwd, scope })).filter(skill => isUserInvocable(skill) || request.includeModelInvocable === true && skill.invocation.modelInvocable)
+@@ -78,0 +79 @@ export class SessionSkillCatalog extends TypertRemoteService {
++        ...(request.includeModelInvocable ? { catalogComplete: true } : {}),
+diff --git a/packages/api/session-controller/src/types.ts b/packages/api/session-controller/src/types.ts
+index a8247aa..c5aebfc 100644
+--- a/packages/api/session-controller/src/types.ts
++++ b/packages/api/session-controller/src/types.ts
+@@ -243,0 +246,2 @@ export interface SkillListRequest {
++  /** Tools inspectors may include model-only skills; composer defaults remain unchanged. */
++  readonly includeModelInvocable?: boolean
+@@ -260,0 +265,2 @@ export interface SkillListValue {
++  /** Present only for the opt-in complete user/model capability listing. */
++  readonly catalogComplete?: boolean
+diff --git a/packages/api/session-controller/tests/session-skills.host.spec.ts b/packages/api/session-controller/tests/session-skills.host.spec.ts
+index 386d37e..013e580 100644
+--- a/packages/api/session-controller/tests/session-skills.host.spec.ts
++++ b/packages/api/session-controller/tests/session-skills.host.spec.ts
+@@ -78,0 +79,3 @@ describe('SessionSkillCatalog', () => {
++    const complete = await catalog.list({ sessionId, includeModelInvocable: true }, new AbortController().signal)
++    expect(complete.catalogComplete).toBe(true)
++    expect(complete.skills.map(skill => skill.name)).toEqual(['review', 'model-only'])
+@@ -80 +83 @@ describe('SessionSkillCatalog', () => {
+-    expect(dispose).toHaveBeenCalledOnce()
++    expect(dispose).toHaveBeenCalledTimes(2)
+diff --git a/packages/client/locale/src/locales/en.ts b/packages/client/locale/src/locales/en.ts
+index 4974387..748e8dc 100644
+--- a/packages/client/locale/src/locales/en.ts
++++ b/packages/client/locale/src/locales/en.ts
+@@ -29,0 +30,2 @@ export const en = {
++  'wb.manageSessions': 'Manage pane sessions',
++  'wb.tools': 'Tools',
+diff --git a/packages/client/locale/src/locales/zh.ts b/packages/client/locale/src/locales/zh.ts
+index cfca410..1e013ca 100644
+--- a/packages/client/locale/src/locales/zh.ts
++++ b/packages/client/locale/src/locales/zh.ts
+@@ -27,0 +28,2 @@ export const zh = {
++  'wb.manageSessions': '管理此 Pane 的会话',
++  'wb.tools': '工具',
+diff --git a/packages/client/ui-chat/src/client/chat/ChatView.tsx b/packages/client/ui-chat/src/client/chat/ChatView.tsx
+index 403eecd..f00090f 100644
+--- a/packages/client/ui-chat/src/client/chat/ChatView.tsx
++++ b/packages/client/ui-chat/src/client/chat/ChatView.tsx
+@@ -220 +220 @@ export function ChatView({
+-  useTranscriptView, useProjection, t,
++  useTranscriptView, useProjection, viewRequest, completeViewRequest, t,
+@@ -752,0 +753,41 @@ export function ChatView({
++  const [revealingCall, setRevealingCall] = useState(false)
++  const [callUnavailable, setCallUnavailable] = useState(false)
++  const [callLocation, setCallLocation] = useState<string>()
++  useEffect(() => {
++    if (viewRequest?.view !== 'chat' || !/^tool-result:[0-9]+$/.test(viewRequest.focus)) return
++    const sequence = Number(viewRequest.focus.slice('tool-result:'.length))
++    if (!Number.isSafeInteger(sequence)) return
++    let live = true
++    setRevealingCall(true); setCallUnavailable(false); setCallLocation('loading')
++    const contains = (block: unknown): boolean => {
++      if (typeof block !== 'object' || block === null) return false
++      const call = block as { seq?: number; subCalls?: readonly unknown[] }
++      return call.seq === sequence || !!call.subCalls?.some(contains)
++    }
++    void loadThrough(sequence as SessionSeq).then(() => {
++      if (!live) return
++      // Paging and transcript expansion commit before the scoped row is available.
++      let frames = 0
++      const land = () => {
++        if (!live) return
++        const targets = nodeStore.values().filter(node => contains((node.data as { root?: unknown } | undefined)?.root))
++        const list = listRef.current
++        const rows = list ? [...list.querySelectorAll<HTMLElement>('[data-chat-anchor-key]')] : []
++        const row = rows.find(element => targets.some(node => node.key === element.dataset.chatAnchorKey))
++        if (row) {
++          row.dispatchEvent(new Event('beforematch'))
++          requestAnimationFrame(() => {
++            if (!live) return
++            row.scrollIntoView({ block: 'center' }); row.tabIndex = -1; row.focus({ preventScroll: true })
++            setCallLocation('located'); completeViewRequest()
++          })
++          return
++        }
++        if (++frames < 12) { requestAnimationFrame(land); return }
++        setCallLocation(targets.length ? 'missing-row' : 'missing-node')
++        setCallUnavailable(true); completeViewRequest()
++      }
++      requestAnimationFrame(land)
++    }, () => { if (live) { setCallUnavailable(true); setCallLocation('load-error'); completeViewRequest() } })
++    return () => { live = false }
++  }, [viewRequest?.focus, nodeStore, loadThrough, completeViewRequest])
+@@ -754 +795,2 @@ export function ChatView({
+-    <div className={css.root}>
++    <div className={css.root} data-call-location={callLocation}>
++      {callUnavailable && <p role="status">{t('chat.callUnavailable')}</p>}
+@@ -782 +824 @@ export function ChatView({
+-            compactTranscript={compactTranscript}
++            compactTranscript={compactTranscript && !revealingCall}
+diff --git a/packages/client/ui-chat/src/client/locale.ts b/packages/client/ui-chat/src/client/locale.ts
+index a90d248..495d908 100644
+--- a/packages/client/ui-chat/src/client/locale.ts
++++ b/packages/client/ui-chat/src/client/locale.ts
+@@ -7,0 +8 @@ export const zh = {
++  'chat.callUnavailable': '原调用记录不可用，可能已删除或不在当前历史中。',
+@@ -125,0 +127 @@ export const en = {
++  'chat.callUnavailable': 'The original call is unavailable or no longer in this history.',
+diff --git a/packages/client/ui-conversation/src/client/apply.ts b/packages/client/ui-conversation/src/client/apply.ts
+index 3d98bdd..3dd035c 100644
+--- a/packages/client/ui-conversation/src/client/apply.ts
++++ b/packages/client/ui-conversation/src/client/apply.ts
+@@ -11,0 +12 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
++import { ConversationNavigation } from './conversation/navigation.ts'
+@@ -649,0 +658,12 @@ export function apply(ctx: Context): void {
++  const navigation = new ConversationNavigation(sessionId => {
++    const summary = sessions.list.getSnapshot().byId[sessionId as SessionId]
++    if (!summary) return false
++    const workspace = ctx.get('workspaceLayout' as never) as unknown as { openPane(pane: { id: string; kind: string; sessionId: string; title: string; pinned: boolean }): void } | undefined
++    if (workspace) workspace.openPane({ id: `conversation:${sessionId}`, kind: 'conversation', sessionId, title: summary.displayTitle, pinned: true })
++    else sessions.open(sessionId as SessionId)
++    return true
++  })
++  ctx.effect(() => {
++    const unprovide = ctx.provide('conversationNavigation' as never, navigation as never)
++    return () => { unprovide(); navigation.dispose() }
++  }, 'ui-conversation: session navigation')
+@@ -657,0 +678 @@ export function apply(ctx: Context): void {
++      bindViewNavigation: () => navigation.bind(sessionId, (view, focus) => { activateView(sessionId, view); actions.openView(view, focus) }),
+diff --git a/packages/client/ui-conversation/src/client/contract/slots.ts b/packages/client/ui-conversation/src/client/contract/slots.ts
+index 96901fa..1e2d71f 100644
+--- a/packages/client/ui-conversation/src/client/contract/slots.ts
++++ b/packages/client/ui-conversation/src/client/contract/slots.ts
+@@ -228,0 +229,2 @@ export interface ConversationSessionInjected {
++  /** Bind the resident Session shell to explicit external navigation. */
++  bindViewNavigation?: () => () => void
+diff --git a/packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css b/packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css
+index e635c38..9a30a3c 100644
+--- a/packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css
++++ b/packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css
+@@ -492,0 +493,5 @@
++
++/* Read-only Session views reserve their full bounded content area. */
++.scrollBody:has([data-conversation-readonly-view]) { overflow: hidden; scrollbar-gutter: auto; }
++.scrollBody:has([data-conversation-readonly-view]) > :global([data-slot='conversation.session']) > .viewArea { flex: 1 1 0; min-height: 0; overflow: hidden; }
++.scrollBody:has([data-conversation-readonly-view]) > .composerSeat { display: none; }
+diff --git a/packages/client/ui-conversation/src/client/skeleton/ConversationSession.tsx b/packages/client/ui-conversation/src/client/skeleton/ConversationSession.tsx
+index ea7a3fe..b40c5ea 100644
+--- a/packages/client/ui-conversation/src/client/skeleton/ConversationSession.tsx
++++ b/packages/client/ui-conversation/src/client/skeleton/ConversationSession.tsx
+@@ -73,2 +73,2 @@ export function ConversationSessionHeader({
+-      className={clsx(css.header, hideChrome && css.headerHidden)}
+-      aria-hidden={hideChrome || undefined}
++      className={clsx(css.header, hideChrome && tabs.length <= 1 && css.headerHidden)}
++      aria-hidden={hideChrome && tabs.length <= 1 || undefined}
+@@ -136,0 +137,3 @@ export function ConversationSessionHeader({
++
++        </>
++      )}
+@@ -153,2 +155,0 @@ export function ConversationSessionHeader({
+-        </>
+-      )}
+@@ -167 +168 @@ export function ConversationSession({
+-  renderSlot, bindDraftMirror, openView,
++  renderSlot, bindDraftMirror, bindViewNavigation, openView,
+@@ -176,0 +178 @@ export function ConversationSession({
++  useEffect(() => bindViewNavigation?.(), [bindViewNavigation])
+@@ -186 +188 @@ export function ConversationSession({
+-  if (session.blank && conversationPhase(session, conversation) === 'blank') return null
++  if (active?.id === 'chat' && session.blank && conversationPhase(session, conversation) === 'blank') return null
+diff --git a/packages/client/ui-layout/README.md b/packages/client/ui-layout/README.md
+index b870390..af253c4 100644
+--- a/packages/client/ui-layout/README.md
++++ b/packages/client/ui-layout/README.md
+@@ -96,0 +97,4 @@ There is no tmux prefix or waiting mode. Shortcuts work in composers, with termi
++
++## Session-bound tool companions
++
++Pane headers expose a session chooser for tabs and explicit companion rebinding. Conversation panes keep their existing Session identity; tool companions persist the explicit Session reference and never follow global current. The optional sessionTools owner handles tool rebinding; the shell owns geometry, titles and focus. Closing a conversation tab does not close its pinned tool companion. Session-addressed conversationNavigation reopens the correct conversation and delivers an opaque view focus request.
+diff --git a/packages/client/ui-layout/src/client/Workbench.tsx b/packages/client/ui-layout/src/client/Workbench.tsx
+index 861f936..47a4cd0 100644
+--- a/packages/client/ui-layout/src/client/Workbench.tsx
++++ b/packages/client/ui-layout/src/client/Workbench.tsx
+@@ -15,0 +16 @@ export type WorkbenchInjected = {
++  requestPaneSessionChange?: (paneId: string, sessionId: string) => boolean
+@@ -77,0 +79 @@ export function Workbench(props: Props) {
++  const sessionTarget = useRef<{ groupId: string; paneId?: string } | null>(null)
+@@ -101,0 +104,10 @@ export function Workbench(props: Props) {
++    const target = sessionTarget.current
++    if (target && pane.sessionId) {
++      if (target.paneId) { props.requestPaneSessionChange?.(target.paneId, pane.sessionId) }
++      else {
++        const current = ref.current.live.groups[target.groupId]?.active
++        if (current) actions.focusPane(current)
++        actions.openPane({ ...pane, pinned: true })
++      }
++      sessionTarget.current = null; setPicker(false); return
++    }
+@@ -137 +149 @@ export function Workbench(props: Props) {
+-  useEffect(() => { if (!picker) splitTarget.current = null }, [picker])
++  useEffect(() => { if (!picker) { splitTarget.current = null; sessionTarget.current = null } }, [picker])
+@@ -176 +188 @@ export function Workbench(props: Props) {
+-      if (pane.kind !== 'conversation' || !pane.sessionId) continue
++      if (!['conversation', 'mcp-inspector'].includes(pane.kind) || !pane.sessionId) continue
+@@ -178 +190,4 @@ export function Workbench(props: Props) {
+-      if (summary) actions.updatePane(pane.id, { title: summary.blank ? t('wb.new') : summary.displayTitle })
++      if (summary) {
++        const label = summary.blank ? t('wb.new') : summary.displayTitle
++        actions.updatePane(pane.id, { title: pane.kind === 'mcp-inspector' ? `${label} · ${t('wb.tools')}` : label })
++      }
+@@ -343 +358 @@ export function Workbench(props: Props) {
+-    if (pane.sessionId && sessions.byId[pane.sessionId as SessionId]) selectSession(pane.sessionId)
++    if (pane.kind === 'conversation' && pane.sessionId && sessions.byId[pane.sessionId as SessionId]) selectSession(pane.sessionId)
+@@ -357,0 +373,5 @@ export function Workbench(props: Props) {
++          <button data-workspace-session-menu={group.id} title={t('wb.manageSessions')} aria-label={t('wb.manageSessions')} onClick={() => {
++            const active = group.active ? state.panes[group.active] : undefined
++            sessionTarget.current = { groupId: group.id, ...(active?.kind === 'mcp-inspector' ? { paneId: active.id } : {}) }
++            setQuery(''); setPicker(true)
++          }}><Glyph kind="conversation" /></button>
+@@ -376 +396 @@ export function Workbench(props: Props) {
+-                  }} title={[pane.title, pane.workspaceTitle].filter(Boolean).join(' · ')}>
++                  }} title={[pane.title, pane.workspaceTitle, pane.sessionId?.slice(0,8)].filter(Boolean).join(' · ')}>
+@@ -458,3 +478,3 @@ export function Workbench(props: Props) {
+-        {presentation.commands.filter(c => !splitTarget.current && `${c.title} ${c.id}`.toLowerCase().includes(query.toLowerCase())).map(c => <button key={`command:${c.id}`} data-workspace-command={c.id} onClick={() => { void actions.executeCommand(c.id); setPicker(false) }}><Glyph kind="terminal" />{c.title}</button>)}
+-        {presentation.catalog.filter(v => `tool:${v.kind}` !== live.groups[splitTarget.current?.groupId ?? '']?.active && `${v.title} ${v.kind}`.toLowerCase().includes(query.toLowerCase())).map(v => <button key={v.kind} onClick={() => { choosePane({ id: `tool:${v.kind}`, kind: v.kind, title: v.title, icon: v.icon, pinned: true }) }}><Glyph kind={v.icon ?? v.kind} />{v.title}</button>)}
+-        {sessions.ids.filter(id => `conversation:${id}` !== live.groups[splitTarget.current?.groupId ?? '']?.active && `${sessions.byId[id]?.displayTitle ?? ''} ${id}`.toLowerCase().includes(query.toLowerCase())).slice(0, 30).map(id => <button key={id} data-workspace-catalog-session={id} onClick={() => { choosePane(conversation(id)) }}><Glyph kind="conversation" />{sessions.byId[id]?.displayTitle}</button>)}
++        {presentation.commands.filter(c => !sessionTarget.current && !splitTarget.current && `${c.title} ${c.id}`.toLowerCase().includes(query.toLowerCase())).map(c => <button key={`command:${c.id}`} data-workspace-command={c.id} onClick={() => { void actions.executeCommand(c.id); setPicker(false) }}><Glyph kind="terminal" />{c.title}</button>)}
++        {presentation.catalog.filter(v => !sessionTarget.current && `tool:${v.kind}` !== live.groups[splitTarget.current?.groupId ?? '']?.active && `${v.title} ${v.kind}`.toLowerCase().includes(query.toLowerCase())).map(v => <button key={v.kind} onClick={() => { choosePane({ id: `tool:${v.kind}`, kind: v.kind, title: v.title, icon: v.icon, pinned: true }) }}><Glyph kind={v.icon ?? v.kind} />{v.title}</button>)}
++        {sessions.ids.filter(id => `conversation:${id}` !== live.groups[splitTarget.current?.groupId ?? '']?.active && `${sessions.byId[id]?.displayTitle ?? ''} ${id}`.toLowerCase().includes(query.toLowerCase())).slice(0, 30).map(id => <button key={id} data-workspace-catalog-session={id} onClick={() => { choosePane(conversation(id)) }}><Glyph kind="conversation" />{sessions.byId[id]?.displayTitle} <small>{id.slice(0,8)}</small></button>)}
+diff --git a/packages/client/ui-layout/src/client/index.ts b/packages/client/ui-layout/src/client/index.ts
+index e2912d7..91c0132 100644
+--- a/packages/client/ui-layout/src/client/index.ts
++++ b/packages/client/ui-layout/src/client/index.ts
+@@ -171,0 +172,4 @@ export function apply(ctx: ClientContext): void {
++          requestPaneSessionChange: (paneId: string, sessionId: string) => {
++            const owner = ctx.get('sessionTools' as never) as unknown as { rebindPane?(paneId: string, sessionId: string): boolean } | undefined
++            return owner?.rebindPane?.(paneId, sessionId) ?? false
++          },
+diff --git a/packages/client/ui-layout/tests/adaptive-layout.client.spec.ts b/packages/client/ui-layout/tests/adaptive-layout.client.spec.ts
+index cedd9d7..59dc077 100644
+--- a/packages/client/ui-layout/tests/adaptive-layout.client.spec.ts
++++ b/packages/client/ui-layout/tests/adaptive-layout.client.spec.ts
+@@ -40 +40 @@ describe('adaptive Pane docking', () => {
+-    expect(state.root!.type === 'split' && layoutAxis(state.root, state, narrow)).toBe('vertical')
++    expect(state.root?.type === 'split' && layoutAxis(state.root, state, narrow)).toBe('vertical')
+diff --git a/packages/client/ui-layout/tests/app-frame.client.spec.tsx b/packages/client/ui-layout/tests/app-frame.client.spec.tsx
+index afc1f11..13eda7b 100644
+--- a/packages/client/ui-layout/tests/app-frame.client.spec.tsx
++++ b/packages/client/ui-layout/tests/app-frame.client.spec.tsx
+@@ -341 +341 @@ describe('AppFrame — narrow-viewport auto-collapse', () => {
+-    expect(360 - tracks(frame)[0]).toBe(304)
++    expect(360 - tracks(frame)[0]!).toBe(304)
+diff --git a/packages/client/ui-settings-general/src/client/SettingsRoot.tsx b/packages/client/ui-settings-general/src/client/SettingsRoot.tsx
+index d5b1df1..a916632 100644
+--- a/packages/client/ui-settings-general/src/client/SettingsRoot.tsx
++++ b/packages/client/ui-settings-general/src/client/SettingsRoot.tsx
+@@ -117,0 +118 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
++  const externalReturn = useRef<HTMLElement | null>(null)
+@@ -124 +125,4 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
+-    if (wasOpen.current && !open) triggerButton.current?.focus()
++    if (wasOpen.current && !open) {
++      const target = externalReturn.current?.isConnected ? externalReturn.current : triggerButton.current
++      target?.focus(); externalReturn.current = null
++    }
+@@ -134,0 +139,4 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
++  useEffect(() => props.bindNavigation?.(id => {
++    externalReturn.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
++    openSection(id)
++  }), [props.bindNavigation, openSection])
+diff --git a/packages/client/ui-settings-general/src/client/index.ts b/packages/client/ui-settings-general/src/client/index.ts
+index c8962ec..7556a0c 100644
+--- a/packages/client/ui-settings-general/src/client/index.ts
++++ b/packages/client/ui-settings-general/src/client/index.ts
+@@ -95,0 +96,5 @@ export function apply(ctx: ClientContext): void {
++  let navigate: ((section: string) => void) | undefined
++  ctx.effect(() => {
++    const off = ctx.provide('settingsNavigation' as never, { open: (section: string) => { navigate?.(section); return navigate !== undefined } } as never)
++    return () => { navigate = undefined; off() }
++  }, 'settings: explicit navigation')
+@@ -96,0 +102 @@ export function apply(ctx: ClientContext): void {
++    bindNavigation: callback => { navigate = callback; return () => { if (navigate === callback) navigate = undefined } },
+diff --git a/packages/client/ui-settings-general/src/client/shell-contract.ts b/packages/client/ui-settings-general/src/client/shell-contract.ts
+index 210f028..c1cd792 100644
+--- a/packages/client/ui-settings-general/src/client/shell-contract.ts
++++ b/packages/client/ui-settings-general/src/client/shell-contract.ts
+@@ -37,0 +38 @@ export type SettingsRootInjected = {
++  bindNavigation?: (callback: (section: string) => void) => () => void

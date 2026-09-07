@@ -41,6 +41,6 @@ describe('toolHub Gateway registration', () => {
     expect(root.typert.local.get('toolHub/list')).toMatchObject({ service: 'toolHub', method: 'list' })
     expect(claims?.('toolHub/list')).toBe(true)
     const result = await dispatch?.('toolHub/list', { args: {} }, new AbortController().signal)
-    expect(result).toMatchObject({ ok: true, value: { ok: true, specVersion: '1.0' } })
+    expect(result).toMatchObject({ ok: true, value: { ok: false, code: 'catalog-unavailable' } })
   })
 })

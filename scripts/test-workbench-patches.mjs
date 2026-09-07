@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Prove that the checked-in patch chain reconstructs the cleaned workbench from its release base. */
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { resolve, relative } from 'node:path'
@@ -22,31 +23,20 @@ function run(command, args, cwd = root) {
 }
 try {
   run('git', ['worktree', 'add', '--detach', checkout, WORKBENCH_BASE], source)
-  for (const packet of ['unified-multi-pane-workbench', 'composer-multi-reference-v1', 'workbench-runtime-cleanup', 'pane-interaction-completion', 'pane-keyboard-cycle', 'pane-editor-shortcuts']) {
+  for (const packet of ['unified-multi-pane-workbench', 'composer-multi-reference-v1', 'workbench-runtime-cleanup', 'pane-interaction-completion', 'pane-keyboard-cycle', 'pane-editor-shortcuts', 'session-tools-workspace']) {
     run('bash', [`upstream-prs/${packet}/apply.sh`, checkout])
   }
   run('bash', ['upstream-prs/workbench-runtime-cleanup/apply.sh', checkout])
-  run('bash', ['upstream-prs/pane-editor-shortcuts/apply.sh', checkout])
+  run('bash', ['upstream-prs/session-tools-workspace/apply.sh', checkout])
   const applied = await readFile(resolve(checkout, 'packages/client/ui-conversation/src/client/apply.ts'), 'utf8')
   assert(!applied.includes('createReferenceTargetControl'), 'Fresh reconstruction must omit Target registration')
   const renderer = await readFile(resolve(checkout, 'packages/client/ui-renderer/src/client/scoped-slots.tsx'), 'utf8')
   assert(renderer.includes('props.sessionId'), 'Fresh reconstruction must retain explicit session binding')
-  for (const path of [
-    'packages/client/ui-layout/src/client/keyboard.ts',
-    'packages/client/ui-layout/src/client/Workbench.tsx',
-    'packages/client/ui-layout/tests/keyboard.client.spec.ts',
-    'packages/client/ui-layout/README.md',
-    'packages/client/locale/src/locales/en.ts',
-    'packages/client/locale/src/locales/zh.ts',
-    '.agents/notes/implemented/architecture/2026-09-05-unified-workspace-panes.md',
-    'packages/client/ui-conversation/src/client/apply.ts',
-    'packages/client/ui-conversation/src/client/reference-target-chooser.tsx',
-    'packages/client/ui-conversation/src/client/reference-target-chooser.module.css',
-    'packages/client/ui-conversation/src/client/locales.ts',
-    'packages/client/ui-conversation/src/client/skeleton/ConversationRoot.tsx',
-    'packages/client/ui-conversation/tests/apply-inject.client.spec.tsx',
-    'apps/web/tests/reference-composer-multi.e2e.ts',
-  ]) assert.equal(await readFile(resolve(checkout, path), 'utf8'), await readFile(resolve(source, path), 'utf8'), `Reconstructed content differs: ${path}`)
+  const checksums = await readFile(resolve(root,'upstream-prs/session-tools-workspace/owned-source.sha256'),'utf8')
+  for (const row of checksums.trim().split('\n')) {
+    const [hash,path] = row.split('  ')
+    assert.equal(createHash('sha256').update(await readFile(resolve(checkout,path))).digest('hex'),hash,`Reconstructed owned source differs: ${path}`)
+  }
 } catch (error) { failure = error.message }
 if (!failure) run('git', ['worktree', 'remove', '--force', checkout], source)
 const redact = value => value.replaceAll(root, '[PROJECT_ROOT]')

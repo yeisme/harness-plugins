@@ -180,7 +180,7 @@ describe('real workspace catalog (integration)', () => {
     for (const entry of catalog.bundles.filter(candidate => candidate.installable)) {
       expect(entry.installRows.length, entry.id).toBeGreaterThan(0)
       for (const row of entry.installRows) {
-        expect(row.name).toMatch(/^@yeisme\//)
+        expect(row.name.startsWith('@yeisme/') || row.name === entry.name || row.name.startsWith(`${entry.name}/`)).toBe(true)
       }
     }
   })
