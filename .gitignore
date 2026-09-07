@@ -21,3 +21,7 @@ core.*
 # local tooling artifacts
 .codegraph/
 .understand-anything/
+
+# Vendored upstream bundle: its pinned lib/ build output IS the deliverable
+# (no local build step), so it must be tracked despite the global lib/ rule.
+!packages/bundle/dsh-pentest/lib/

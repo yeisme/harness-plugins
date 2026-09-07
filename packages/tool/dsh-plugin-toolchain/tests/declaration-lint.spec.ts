@@ -56,6 +56,39 @@ describe('declaration-lint', () => {
     expect(result.checkedCount).toBe(1)
   })
 
+  it('records but does not red-light a vendored upstream bundle using the full cordis patch grammar', () => {
+    const root = workspace({
+      'packages/bundle/fixture/package.json': bundlePackageJson({ name: '@howmp/dsh-fixture-vendored' }),
+      'packages/bundle/fixture/YEISME-VENDORED.md': '# provenance\n',
+      'packages/bundle/fixture/cordis.patch.yml': [
+        '- insert:',
+        '    - id: ui-fixture',
+        "      name: '@howmp/dsh-fixture-vendored/ui-fixture'",
+        '',
+        '- id: storage-domain',
+        '  config:',
+        '    backend: json',
+        '',
+        '- insert:',
+        '    - id: preset-root',
+        "      name: '@howmp/dsh-fixture-vendored/preset-root'",
+        '',
+      ].join('\n'),
+    })
+    const result = runDeclarationLint(root)
+    expect(result.findings).toEqual([])
+    expect(result.notes.some(note => note.includes('vendored upstream bundle'))).toBe(true)
+  })
+
+  it('still red-lights the same grammar without the vendored marker', () => {
+    const root = workspace({
+      'packages/bundle/fixture/package.json': bundlePackageJson({ name: '@howmp/dsh-fixture-vendored' }),
+      'packages/bundle/fixture/cordis.patch.yml': '- id: storage-domain\n  config:\n    backend: json\n',
+    })
+    const result = runDeclarationLint(root)
+    expect(result.findings.some(finding => finding.code === 'DECL/PATCH_UNPARSED')).toBe(true)
+  })
+
   it('accepts subpath row names that are real exports (dsh-terminal/host form)', () => {
     const root = workspace({
       'packages/bundle/fixture/package.json': bundlePackageJson({ exports: ['.', './client', './host'] }),

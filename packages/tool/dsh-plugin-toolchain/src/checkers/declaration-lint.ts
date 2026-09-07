@@ -37,6 +37,15 @@ export function runDeclarationLint(root: string): CheckerReport {
       }
       continue
     }
+    // Vendored 上游 bundle（目录带 YEISME-VENDORED.md）：上游 patch 合法使用完整
+    // cordis patch 语法（无 name 的 id 覆盖行、多个顶层条目），不属于本仓收敛的
+    // `- insert: [id, name]` 子集。与 preset/data bundle 同类：只记 note 不红灯，
+    // 上游代码在升级时人工复核（见该目录 YEISME-VENDORED.md 升级流程）。
+    if (existsSync(join(bundle.dir, 'YEISME-VENDORED.md'))) {
+      notes.push(`${rel}: vendored upstream bundle — declaration lint record-only (upstream patch grammar)`)
+      lintDependencies(bundle, rel, repoPackageNames, findings, notes)
+      continue
+    }
     const rows = parsePatchYml(readFileSync(patchPath, 'utf8'), rel, findings)
     const name = packageName(bundle)
     const exports = packageExports(bundle)
