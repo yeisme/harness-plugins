@@ -35,6 +35,7 @@ const clientCatalog = {
   'ui-surface': 'adopted',
   'ui-token-usage': 'adopted',
   'ui-visual-kit': 'excluded',
+  'ui-url-session': 'excluded', // pure route codec/view-model; Web sync UI ships with dsh-url-session-v1 §3
 }
 
 /** @type {Record<string, 'adopted'|'embed'|'excluded'|'pending'>} */

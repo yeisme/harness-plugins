@@ -6,8 +6,8 @@
 
 ## 2. P1 Route codec（可与文档并行于 1.1 之后）
 
-- [ ] 2.1 [Owner: Harness Plugins；Scope: `packages/client/ui-url-session/`；Dependencies: 1.1；Lane: codec] 初始化 `@yeisme/dsh-client-ui-url-session` 的 package、exports、tsdown/tsc/Vitest 与中文 README。Acceptance: codec 从独立子路径导出，无 DSH 私有 import；Validation: `pnpm --filter @yeisme/dsh-client-ui-url-session run typecheck`；Expected: exit 0；失败复查: 检查 ESM/peer，不改根外无关 package。
-- [ ] 2.2 [Owner: Harness Plugins；Scope: codec 纯函数；Dependencies: 2.1；Lane: codec] 实现 `parseLocation` / `sessionUrl` / mention URI 抽 id：path 优于 query、空/非法 id → null、`file:` 可用、生成 URL 无 secret。Acceptance: 表驱动覆盖 design 全部 codec 场景；Validation: `pnpm --filter @yeisme/dsh-client-ui-url-session run test`；Expected: codec cases 全绿；失败复查: 禁止在 codec 读 `window` 或 Cordis。复杂解析不变量 SHALL 写中文注释。
+- [x] 2.1 [Owner: Harness Plugins；Scope: `packages/client/ui-url-session/`；Dependencies: 1.1；Lane: codec] 初始化 `@yeisme/dsh-client-ui-url-session` 的 package、exports、tsdown/tsc/Vitest 与中文 README。Acceptance: codec 从独立子路径导出，无 DSH 私有 import；Validation: `pnpm --filter @yeisme/dsh-client-ui-url-session run typecheck`；Expected: exit 0；失败复查: 检查 ESM/peer，不改根外无关 package。 | evidence: packages/client/ui-url-session 已建：package.json（exports `.` no-op host face + `./codec` 子路径，无 DSH 私有 import）、tsconfig/tsdown（双单 entry ESM）/vitest、中文 README；typecheck exit 0、build exit 0（lib/index.js + lib/codec.js + lib/types）。
+- [x] 2.2 [Owner: Harness Plugins；Scope: codec 纯函数；Dependencies: 2.1；Lane: codec] 实现 `parseLocation` / `sessionUrl` / mention URI 抽 id：path 优于 query、空/非法 id → null、`file:` 可用、生成 URL 无 secret。Acceptance: 表驱动覆盖 design 全部 codec 场景；Validation: `pnpm --filter @yeisme/dsh-client-ui-url-session run test`；Expected: codec cases 全绿；失败复查: 禁止在 codec 读 `window` 或 Cordis。复杂解析不变量 SHALL 写中文注释。 | evidence: parseSessionLocation/sessionUrl/mentionSessionId 表驱动 33/33：path 优于 query（不一致取 path、非法 path 不回退 query）、`/s/`、尾斜杠、多段、空/非法/超长/percent-encoded id、`?s=` 混排参数、file:// 别名、URL 实例 + `#msg-` 保留锚、file:// 空 host 归一、origin userinfo/非法 id 抛 TypeError、mention 抽 id。复杂解析不变量中文注释固化于 src/codec.ts；codec 零 window/Cordis 访问。
 
 ## 3. P1 URL ↔ runtime 同步与空态
 

@@ -1,0 +1,51 @@
+{
+  "name": "@yeisme/dsh-client-ui-url-session",
+  "version": "0.1.0-rc.1",
+  "description": "DSH URL session codec: /s/<id> canonical route, ?s= alias, and dsh-session mention id extraction (pure functions, no host imports)",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json && tsdown",
+    "bundle": "tsdown"
+  },
+  "license": "MIT",
+  "type": "module",
+  "types": "lib/types/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/codec.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./codec": {
+      "types": "./lib/types/codec.d.ts",
+      "default": "./lib/codec.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [],
+      "platform": "web"
+    }
+  }
+}
