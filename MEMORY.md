@@ -1,3 +1,15 @@
+## 2026-09-07 PM: spec advance — in-flight wave committed, tools-location 7/8, followups 2/4, url-session codec, seven studio changes authored
+
+- In-flight 138-file wave committed as 9 units (archives x4 → specs; workbench retirement + canvas program; url-session protocol; creative workspace impl; search owner wiring; browser pane view split; tools-location design; G21 day7; katex vitest fix). Tree clean after.
+- Archived `dsh-session-tools-workspace-v2`: MODIFIED block had to re-include legacy scenarios (宽容器正常目录/中窄容器) by name with V2 semantics — openspec 1.6.0 MODIFIED drops unnamed scenarios.
+- `dsh-tools-location-command-ux-v1` 2/8→7/8: consume official `ToolResultNode.callView` (presentation vocabulary in @deepseek-ai/dsh-tools) as owner safe summary (title/description/kind/locations only; rawInput/diffs/cwd never projected); reveal lifecycle marker (success replaces, failure keeps details + reason) in shared viewState `revealedCall`; 3.3 main-thread serial integration stays open.
+- `dsh-pane-workspace-followups-v1` 1/4→2/4: real SemanticFileEditor two-pane unsaved-body independence + remount no-swap/no-leak/save-own-entry tests (editor.spec 5/5; evidence editor-renderer-independence-2026-09-07T16-52-07). 1.1 watch/gap、1.2 dirty-conflict 仍开。
+- `dsh-url-session-v1` 3/23→5/23: new `packages/client/ui-url-session` codec package (path>query, /s/ strict single segment, percent-decode once, file:// empty-host normalize, builder throws on userinfo/invalid id) 33/33; surface catalog classified excluded (codec-only until §3 UI).
+- Authored 7 creative-studio program changes (eikona/anatomia/scaena/auctra/sonora studios + creative-workflow + cross-owner-journeys) from dsh-creative-studio-contracts.md + program doc; all strict-valid; `openspec validate --all` 160/160 (was 153/7 skeletons). Skeleton dirs only had .openspec.yaml.
+- External recheck 09-07: upstream published 0.1.3-alpha.2 (five key tarballs grep: GitTypedActions/rendition/PreviewResource/ArtifactRef/standingFactsFor/mcp-inventory/fs-watch all 0 hits); apiproxy next still 0.1.1-rc.2; @yeisme/dsh-agent-composition-preview still 404 → 14 gated tasks re-annotated.
+- Fixes: dsh-mcp-inspector vitest inline katex css (ui-primitives Menu import); file-host `authorization` field → `revealGrant` (safe-projection-audit exact-match sensitive names); .gitattributes for migration snapshots + upstream-prs patches (whitespace=-trailing-space).
+- Gates: typecheck 0, full test green, check:plugins 6/6 zero findings, check:bundles 27/27, test:visual 106/106 (tools 360/560/960+200%).
+
 # harness-plugins memory
 
 ## 2026-09-07: parallel subagent advance (search owner + G21 day 7 + seam recheck)
