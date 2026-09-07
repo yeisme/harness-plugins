@@ -4,6 +4,8 @@
 
 ## 入口
 
+- [DSH 本地工作台](runtime/dsh-workbench.md)：兼容启动器、旧版清理、Pane 会话隔离与无冗余 Target 的日常入口。
+
 - design/dsh-unified-panel-visual-system.md：所有 React/Web 插件 UI 的设计事实源，定义 host-first token、Surface composition、容器密度、状态矩阵、插件 archetype、Workbench 联邦对齐和视觉验收门。
 - design/dsh-conversation-rewrite-core-v2.md：Web 共用的 host-neutral rewrite boundary、typed mutation outcomes、partial-success recovery、V1 compatibility facade 与 fixtures。
 - design/dsh-personal-coding-plugin-platform.md：个人编码基础包、显式 packs、`dsh.plugin_surface.v1`、Web 语义 fixture 和 contribution 故障隔离；当前保持 experimental。

@@ -5,6 +5,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { homedir } from 'node:os'
 import { discoverWorkspacePackages, workspaceBundles } from './dsh-dev.mjs'
+import { checkWorkbenchRuntime, WORKBENCH_BASE } from './workbench-runtime.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const source = resolve(root, 'temp/dsh-unified-host-source')
@@ -12,8 +13,9 @@ const args = process.argv.slice(2).filter(arg => arg !== '--')
 const take = flag => { const at = args.indexOf(flag); if (at < 0) return false; args.splice(at, 1); return true }
 const isolated = take('--isolated'), prepareOnly = take('--prepare-only'), rebuild = take('--rebuild')
 const rollback = take('--rollback')
+const check = take('--check')
 if (take('--help') || take('-h')) {
-  console.log('Usage: pnpm dsh:workbench -- [--isolated] [--prepare-only] [--rebuild] [--rollback] [DSH web options]\n\nUses the staged DSH 0.1.2-rc.1 host and all local bundles.\n--isolated      use the disposable acceptance home\n--prepare-only  reconcile bundles and exit\n--rebuild       rebuild the staged runtime before launching\n--rollback      restore replaced official profile dependencies and exit\n\nRollback: pnpm dsh:workbench -- --rollback, then dsh web')
+  console.log('Usage: pnpm dsh:workbench -- [--check] [--isolated] [--prepare-only] [--rebuild] [--rollback] [DSH web options]\n\nUses the compatible staged DSH host and all local bundles.\n--check         validate the release and browser artifacts without writes\n--isolated      use the disposable acceptance home\n--prepare-only  reconcile bundles and exit\n--rebuild       rebuild the staged runtime before launching\n--rollback      restore recorded profile dependencies; never launch another runtime')
   process.exit(0)
 }
 const env = { ...process.env, ...(isolated ? { DSH_HOME: resolve(root, 'temp/dsh-unified-home') } : {}), DSH_TELEMETRY_DISABLED: '1' }
@@ -32,21 +34,33 @@ function run(command, argv, cwd = root) {
   })
 }
 try {
+  if (check) {
+    checkWorkbenchRuntime(root)
+    console.log('Compatible workbench runtime verified; no profile or session data changed.')
+    process.exit(0)
+  }
   if (!existsSync(resolve(source, '.git'))) {
     await run('git', ['clone', '--depth', '1', '--branch', 'dsh-v0.1.2-rc.1', 'https://github.com/deepseek-ai/deepseek-harness.git', source])
     await run('bash', ['upstream-prs/unified-multi-pane-workbench/apply.sh', source])
   }
   const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: source, encoding: 'utf8' }).trim()
-  if (base !== 'a66e4702047846cdaa10c66c9d3df3951f5ea70d') throw new Error('The staging checkout does not match the supported DSH release. Keep it intact and prepare a matching checkout.')
+  if (base !== WORKBENCH_BASE) throw new Error('The staging checkout does not match the supported DSH release. Keep it intact and prepare a matching checkout.')
   if (!existsSync(resolve(source, 'packages/client/ui-layout/src/client/Workbench.tsx'))) {
     await run('bash', ['upstream-prs/unified-multi-pane-workbench/apply.sh', source])
   }
-  const layoutBundle = resolve(source, 'packages/client/ui-layout/lib/client.js')
-  const compatibleBundle = existsSync(layoutBundle) && readFileSync(layoutBundle, 'utf8').includes('workspace.unified.v1')
+  if (!existsSync(resolve(source, 'packages/client/ui-conversation/src/client/reference-target-chooser.tsx'))) {
+    await run('bash', ['upstream-prs/composer-multi-reference-v1/apply.sh', source])
+  }
+  if (readFileSync(resolve(source, 'packages/client/ui-conversation/src/client/apply.ts'), 'utf8').includes('createReferenceTargetControl')) {
+    await run('bash', ['upstream-prs/workbench-runtime-cleanup/apply.sh', source])
+  }
+  let compatibleBundle = false
+  try { checkWorkbenchRuntime(root); compatibleBundle = true } catch { /* Rebuild incomplete or stale local artifacts below. */ }
   if (rebuild || !compatibleBundle || !existsSync(resolve(source, 'apps/cli/lib/bin.js')) || !existsSync(resolve(source, 'apps/web/dist/index.html'))) {
     await run('pnpm', ['install', '--frozen-lockfile'], source)
     for (const script of ['build:lib:host', 'build:lib:client', 'build:web']) await run('pnpm', ['run', script], source)
   }
+  checkWorkbenchRuntime(root)
   const cli = resolve(source, 'apps/cli/lib/bin.js')
   const profile = resolve(env.DSH_HOME ?? resolve(homedir(), '.dsh'), 'profiles/web')
   const manifestPath = resolve(profile, 'package.json')
@@ -71,7 +85,12 @@ try {
     const pkg = upstream.find(candidate => candidate.name === name)
     return pkg ? [{ name, original, staged: `link:${pkg.dir}` }] : []
   })
-  const replacements = overrides.filter(entry => entry.original !== entry.staged)
+  const replacements = overrides.filter(entry => {
+    if (/^(link:|file:)/.test(entry.original)) {
+      return resolve(profile, entry.original.replace(/^(link:|file:)/, '')) !== entry.staged.slice(5)
+    }
+    return entry.original !== entry.staged
+  })
   if (replacements.length) {
     const previous = existsSync(backupPath) ? JSON.parse(readFileSync(backupPath, 'utf8')).entries : []
     const entries = [...previous.filter(entry => !replacements.some(next => next.name === entry.name)), ...replacements]

@@ -26,7 +26,9 @@ preview patch row。完整运行仍取决于 DSH core 发布 composition preview
 
 ## 全插件热开发
 
-在仓库根运行一条命令，即可构建并 link 安装所有本地 bundle、生成 HMR overlay、启动 DSH Web，并在源码变化后增量重建受影响依赖链：
+日常开发预览使用已验证的兼容宿主：`pnpm dsh:workbench -- --no-open --port 40869`。启动、版本检查、旧版清理和会话隔离排障统一见 [DSH 本地工作台](docs/runtime/dsh-workbench.md)。全局 `dsh` 必须先 link 到同一构建，不能混用旧安装与新版 pane。
+
+兼容宿主准备好后，在仓库根运行一条命令，即可构建并 link 安装所有本地 bundle、生成 HMR overlay、启动 DSH Web，并在源码变化后增量重建受影响依赖链：
 
     pnpm dsh:dev
 

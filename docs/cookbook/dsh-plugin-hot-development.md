@@ -1,6 +1,6 @@
 # DSH 插件全量热开发
 
-`pnpm dsh:dev` 是本仓库统一的 DSH 插件开发入口。它不会替代官方 `dsh plugin`，而是编排现有 build、profile reconciliation 和 Cordis HMR。
+`pnpm dsh:dev` 使用本仓库验证过的 staging CLI 编排 build、profile reconciliation 和 Cordis HMR，与 `pnpm dsh:workbench` 使用相同宿主。缺失或不兼容构建会明确报错，不回退 PATH 上的旧版 `dsh`；先按 [本地工作台](../runtime/dsh-workbench.md) 准备兼容产物。
 
 ## 默认启动
 

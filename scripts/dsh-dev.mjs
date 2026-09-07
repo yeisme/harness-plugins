@@ -6,6 +6,7 @@ import { mkdir, readFile, readdir, realpath, stat, utimes, writeFile } from 'nod
 import { homedir } from 'node:os'
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { checkWorkbenchRuntime, workbenchCommand } from './workbench-runtime.mjs'
 
 const SCRIPT_FILE = fileURLToPath(import.meta.url)
 export const DEFAULT_WORKSPACE_ROOT = resolve(dirname(SCRIPT_FILE), '..')
@@ -357,12 +358,14 @@ async function syncProfile(profile, bundles, workspaceRoot) {
   const specs = bundles.map(bundle => `link:${bundle.dir}`)
   if (specs.length === 0) throw new Error('no DSH bundles discovered')
   process.stdout.write(`[dsh-dev] syncing ${specs.length} bundles into profile ${profile}\n`)
-  const result = await run('dsh', ['plugin', '--profile', profile, 'add', ...specs], { cwd: workspaceRoot })
+  const cli = workbenchCommand(workspaceRoot, ['plugin', '--profile', profile, 'add', ...specs])
+  const result = await run(cli.command, cli.args, { cwd: workspaceRoot })
   if (result.code !== 0) throw new Error('dsh plugin synchronization failed')
 }
 
 async function probeComposedConfig(profile, patchFile, workspaceRoot) {
-  const result = await run('dsh', ['--profile', profile, '--patch', patchFile, '--dump-config'], { cwd: workspaceRoot, capture: true })
+  const cli = workbenchCommand(workspaceRoot, ['--profile', profile, '--patch', patchFile, '--dump-config'])
+  const result = await run(cli.command, cli.args, { cwd: workspaceRoot, capture: true })
   if (result.code !== 0) {
     process.stderr.write(result.stderr)
     throw new Error('composed DSH config is invalid')
@@ -408,7 +411,9 @@ class DevRuntime {
     if (this.stopping || this.child !== undefined) return
     const args = ['--profile', this.options.profile, '--patch', this.patchFile, ...this.options.appArgs]
     process.stdout.write(`[dsh-dev] starting DSH profile ${this.options.profile}\n`)
-    const child = spawn('dsh', args, { cwd: this.workspaceRoot, env: process.env, shell: false, stdio: 'inherit' })
+    checkWorkbenchRuntime(this.workspaceRoot)
+    const cli = workbenchCommand(this.workspaceRoot, args)
+    const child = spawn(cli.command, cli.args, { cwd: this.workspaceRoot, env: process.env, shell: false, stdio: 'inherit' })
     this.child = child
     clearTimeout(this.stableTimer)
     this.stableTimer = setTimeout(() => {
@@ -572,7 +577,9 @@ export async function main(argv = process.argv.slice(2), workspaceRoot = DEFAULT
     process.stdout.write(helpText())
     return 0
   }
-  const [dshVersion, pnpmVersion] = await Promise.all([requireTool('dsh'), requireTool('pnpm')])
+  checkWorkbenchRuntime(workspaceRoot)
+  const cli = workbenchCommand(workspaceRoot, ['--version'])
+  const [dshVersion, pnpmVersion] = await Promise.all([requireTool(cli.command, cli.args), requireTool('pnpm')])
   const state = await discoverState(workspaceRoot, options.plugins, process.cwd())
   process.stdout.write(`[dsh-dev] dsh ${dshVersion}; pnpm ${pnpmVersion}; ${state.bundles.length} bundles discovered\n`)
   if (state.bundles.length === 0) throw new Error('no DSH bundles discovered')

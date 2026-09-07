@@ -1,0 +1,211 @@
+diff --git a/.agents/notes/implemented/architecture/2026-09-05-unified-workspace-panes.md b/.agents/notes/implemented/architecture/2026-09-05-unified-workspace-panes.md
+index e2f8cf3..9619956 100644
+--- a/.agents/notes/implemented/architecture/2026-09-05-unified-workspace-panes.md
++++ b/.agents/notes/implemented/architecture/2026-09-05-unified-workspace-panes.md
+@@ -21 +21,3 @@ Vitest 覆盖布局转换、重复会话拒绝、关闭保护、存储失败、
+-本轮通过下游 upstream-prs 补丁通道交付，本地 staged runtime 保留全局已安装 DSH 作为回退；没有推送或发布。
++宿主通过下游 upstream-prs 补丁通道交付。开发入口和全局本地 link 使用同一已验证的 staged CLI 与浏览器组件；旧安装只保留可恢复副本，不作为启动失败时的自动回退。没有推送或发布。
++
++Pane 标题与显式 sessionId 提供会话上下文，内置 composer 不注册全局 Target 常驻行。引用折叠摘要仅显示数量；目标选择由引用操作按需调用唯一 Modal，取消保持原会话。第三方 target slot、chooseTarget 服务和引用版本校验保留。
+diff --git a/packages/client/ui-conversation/src/client/apply.ts b/packages/client/ui-conversation/src/client/apply.ts
+index 204541e..3d98bdd 100644
+--- a/packages/client/ui-conversation/src/client/apply.ts
++++ b/packages/client/ui-conversation/src/client/apply.ts
+@@ -38 +38 @@ import {
+-  createReferenceTargetChooser, createReferenceTargetControl,
++  createReferenceTargetChooser,
+@@ -346,10 +345,0 @@ export function apply(ctx: Context): void {
+-  const ReferenceTargetControl = createReferenceTargetControl(referenceBridge, {
+-    target: t('referenceTarget.label'),
+-    none: t('referenceTarget.none'),
+-    change: t('referenceTarget.change'),
+-    unavailable: t('referenceTarget.choosing'),
+-  })
+-  ctx.slots.inject('conversation.reference.target', () => ctx.slots.register({
+-    name: 'conversation.reference.target',
+-    locale: NS,
+-  }, ReferenceTargetControl))
+diff --git a/packages/client/ui-conversation/src/client/reference-target-chooser.tsx b/packages/client/ui-conversation/src/client/reference-target-chooser.tsx
+index 05e16b8..d6fd4ee 100644
+--- a/packages/client/ui-conversation/src/client/reference-target-chooser.tsx
++++ b/packages/client/ui-conversation/src/client/reference-target-chooser.tsx
+@@ -1 +1 @@
+-import { useEffect, useState, useSyncExternalStore } from 'react'
++import { useSyncExternalStore } from 'react'
+@@ -104,47 +103,0 @@ export interface ReferenceTargetChooserLabels {
+-export interface ReferenceTargetBridgeFace {
+-  snapshot(): {
+-    readonly available: boolean
+-    readonly target?: { readonly conversationId: string; readonly title?: string }
+-  }
+-  subscribe(listener: () => void): () => void
+-  chooseTarget(signal?: AbortSignal): Promise<ReferenceTargetChoiceResult | { readonly status: 'selected'; readonly target: { readonly conversationId: string; readonly title?: string } }>
+-}
+-
+-export interface ReferenceTargetControlLabels {
+-  readonly target: string
+-  readonly none: string
+-  readonly change: string
+-  readonly unavailable: string
+-}
+-
+-/** Input-area target status and entry into the same host-owned chooser. */
+-export function createReferenceTargetControl(
+-  bridge: ReferenceTargetBridgeFace,
+-  labels: ReferenceTargetControlLabels,
+-) {
+-  return function ReferenceTargetControl() {
+-    const [, setRevision] = useState(0)
+-    useEffect(() => bridge.subscribe(() => { setRevision(value => value + 1) }), [])
+-    const snapshot = bridge.snapshot()
+-    const [pending, setPending] = useState(false)
+-    const choose = (anchor: HTMLElement): void => {
+-      if (pending) return
+-      setPending(true)
+-      void bridge.chooseTarget().finally(() => {
+-        setPending(false)
+-        queueMicrotask(() => { if (anchor.isConnected) anchor.focus({ preventScroll: true }) })
+-      })
+-    }
+-    return (
+-      <div className={css.target} data-composer-reference-target>
+-        <span className={css.targetLabel}>
+-          {labels.target}: <strong>{snapshot.target?.title ?? snapshot.target?.conversationId ?? labels.none}</strong>
+-        </span>
+-        <Button variant="toolbar" size="sm" disabled={pending} onClick={event => { choose(event.currentTarget) }}>
+-          {pending ? labels.unavailable : labels.change}
+-        </Button>
+-      </div>
+-    )
+-  }
+-}
+-
+diff --git a/packages/client/ui-conversation/src/client/reference-target-chooser.module.css b/packages/client/ui-conversation/src/client/reference-target-chooser.module.css
+index 89d4dc6..fd097be 100644
+--- a/packages/client/ui-conversation/src/client/reference-target-chooser.module.css
++++ b/packages/client/ui-conversation/src/client/reference-target-chooser.module.css
+@@ -1,23 +0,0 @@
+-.target {
+-  display: flex;
+-  align-items: center;
+-  justify-content: space-between;
+-  gap: 12px;
+-  min-inline-size: 0;
+-  padding: 6px 24px 6px 8px;
+-  color: var(--dsw-alias-label-secondary);
+-  font-size: 12px;
+-}
+-
+-.targetLabel {
+-  min-inline-size: 0;
+-  overflow: hidden;
+-  text-overflow: ellipsis;
+-  white-space: nowrap;
+-}
+-
+-.targetLabel strong {
+-  color: var(--dsw-alias-label-primary);
+-  font-weight: 600;
+-}
+-
+diff --git a/packages/client/ui-conversation/src/client/locales.ts b/packages/client/ui-conversation/src/client/locales.ts
+index 87e344b..1a814ff 100644
+--- a/packages/client/ui-conversation/src/client/locales.ts
++++ b/packages/client/ui-conversation/src/client/locales.ts
+@@ -78 +78 @@ export const zh = {
+-  'referenceDock.summary': '引用 {count} · 目标：{target}',
++  'referenceDock.summary': '引用 {count}',
+@@ -241 +241 @@ export const en = {
+-  'referenceDock.summary': 'References {count} · Target: {target}',
++  'referenceDock.summary': 'References {count}',
+diff --git a/packages/client/ui-conversation/src/client/skeleton/ConversationRoot.tsx b/packages/client/ui-conversation/src/client/skeleton/ConversationRoot.tsx
+index dc5eecb..31b8f55 100644
+--- a/packages/client/ui-conversation/src/client/skeleton/ConversationRoot.tsx
++++ b/packages/client/ui-conversation/src/client/skeleton/ConversationRoot.tsx
+@@ -147 +146,0 @@ export function ConversationRoot({
+-  const targetTitle = useSessions(s => sessionId === undefined ? undefined : s.byId[sessionId]?.displayTitle)
+@@ -355 +353,0 @@ export function ConversationRoot({
+-        targetTitle={targetTitle ?? sessionId}
+@@ -413 +411 @@ function structuredIdentity(reference: NonNullable<InputZone['input']['occurrenc
+-function StructuredReferenceDock({ input, targetTitle, remove, t }: {
++function StructuredReferenceDock({ input, remove, t }: {
+@@ -415 +412,0 @@ function StructuredReferenceDock({ input, targetTitle, remove, t }: {
+-  readonly targetTitle: string | undefined
+@@ -430 +427 @@ function StructuredReferenceDock({ input, targetTitle, remove, t }: {
+-    <summary>{t('referenceDock.summary', { count: references.length, target: targetTitle ?? t('referenceDock.currentTarget') })}</summary>
++    <summary>{t('referenceDock.summary', { count: references.length })}</summary>
+diff --git a/packages/client/ui-conversation/tests/apply-inject.client.spec.tsx b/packages/client/ui-conversation/tests/apply-inject.client.spec.tsx
+index 6d34428..986b172 100644
+--- a/packages/client/ui-conversation/tests/apply-inject.client.spec.tsx
++++ b/packages/client/ui-conversation/tests/apply-inject.client.spec.tsx
+@@ -3 +3 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
+-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
++import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+@@ -273 +272,0 @@ describe('Conversation inject API', () => {
+-    const targetEntry = b.slots.entries('conversation.reference.target')[0]
+@@ -275 +274 @@ describe('Conversation inject API', () => {
+-    expect(targetEntry).toBeDefined()
++    expect(b.slots.entries('conversation.reference.target')).toHaveLength(0)
+@@ -277,4 +276,4 @@ describe('Conversation inject API', () => {
+-    const TargetControl = targetEntry!.component as ComponentType
+-    render(createElement('div', null, createElement(TargetControl), createElement(Overlay)))
+-    expect(screen.getByText((_content, element) => element?.textContent === '目标: 未选择')).toBeTruthy()
+-    fireEvent.click(screen.getByRole('button', { name: '切换' }))
++    render(createElement(Overlay))
++    expect(document.querySelector('[data-composer-reference-target]')).toBeNull()
++    let choosing!: ReturnType<typeof bridge.chooseTarget>
++    act(() => { choosing = bridge.chooseTarget() })
+@@ -281,0 +281 @@ describe('Conversation inject API', () => {
++    await expect(choosing).resolves.toMatchObject({ status: 'selected' })
+@@ -307 +307 @@ describe('Conversation inject API', () => {
+-  it('cancels the Host target modal with Escape and restores focus to the input-area switch button', async () => {
++  it('cancels the on-demand target modal with Escape and restores the caller focus', async () => {
+@@ -312 +311,0 @@ describe('Conversation inject API', () => {
+-    const targetEntry = b.slots.entries('conversation.reference.target')[0]
+@@ -314,3 +313,6 @@ describe('Conversation inject API', () => {
+-    const TargetControl = targetEntry!.component as ComponentType
+-    render(createElement('div', null, createElement(TargetControl), createElement(Overlay)))
+-    const change = screen.getByRole('button', { name: '切换' })
++    const bridge = b.runtime.ctx.get('composerReferenceBridge' as never) as unknown as {
++      chooseTarget(): Promise<{ status: string }>
++    }
++    let choosing!: ReturnType<typeof bridge.chooseTarget>
++    render(createElement('div', null, createElement('button', { onClick: () => { choosing = bridge.chooseTarget() } }, 'Choose reference destination'), createElement(Overlay)))
++    const change = screen.getByRole('button', { name: 'Choose reference destination' })
+@@ -320,0 +323 @@ describe('Conversation inject API', () => {
++    await expect(choosing).resolves.toEqual({ status: 'cancelled' })
+diff --git a/apps/web/tests/reference-composer-multi.e2e.ts b/apps/web/tests/reference-composer-multi.e2e.ts
+index ac356b8..592fac6 100644
+--- a/apps/web/tests/reference-composer-multi.e2e.ts
++++ b/apps/web/tests/reference-composer-multi.e2e.ts
+@@ -403,8 +403,3 @@ describe('web e2e: owner-backed multi-reference composer', () => {
+-    // The main input always exposes its Host-owned target. Create a second
+-    // conversation through the shipped navigation, keep an unsent draft
+-    // there, switch to the prior target through the real chooser, then switch
+-    // back and prove each SessionInputShell retained only its own draft.
+-    const targetControl = page.locator('[data-composer-reference-target]').first()
+-    await targetControl.waitFor({ timeout: 15_000 })
+-    const formerTarget = (await targetControl.locator('strong').textContent())?.trim()
+-    if (formerTarget === undefined || formerTarget === '') throw new Error('current reference target title is unavailable')
++    // Session selection belongs to navigation; composers have no global target toolbar.
++    expect(await page.locator('[data-composer-reference-target]').count()).toBe(0)
++    const formerTarget = initialAgent.session.id
+@@ -412 +407,4 @@ describe('web e2e: owner-backed multi-reference composer', () => {
+-    await expect.poll(async () => (await targetControl.locator('strong').textContent())?.trim()).not.toBe(formerTarget)
++    const selectedRow = page.locator('[data-workspace-session-id][aria-selected="true"]')
++    await expect.poll(() => selectedRow.getAttribute('data-workspace-session-id')).not.toBe(formerTarget)
++    const nextTarget = await selectedRow.getAttribute('data-workspace-session-id')
++    if (!nextTarget) throw new Error('new session navigation row is unavailable')
+@@ -415,9 +413,3 @@ describe('web e2e: owner-backed multi-reference composer', () => {
+-    await targetControl.getByRole('button', { name: 'Change' }).click()
+-    let chooser = page.getByRole('dialog', { name: 'Choose reference target' })
+-    await chooser.waitFor({ timeout: 15_000 })
+-    await chooser.locator('[data-composer-reference-target-option]:not([aria-current="true"])').first().click()
+-    await expect.poll(async () => (await targetControl.locator('strong').textContent())?.trim()).toBe(formerTarget)
+-    expect(await input.textContent()).not.toContain(isolatedDraft)
+-    await targetControl.getByRole('button', { name: 'Change' }).click()
+-    chooser = page.getByRole('dialog', { name: 'Choose reference target' })
+-    await chooser.locator('[data-composer-reference-target-option]:not([aria-current="true"])').first().click()
++    await page.locator(`[data-workspace-session-id="${formerTarget}"]`).click()
++    await expect.poll(() => input.textContent()).not.toContain(isolatedDraft)
++    await page.locator(`[data-workspace-session-id="${nextTarget}"]`).click()

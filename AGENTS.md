@@ -8,6 +8,8 @@ Ordo 是 run/task/session/lease/approval/verification/evidence/closeout 的唯�
 
 ## Technology
 
+DSH 开发预览默认运行 `pnpm dsh:workbench -- --no-open --port 40869`，热开发运行 `pnpm dsh:dev`；先用 `pnpm dsh:workbench -- --check` 验证同代 CLI、renderer、侧栏和 conversation。不得用全局旧版 CLI 混载新版 pane。全局 `dsh` 只有在解析到同一验证构建时才能直接使用。清理、恢复与验证见 [docs/runtime/dsh-workbench.md](docs/runtime/dsh-workbench.md)。
+
 - TypeScript + pnpm workspace，默认 ESM（"type": "module"）。
 - 依赖 DeepSeek Harness 的已发布 surface（@deepseek-ai/dsh-*、@deepseek-ai/cordis），不 vendoring、不改写 DSH core。
 - 运行时 bundling 使用 tsdown；类型由 tsc 输出到 lib/types。
