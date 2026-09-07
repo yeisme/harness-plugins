@@ -54,6 +54,9 @@ try {
   if (readFileSync(resolve(source, 'packages/client/ui-conversation/src/client/apply.ts'), 'utf8').includes('createReferenceTargetControl')) {
     await run('bash', ['upstream-prs/workbench-runtime-cleanup/apply.sh', source])
   }
+  if (!existsSync(resolve(source, 'packages/client/ui-layout/src/client/keyboard.ts'))) {
+    await run('bash', ['upstream-prs/pane-interaction-completion/apply.sh', source])
+  }
   let compatibleBundle = false
   try { checkWorkbenchRuntime(root); compatibleBundle = true } catch { /* Rebuild incomplete or stale local artifacts below. */ }
   if (rebuild || !compatibleBundle || !existsSync(resolve(source, 'apps/cli/lib/bin.js')) || !existsSync(resolve(source, 'apps/web/dist/index.html'))) {

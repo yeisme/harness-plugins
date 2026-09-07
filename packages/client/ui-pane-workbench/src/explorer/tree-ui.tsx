@@ -5,6 +5,7 @@ import { WorkbenchIcon, type WorkbenchIconName } from '../icon.js'
 import { t } from '../i18n/locale.js'
 import type { PaneLocalViewProps } from '../view-registry.js'
 import { windowVirtualRows } from '../virtual-window.js'
+import { EXPLORER_STYLES } from './styles.js'
 import type { ExplorerOpenAdapterV1 } from './open-adapter.js'
 import { getExplorerRuntime, subscribeExplorerRuntime, type ExplorerMetadataV1, type ExplorerMutationProposalV1, type ExplorerRuntimeSourceV1, type ExplorerRuntimeV2 } from './runtime.js'
 import {
@@ -64,8 +65,14 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
   const pointer = props.pointer ?? 'fine'
   const rowHeight = explorerRowHeight(pointer)
   const rows = useMemo(() => flattenExplorerTree(props.state), [props.state])
-  const windowed = windowVirtualRows(rows, props.scrollTop ?? 0, props.viewportHeight ?? 560, rowHeight)
-  const emit = (next: ExplorerTreeStateV1): void => { props.onIntent?.(next) }
+  const [scrollTop, setScrollTop] = useState(0)
+  const [viewportHeight, setViewportHeight] = useState(props.viewportHeight ?? 560)
+  const windowed = windowVirtualRows(rows, props.scrollTop ?? scrollTop, props.viewportHeight ?? viewportHeight, rowHeight)
+  const latest = useRef(props.state)
+  latest.current = props.state
+  const runtimeRef = useRef(props.runtime)
+  runtimeRef.current = props.runtime
+  const emit = (next: ExplorerTreeStateV1): void => { latest.current = next; props.onIntent?.(next) }
   const focused = props.state.focusedRef === undefined
     ? undefined
     : rows.find(row => row.ref === props.state.focusedRef)
@@ -80,16 +87,52 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
   const [draggedRefs, setDraggedRefs] = useState<readonly string[]>([])
   const hoverTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const treeRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const element = treeRef.current
+    if (!element || typeof ResizeObserver === 'undefined') return
+    const measure = () => { if (element.clientHeight > 0) setViewportHeight(element.clientHeight) }
+    const observer = new ResizeObserver(measure)
+    observer.observe(element); measure()
+    return () => observer.disconnect()
+  }, [])
+  useEffect(() => {
+    const element = treeRef.current
+    const index = rows.findIndex(row => row.ref === props.state.focusedRef)
+    if (!element || index < 0) return
+    const top = index * rowHeight
+    if (top < element.scrollTop) element.scrollTop = top
+    else if (top + rowHeight > element.scrollTop + viewportHeight) element.scrollTop = top + rowHeight - viewportHeight
+    setScrollTop(element.scrollTop)
+  }, [props.state.focusedRef, rowHeight, viewportHeight])
+  const loadChildren = (ref: string): void => {
+    if (!props.runtime || latest.current.loadingRefs.includes(ref)) return
+    const runtime = props.runtime
+    emit(reduceExplorerTree(latest.current, { type: 'children_loading', ref }))
+    void runtime.listChildren(ref)
+      .then(nodes => { if (runtimeRef.current === runtime) emit(reduceExplorerTree(latest.current, { type: 'children_ready', ref, nodes })) })
+      .catch(error => { if (runtimeRef.current === runtime) emit(reduceExplorerTree(latest.current, { type: 'children_error', ref, reason: error instanceof Error ? error.message : 'Failed to load directory' })) })
+  }
+  const toggleDirectory = (row: ExplorerTreeRowV1): void => {
+    emit(reduceExplorerTree(latest.current, { type: row.expanded ? 'collapse' : 'expand', ref: row.ref }))
+    if (!row.expanded && latest.current.children[row.ref] === undefined) loadChildren(row.ref)
+  }
   const open = (row: ExplorerTreeRowV1, mode: 'preview' | 'pin'): void => {
     if (row.node.kind === 'directory') return
     if (row.node.availability?.preview !== undefined && row.node.availability.preview !== 'available') return
-    const action = props.runtime?.openResource(row.node, mode) ?? props.adapter?.openResource(row.node, mode)
-    if (action === undefined || typeof (action as Promise<unknown>).then !== 'function') return
+    let action
+    try {
+      action = props.runtime?.openResource(row.node, mode) ?? props.adapter?.openResource(row.node, mode)
+    } catch (error) {
+      setMutationStatus(error instanceof Error ? error.message : 'Unable to open file')
+      return
+    }
+    if (action === undefined) return
     setPendingRefs(current => current.includes(row.ref) ? current : [...current, row.ref])
-    void (action as Promise<{ readonly ok: boolean; readonly reason?: string }>).then(result => {
-      if (result.ok && props.narrow === true) emit(reduceExplorerTree(props.state, { type: 'narrow_content', ref: row.ref }))
+    void Promise.resolve(action).then(result => {
+      if (result.ok && props.narrow === true) emit(reduceExplorerTree(latest.current, { type: 'narrow_content', ref: row.ref }))
       if (!result.ok) setMetadata(current => ({ ...current, [row.ref]: { ref: row.ref, version: row.node.version, state: 'unsupported', label: row.node.name, ...(result.reason === undefined ? {} : { detail: result.reason }) } }))
-    }).finally(() => setPendingRefs(current => current.filter(ref => ref !== row.ref)))
+    }).catch(error => setMutationStatus(error instanceof Error ? error.message : 'Unable to open file'))
+      .finally(() => setPendingRefs(current => current.filter(ref => ref !== row.ref)))
   }
   const addReference = (row: ExplorerTreeRowV1): void => {
     if (props.runtime?.addReference === undefined || row.node.sensitive === true) return
@@ -151,7 +194,7 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
     else if (key === 'PageUp') { event.preventDefault(); emit(moveExplorerFocus(props.state, 'pageUp')) }
     else if (key === 'ArrowRight' && focused?.node.hasChildren && !focused.expanded) {
       event.preventDefault()
-      emit(reduceExplorerTree(props.state, { type: 'expand', ref: focused.ref }))
+      toggleDirectory(focused)
     } else if (key === 'ArrowLeft' && focused?.expanded) {
       event.preventDefault()
       emit(reduceExplorerTree(props.state, { type: 'collapse', ref: focused.ref }))
@@ -159,8 +202,7 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
       event.preventDefault()
       emit(reduceExplorerTree(props.state, { type: 'select', ref: focused.ref }))
       if (focused.node.kind === 'directory') {
-        const next = reduceExplorerTree(props.state, { type: focused.expanded ? 'collapse' : 'expand', ref: focused.ref })
-        emit(next)
+        toggleDirectory(focused)
       } else open(focused, key === 'Enter' ? 'pin' : 'preview')
     } else if (key === 'F10' && event.shiftKey && focused !== undefined) {
       event.preventDefault()
@@ -169,21 +211,21 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
   }
 
   return createElement(Surface, { kind: 'navigator', className: 'pwr-explorer', 'data-explorer-tree': 'true' },
+    createElement('style', null, EXPLORER_STYLES),
     createElement(SurfaceContextBar, {
       className: 'pwr-explorer-header',
-      title: t('rail.explorer'),
-      nav: createElement('div', { className: 'pwr-explorer-crumb', 'aria-label': t('explorer.root') },
-        ...(props.breadcrumb ?? [{ ref: 'workspace', name: t('explorer.root') }]).map(segment =>
-          createElement('span', { key: segment.ref, className: 'pwr-explorer-crumb-item' }, segment.name)),
-      ),
+      title: props.breadcrumb?.at(-1)?.name ?? t('explorer.root'),
       actions: createElement(Input, {
         className: 'pwr-explorer-filter',
-        'aria-label': t('picker.search.placeholder'),
+        'aria-label': t('explorer.search'),
+        placeholder: t('explorer.search'),
         value: props.state.filter,
         onChange: event => emit(reduceExplorerTree(props.state, { type: 'filter', query: event.currentTarget.value })),
       }),
     }),
-    props.runtime?.mutation === undefined ? null : createElement('div', { className: 'pwr-explorer-resource-actions', 'data-explorer-resource-actions': true },
+    props.state.errors.search ? createElement(SurfaceState, { phase: 'error', title: props.state.errors.search }) : null,
+    props.runtime?.mutation === undefined ? null : createElement('details', { className: 'pwr-explorer-resource-actions', 'data-explorer-resource-actions': true },
+      createElement('summary', null, t('explorer.fileActions')),
       createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', disabled: selectedNode?.kind !== 'directory' && props.runtime.getRootRef?.() === undefined, onClick: () => setDraftAction('create-file') }, '新建文件'),
       createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', disabled: selectedNode?.kind !== 'directory' && props.runtime.getRootRef?.() === undefined, onClick: () => setDraftAction('create-directory') }, '新建目录'),
       createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', disabled: props.state.selectedRef === undefined, onClick: () => setDraftAction('rename') }, '重命名'),
@@ -242,7 +284,8 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
         const destination = selectedNode?.kind === 'directory' ? selectedNode.ref : props.runtime.getRootRef?.()
         for (const file of Array.from(event.dataTransfer.files)) void props.runtime.transfer.importFile(file).then(uploaded => beginProposal('import-commit', uploaded.importRef, uploaded.name, destination)).catch(error => setMutationStatus(error instanceof Error ? error.message : '上传失败'))
       },
-      style: { height: props.viewportHeight ?? 560, overflow: 'auto' },
+      onScroll: (event: { currentTarget: HTMLDivElement }) => setScrollTop(event.currentTarget.scrollTop),
+      style: { ...(props.viewportHeight === undefined ? {} : { height: props.viewportHeight }), overflow: 'auto' },
     },
       createElement('div', { style: { height: windowed.height, position: 'relative' } },
         createElement('div', { style: { transform: `translateY(${windowed.offset}px)` } },
@@ -271,14 +314,9 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
             onClick: () => {
               let next = reduceExplorerTree(props.state, { type: 'select', ref: row.ref })
               if (row.node.hasChildren) {
-                next = reduceExplorerTree(next, { type: row.expanded ? 'collapse' : 'expand', ref: row.ref })
-                if (!row.expanded && props.runtime !== undefined && props.state.children[row.ref] === undefined) {
-                  emit(reduceExplorerTree(next, { type: 'children_loading', ref: row.ref }))
-                  void props.runtime.listChildren(row.ref)
-                    .then(nodes => emit(reduceExplorerTree(next, { type: 'children_ready', ref: row.ref, nodes })))
-                    .catch(error => emit(reduceExplorerTree(next, { type: 'children_error', ref: row.ref, reason: error instanceof Error ? error.message : 'failed to load children' })))
-                  return
-                }
+                emit(next)
+                toggleDirectory(row)
+                return
               } else {
                 next = reduceExplorerTree(next, { type: 'set_primary', ref: row.ref })
                 open(row, 'preview')
@@ -317,7 +355,7 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
               className: 'pwr-explorer-retry',
               onClick: (event: { stopPropagation(): void }) => {
                 event.stopPropagation()
-                emit(reduceExplorerTree(props.state, { type: 'retry', ref: row.ref }))
+                loadChildren(row.ref)
               },
             }, t('state.retry')),
             pendingRefs.includes(row.ref) ? createElement('span', { className: 'pwr-explorer-metadata-pending', role: 'status' }, '…') : null,
@@ -330,7 +368,7 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
               onClick: (event: { stopPropagation(): void }) => { event.stopPropagation(); setPendingRefs(current => [...new Set([...current, row.ref])]); void props.runtime?.revealSensitive?.(row.node).then(result => setMutationStatus(result.ok ? '敏感内容已临时授权' : result.reason ?? '授权失败')).finally(() => setPendingRefs(current => current.filter(ref => ref !== row.ref))) },
             }, '揭示') : null,
             props.runtime?.addReference === undefined || row.node.sensitive === true ? null : createElement(Button, {
-              type: 'button', size: 'sm', variant: 'toolbar', 'aria-label': `添加 ${row.node.name} 到当前对话引用`,
+              type: 'button', size: 'sm', variant: 'toolbar', className: 'pwr-explorer-reference', 'aria-label': `添加 ${row.node.name} 到当前对话引用`,
               onClick: (event: { stopPropagation(): void }) => { event.stopPropagation(); addReference(row) },
             }, '引用'),
           )),
@@ -361,10 +399,17 @@ export function ExplorerTreeView(props: PaneLocalViewProps & { readonly runtimeS
     return () => { live = false }
   }, [runtime])
   useEffect(() => {
-    if (runtime?.search === undefined || state.filter.trim() === '') return
+    if (runtime?.search === undefined) return
     let live = true
     const timer = setTimeout(() => {
-      void runtime.search?.(state.filter.trim()).then(nodes => { if (live) setState(current => reduceExplorerTree(current, { type: 'hydrate_roots', nodes })) })
+      const query = state.filter.trim()
+      const request = query === '' ? runtime.roots() : runtime.search!(query)
+      void request.then(nodes => { if (live) setState(current => {
+        const next = reduceExplorerTree(current, { type: 'hydrate_roots', nodes })
+        const errors = { ...next.errors }; delete errors.search
+        return { ...next, errors }
+      }) })
+        .catch(error => { if (live) setState(current => ({ ...current, errors: { ...current.errors, search: error instanceof Error ? error.message : 'Search unavailable' } })) })
     }, 150)
     return () => { live = false; clearTimeout(timer) }
   }, [runtime, state.filter])

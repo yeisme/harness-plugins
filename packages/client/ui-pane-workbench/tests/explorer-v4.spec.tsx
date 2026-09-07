@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { createElement } from 'react'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { createElement, useState } from 'react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { setActiveLocale } from '../src/i18n/locale.js'
 import { PaneWorkbenchController } from '../src/controller.js'
@@ -30,7 +30,8 @@ import {
   windowVirtualRows,
   type ExplorerTreeNodeV1,
 } from '../src/index.js'
-import { ExplorerTree } from '../src/explorer/tree-ui.js'
+import { ExplorerTree, ExplorerTreeView } from '../src/explorer/tree-ui.js'
+import { createExplorerRuntimeSource } from '../src/explorer/runtime.js'
 import { PaneViewRegistry } from '../src/view-registry.js'
 
 afterEach(() => {
@@ -160,6 +161,51 @@ describe('V4 Task 4.3 Tree State', () => {
 })
 
 describe('V4 Task 4.4 Tree UI', () => {
+  it('restores directory roots after clearing a remote search and reports search failures', async () => {
+    const runtimeSource = createExplorerRuntimeSource()
+    runtimeSource.bind({
+      roots: async () => [node({ ref: 'dir:source', name: 'source', kind: 'directory', hasChildren: true })],
+      listChildren: async () => [], openResource: async () => ({ ok: true }),
+      search: async query => { if (query === 'broken') throw new Error('Search is unavailable'); return [node({ ref: 'file:match', name: 'match.txt' })] },
+    })
+    render(createElement(ExplorerTreeView, { runtimeSource } as never))
+    await screen.findByText('source')
+    const filter = screen.getByRole('textbox')
+    fireEvent.change(filter, { target: { value: 'match' } })
+    await screen.findByText('match.txt')
+    fireEvent.change(filter, { target: { value: '' } })
+    await screen.findByText('source')
+    fireEvent.change(filter, { target: { value: 'broken' } })
+    await screen.findByText('Search is unavailable')
+  })
+  it('loads a keyboard-expanded directory without overwriting a later file selection', async () => {
+    let resolve!: (nodes: readonly ExplorerTreeNodeV1[]) => void
+    const listChildren = vi.fn(() => new Promise<readonly ExplorerTreeNodeV1[]>(done => { resolve = done }))
+    const runtime = { roots: async () => [], listChildren, openResource: async () => ({ ok: true }) }
+    function Harness() {
+      const [state, setState] = useState(reduceExplorerTree(hydrated(), { type: 'focus', ref: 'dir:src' }))
+      return createElement(ExplorerTree, { state, onIntent: setState, runtime })
+    }
+    render(createElement(Harness))
+    fireEvent.keyDown(screen.getByRole('tree'), { key: 'ArrowRight' })
+    expect(listChildren).toHaveBeenCalledWith('dir:src')
+    fireEvent.click(screen.getByText('README.md'))
+    await act(async () => resolve([node({ ref: 'file:child', parentRef: 'dir:src', name: 'index.ts' })]))
+    expect(screen.getByText('index.ts')).toBeTruthy()
+    expect(screen.getByText('README.md').closest('[role=treeitem]')?.getAttribute('aria-selected')).toBe('true')
+  })
+
+  it.each([false, true])('updates virtual rows and reports file open errors (async=%s)', async (asyncOpen) => {
+    const state = hydrated(Array.from({ length: 200 }, (_, i) => node({ ref: `file:n${i}`, name: `item-${i}.txt` })))
+    render(createElement(ExplorerTree, { state, viewportHeight: 140, runtime: {
+      roots: async () => [], listChildren: async () => [], openResource: () => { if (asyncOpen) return Promise.reject(new Error('File is no longer available')); throw new Error('File is no longer available') },
+    } }))
+    expect(screen.queryByText('item-100.txt')).toBeNull()
+    fireEvent.scroll(screen.getByRole('tree'), { target: { scrollTop: 2800 } })
+    expect(screen.getByText('item-100.txt')).toBeTruthy()
+    fireEvent.click(screen.getByText('item-100.txt'))
+    expect(await screen.findByText('File is no longer available')).toBeTruthy()
+  })
   it('renders APG tree rows at 28px and opens preview on click without overflowing long names', () => {
     const opened: string[] = []
     let state = hydrated([node({ ref: 'file:long', name: `${'VeryLongFileName'.repeat(8)}.ts` })])
@@ -212,7 +258,7 @@ describe('V4 Task 4.4 Tree UI', () => {
 })
 
 describe('Explorer narrow content flow (3.4)', () => {
-  it('replaces the navigator with a back affordance on narrow open and restores focus on return', async () => {
+  it.each([false, true])('restores narrow navigator focus for sync/async file opens (async=%s)', async (asyncOpen) => {
     const opened: Array<{ readonly ref: string; readonly mode: 'preview' | 'pin' }> = []
     const runtime = {
       getRootRef: () => 'root',
@@ -220,7 +266,7 @@ describe('Explorer narrow content flow (3.4)', () => {
       listChildren: async () => [],
       search: async () => [],
       inspectMetadata: async (input: ExplorerTreeNodeV1) => ({ ref: input.ref, version: input.version, state: 'ready' as const, label: input.name }),
-      openResource: async (input: ExplorerTreeNodeV1, mode: 'preview' | 'pin') => { opened.push({ ref: input.ref, mode }); return { ok: true } },
+      openResource: (input: ExplorerTreeNodeV1, mode: 'preview' | 'pin') => { opened.push({ ref: input.ref, mode }); return asyncOpen ? Promise.resolve({ ok: true }) : { ok: true } },
     } as unknown as Parameters<typeof ExplorerTree>[0]['runtime']
     const initial = reduceExplorerTree(createExplorerTreeState(), { type: 'hydrate_roots', nodes: [node({ ref: 'readme.md', name: 'readme.md' })] })
     let state = initial

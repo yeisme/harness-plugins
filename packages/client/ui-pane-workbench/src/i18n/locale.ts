@@ -238,6 +238,8 @@ const EN_BUNDLE: LocaleBundle = {
 
     // Explorer
     'explorer.root': 'Workspace',
+    'explorer.fileActions': 'File actions',
+    'explorer.search': 'Search files and folders…',
     'explorer.backToExplorer': 'Back to Explorer',
     'explorer.newFile': 'New File',
     'explorer.newFolder': 'New Folder',
@@ -668,6 +670,8 @@ const ZH_BUNDLE: LocaleBundle = {
 
     // Explorer
     'explorer.root': '工作区',
+    'explorer.fileActions': '文件操作',
+    'explorer.search': '搜索文件和目录…',
     'explorer.backToExplorer': '返回 Explorer',
     'explorer.newFile': '新建文件',
     'explorer.newFolder': '新建文件夹',

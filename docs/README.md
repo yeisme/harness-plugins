@@ -4,6 +4,8 @@
 
 ## 入口
 
+- [Pane 风格交互与后续支持](design/dsh-pane-interaction-completion.md)：Explorer、选区工具条、MCP 入口及侧栏/布局快捷键。
+
 - [DSH 本地工作台](runtime/dsh-workbench.md)：兼容启动器、旧版清理、Pane 会话隔离与无冗余 Target 的日常入口。
 
 - design/dsh-unified-panel-visual-system.md：所有 React/Web 插件 UI 的设计事实源，定义 host-first token、Surface composition、容器密度、状态矩阵、插件 archetype、Workbench 联邦对齐和视觉验收门。

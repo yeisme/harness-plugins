@@ -6,6 +6,7 @@
  */
 
 import { bindSlashRuntime, type SlashBindContext } from '../slash-bind.ts';
+import { bindPaneCommandUi } from './pane-commands.js';
 
 /**
  * The React web adapter cannot ship inside this ModuleLoader bundle:
@@ -20,11 +21,13 @@ export const commandExperienceWebAdapterRef = {
 } as const;
 
 export const name = 'dsh-command-experience';
-export const inject: readonly string[] = [];
+export const inject: readonly string[] = ['paneWorkbench'];
 
 /** Live slash directory on the web client. Missing pane/commands seams fail closed. */
 export function apply(ctx: SlashBindContext): () => void {
-  return bindSlashRuntime(ctx).dispose;
+  const binding = bindSlashRuntime(ctx);
+  const disposeCommands = bindPaneCommandUi(ctx);
+  return () => { disposeCommands(); binding.dispose(); };
 }
 
 const DshCommandExperienceClientPlugin = { name, inject, apply };

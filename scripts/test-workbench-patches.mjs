@@ -22,7 +22,7 @@ function run(command, args, cwd = root) {
 }
 try {
   run('git', ['worktree', 'add', '--detach', checkout, WORKBENCH_BASE], source)
-  for (const packet of ['unified-multi-pane-workbench', 'composer-multi-reference-v1', 'workbench-runtime-cleanup']) {
+  for (const packet of ['unified-multi-pane-workbench', 'composer-multi-reference-v1', 'workbench-runtime-cleanup', 'pane-interaction-completion']) {
     run('bash', [`upstream-prs/${packet}/apply.sh`, checkout])
   }
   run('bash', ['upstream-prs/workbench-runtime-cleanup/apply.sh', checkout])

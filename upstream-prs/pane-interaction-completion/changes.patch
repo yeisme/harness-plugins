@@ -1,0 +1,77 @@
+diff --git a/.agents/notes/implemented/architecture/2026-09-05-unified-workspace-panes.md b/.agents/notes/implemented/architecture/2026-09-05-unified-workspace-panes.md
+index 9619956..28242ba 100644
+--- a/.agents/notes/implemented/architecture/2026-09-05-unified-workspace-panes.md
++++ b/.agents/notes/implemented/architecture/2026-09-05-unified-workspace-panes.md
+@@ -29,0 +30,6 @@ Pane 标题与显式 sessionId 提供会话上下文，内置 composer 不注册
++
++## 键盘与插件内容
++
++非编辑区域的 Ctrl/Cmd+B 切换侧栏；Ctrl/Cmd+Alt+1 聚焦当前组或还原，2/3 改为左右或上下布局，L 打开布局菜单。切换方向复用现有 split/root 与 geometry 提交，不重建 Pane、会话或草稿。单组含多个标签时，2/3 将末尾标签移入分屏；只有一个标签时不创建空 Pane。输入法、编辑器、终端与已经处理的按键继续由原控件拥有。
++
++统一宿主的插件内容必须携带自己的样式与有界容器，不能依赖旧 overlay 是否挂载。Explorer 与工具条沿用 Pane token；浏览器 pane 命令由客户端 commandUi 处理，Host 不拥有浏览器布局。
+diff --git a/packages/client/ui-layout/src/client/AppFrame.tsx b/packages/client/ui-layout/src/client/AppFrame.tsx
+index 7230fe4..4e63b38 100644
+--- a/packages/client/ui-layout/src/client/AppFrame.tsx
++++ b/packages/client/ui-layout/src/client/AppFrame.tsx
+@@ -13,0 +14 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
++import { workbenchShortcut } from './keyboard.ts'
+@@ -175,0 +177,8 @@ export function AppFrame(props: AppFrameProps) {
++  useEffect(() => {
++    const handle = (event: KeyboardEvent) => {
++      if (workbenchShortcut(event) !== 'navigation') return
++      event.preventDefault(); actions.toggleSidebar()
++    }
++    document.addEventListener('keydown', handle)
++    return () => document.removeEventListener('keydown', handle)
++  }, [actions])
+diff --git a/packages/client/ui-layout/src/client/Workbench.tsx b/packages/client/ui-layout/src/client/Workbench.tsx
+index 7ccffdb..ca78832 100644
+--- a/packages/client/ui-layout/src/client/Workbench.tsx
++++ b/packages/client/ui-layout/src/client/Workbench.tsx
+@@ -7,0 +8 @@ import css from './Workbench.module.css'
++import { workbenchShortcut } from './keyboard.ts'
+@@ -82,0 +84,24 @@ export function Workbench(props: Props) {
++  function applyLayout(mode: 'single' | 'columns' | 'rows') {
++    const { live: layout, actions: currentActions } = ref.current
++    if (mode === 'single') {
++      if (layout.focused) currentActions.maximize(layout.focused)
++      return
++    }
++    if (layout.root?.type === 'split') {
++      currentActions.commitGeometry({ ...layout, maximized: null, root: { ...layout.root, axis: mode === 'columns' ? 'horizontal' : 'vertical', ratio: 0.5 } })
++    } else if (layout.root?.type === 'group') {
++      const group = layout.groups[layout.root.id]!
++      if (group.panes.length > 1) currentActions.movePane(group.panes.at(-1)!, { type: 'split', groupId: group.id, edge: mode === 'columns' ? 'right' : 'bottom' })
++    }
++  }
++  useEffect(() => {
++    const handle = (event: KeyboardEvent) => {
++      const action = workbenchShortcut(event)
++      if (action === null || action === 'navigation') return
++      event.preventDefault()
++      if (action === 'menu') setLayouts(value => !value)
++      else applyLayout(action)
++    }
++    document.addEventListener('keydown', handle)
++    return () => document.removeEventListener('keydown', handle)
++  }, [])
+@@ -409,0 +435,3 @@ export function Workbench(props: Props) {
++      <button aria-keyshortcuts="Control+Alt+1 Meta+Alt+1" disabled={!live.focused} onClick={() => { applyLayout('single'); setLayouts(false) }}>{t('wb.singleLayout')} · Ctrl+Alt+1</button>
++      <button aria-keyshortcuts="Control+Alt+2 Meta+Alt+2" disabled={!live.root || live.root.type === 'group' && live.groups[live.root.id]!.panes.length < 2} onClick={() => { applyLayout('columns'); setLayouts(false) }}>{t('wb.columnsLayout')} · Ctrl+Alt+2</button>
++      <button aria-keyshortcuts="Control+Alt+3 Meta+Alt+3" disabled={!live.root || live.root.type === 'group' && live.groups[live.root.id]!.panes.length < 2} onClick={() => { applyLayout('rows'); setLayouts(false) }}>{t('wb.rowsLayout')} · Ctrl+Alt+3</button>
+diff --git a/packages/client/locale/src/locales/en.ts b/packages/client/locale/src/locales/en.ts
+index fc3c1d4..810fa94 100644
+--- a/packages/client/locale/src/locales/en.ts
++++ b/packages/client/locale/src/locales/en.ts
+@@ -29,0 +30,3 @@ export const en = {
++  'wb.singleLayout': 'Focus pane / restore',
++  'wb.columnsLayout': 'Two columns',
++  'wb.rowsLayout': 'Two rows',
+diff --git a/packages/client/locale/src/locales/zh.ts b/packages/client/locale/src/locales/zh.ts
+index 51770da..a28c679 100644
+--- a/packages/client/locale/src/locales/zh.ts
++++ b/packages/client/locale/src/locales/zh.ts
+@@ -27,0 +28,3 @@ export const zh = {
++  'wb.singleLayout': '聚焦窗格／还原',
++  'wb.columnsLayout': '左右两栏',
++  'wb.rowsLayout': '上下两栏',

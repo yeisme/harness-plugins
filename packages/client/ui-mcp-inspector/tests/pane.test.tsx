@@ -38,6 +38,20 @@ const catalog = {
 const t = (key: keyof typeof en) => en[key]
 
 describe('session-following Tools pane', () => {
+  it('reads the chat projection when the session only carries lifecycle fields', async () => {
+    const lifecycle = observable({ running: false, blank: false })
+    const chat = observable({ nodes: { values: () => [] }, order: [], legacy: snapshot('mcp__alpha__read') })
+    const target = vi.fn(() => chat)
+    const ctx = { get: (name: string) => name === 'uiConversation' ? { binding: () => ({ target }) } : undefined }
+    const sessions = { list: observable({ current: 'a' }), binding: () => ({ session: lifecycle }) }
+    vi.mocked(resolveToolHubRemote).mockResolvedValue(undefined)
+    const view = render(<ToolsPane ctx={ctx as never} sessions={sessions as never} t={t} />)
+    expect(screen.getByText('mcp__alpha / read')).toBeTruthy()
+    expect(target).toHaveBeenCalledWith('chat')
+    expect(lifecycle.listeners.size).toBe(0)
+    expect(chat.listeners.size).toBe(1)
+    view.unmount(); expect(chat.listeners.size).toBe(0)
+  })
   it('defaults to MCP, streams activity and drops the previous session selection and subscriptions', async () => {
     const first = observable(snapshot('mcp__alpha__first', true))
     const second = observable(snapshot('mcp__beta__second'))

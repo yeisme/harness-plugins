@@ -6,6 +6,7 @@ import { PANE_WORKSPACE_STORAGE_NAMESPACE, restorePaneWorkspace } from './persis
 import type { PaneCommandRegistry } from './composition.js'
 import type { PaneWorkbenchController } from './controller.js'
 import { PaneViewContent } from './chrome/view-host.js'
+import { REGION_STYLES } from './chrome/shared.js'
 import { isUnifiedHostCatalogView } from './core-pane.js'
 import { probeWorkbenchStorage } from './browser-storage.js'
 
@@ -189,8 +190,11 @@ export function createUnifiedHostAdapter(host: UnifiedWorkspaceHost, registry: P
           const layout = host.source.getSnapshot().layout
           const group = Object.values(layout.groups).find(g => g.panes.includes(pane.id))
           const view = viewOf(pane, group?.id ?? '')
-          if (controller) return createElement(PaneViewContent, { view, registration, registry, controller, onClose: id => { void host.closePane(id) } })
-          return createElement(registration.component as ComponentType<PaneLocalViewProps>, { view, registry, projection: view.metadata, retry: publish })
+          const content = controller
+            ? createElement(PaneViewContent, { view, registration, registry, controller, onClose: id => { void host.closePane(id) } })
+            : createElement(registration.component as ComponentType<PaneLocalViewProps>, { view, registry, projection: view.metadata, retry: publish })
+          return createElement('div', { className: 'pwr-root', 'data-unified-pane-content': true },
+            createElement('style', null, `${REGION_STYLES}\n[data-unified-pane-content]>[data-pane-view-generation]{height:100%;min-height:0;overflow:auto}`), content)
         }) as never)
         const offView = host.registerView({ kind, title: label, rendererKey, icon: registration.presentation?.icon,
           beforeClose: id => {
