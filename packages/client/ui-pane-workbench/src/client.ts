@@ -19,6 +19,7 @@ import {
 import { WorkspaceSearchOverlay } from './search-overlay.js'
 import { PaneCommandRegistry, PaneIntentDispatcher, type PaneIntentHandlerRegistrationV1 } from './composition.js'
 import { registerWorkspaceCapabilitiesCommand, registerWorkspaceCapabilitiesView } from './capabilities-view.js'
+import { resolvePaneConversationSearchHost } from './conversation-search-host.js'
 import {
   createExperienceTierTracker,
   probeWorkspaceSeams,
@@ -27,7 +28,6 @@ import {
 import { COMMAND_SURFACE_CONTEXT_KEY } from './capability-ledger.js'
 import { PaneWorkspacePersistenceAdapter } from './persistence.js'
 import {
-  PANE_CONVERSATION_SEARCH_CONTEXT_KEY,
   PANE_MANAGEMENT_KEYMAP_CONTEXT_KEY,
   PANE_RENDITION_RENDERER_CONTEXT_KEY,
   PANE_WORKSPACE_CONTEXT_KEY,
@@ -351,7 +351,7 @@ function createPaneWorkbenchRuntime(tier: ExperienceTierTrackerV1, ctx: Pick<Cli
     return { sessionId, workspaceId: workspace?.workspaceId, workspaceTitle: workspace?.title }
   }, commands)
   const controller = new PaneWorkbenchController({ registry, persistence, managementPersistence, experienceTier: tier, renditionRenderer, ...(unifiedAdapter ? { layoutDelegate: unifiedAdapter.delegate } : {}) })
-  const conversationSearch = readContextService<PaneConversationSearchHostV1>(ctx, PANE_CONVERSATION_SEARCH_CONTEXT_KEY)
+  const conversationSearch = resolvePaneConversationSearchHost(ctx)
   const keymap = readContextService<Partial<PaneManagementKeymapV1>>(ctx, PANE_MANAGEMENT_KEYMAP_CONTEXT_KEY)
   const workspaceContext = readContextService<PaneWorkspaceContextProviderV1>(ctx, PANE_WORKSPACE_CONTEXT_KEY)
   closePaneWorkbenchCoreView(controller, DSH_TOOL_DETAILS_VIEW_KIND)

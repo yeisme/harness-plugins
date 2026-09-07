@@ -34,6 +34,7 @@ export * from './search-query.js'
 export * from './search-cache.js'
 export * from './search-preferences.js'
 export * from './search-adapter.js'
+export * from './conversation-search-host.js'
 export {
   activateWorkspaceSearchCandidate,
   openWorkspaceSearchPane,

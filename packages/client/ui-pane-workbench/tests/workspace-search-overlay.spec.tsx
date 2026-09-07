@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PaneCommandRegistry } from '../src/composition.js'
 import { PaneWorkbenchController } from '../src/controller.js'
 import { setActiveLocale } from '../src/i18n/locale.js'
+import { createSessionListConversationSearchHost } from '../src/conversation-search-host.js'
 import { WorkspaceSearchOverlay } from '../src/search-overlay.js'
 import { PaneViewRegistry } from '../src/view-registry.js'
 
@@ -164,5 +165,27 @@ describe('WorkspaceSearchOverlay', () => {
     fireEvent.change(within(dialog).getByRole('combobox'), { target: { value: 'Git' } })
     expect(within(dialog).getByRole('option', { name: /Git/ })).toBeTruthy()
     expect(within(dialog).queryByRole('button', { name: 'Load more' })).toBeNull()
+  })
+
+  it('queries the current-profile conversation owner, paginates, and opens a hit', async () => {
+    const { registry, commands, controller } = fixture()
+    const open = vi.fn()
+    const byId: Record<string, { displayTitle: string }> = {}
+    for (let index = 0; index < 25; index += 1) byId[`session:${index}`] = { displayTitle: `Planning ${index}` }
+    const conversationSearch = createSessionListConversationSearchHost({
+      list: { getSnapshot: () => ({ ids: Object.keys(byId), byId, current: 'session:0' }) },
+      open,
+    })
+    expect(conversationSearch).toBeDefined()
+    render(createElement(WorkspaceSearchOverlay, { registry, commands, controller, conversationSearch, onClose: vi.fn() }))
+    const dialog = screen.getByRole('dialog', { name: 'Search and open' })
+    expect(within(dialog).queryByText('History search is unavailable in this host.')).toBeNull()
+    fireEvent.change(within(dialog).getByRole('combobox'), { target: { value: 'Planning' } })
+    await waitFor(() => expect(within(dialog).getByRole('option', { name: /Planning 0/ })).toBeTruthy())
+    expect(within(dialog).getByRole('button', { name: 'Load more' })).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Load more' }))
+    await waitFor(() => expect(within(dialog).queryByRole('button', { name: 'Load more' })).toBeNull())
+    fireEvent.click(within(dialog).getByRole('option', { name: /Planning 0/ }))
+    await waitFor(() => expect(open).toHaveBeenCalledWith('session:0'))
   })
 })

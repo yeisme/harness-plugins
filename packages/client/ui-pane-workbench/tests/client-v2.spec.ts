@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest'
+import { createElement } from 'react'
+import { cleanup, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apply, inject, PANE_CORE_HOST_CONTRACT, probePaneWorkbenchHost } from '../src/client.js'
 import { getActiveLocale, setActiveLocale } from '../src/i18n/locale.js'
+
+afterEach(() => {
+  cleanup()
+})
 
 describe('Pane Workbench V2 DSH assembly', () => {
   it('registers with the optional DSH locale runtime and follows hot switches', () => {
@@ -343,6 +349,39 @@ describe('Pane Workbench V2 DSH assembly', () => {
     // Repeated launches reuse the singleton pane instead of stacking duplicates.
     face.executeCommand('workspace.search')
     expect(Object.values(face.controller.getSnapshot().views).filter(view => view.kind === 'dsh.workspace-search')).toHaveLength(1)
+    dispose()
+  })
+
+  it('injects a current-profile conversation-search host from sessions.list', () => {
+    const slots = {
+      spec: () => undefined,
+      inject: vi.fn((_name: string, setup: () => () => void) => setup()),
+      register: vi.fn(() => vi.fn()),
+    }
+    const sessions = {
+      list: {
+        getSnapshot: () => ({
+          ids: ['session:alpha'],
+          byId: { 'session:alpha': { displayTitle: 'Alpha planning', running: false } },
+          current: 'session:alpha',
+        }),
+        subscribe: () => () => {},
+      },
+      open: vi.fn(),
+    }
+    const provide = vi.fn()
+    const ctx = {
+      get: (name: string) => name === 'slots' ? slots : name === 'sessions' ? sessions : undefined,
+      provide,
+    }
+    const dispose = apply(ctx as never)
+    const face = provide.mock.calls.find(call => call[0] === 'paneWorkbench')?.[1] as {
+      views: { get(kind: string): { component(): unknown } | undefined }
+    }
+    const searchView = face.views.get('dsh.workspace-search')
+    expect(searchView).toBeDefined()
+    render(createElement(searchView!.component as never))
+    expect(screen.queryByText('History search is unavailable in this host.')).toBeNull()
     dispose()
   })
 })

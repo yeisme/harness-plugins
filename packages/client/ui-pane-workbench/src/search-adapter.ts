@@ -1,3 +1,4 @@
+import { CURRENT_PROFILE_WORKSPACE_REF } from './conversation-search-host.js'
 import type { PaneConversationSearchHostV1, PaneWorkspaceContextProviderV1 } from './management.js'
 import { boundedPaneDescription } from './management.js'
 import {
@@ -54,8 +55,7 @@ export function createWorkspaceSearchHistoryAdapter(input: {
       if (conversationSearch === undefined || input.conversationSearch === undefined) {
         return { items: [], status: 'contract_mismatch', reason: 'conversation_search_unavailable' }
       }
-      const workspaceRef = request.projectRef ?? input.workspaceRef
-      if (workspaceRef === undefined) return { items: [], status: 'contract_mismatch', reason: 'workspace_ref_required' }
+      const workspaceRef = request.projectRef ?? input.workspaceRef ?? CURRENT_PROFILE_WORKSPACE_REF
       const page = await input.conversationSearch.search({
         workspaceRef,
         query: request.query,
