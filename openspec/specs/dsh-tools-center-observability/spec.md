@@ -4,19 +4,25 @@
 
 ## Purpose
 Define the Tools workbench (tools center) experience inside the `mcp-inspector` entry: responsive layout hierarchy, honest catalog status and filtering, authoritative CAS-based enable/disable, redacted session activity with timeline visualization, additive Tool Hub observability, MCP health degradation, safe error recovery, i18n/a11y, and integration evidence gates.
-
 ## Requirements
-
 ### Requirement: Tools 工作台首屏层级
-系统 SHALL 在现有 `conversation.view` 的 `mcp-inspector` entry 内提供紧凑状态条、目录区和活动/详情区；MUST NOT 通过并列主壳或 dashboard card mosaic 实现。宽容器首屏 MUST 同时可见目录与会话活动，内容 MUST 从顶部开始且不得产生被拉伸的空白区。
+系统 SHALL 在现有 conversation.view 的 mcp-inspector entry 内提供会话工具 Tab，默认展示本会话活动。目录作为次级页签，调用或目录详情仅在选中时出现。固定旁栏 SHALL 复用该会话内容与展示状态，不创建并列主壳或 dashboard card mosaic。旧 V1 宽屏常驻目录/活动 58/42 布局和常驻详情页签不再适用于 V2 会话视图；全局管理使用独立目录入口。
+
+#### Scenario: 宽容器会话排错
+- **WHEN** 用户打开会话工具 Tab 并选择失败调用
+- **THEN** UI SHALL 保留活动列表并在容器允许时并排显示有界详情；目录不常驻占据首屏
 
 #### Scenario: 宽容器正常目录
-- **WHEN** Tools 容器宽度至少 1100px 且目录与活动均有数据
-- **THEN** UI SHALL 使用约 58/42 双栏，在无需纵向滚动前显示状态条、目录首行和活动首行
+- **WHEN** Tools 容器宽度充足且目录与活动均有数据
+- **THEN** 会话工具 Tab 默认展示本会话活动；完整目录通过次级页签可达，不再以 V1 58/42 常驻双栏占据首屏
 
 #### Scenario: 中窄容器
-- **WHEN** Tools 容器小于 1100px
-- **THEN** UI SHALL 使用内部目录/活动/详情切换且同一时刻只保留一个主内容滚动区
+- **WHEN** Tools 容器小于并排显示列表与详情所需宽度
+- **THEN** UI SHALL 保持调用列表可访问，详情支持返回和 Escape，恢复所选行焦点，目录/活动/详情在页签内切换且同一时刻只保留一个主内容滚动区
+
+#### Scenario: 中窄或矮容器
+- **WHEN** Tools 容器不足以并排显示列表和详情
+- **THEN** UI SHALL 保持调用列表可访问，详情支持返回和 Escape，恢复所选行焦点，不把输入区或统计卡拉伸为大块空白
 
 ### Requirement: 安全目录状态与筛选
 系统 SHALL 展示目录完整性、总数、已启用、已关闭和不可用数量，并支持按名称/描述/来源、family 与 availability 筛选。目录项 SHALL 以高密度行展示 label、family、source、safe description、tool count、状态和本会话最近使用；MUST NOT 把“已启用”等同于“健康或已连接”。
