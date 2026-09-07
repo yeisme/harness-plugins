@@ -1,3 +1,4 @@
+import '../../scripts/build-ui-visual-native-menu.mjs'
 import { createServer } from 'node:http'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -45,6 +46,8 @@ const statusFlowVendor = {
   '/vendor/scheduler.global.js': () => wrapCjsGlobal(join(schedulerDir, 'cjs/scheduler.production.min.js'), 'Scheduler'),
   '/vendor/react-dom.global.js': () => `${wrapCjsGlobal(join(reactDomDir, 'cjs/react-dom.production.min.js'), 'ReactDOM', { react: 'React', scheduler: 'Scheduler' })}window.ReactDOMClient = { createRoot: window.ReactDOM.createRoot, hydrateRoot: window.ReactDOM.hydrateRoot };\n`,
   '/vendor/react-jsx-runtime.global.js': () => wrapCjsGlobal(join(reactDir, 'cjs/react-jsx-runtime.production.min.js'), 'ReactJsxRuntime', { react: 'React' }),
+  '/vendor/native-menu.mjs': () => readFileSync(new URL('../../temp/ui-visual-native-menu/native-menu.js', import.meta.url), 'utf8'),
+  '/vendor/react-dom.mjs': () => 'export const createPortal=window.ReactDOM.createPortal;',
   '/vendor/react.mjs': () => esmShimFromGlobal('React'),
   '/vendor/react-jsx-runtime.mjs': () => esmShimFromGlobal('ReactJsxRuntime'),
   '/vendor/fixture-primitives.mjs': () => readFileSync(new URL('./fixture-primitives.mjs', import.meta.url), 'utf8'),
@@ -63,6 +66,7 @@ const statusFlowVendor = {
 const statusFlowImportMap = {
   imports: {
     'react': '/vendor/react.mjs',
+    'react-dom': '/vendor/react-dom.mjs',
     'react/jsx-runtime': '/vendor/react-jsx-runtime.mjs',
     '@deepseek-ai/dsh-client-ui-primitives': '/vendor/fixture-primitives.mjs',
     '@yeisme/dsh-client-ui-surface': '/vendor/ui-surface.mjs',
@@ -300,6 +304,31 @@ createServer((request, response) => {
     response.end(vendorAsset())
     return
   }
+  if (url.pathname === '/pane-menus') {
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+    response.end(`<!doctype html><html><head><style>body{margin:0;background:#111;color:#eee;font:12px Arial}#fixture{height:600px;width:100%}</style><script type="importmap">${JSON.stringify(statusFlowImportMap)}</script></head><body><main id="fixture"></main>
+<script>window.__ModuleLoader__={load(entry){window.__toolsEntry=entry}}</script><script src="/vendor/react.global.js"></script><script src="/vendor/scheduler.global.js"></script><script src="/vendor/react-dom.global.js"></script><script src="/vendor/react-jsx-runtime.global.js"></script><script src="/tools-client.js"></script><script type="module">
+import {Menu,ExplorerTree,createExplorerTreeState,reduceExplorerTree} from '/vendor/native-menu.mjs';
+import * as surface from '/vendor/ui-surface.mjs';import * as kit from '/vendor/ui-visual-kit.mjs';
+const h=React.createElement, mode=${JSON.stringify(url.searchParams.get('kind'))};window.__menuAction='';
+if(mode==='explorer'){
+ const nodes=['one','two'].map(ref=>({ref,name:ref,version:'1',kind:'directory',hasChildren:true,capabilities:[],freshness:'fresh',availability:{mutate:'available'}}));
+ const runtime={roots:async()=>nodes,listChildren:async()=>[],openResource:()=>({ok:true}),mutation:{enabled:true,propose:async input=>({...input,proposalRef:'fixture',summary:'Confirm fixture action',risks:[],conflicts:[],reversible:true,expiresAt:'future',execute:async()=>{window.__menuAction='executed';return {ok:true}}})}};
+ function Fixture(){const [state,setState]=React.useState(()=>reduceExplorerTree(reduceExplorerTree(createExplorerTreeState(),{type:'hydrate_roots',nodes}),{type:'select',ref:'one'}));return h(ExplorerTree,{state,onIntent:setState,runtime})}
+ ReactDOM.createRoot(document.getElementById('fixture')).render(h(Fixture));
+}else{
+ const api=window.__toolsEntry.factory(name=>{if(name==='react')return React;if(name==='react/jsx-runtime')return ReactJsxRuntime;if(name==='@deepseek-ai/dsh-client-ui-primitives')return {Menu};if(name==='@yeisme/dsh-client-ui-surface')return surface;if(name==='@yeisme/dsh-client-ui-visual-kit')return kit;throw new Error('Unexpected fixture dependency')});
+ let view;const snapshot={legacy:{nodes:[],runningCalls:[]}},summary={current:'a',ids:['a'],byId:{a:{displayTitle:'Fixture A'}}};
+ const sessions={list:{getSnapshot:()=>summary,subscribe:()=>()=>{}},binding:()=>({session:{getSnapshot:()=>snapshot,subscribe:()=>()=>{}}})};
+ const pane={registerView:()=>()=>{},openView:request=>{window.__menuAction=request.kind}};
+ const remote={referenceTools:{list:async()=>({ok:true,value:{tools:[]}})},skills:{list:async()=>({ok:true,value:{skills:[],catalogComplete:true}})}};
+ const slots={inject:(_,factory)=>factory(),register:(_,component)=>{view=component;return ()=>{}}};
+ api.apply({locale:{register:()=>()=>{},bind:()=>key=>api.en[key]??key},slots,get:key=>({sessions,paneWorkbench:pane,remote,slots})[key],provide:()=>()=>{},on:()=>()=>{},effect:factory=>factory()});
+ ReactDOM.createRoot(document.getElementById('fixture')).render(h(view,{boundSessionId:'a'}));
+}
+</script></body></html>`)
+    return
+  }
   if (url.pathname === '/session-tools') {
     const width = [360,560,960].includes(Number(url.searchParams.get('width'))) ? Number(url.searchParams.get('width')) : 560
     const height = url.searchParams.get('short') === 'true' ? 150 : 650
@@ -310,9 +339,11 @@ createServer((request, response) => {
 <script type="module">
 import * as surface from '/vendor/ui-surface.mjs';
 import * as visualKit from '/vendor/ui-visual-kit.mjs';
-const exports=window.__toolsEntry.factory(name=>{if(name==='react')return React;if(name==='react/jsx-runtime')return ReactJsxRuntime;if(name==='@yeisme/dsh-client-ui-surface')return surface;if(name==='@yeisme/dsh-client-ui-visual-kit')return visualKit;throw new Error('Unexpected module '+name)})
+import { Menu } from '/vendor/native-menu.mjs';
+const primitives={Menu};
+const exports=window.__toolsEntry.factory(name=>{if(name==='react')return React;if(name==='react/jsx-runtime')return ReactJsxRuntime;if(name==='@yeisme/dsh-client-ui-surface')return surface;if(name==='@yeisme/dsh-client-ui-visual-kit')return visualKit;if(name==='@deepseek-ai/dsh-client-ui-primitives')return primitives;throw new Error('Unexpected module '+name)})
 const activity=exports.deriveToolActivity(Array.from({length:30},(_,i)=>({kind:'tool-result',seq:i,time:10000-i*200,callTime:9900-i*200,call:{name:'fixture_tool_'+i},isError:i===0})),[])
-function Fixture(){const [section,setSection]=React.useState('activity'),[call,setCall]=React.useState(),[filter,setFilter]=React.useState('all');return exports.renderToolsInspectorTree({catalogState:{status:'unavailable',message:'catalog_unavailable'},activity,query:'',family:'all',enabled:'all',activeSection:section,selectedCall:call,activityFilter:filter,canRefresh:true,onQueryChange(){},onFamilyChange(){},onEnabledChange(){},onToggle(){},onActiveSectionChange:setSection,onSelectCall:setCall,onActivityFilterChange:setFilter,onRevealCall(){window.__revealed=true},onRefresh(){},toolbarActions:React.createElement('button',{className:'vk-btn'},'Pin to side pane')})}
+function Fixture(){const [section,setSection]=React.useState('activity'),[call,setCall]=React.useState(),[filter,setFilter]=React.useState('all'),[mode,setMode]=React.useState('list');return exports.renderToolsInspectorTree({catalogState:{status:'unavailable',message:'catalog_unavailable'},activity,query:'',family:'all',enabled:'all',activeSection:section,selectedCall:call,activityFilter:filter,activityMode:mode,onActivityModeChange:setMode,canRefresh:true,onQueryChange(){},onFamilyChange(){},onEnabledChange(){},onToggle(){},onActiveSectionChange:setSection,onSelectCall:setCall,onActivityFilterChange:setFilter,onRevealCall(){window.__revealed=true},onRefresh(){},toolbarActions:React.createElement('button',{className:'vk-btn'},'Pin to side pane')})}
 ReactDOM.createRoot(document.getElementById('tools')).render(React.createElement(Fixture));document.body.dataset.ready='true'
 </script></body></html>`)
     return

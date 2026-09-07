@@ -2,7 +2,7 @@ import { buildPanelStyles } from '@yeisme/dsh-client-ui-visual-kit'
 
 /** Explorer remains styled when rendered without the legacy region chrome. */
 export const EXPLORER_STYLES = buildPanelStyles({ scope: 'explorer-tree', extra: `
-[data-explorer-tree].pwr-explorer{display:flex;flex-direction:column;min-height:0;height:100%;overflow:hidden;background:var(--vk-bg-base);color:var(--vk-text-secondary)}
+[data-explorer-tree].pwr-explorer{position:relative;display:flex;flex-direction:column;min-height:0;height:100%;overflow:hidden;background:var(--vk-bg-base);color:var(--vk-text-secondary)}
 [data-explorer-tree] .pwr-explorer-header{padding:var(--vk-gap-md);gap:var(--vk-gap-md);border-bottom:1px solid var(--vk-border-l1)}
 [data-explorer-tree] .ys-context-title{font-size:var(--vk-font-small);font-weight:500;color:var(--vk-text-tertiary)}
 [data-explorer-tree] .ys-context-actions{flex:1;min-width:0}
@@ -25,5 +25,9 @@ export const EXPLORER_STYLES = buildPanelStyles({ scope: 'explorer-tree', extra:
 [data-explorer-tree] .pwr-explorer-action-status,[data-explorer-tree] .pwr-explorer-metadata-card{position:static;flex:none;display:flex;gap:var(--vk-gap-md);width:auto;margin:0;padding:var(--vk-gap-xs) var(--vk-gap-md);font-size:var(--vk-font-small);border:0;border-top:1px solid var(--vk-border-l1);border-radius:0;box-shadow:none;background:var(--vk-bg-layer-1)}
 [data-explorer-tree] .pwr-explorer-metadata-card strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
 [data-explorer-tree] .pwr-explorer-metadata-card span{color:var(--vk-text-tertiary)}
-@media(pointer:coarse){[data-explorer-tree] .pwr-explorer-row input[type=checkbox],[data-explorer-tree] .pwr-explorer-row .pwr-explorer-reference{opacity:1!important}[data-explorer-tree] .pwr-explorer-row button{height:var(--vk-ctrl-touch)}}
+[data-explorer-tree] .pwr-explorer-context-menu{position:absolute;inset-inline:var(--vk-gap-md);top:var(--vk-ctrl-touch);bottom:var(--vk-gap-md);overflow:auto;z-index:20;max-width:calc(100% - 2 * var(--vk-gap-md))}
+[data-explorer-tree] .pwr-explorer-context-menu>span{display:block}
+[data-explorer-tree] .pwr-explorer-context-menu [role=menu]{position:relative;inset:auto;width:100%;min-width:0;max-width:100%;max-height:calc(100dvh - 120px);overflow:auto}
+[data-explorer-tree] .pwr-explorer-context-menu small{display:block;white-space:normal;overflow-wrap:anywhere;font-size:var(--vk-font-small)}
+@media(pointer:coarse){[data-explorer-tree] .pwr-explorer-context-menu [role=menuitem]{min-height:var(--vk-ctrl-touch)}[data-explorer-tree] .pwr-explorer-row input[type=checkbox],[data-explorer-tree] .pwr-explorer-row .pwr-explorer-reference{opacity:1!important}[data-explorer-tree] .pwr-explorer-row button{height:var(--vk-ctrl-touch)}}
 ` })

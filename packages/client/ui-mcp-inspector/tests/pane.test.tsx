@@ -5,7 +5,13 @@ import { ToolsPane } from '../src/client/pane.tsx'
 import { SessionToolsWorkspace } from '../src/client/workspace-state.ts'
 import { en } from '../src/client/locales.ts'
 
-afterEach(() => { cleanup(); vi.useRealTimers() })
+const menuFixture = vi.hoisted(() => ({ measuring: false }))
+
+// The official Menu barrel imports renderer CSS; interaction semantics are tested
+// here through its public props, with the real primitive covered by browser gates.
+vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({ Menu: ({ open, anchor, items, onSelect }: { open: boolean; anchor: import('react').ReactNode; items: { id: string; label: import('react').ReactNode; disabled?: boolean }[]; onSelect: (id: string) => void }) => <>{anchor}{open && <div role="menu" style={{ visibility: menuFixture.measuring ? 'hidden' : 'visible' }}>{items.map(item => <button role="menuitem" key={item.id} disabled={item.disabled} onClick={() => onSelect(item.id)}>{item.label}</button>)}</div>}</> }))
+
+afterEach(() => { menuFixture.measuring = false; cleanup(); vi.useRealTimers() })
 function observable<T>(initial: T) {
   let state = initial
   const listeners = new Set<() => void>()
@@ -28,7 +34,7 @@ function harness() {
 describe('explicit Session Tools affinity', () => {
   it('keeps A bound when global current becomes B and reads only A catalog', async () => {
     const h = harness(); const view = render(<ToolsPane {...h.props} sessionId="a" />)
-    expect(screen.getByText('read_a', { selector: '.tools-record-name' })).toBeTruthy()
+    expect(screen.getByText('read_a', { selector: '.tools-record-label' })).toBeTruthy()
     act(() => h.list.set({ ...h.list.getSnapshot(), current: 'b' }))
     expect(screen.queryByText('read_b')).toBeNull()
     await waitFor(() => expect(h.toolList).toHaveBeenCalledWith({ sessionId: 'a' }, expect.anything()))
@@ -95,4 +101,55 @@ it('releases polling only after the final view and survives a StrictMode retain 
   expect(h.workspace.get('a')).toBe(resource);expect(dispose).not.toHaveBeenCalled()
   again();await Promise.resolve();expect(dispose).toHaveBeenCalledOnce();expect(vi.getTimerCount()).toBe(0)
   h.workspace.dispose()
+})
+
+it('keeps auxiliary actions in More and restores its trigger after choosing', () => {
+  const h = harness(), onPin = vi.fn()
+  render(<ToolsPane {...h.props} sessionId="a" onPin={onPin} />)
+  expect(screen.queryByRole('menuitem')).toBeNull()
+  const trigger = screen.getByRole('button', { name: 'More' })
+  fireEvent.click(trigger)
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Pin to side pane' }))
+  expect(onPin).toHaveBeenCalledOnce()
+  expect(screen.queryByRole('menuitem')).toBeNull()
+  expect(document.activeElement).toBe(trigger)
+})
+
+it('owns More keyboard navigation, skipping disabled entries and returning focus', () => {
+  const h = harness(), hostKey = vi.fn()
+  const view = render(<div onKeyDown={hostKey}><ToolsPane {...h.props} manager onPin={vi.fn()} onOpenSession={vi.fn()} onManage={vi.fn()} /></div>)
+  const trigger = screen.getByRole('button', { name: 'More' })
+  fireEvent.click(trigger)
+  const first = screen.getByRole('menuitem', { name: 'Pin to side pane' })
+  const middle = screen.getByRole('menuitem', { name: 'Open conversation' })
+  const last = screen.getByRole('menuitem', { name: 'Manage global tools' })
+  expect(document.activeElement).toBe(first)
+  fireEvent.keyDown(first, { key: 'ArrowDown' }); expect(document.activeElement).toBe(middle)
+  fireEvent.keyDown(middle, { key: 'End' }); expect(document.activeElement).toBe(last)
+  fireEvent.keyDown(last, { key: 'ArrowDown' }); expect(document.activeElement).toBe(first)
+  fireEvent.keyDown(first, { key: 'ArrowUp' }); expect(document.activeElement).toBe(last)
+  fireEvent.keyDown(last, { key: 'Home' }); expect(document.activeElement).toBe(first)
+  fireEvent.keyDown(first, { key: 'Escape' })
+  expect(document.activeElement).toBe(trigger)
+  expect(screen.queryByRole('menu')).toBeNull()
+  fireEvent.click(trigger)
+  expect(fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Pin to side pane' }), { key: 'Tab' })).toBe(true)
+  expect(screen.queryByRole('menu')).toBeNull()
+  expect(document.activeElement).toBe(trigger)
+  expect(hostKey).not.toHaveBeenCalled()
+  view.unmount()
+})
+
+it('focuses the first item after the portal measurement pass becomes visible', async () => {
+  menuFixture.measuring = true
+  const h = harness()
+  const view = render(<ToolsPane {...h.props} sessionId="a" onPin={vi.fn()} />)
+  const trigger = screen.getByRole('button', { name: 'More' })
+  trigger.focus()
+  fireEvent.click(trigger)
+  expect(document.activeElement).toBe(trigger)
+  const menu = screen.getByRole('menu', { hidden: true })
+  menu.style.visibility = 'visible'
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('menuitem')))
+  view.unmount()
 })

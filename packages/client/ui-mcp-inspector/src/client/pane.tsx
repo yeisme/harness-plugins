@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useSyncExternalStore, type JSX } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type JSX } from 'react'
 import type { ClientContext, ISessions, SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
 import { deriveToolActivity, type ActivityRunningCall, type ActivityToolResultNode } from './activity.ts'
 import { ToolsInspectorContent, type ToolsTranslator } from './McpInspectorView.tsx'
 import { SessionToolsWorkspace } from './workspace-state.ts'
+import { Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Surface } from '@yeisme/dsh-client-ui-surface'
 import type { ToolActivityRecord } from './activity.ts'
 
@@ -65,6 +66,56 @@ export function ToolsPane(props: ToolsPaneProps): JSX.Element {
 
 function BoundToolsPane(props: ToolsPaneProps): JSX.Element {
   const { ctx, sessions, sessionId, workspace, t } = props
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreTrigger = useRef<HTMLButtonElement>(null)
+  const moreLabels = useRef(new Map<string, HTMLSpanElement>())
+  const actions = [
+    ...(props.manager ? [{ id: 'settings', label: t('action.settings'), run: props.onSettings, reason: t('action.settingsUnavailable') }] : []),
+    ...(props.onPin ? [{ id: 'pin', label: t('action.pinSession'), run: props.onPin }] : []),
+    ...(props.onOpenSession ? [{ id: 'open', label: t('action.openSession'), run: props.onOpenSession }] : []),
+    ...(props.onManage ? [{ id: 'manage', label: t('action.manageGlobal'), run: props.onManage }] : []),
+  ]
+  const closeMore = () => { setMoreOpen(false); moreTrigger.current?.focus() }
+  const menuButtons = () => actions.filter(action => action.run).flatMap(action => {
+    const button = moreLabels.current.get(action.id)?.closest<HTMLButtonElement>('button[role="menuitem"]')
+    return button ? [button] : []
+  })
+  useEffect(() => {
+    if (!moreOpen) return
+    const first = menuButtons()[0]
+    const menu = first?.closest<HTMLElement>('[role="menu"]')
+    if (!first || !menu) return
+    // Portal Menu first mounts hidden to measure, then commits its placement.
+    // Follow that DOM lifecycle instead of trying to focus its measurement pass.
+    const focusWhenPlaced = () => {
+      if (getComputedStyle(menu).visibility === 'hidden' || getComputedStyle(menu).display === 'none') return false
+      first.focus()
+      return document.activeElement === first
+    }
+    if (focusWhenPlaced()) return
+    const observer = new MutationObserver(() => { if (focusWhenPlaced()) observer.disconnect() })
+    observer.observe(menu, { attributes: true, attributeFilter: ['style', 'class'] })
+    return () => observer.disconnect()
+  }, [moreOpen])
+  const onMoreKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!moreOpen) return
+    if (event.key === 'Escape' || event.key === 'Tab') {
+      event.stopPropagation()
+      // Tab continues from the trigger in the natural document order.
+      if (event.key === 'Escape') event.preventDefault()
+      closeMore()
+      return
+    }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+    event.preventDefault()
+    event.stopPropagation()
+    const buttons = menuButtons()
+    if (!buttons.length) return
+    const index = buttons.findIndex(button => button === document.activeElement)
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+      : event.key === 'ArrowDown' ? (index + 1) % buttons.length : (index - 1 + buttons.length) % buttons.length
+    buttons[next]?.focus()
+  }
   const resource = useMemo(() => workspace.get(sessionId), [workspace, sessionId])
   useEffect(() => workspace.retain(sessionId), [workspace, sessionId])
   useEffect(() => sessionId ? (sessions as unknown as { present?(id: string): () => void }).present?.(sessionId) : undefined, [sessions, sessionId])
@@ -78,10 +129,10 @@ function BoundToolsPane(props: ToolsPaneProps): JSX.Element {
   }, [snapshot])
   return <ToolsInspectorContent activity={activity} controller={resource.controller} viewState={resource.state} t={t} readOnlyCatalog={!props.manager} globalManagement={!!props.manager}
     contextLabel={props.manager ? t('view.globalTools') : t('view.tools')} onRevealCall={props.onRevealCall}
-    toolbarActions={<div className="tools-context-actions">
-      {props.manager && <button type="button" className="vk-btn" disabled={!props.onSettings} title={props.onSettings ? undefined : t('action.settingsUnavailable')} onClick={props.onSettings}>{t('action.settings')}</button>}
-      {props.onPin && <button type="button" className="vk-btn" onClick={props.onPin}>{t('action.pinSession')}</button>}
-      {props.onOpenSession && <button type="button" className="vk-btn" onClick={props.onOpenSession}>{t('action.openSession')}</button>}
-      {props.onManage && <button type="button" className="vk-btn" onClick={props.onManage}>{t('action.manageGlobal')}</button>}
-    </div>} />
+    toolbarActions={actions.length > 0 ? <div className="tools-context-actions" onKeyDown={onMoreKeyDown}>
+      <Menu open={moreOpen} portal align="end" compact
+        anchor={<button ref={moreTrigger} type="button" className="vk-btn" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen(!moreOpen)}>{t('action.more')}</button>}
+        items={actions.map(action => ({ id: action.id, label: <span ref={node => { if (node) moreLabels.current.set(action.id, node); else moreLabels.current.delete(action.id) }} title={'reason' in action && !action.run ? action.reason : undefined}>{action.label}</span>, disabled: !action.run }))}
+        onClose={closeMore} onSelect={id => { closeMore(); actions.find(action => action.id === id)?.run?.() }} />
+    </div> : undefined} />
 }

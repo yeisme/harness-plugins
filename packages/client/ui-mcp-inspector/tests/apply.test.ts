@@ -1,4 +1,6 @@
 import { describe, expect, test, vi } from 'vitest'
+vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({ Menu: () => null }))
+
 import { renderToStaticMarkup } from 'react-dom/server'
 import { apply, inject, name } from '../src/client/index.ts'
 import { deriveMcpActivity } from '../src/client/activity.ts'

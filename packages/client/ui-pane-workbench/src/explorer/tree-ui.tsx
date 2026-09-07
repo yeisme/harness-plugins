@@ -1,5 +1,5 @@
 import { createElement, useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
-import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Input, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Surface, SurfaceContextBar, SurfaceState } from '@yeisme/dsh-client-ui-surface'
 import { WorkbenchIcon, type WorkbenchIconName } from '../icon.js'
 import { t } from '../i18n/locale.js'
@@ -85,6 +85,47 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
   const [lastUndo, setLastUndo] = useState<(() => Promise<{ readonly ok: boolean; readonly reason?: string }>)>()
   const [dangerPhrase, setDangerPhrase] = useState('')
   const [draggedRefs, setDraggedRefs] = useState<readonly string[]>([])
+  const [menuRow, setMenuRow] = useState<ExplorerTreeRowV1>()
+  const requestGeneration = useRef(0)
+  const proposalGeneration = useRef<number | undefined>(undefined)
+  const executingGeneration = useRef<number | undefined>(undefined)
+  const [proposalPending, setProposalPending] = useState(false)
+  const proposalRef = useRef<HTMLDivElement>(null)
+  const invalidateProposal = (): void => {
+    requestGeneration.current += 1
+    proposalGeneration.current = undefined
+    executingGeneration.current = undefined
+    setProposal(undefined); setProposalPending(false); setMutationStatus(undefined)
+  }
+  const actionContext = useRef<{ row: ExplorerTreeRowV1; runtime: ExplorerRuntimeV2 | undefined } | undefined>(undefined)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const actionsRef = useRef<HTMLDetailsElement>(null)
+  const restoreFocus = (): void => {
+    const origin = actionContext.current?.row
+    const visible = flattenExplorerTree(latest.current)
+    const ref = [origin?.ref, origin?.node.parentRef, latest.current.focusedRef].find(ref => visible.some(row => row.ref === ref)) ?? visible[0]?.ref
+    emit(reduceExplorerTree(latest.current, { type: 'focus', ref }))
+    requestAnimationFrame(() => { treeRef.current?.focus() })
+  }
+  const closeMenu = (): void => { invalidateProposal(); setMenuRow(undefined); setDraftAction(undefined); setDraftName(''); restoreFocus(); actionContext.current = undefined }
+  const showMenu = (row: ExplorerTreeRowV1): void => {
+    invalidateProposal(); setDraftAction(undefined); setDraftName('')
+    actionContext.current = { row, runtime: props.runtime }
+    emit(reduceExplorerTree(latest.current, { type: 'focus', ref: row.ref }))
+    setMenuRow(row)
+  }
+  useEffect(() => {
+    if (menuRow !== undefined) menuRef.current?.querySelector<HTMLButtonElement>('[role=menuitem]:not(:disabled)')?.focus()
+  }, [menuRow])
+  useEffect(() => {
+    invalidateProposal()
+    setMenuRow(undefined); actionContext.current = undefined
+    setDraftAction(undefined); setProposal(undefined); setLastUndo(undefined)
+    return () => { requestGeneration.current += 1 }
+  }, [props.runtime])
+  useEffect(() => {
+    if (proposal !== undefined) proposalRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+  }, [proposal])
   const hoverTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const treeRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -165,27 +206,45 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
   const targetRefs = props.state.checkedRefs.length > 0 ? props.state.checkedRefs : props.state.selectedRef === undefined ? [] : [props.state.selectedRef]
   const beginProposal = (action: ExplorerMutationProposalV1['action'], importRef?: string, importName?: string, destinationOverride?: string): void => {
     if (props.runtime?.mutation === undefined || !props.runtime.mutation.enabled) return
+    const context = actionContext.current
+    if (context !== undefined && (context.runtime !== props.runtime || latest.current.nodes[context.row.ref] === undefined)) { setMutationStatus('Resource context changed'); restoreFocus(); return }
+    invalidateProposal()
+    const generation = requestGeneration.current
+    const runtime = props.runtime
+    const isCurrent = (): boolean => runtimeRef.current === runtime && requestGeneration.current === generation
+    const actionNode = context?.row.node ?? selectedNode
     const needsDestination = action === 'create-file' || action === 'create-directory' || action === 'move' || action === 'copy' || action === 'import-commit'
-    const destinationRef = needsDestination ? (destinationOverride ?? (selectedNode?.kind === 'directory' ? selectedNode.ref : props.runtime.getRootRef?.())) : undefined
-    const targets = action === 'create-file' || action === 'create-directory' || action === 'import-commit' ? undefined : draggedRefs.length > 0 ? draggedRefs : targetRefs
-    setMutationStatus('正在预检…')
-    void props.runtime.mutation.propose({ action, ...(targets === undefined ? {} : { targetRefs: targets }), ...(destinationRef === undefined ? {} : { destinationRef }), ...((draftName || importName) === '' ? {} : { name: importName ?? draftName }), ...(importRef === undefined ? {} : { importRef }) })
-      .then(next => { setProposal(next); setMutationStatus(undefined); setDangerPhrase('') })
-      .catch(error => setMutationStatus(error instanceof Error ? error.message : '预检失败'))
+    const destinationRef = needsDestination ? (destinationOverride ?? (actionNode?.kind === 'directory' ? actionNode.ref : props.runtime.getRootRef?.())) : undefined
+    const targets = action === 'create-file' || action === 'create-directory' || action === 'import-commit' ? undefined : context !== undefined ? [context.row.ref] : draggedRefs.length > 0 ? draggedRefs : targetRefs
+    setProposalPending(true); setMutationStatus('正在预检…')
+    void props.runtime.mutation.propose({ action, ...(targets === undefined ? {} : { targetRefs: targets }), ...(destinationRef === undefined ? {} : { destinationRef }), ...((importName ?? draftName) === '' ? {} : { name: importName ?? draftName }), ...(importRef === undefined ? {} : { importRef }) })
+      .then(next => { if (!isCurrent()) return; proposalGeneration.current = generation; setProposalPending(false); setProposal(next); setMutationStatus(undefined); setDangerPhrase('') })
+      .catch(error => { if (!isCurrent()) return; setProposalPending(false); setMutationStatus(error instanceof Error ? error.message : '预检失败'); restoreFocus() })
   }
   const executeProposal = (choice?: 'keep-both' | 'replace'): void => {
-    if (proposal === undefined) return
+    const generation = proposalGeneration.current
+    if (proposal === undefined || generation === undefined || generation !== requestGeneration.current || executingGeneration.current === generation) return
+    const runtime = props.runtime
+    if (actionContext.current !== undefined && actionContext.current.runtime !== runtime) return
+    const isCurrent = (): boolean => runtimeRef.current === runtime && requestGeneration.current === generation
+    executingGeneration.current = generation
     setMutationStatus('正在执行…')
     void proposal.execute(choice).then(result => {
-      if (!result.ok) { setMutationStatus(result.reason ?? '操作被拒绝'); return }
+      if (!isCurrent()) return
+      if (!result.ok) { setMutationStatus(result.reason ?? '操作被拒绝'); restoreFocus(); return }
       setLastUndo(result.undo === undefined ? undefined : () => result.undo)
       setProposal(undefined); setDraftAction(undefined); setDraftName(''); setMutationStatus('已完成')
-      void props.runtime?.roots().then(nodes => emit(reduceExplorerTree(props.state, { type: 'hydrate_roots', nodes })))
-    }).catch(error => setMutationStatus(error instanceof Error ? error.message : '执行失败'))
+      void runtime?.roots().then(nodes => { if (!isCurrent()) return; emit(reduceExplorerTree(latest.current, { type: 'hydrate_roots', nodes })); restoreFocus() }).catch(() => { if (isCurrent()) restoreFocus() })
+    }).catch(error => { if (!isCurrent()) return; setMutationStatus(error instanceof Error ? error.message : '执行失败'); restoreFocus() })
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     const key = event.key
+    if ((key === 'ContextMenu' || (key === 'F10' && event.shiftKey)) && event.target instanceof Element) {
+      const ref = event.target.closest('[data-explorer-ref]')?.getAttribute('data-explorer-ref')
+      const row = rows.find(row => row.ref === ref) ?? focused
+      if (row !== undefined) { event.preventDefault(); showMenu(row); return }
+    }
     if (key === 'ArrowDown') { event.preventDefault(); emit(moveExplorerFocus(props.state, 'down')) }
     else if (key === 'ArrowUp') { event.preventDefault(); emit(moveExplorerFocus(props.state, 'up')) }
     else if (key === 'Home') { event.preventDefault(); emit(moveExplorerFocus(props.state, 'home')) }
@@ -204,13 +263,44 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
       if (focused.node.kind === 'directory') {
         toggleDirectory(focused)
       } else open(focused, key === 'Enter' ? 'pin' : 'preview')
-    } else if (key === 'F10' && event.shiftKey && focused !== undefined) {
+    } else if (((key === 'F10' && event.shiftKey) || key === 'ContextMenu') && focused !== undefined) {
       event.preventDefault()
-      emit(reduceExplorerTree(props.state, { type: 'select', ref: focused.ref }))
+      showMenu(focused)
     }
   }
 
+  const menuReason = props.runtime?.mutation?.enabled !== true ? props.runtime?.mutation?.disabledReason ?? 'File operations unavailable'
+    : props.state.freshness !== 'fresh' || menuRow?.node.freshness !== 'fresh' ? 'Refresh required before file operations'
+    : menuRow.node.availability?.mutate !== 'available' ? menuRow.node.availability?.reason ?? 'File operation permission unavailable' : undefined
+  const menuActions = [
+    { id: 'create-file', label: '新建文件', directory: true },
+    { id: 'create-directory', label: '新建目录', directory: true },
+    { id: 'rename', label: '重命名' },
+    { id: 'trash', label: '移到废纸篓' },
+  ] as const
   return createElement(Surface, { kind: 'navigator', className: 'pwr-explorer', 'data-explorer-tree': 'true' },
+    menuRow === undefined ? null : createElement('div', { className: 'pwr-explorer-context-menu', ref: menuRef,
+      onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
+        const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role=menuitem]:not(:disabled)') ?? [])
+        const index = items.indexOf(document.activeElement as HTMLButtonElement)
+        if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+          event.preventDefault(); event.stopPropagation()
+          items[event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length]?.focus()
+        } else if (event.key === 'Tab') { closeMenu() }
+      },
+    }, createElement(Menu, { open: true, anchor: null, compact: true, onClose: closeMenu,
+      items: [{ type: 'label', id: 'resource', text: menuRow.node.name }, ...menuActions.map(action => {
+        const reason = menuReason ?? ('directory' in action && menuRow.node.kind !== 'directory' ? 'Select a directory' : undefined)
+        return { id: action.id, disabled: reason !== undefined, danger: action.id === 'trash', label: createElement('span', { title: reason }, action.label, reason === undefined ? null : createElement('small', null, reason)) }
+      }), { id: 'cancel', label: '取消' }],
+      onSelect: id => {
+        if (id === 'cancel') { closeMenu(); return }
+        if (menuReason !== undefined) return
+        setMenuRow(undefined)
+        if (id === 'trash') beginProposal('trash')
+        else { if (actionsRef.current !== null) actionsRef.current.open = true; setDraftAction(id as ExplorerMutationProposalV1['action']); requestAnimationFrame(() => actionsRef.current?.querySelector<HTMLInputElement>('.pwr-explorer-action-draft input')?.focus()) }
+      },
+    })),
     createElement('style', null, EXPLORER_STYLES),
     createElement(SurfaceContextBar, {
       className: 'pwr-explorer-header',
@@ -224,7 +314,7 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
       }),
     }),
     props.state.errors.search ? createElement(SurfaceState, { phase: 'error', title: props.state.errors.search }) : null,
-    props.runtime?.mutation === undefined ? null : createElement('details', { className: 'pwr-explorer-resource-actions', 'data-explorer-resource-actions': true },
+    props.runtime?.mutation === undefined ? null : createElement('details', { onClickCapture: (event: { target: EventTarget }) => { if (event.target instanceof Element && !event.target.closest('.pwr-explorer-action-draft')) { invalidateProposal(); actionContext.current = undefined } }, ref: actionsRef, className: 'pwr-explorer-resource-actions', 'data-explorer-resource-actions': true },
       createElement('summary', null, t('explorer.fileActions')),
       createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', disabled: selectedNode?.kind !== 'directory' && props.runtime.getRootRef?.() === undefined, onClick: () => setDraftAction('create-file') }, '新建文件'),
       createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', disabled: selectedNode?.kind !== 'directory' && props.runtime.getRootRef?.() === undefined, onClick: () => setDraftAction('create-directory') }, '新建目录'),
@@ -235,14 +325,14 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
       createElement('label', { className: 'pwr-explorer-import' }, '导入', createElement('input', { type: 'file', hidden: true, disabled: (selectedNode?.kind !== 'directory' && props.runtime.getRootRef?.() === undefined) || props.runtime.transfer?.enabled !== true, onChange: (event: { currentTarget: HTMLInputElement }) => { const file = event.currentTarget.files?.[0]; if (file === undefined || props.runtime?.transfer === undefined) return; setMutationStatus('正在上传…'); void props.runtime.transfer.importFile(file).then(uploaded => beginProposal('import-commit', uploaded.importRef, uploaded.name)).catch(error => setMutationStatus(error instanceof Error ? error.message : '上传失败')) } })),
       selectedNode?.kind === 'file' && selectedNode.availability?.download === 'available' && props.runtime.transfer?.enabled === true ? createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: () => { setMutationStatus('正在下载…'); void props.runtime?.transfer?.download(selectedNode.ref, selectedNode.version).then(() => setMutationStatus('下载已授权')).catch(error => setMutationStatus(error instanceof Error ? error.message : '下载失败')) } }, '下载') : null,
       lastUndo === undefined ? null : createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: () => { void lastUndo().then(result => { setMutationStatus(result.ok ? '已撤销' : result.reason ?? '撤销失败'); if (result.ok) setLastUndo(undefined) }) } }, '撤销'),
-      draftAction === undefined ? null : createElement('div', { className: 'pwr-explorer-action-draft' },
+      draftAction === undefined ? null : createElement('div', { className: 'pwr-explorer-action-draft', onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => { if (event.key === 'Escape') { closeMenu() } } },
         createElement(Input, { value: draftName, 'aria-label': '资源名称', placeholder: draftAction === 'rename' ? selectedNode?.name ?? '新名称' : '名称', onChange: event => setDraftName(event.currentTarget.value) }),
         createElement(Button, { type: 'button', size: 'sm', variant: 'primary', disabled: draftName.trim() === '', onClick: () => beginProposal(draftAction) }, '预检'),
-        createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: () => { setDraftAction(undefined); setDraftName('') } }, '取消'),
+        createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: () => { closeMenu() } }, '取消'),
       ),
     ),
-    mutationStatus === undefined ? null : createElement('span', { role: 'status', className: 'pwr-explorer-action-status' }, mutationStatus),
-    proposal === undefined ? null : createElement('div', { className: 'pwr-explorer-proposal', role: proposal.conflicts.length > 0 ? 'dialog' : 'region', 'aria-label': '文件操作预览' },
+    mutationStatus === undefined ? null : createElement('span', { role: 'status', className: 'pwr-explorer-action-status', onKeyDown: (event: KeyboardEvent<HTMLSpanElement>) => { if (event.key === 'Escape' && proposalPending) closeMenu() } }, mutationStatus, proposalPending ? createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', autoFocus: true, onClick: closeMenu }, '取消') : null),
+    proposal === undefined ? null : createElement('div', { ref: proposalRef, className: 'pwr-explorer-proposal', onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => { if (event.key === 'Escape') { closeMenu() } }, role: proposal.conflicts.length > 0 ? 'dialog' : 'region', 'aria-label': '文件操作预览' },
       createElement('strong', null, proposal.summary),
       proposal.risks.length === 0 ? null : createElement('span', null, `风险：${proposal.risks.join('、')}`),
       proposal.conflicts.length === 0
@@ -253,7 +343,7 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
           createElement(Input, { value: dangerPhrase, 'aria-label': '输入目标名称确认替换', placeholder: proposal.conflicts[0], onChange: event => setDangerPhrase(event.currentTarget.value) }),
           createElement(Button, { type: 'button', size: 'sm', variant: 'primary', disabled: dangerPhrase !== proposal.conflicts[0], onClick: () => executeProposal('replace') }, '替换'),
         ),
-      createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: () => setProposal(undefined) }, '取消'),
+      createElement(Button, { type: 'button', size: 'sm', variant: 'toolbar', onClick: () => { closeMenu() } }, '取消'),
     ),
     props.narrow === true && props.state.narrowReturnRef !== undefined
       ? createElement('div', { className: 'pwr-explorer-narrow-back', 'data-explorer-narrow-back': props.state.narrowReturnRef, role: 'region', 'aria-label': t('rail.explorer') },
@@ -323,6 +413,7 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
               }
               emit(next)
             },
+            onContextMenu: (event: { preventDefault(): void; stopPropagation(): void }) => { event.preventDefault(); event.stopPropagation(); showMenu(row) },
             onDoubleClick: () => {
               if (row.node.kind !== 'directory') open(row, 'pin')
             },

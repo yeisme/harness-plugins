@@ -1,6 +1,6 @@
 ## 状态与顺序
 
-状态：planned，未实施。依赖本轮 `dsh-pane-interaction-completion-v1`，按目录事件 → 文件恢复 → 上下文菜单 → 布局模板顺序推进，每步以真实用户路径验证。
+状态：实施中，目录上下文菜单1.3已完成；布局controller验证已补强，1.4仍保留编辑缓冲集成缺口。依赖本轮 `dsh-pane-interaction-completion-v1`，按目录事件 → 文件恢复 → 上下文菜单 → 布局模板顺序推进，每步以真实用户路径验证。
 
 ## 场景矩阵
 
@@ -25,3 +25,13 @@
 ## 验证与边界
 
 先用已有 Explorer reducer/component tests 与文件服务测试，真实浏览器只测关键链路。每次 integration/component/e2e 都由现有脚本生成脱敏六件套。不把模拟 watch 或静态截图当真实跨刷新恢复通过。任何真实文件删除、覆盖或生产动作仍需具体用户授权；测试使用可丢弃 fixture。
+
+## 1.3实施与验收
+
+右键、Shift+F10和ContextMenu使用既有Menu及owner预检/执行/冲突/撤销通道；菜单绑定发起行而不更改另一选择目标。请求generation隔离取消、更新操作、runtime切换和迟到执行/刷新；pending可取消，预检就绪聚焦确认但不执行。取消及完成回到发起行，删除行时回到有效父级/首行。短Pane菜单内部滚动，coarse pointer项至少44px。菜单提供新建、重命名、移到废纸篓，其他已有操作继续使用原工具栏。
+
+独立验证10项新菜单回归+22项既有Explorer测试通过：`temp/integration-test-runs/p1-independent-recheck-20260907T104205684008Z/`。原生Menu的360/960px、160px矮窗和触屏验证5项通过：`temp/integration-test-runs/ui-visual-2026-09-07T10-49-28-113Z-3806248/`，最终完整视觉106项通过：`temp/integration-test-runs/ui-visual-2026-09-07T11-04-11-870Z-3926944/`。使用合成文件操作，不宣称真实文件删除/改名通过。
+
+## 1.4部分验证，保持未完成
+
+真实WorkspaceLayoutController补充10项测试覆盖两/三栏混合项目、重复恢复去重、会话身份、序列化重建与同步/异步dirty guard和过期许可：`temp/integration-test-runs/preset-continuity-strengthened-20260907T105132133690Z/`。测试包在`upstream-prs/pane-preset-continuity-tests/`，不改宿主生产代码。实际编辑器renderer重挂载后的两份未保存正文独立性仍未验证，不能把controller guard测试当完整buffer恢复；1.4维持未勾选。

@@ -231,6 +231,8 @@ function ActivityPanel({ activity, mode, filter, now, text, onMode, onFilter, se
   readonly onFilter: (filter: ActivityFilter) => void
 }): JSX.Element {
   const activityRoot = useRef<HTMLElement>(null)
+  const detailsBack = useRef<HTMLButtonElement>(null)
+  useEffect(() => { if (selectedCall) detailsBack.current?.focus() }, [selectedCall])
   const closeDetails = () => {
     const target = activityRoot.current?.querySelector<HTMLButtonElement>('.tools-record-name[aria-pressed=true]')
     onSelectCall?.(undefined)
@@ -252,29 +254,34 @@ function ActivityPanel({ activity, mode, filter, now, text, onMode, onFilter, se
       </div>
       <p className="tools-window-note">{text('activity.window', { shown: activity.records.length, total: activity.calls })}</p>
       {selected && <section className="tools-call-details" aria-label={text('tab.details')}>
-        <button type="button" className="vk-btn" onClick={closeDetails}>{text('action.back')}</button>
-        <strong>{recordName(selected, text)}</strong><p>{recordStatus(selected, text)} · {formatTime(selected.time)}</p>
+        <button ref={detailsBack} type="button" className="vk-btn" onClick={closeDetails}>{text('action.back')}</button>
+        <strong className="tools-call-title">{recordName(selected, text)}</strong><p>{recordStatus(selected, text)} · {formatTime(selected.time)}</p>
         {selected.isError && <p>{selected.errorCode ? text('activity.errorSummary', { name: selected.errorName ?? 'Error', code: selected.errorCode }) : text('activity.errorSummaryUnavailable')}</p>}
         <button type="button" className="vk-btn" disabled={!onRevealCall || selected.running} title={!onRevealCall ? text('activity.navigationUnavailable') : undefined} onClick={() => onRevealCall?.(selected)}>{text('activity.reveal')}</button>
       </section>}
       {records.length === 0 ? <div className="vk-empty tools-empty"><p>{text('empty.activity')}</p><small>{text('empty.activity.hint')}</small></div> : mode === 'list' ? (
         <ol className="tools-activity-list">
           {records.map(record => (
-            <li key={`${record.sequence}-${record.time}-${record.tool}`} className="tools-activity-row" data-running={record.running}>
+            <li key={`${record.sequence}-${record.time}-${record.tool}`} className="tools-activity-row" data-running={record.running} data-selected={selectedCall === callKey(record)}>
+              <button type="button" className="tools-record-name tools-record-select" aria-pressed={selectedCall === callKey(record)} onClick={() => onSelectCall?.(callKey(record))}>
               <i className="vk-dot" data-tone={record.running ? 'info' : record.isError ? 'critical' : 'positive'} aria-hidden="true" />
-              <button type="button" className="tools-record-name" aria-pressed={selectedCall === callKey(record)} onClick={() => onSelectCall?.(callKey(record))}>{recordName(record, text)}</button>
+              <span className="tools-record-label" title={recordName(record, text)}>{recordName(record, text)}</span>
               <time>{formatTime(record.time)}</time>
               <span className="tools-record-status">{recordStatus(record, text)}</span>
+              </button>
             </li>
           ))}
         </ol>
       ) : (
         <ol className="tools-timeline" aria-label={text('mode.timeline')}>
+          <li className="tools-timeline-scale">{text('activity.timelineRange', { start: formatTime(Math.min(...records.map(record => record.running ? record.time : record.time - (record.durationMs ?? 0)))), end: formatTime(Math.max(...records.map(record => record.running ? now : record.time))) })}</li>
           {records.map(record => (
-            <li key={`${record.sequence}-${record.time}-${record.tool}`} className="tools-timeline-row">
-              <button type="button" className="tools-record-name" aria-pressed={selectedCall === callKey(record)} onClick={() => onSelectCall?.(callKey(record))}>{recordName(record, text)}</button>
+            <li key={`${record.sequence}-${record.time}-${record.tool}`} className="tools-timeline-row" data-selected={selectedCall === callKey(record)}>
+              <button type="button" className="tools-record-name tools-record-select" aria-pressed={selectedCall === callKey(record)} onClick={() => onSelectCall?.(callKey(record))}>
+              <span className="tools-record-label" title={recordName(record, text)}>{recordName(record, text)}</span>
               <span className="tools-timeline-track" aria-label={`${recordName(record, text)} · ${recordStatus(record, text)}`}><i style={timelineStyle(record, records, now)} data-tone={record.running ? 'info' : record.isError ? 'critical' : 'positive'} /></span>
               <span className="tools-record-status">{recordStatus(record, text)}</span>
+              </button>
             </li>
           ))}
         </ol>
@@ -338,7 +345,7 @@ export function renderToolsInspectorTree(props: ToolsInspectorTreeProps): JSX.El
       <style>{mcpInspectorStyles}</style>
       {props.sessionNotice === undefined ? null : <p className="tools-notice" role="status">{props.sessionNotice}</p>}
       <header className="vk-header tools-header">
-        <div className="tools-title"><strong className="vk-heading">{props.contextLabel ?? text('view.tools')}</strong><p className="vk-sub" role="status"><i className="vk-dot" data-tone={headerTone} aria-hidden="true" />{catalogHeading(props.catalogState, text)}</p></div>
+        <div className="tools-title"><strong className="vk-heading" title={props.contextLabel ?? text('view.tools')}>{props.contextLabel ?? text('view.tools')}</strong><p className="vk-sub" role="status"><i className="vk-dot" data-tone={headerTone} aria-hidden="true" />{catalogHeading(props.catalogState, text)}</p></div>
         <div className="tools-summary" aria-label={text('header.subtitle')}>
           {props.catalogState.status === 'ready' ? <><span>{text('summary.items', { count: coverage.all })}</span><span>{text('summary.enabled', { count: coverage.enabled })}</span></> : null}
           {!props.globalManagement && <span>{text('summary.calls', { count: activity.calls })}</span>}

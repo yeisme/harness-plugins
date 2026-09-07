@@ -44,10 +44,15 @@ const runRoot = resolve(projectRoot, 'temp/integration-test-runs', runId)
 const artifacts = resolve(runRoot, 'artifacts')
 const update = process.argv.includes('--update-snapshots')
 const testFile = process.argv.find(arg => /^visual-[a-z-]+\.spec\.ts$/.test(arg))
-const publicCommand = `node scripts/run-ui-visual-tests.mjs${update ? ' --update-snapshots' : ''}${testFile ? ` ${testFile}` : ''}`
+const grepAt = process.argv.indexOf('--grep')
+const grep = grepAt < 0 ? undefined : process.argv[grepAt + 1]
+if (grepAt >= 0 && !grep) throw new Error('--grep requires a pattern')
+const quote = value => "'" + value.replaceAll("'", "'\\''") + "'"
+const publicCommand = `node scripts/run-ui-visual-tests.mjs${update ? ' --update-snapshots' : ''}${testFile ? ` ${testFile}` : ''}${grep ? ` --grep ${quote(grep)}` : ''}`
 const args = ['exec', 'playwright', 'test', '--config', 'tests/ui-visual/playwright.config.ts', update ? '--update-snapshots=all' : '--update-snapshots=none']
 
 if (testFile) args.push(testFile)
+if (grep) args.push('--grep', grep)
 
 function redact(value) {
   return value

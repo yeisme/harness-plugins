@@ -68,3 +68,17 @@ describe('Tools workbench controls', () => {
     expect(screen.queryByText(/HTTP 404|transport failure/)).toBeNull()
   })
 })
+
+it.each(['list', 'timeline'] as const)('selects the complete %s call row while retaining running status', mode => {
+  const onSelectCall = vi.fn()
+  const input = props({ activeSection: 'activity', activityMode: mode, selectedCall: '1-2000-list_prs', onSelectCall })
+  const view = render(renderToolsInspectorTree(input))
+  const row = view.container.querySelector(`[data-selected="true"]`)!
+  expect(row).toBeTruthy()
+  const button = row.querySelector('button')!
+  expect(button.getAttribute('aria-pressed')).toBe('true')
+  fireEvent.click(row.querySelector('.tools-record-status')!)
+  expect(onSelectCall).toHaveBeenCalledWith('1-2000-list_prs')
+  expect(row.textContent).toContain('running')
+  expect(view.container.querySelector('.tools-call-details button')).toBe(document.activeElement)
+})
