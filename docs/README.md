@@ -4,6 +4,8 @@
 
 ## 入口
 
+- [会话工具工作区（待实施）](design/dsh-session-tools-workspace.md)：会话工具 Tab、固定旁栏、Pane 标题会话管理与目录恢复；[正式验收计划](qa/dsh-session-tools-workspace-acceptance.md)。
+
 - [Pane 风格交互与后续支持](design/dsh-pane-interaction-completion.md)：Explorer、选区工具条、MCP 入口及侧栏/布局快捷键。
 
 - [DSH 本地工作台](runtime/dsh-workbench.md)：兼容启动器、旧版清理、Pane 会话隔离与无冗余 Target 的日常入口。
