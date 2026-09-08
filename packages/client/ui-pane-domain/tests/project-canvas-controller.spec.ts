@@ -11,6 +11,32 @@ function setup() {
   return { controller, remote }
 }
 describe('canvas save and recovery controller', () => {
+  it('does not release an uncertain save on another request not_applied receipt', async () => {
+    const { controller, remote } = setup()
+    await controller.load(); controller.createDraft()
+    vi.mocked(remote.canvasSave).mockRejectedValueOnce(new Error('lost response'))
+    await controller.save()
+    vi.mocked(remote.canvasReconcile).mockResolvedValueOnce({ status: 'not_applied', requestId: 'different-save' })
+    await controller.reconcile(); await controller.save()
+    expect(controller.getSnapshot().saveStatus).toBe('unknown')
+    expect(remote.canvasSave).toHaveBeenCalledOnce()
+    vi.mocked(remote.canvasReconcile).mockResolvedValueOnce({ status: 'not_applied', requestId: 'save-one' })
+    await controller.reconcile()
+    expect(controller.getSnapshot()).toMatchObject({ dirty: true, saveStatus: 'dirty' })
+  })
+  it('keeps unsaved data and its dirty fact when an explicit reload fails', async () => {
+    const { controller, remote } = setup()
+    await controller.load(); controller.createDraft()
+    controller.edit({ type: 'camera', camera: { x: 75, y: 20, zoom: 1.5 } })
+    const editor = controller.getSnapshot().editor
+    for (const status of ['error', 'unavailable', 'forbidden', 'invalid']) {
+      vi.mocked(remote.canvasRead).mockResolvedValueOnce({ status })
+      await controller.load(true)
+      expect(controller.getSnapshot()).toMatchObject({ status, dirty: true, saveStatus: 'dirty' })
+      expect(controller.getSnapshot().editor).toBe(editor)
+    }
+    expect(remote.canvasSave).not.toHaveBeenCalled()
+  })
   it('coalesces a gesture and keeps its undo revision current when a save finishes mid-gesture', async () => {
     const { controller, remote } = setup()
     await controller.load(); controller.createDraft()

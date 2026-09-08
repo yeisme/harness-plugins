@@ -46,7 +46,7 @@ export class ProjectCanvasController {
       const result = ProjectCanvasReadResultSchema.parse(await this.remote.canvasRead(this.target))
       if (generation !== this.generation || this.disposed) return
       if (result.status !== 'ready' && result.status !== 'missing') {
-        this.publish({ ...this.state, status: result.status, dirty: false, saveStatus: 'clean' }); return
+        this.publish({ ...this.state, status: result.status }); return
       }
       const confirmed = result.status === 'ready' ? result.document : undefined
       if (confirmed !== undefined && (confirmed.id !== this.target.documentId
@@ -60,8 +60,8 @@ export class ProjectCanvasController {
         try {
           const raw = ProjectCanvasSaveResultSchema.safeParse(await this.remote.canvasReconcile({ ...this.target, requestId: result.draft.requestId }))
           if (generation !== this.generation || this.disposed) return
-          if (raw.success && raw.data.status === 'saved') settled = 'saved'
-          else if (raw.success && raw.data.status === 'not_applied') settled = 'not_applied'
+          if (raw.success && raw.data.status === 'saved' && raw.data.requestId === draft.requestId) settled = 'saved'
+          else if (raw.success && raw.data.status === 'not_applied' && raw.data.requestId === draft.requestId) settled = 'not_applied'
         } catch { /* the journal stays; this session starts from confirmed facts only */ }
         if (settled === 'not_applied') {
           // The submitted draft never landed and the owner document did not move: recover the unsaved edits.
@@ -123,6 +123,9 @@ export class ProjectCanvasController {
     const result = ProjectCanvasSaveResultSchema.safeParse(raw)
     if (!result.success) { this.publish({ ...this.state, saveStatus: 'unknown' }); return }
     if (result.data.status === 'not_applied') {
+      if (result.data.requestId !== pending.request.requestId) {
+        this.publish({ ...this.state, saveStatus: 'unknown' }); return
+      }
       // The journaled commit never landed: local edits stay unconfirmed and retryable under a fresh request id.
       this.pending = undefined
       this.publish({ ...this.state, saveStatus: 'dirty' })

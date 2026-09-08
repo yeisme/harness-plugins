@@ -1,5 +1,11 @@
 # 画布实现基线与证据
 
+## 2026-09-08：失败读取与journal回执匹配修复
+
+在当前journal实现上补两项控制器保护：显式reload返回error/unavailable/forbidden/invalid时，只更新读取状态，保留原editor、dirty和saveStatus，不将未保存草稿标记clean；not_applied与saved对账必须匹配原journal/requestId。其他请求的not_applied不能释放本次pending或允许新的保存。
+
+新增测试覆盖四类失败读取保留同一草稿，以及unknown→错误requestId对账→仍禁止重存→正确requestId对账→恢复dirty。当前controller12项通过，client typecheck/build通过。类型检查初次遇到并行locale订阅修改的可选方法错误；该文件由并行工作修正后复验通过，本轮未改其订阅实现。证据为focused unit，不代表真实Host刷新恢复、多会话冲突或全部父2.2完成。
+
 ## 2026-09-08：写前日志、确定性对账与冲突显式恢复（2.2b）
 
 ### 实现
@@ -48,11 +54,18 @@ pnpm run check:plugins
 - 浏览器360/560/960宽度下“创建→编辑→保存→重开”3项通过；截图与日志位于 `temp/integration-test-runs/ui-visual-2026-09-08T02-34-28-756Z-2146330/`。同轮新增拖拽测试因测试断言未扣除库的拖拽起始阈值失败；将位移断言改为验证显著移动，未改实现来迎合断言。focused复验拖拽一次撤销/重做、缩放撤销恢复viewport通过，证据位于 `temp/integration-test-runs/ui-visual-2026-09-08T02-34-59-503Z-2153651/`。浏览器使用真实ModuleLoader bundle/React Flow，Host存储与primitive为fixture，不能替代真实DSH profile或owner验收。
 - Surface规范检查通过；插件六项检查全部通过：`temp/toolchain-runs/2026-09-08T023356470Z-toolchain/`。
 
+### 2.3b：locale 订阅、项目隔离与销毁对称（同日增补）
+
+- `project-canvas-pane.tsx` 经真实 Host locale face 的 `getSnapshot/subscribe` 用 `useSyncExternalStore` 触发已挂载视图重渲染；`bind` 返回的 translator 按调用时 locale 生效（核对 DSH client/locale 实现），无 face 时退化为注册期字典。注册期 descriptor label 仍为注册时 locale，属宿主重注册关切。
+- 控制器缓存按 tenant/principal/membership/runtime/scope 键控：切换项目绑定新控制器，旧项目未保存草稿在内存保留，重开命中缓存且不重读 owner 文档（load 被 dirty 保护短路）；迟到 snapshot 由 mounted/active 双栅栏隔离。
+- 新增 `tests/project-canvas-pane.spec.tsx` 3 项：locale 切换重渲染（zh→en 文案实际变化）、项目隔离与草稿保留（canvasRead 读日志证明 project:one 只读一次）、unregister 对称注销视图、控制器与 locale 字典。
+- 边界：真实 HMR 无残留、运行中项目切换的推送重绑定（无 Remote 订阅通道）与真实 DSH profile 验收仍属父2.3/4.x。
+
 ### 继续任务
 
 父2.2：已提交过至少一次的草稿与unknown请求可跨刷新恢复（2.2b journal）。仍须验证：真实Host生命周期、多会话/多进程并发冲突、存储失权/损坏恢复；纯本机未提交输入跨刷新仍不声明自动保存。
 
-父2.3及3组：挂载期间项目/权限切换订阅、迟到snapshot隔离、HMR、真实locale和专业面板选定版本双向同步仍未完成。完整媒体可访问性、离屏行为、200%缩放、中文输入法、完整画布连接键盘等价操作，以及300节点60分钟性能测试继续保留任务。
+父2.3及3组：真实HMR、运行中项目/权限切换推送重绑定（当前为重开时按scope键重新绑定）、专业面板选定版本双向同步仍未完成；locale订阅与项目切换隔离已由2.3b覆盖。完整媒体可访问性、离屏行为、200%缩放、中文输入法、完整画布连接键盘等价操作，以及300节点60分钟性能测试继续保留任务。
 
 ## 2026-09-08：共享文档与确定性编辑内核
 

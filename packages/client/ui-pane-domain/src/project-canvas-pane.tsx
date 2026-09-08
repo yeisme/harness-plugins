@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { ArtifactRefSchema, PaneActionDescriptorSchema, ProjectCanvasScopeSchema, type ArtifactRefV1, type PaneActionDescriptorV1 } from '@yeisme/dsh-pane-protocol'
 import { Surface, SurfaceState } from '@yeisme/dsh-client-ui-surface'
 import { ProjectCanvasController, type ProjectCanvasRemote } from './project-canvas-controller.js'
@@ -14,13 +14,25 @@ const ownerKinds: Record<string, string> = { eikona: 'creator.visual', scaena: '
 export function registerProjectCanvasPane(ctx: ContextFace, pane: Pane): () => void {
   const controllers = new Map<string, ProjectCanvasController>()
   let active = true
-  const locale = ctx.get('locale') as { register?(ns: string, dictionaries: unknown): (() => void) | void; bind?(ns: string): (key: string) => string } | undefined
+  const locale = ctx.get('locale') as {
+    register?(ns: string, dictionaries: unknown): (() => void) | void
+    bind?(ns: string): (key: string) => string
+    /** Real Host locale face: notified on locale switches so mounted views re-render. */
+    getSnapshot?(): unknown
+    subscribe?(listener: () => void): () => void
+  } | undefined
   const unregisterLocale = locale?.register?.('yeisme.project-canvas', { zh: canvasZh, en: canvasEn })
   const translate = locale?.bind?.('yeisme.project-canvas')
   const t: CanvasTranslator = key => translate?.(key) ?? canvasZh[key]
   function BoundCanvas(): ReactNode {
     const [binding, setBinding] = useState<{ controller: ProjectCanvasController; artifacts: ArtifactRefV1[]; actions: PaneActionDescriptorV1[]; service: Record<string, unknown> }>()
     const [failed, setFailed] = useState(false)
+    // The bound translator is live at call time; the locale store only exists to re-render on switches.
+    const reactive = locale !== undefined && typeof locale.subscribe === 'function' && typeof locale.getSnapshot === 'function' ? locale : undefined
+    useSyncExternalStore(
+      listener => (reactive !== undefined ? reactive.subscribe!(listener) : () => {}),
+      () => reactive?.getSnapshot?.() ?? null,
+    )
     useEffect(() => {
       let mounted = true
       const root = ctx.get('remote')
