@@ -2,8 +2,8 @@
 
 由 scripts/openspec-tasks.py 维护状态。
 
-- [ ] 1.1 核对 Scaena Production API 与 review-package 合同：镜头/资产/声音动作、编排计划、导出、transport 逐项记录版本/digest、支持/缺失/未验证；与 agent/scaena 双向链接。
-- [ ] 1.2 冻结最小制作台 consumer 合同与 UI Contract；核对脚手架复用。
+- [ ] 1.1 核对 Scaena Production API 与 review-package 合同：镜头/资产/声音动作、编排计划、导出、transport 逐项记录版本/digest、支持/缺失/未验证；与 agent/scaena 双向链接。 | evidence: implementation-baseline.md：合同初查完成（owner HEAD 087f7820）：Production四个只读合同+action descriptor+review-package镜头/资产/编排/导出/transport已逐项记录版本与支持状态；声音动作确认缺失（media路由未进catalog，404）。agent/scaena侧无本change反向链接（全文grep仅命中其他DSH change先例），owner侧配套与反向链接须由scaena-owner会话经5.1落地，本仓不代写，故保持未勾。
+- [x] 1.2 冻结最小制作台 consumer 合同与 UI Contract；核对脚手架复用。 | evidence: implementation-baseline.md：最小consumer合同冻结（只读四合同/storyboard-packages动作+SSE游标恢复；声音动作与future inventory明确排除，未知critical版本拒绝）；UI Contract在design.md两节冻结（adopted workspace+inspector、State Matrix、Responsive、A11y，符合视觉系统§12字段）；脚手架复用核对CreatorActionComposer/artifact-workspace/SurfaceState与host gateway/validation。本切片无代码，openspec validate --strict 通过。
 - [ ] 2.1 实现制作项目/镜头/资产列表 adapter：project scope、分页、freshness、诚实态。
 - [ ] 2.2 实现动作发现/预览/确认：descriptor、权限、expected version/digest；stale 拒绝刷新不覆盖。
 - [ ] 2.3 实现候选比较与采纳：复用既有候选通道；owner receipt、版本与目标 scope 分别取得。
