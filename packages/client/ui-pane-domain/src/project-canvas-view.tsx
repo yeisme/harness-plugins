@@ -167,6 +167,24 @@ function CanvasContent({ controller, artifacts = [], actions = [], resolveMedia,
     if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable=true]')) return
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); controller.edit({ type: event.shiftKey ? 'redo' : 'undo' }) }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void controller.save() }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd' && editor.selection.length) {
+      event.preventDefault(); copy()
+    }
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'f') { event.preventDefault(); fit() }
+    // Keyboard equivalents for object-list operations: arrow nudge, tab cycle, delete.
+    if (editor.selection.length && (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+      event.preventDefault()
+      const step = event.shiftKey ? 10 : 1
+      controller.edit({ type: 'move', ids: editor.selection,
+        dx: event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0,
+        dy: event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0 })
+    }
+    if (event.key === 'Tab' && matches.length) {
+      event.preventDefault()
+      const index = matches.indexOf(editor.selection[0] ?? '')
+      const next = matches[(index + (event.shiftKey ? matches.length - 1 : 1) + matches.length) % matches.length]
+      if (next !== undefined) choose([next])
+    }
     if (event.key === 'Delete' && editor.selection.length) { event.preventDefault(); controller.edit({ type: 'remove', ids: editor.selection }) }
   }}>
     <style>{flowCss}</style><style>{styles}</style>

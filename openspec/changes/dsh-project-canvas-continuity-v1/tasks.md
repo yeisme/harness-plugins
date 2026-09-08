@@ -6,7 +6,7 @@
 - [ ] 1.2 冻结最小项目画布合同与 UI Contract；复用 host/client/bundle 脚手架；验收 session/project 分离与兼容。
 - [ ] 2.1 实现五类节点及图片/视频/音频/文件/领域引用、相机、选择、移动、尺寸、分组、撤销；由5.1/5.2补全交互；focused reducer测试。
 - [x] 2.1a 完成共享文档schema与确定性Draft编辑内核：五类节点/两类边、选择/移动/尺寸/分组/复制/撤销，workspace/project/document/editVersion隔离；不含renderer/host持久化，父2.1保持未完成。 | evidence: implementation-baseline.md；17 focused unit tests / 11 existing protocol tests / package typecheck passed；非UI或真实owner验收。
-- [ ] 2.2 实现 host 项目 Draft/layout 持久化与 revision 冲突恢复；关闭重开/存储失败不丢已确认数据。 | evidence: implementation-baseline.md：在journal恢复上补失败reload保留dirty、对账requestId匹配；controller12项、client typecheck/build通过；真实Host生命周期及多会话验收仍未完成。
+- [ ] 2.2 实现 host 项目 Draft/layout 持久化与 revision 冲突恢复；关闭重开/存储失败不丢已确认数据。 | evidence: implementation-baseline.md：恢复journal继续绑定原pending；unknown禁重存，晚到saved应用新revision。controller14项/typecheck/build通过；真实JSON+controller恢复重存证据 project-canvas-storage-20260908035158Z-3697558。完整Host/多会话/stale journal验收未完成。
 - [x] 2.2a 实现Host画布保存与只读对账、revision冲突、保存期间编辑保护；真实JSON存储销毁重挂载恢复；父2.2保留刷新草稿/unknown恢复与完整Host验收。
 - [x] 2.2b 实现写前日志与确定性对账：save先落journal再commit；跨重挂载read返回journaled draft；reconcile对已记账未提交返回not_applied并可把草稿恢复为dirty重存；conflict提供reapply（重存到owner确认revision）/discard显式路径。父2.2保留真实Host生命周期与多会话冲突验收。 | evidence: implementation-baseline.md；13 Host store + 10 controller unit全绿；真实storage journal恢复证据 project-canvas-storage-20260908033330Z-3349834
 - [ ] 2.3 注册 Pane，复用 DSH tokens/控件/locale，补对象列表和键盘等价操作；dispose 与 HMR 无残留。
@@ -20,6 +20,7 @@
 - [ ] 4.3 三个项目两类工作、10次续接至少8次30秒内、60分钟零已确认丢稿/零重复提交；保存脱敏证据并更新实际 readiness。 300混合节点，输入p95≤100ms、缓存切换p95≤200ms，记录订阅/DOM/heap/帧趋势与机器/样本。
 - [ ] 5.1 依赖1.2/2.1；实现完整素材/草稿/操作/成果/分组节点及六类引用，固定@xyflow/react@12.11.6；执行边只由workflow消费同一document；无第二状态owner。
 - [ ] 5.2 依赖5.1；实现复制、撤销/重做、搜索、fit selection/全图、运行定位、小地图及键盘对象列表等价；复制操作不复制run。
+- [x] 5.2a 键盘对象列表等价：Tab/Shift+Tab按搜索顺序循环选择、方向键±1（Shift±10）步进移动、Ctrl+D复制选中、Ctrl+Shift+F适配、Delete移除；输入控件内按键不劫持；复制不复制run。父5.2保留运行定位与全键盘走查验收。 | evidence: implementation-baseline.md；project-canvas-view.spec 2项键盘等价（循环/步进/复制/移除/输入不劫持）；pane-domain 145项全绿
 - [ ] 5.3 依赖1.2/3.1；实现Agent指定范围内草稿/布局变更、摘要与撤销；拒绝修改领域正文/采用版本/运行快照，执行另确认。
 - [ ] 5.4 依赖1.2；完成带fixture标识的可丢弃原型：五节点/两边/媒体/窄Pane与专业Pane并排，人工走查回填UI Contract；不升级实际能力。
 - [ ] 5.5 依赖5.1/5.2；实现媒体lazy-load与离屏视频暂停；建立300混合节点60分钟性能样本和原始指标采集，阈值见design；不空匹配。

@@ -55,19 +55,24 @@ export class ProjectCanvasController {
       }
       // A previous session left a journaled save whose commit never settled; reconcile it before showing anything.
       const draft = result.draft !== undefined && result.draft.baseRevision === (confirmed?.revision ?? 0) ? result.draft : undefined
-      if (result.draft !== undefined && draft !== undefined) {
-        let settled: 'saved' | 'not_applied' | 'unsettled' = 'unsettled'
-        try {
-          const raw = ProjectCanvasSaveResultSchema.safeParse(await this.remote.canvasReconcile({ ...this.target, requestId: result.draft.requestId }))
-          if (generation !== this.generation || this.disposed) return
-          if (raw.success && raw.data.status === 'saved' && raw.data.requestId === draft.requestId) settled = 'saved'
-          else if (raw.success && raw.data.status === 'not_applied' && raw.data.requestId === draft.requestId) settled = 'not_applied'
-        } catch { /* the journal stays; this session starts from confirmed facts only */ }
-        if (settled === 'not_applied') {
-          // The submitted draft never landed and the owner document did not move: recover the unsaved edits.
-          this.publish({ status: 'ready', editor: createProjectCanvasEditor(draft.document), dirty: true, saveStatus: 'dirty' })
-          return
+      if (draft !== undefined) {
+        const document = draft.document
+        if (document.id !== this.target.documentId || document.scope.workspaceRef !== this.target.scope.workspaceRef
+          || document.scope.projectRef !== this.target.scope.projectRef || document.revision !== draft.baseRevision) {
+          this.publish({ ...this.state, status: 'invalid' }); return
         }
+        const editor = createProjectCanvasEditor(document)
+        const pending = { request: { requestId: draft.requestId, document: editor.document }, editVersion: editor.editVersion }
+        this.pending = pending
+        this.publish({ status: 'ready', editor, dirty: true, saveStatus: 'saving' })
+        try {
+          const receipt = await this.remote.canvasReconcile({ ...this.target, requestId: draft.requestId })
+          if (generation !== this.generation || this.disposed) return
+          this.acceptResult(receipt, pending, true)
+        } catch {
+          if (generation === this.generation && !this.disposed) this.publish({ ...this.state, saveStatus: 'unknown' })
+        }
+        return
       }
       if (confirmed === undefined) this.publish({ status: 'missing', dirty: false, saveStatus: 'clean' })
       else this.publish({ status: 'ready', editor: createProjectCanvasEditor(confirmed), dirty: false, saveStatus: 'clean' })

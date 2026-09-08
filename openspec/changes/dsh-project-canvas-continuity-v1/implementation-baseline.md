@@ -1,5 +1,13 @@
 # 画布实现基线与证据
 
+## 2026-09-08：续接原journal保存至确定回执
+
+控制器原来在恢复journal后对账仍未知时落回旧confirmed文档，丢失客户端的pending身份；对账刚确认saved时也没有应用新revision。现在验证journal的project/document/baseRevision后，恢复该原请求为pending，显示未确认草稿；unknown继续只对账原requestId并禁止新保存。saved通过现有ack规则确认journal文档及新revision；not_applied恢复dirty，下一次显式保存可使用新键。恢复过程不自动提交保存或领域执行。
+
+controller14项与类型检查通过，新增覆盖unknown跨续接保持原身份，以及read之后才saved时显示新内容/revision。真实JSON存储集成测试进一步接入实际ProjectCanvasController：写journal后commit失败→销毁重挂载Host→controller读取及对账恢复dirty→显式保存→磁盘与controller均确认新revision。证据`temp/integration-test-runs/project-canvas-storage-20260908035158Z-3697558/`，两条存储测试通过，client构建通过。
+
+测试使用真实本地storage-domain/JSON与实际controller，故障由测试注入；不包含真实DSH浏览器、跨进程并发或领域owner执行。stale journal的比较/恢复、完整Host生命周期与多会话冲突仍保留父2.2任务。
+
 ## 2026-09-08：失败读取与journal回执匹配修复
 
 在当前journal实现上补两项控制器保护：显式reload返回error/unavailable/forbidden/invalid时，只更新读取状态，保留原editor、dirty和saveStatus，不将未保存草稿标记clean；not_applied与saved对账必须匹配原journal/requestId。其他请求的not_applied不能释放本次pending或允许新的保存。
@@ -60,6 +68,12 @@ pnpm run check:plugins
 - 控制器缓存按 tenant/principal/membership/runtime/scope 键控：切换项目绑定新控制器，旧项目未保存草稿在内存保留，重开命中缓存且不重读 owner 文档（load 被 dirty 保护短路）；迟到 snapshot 由 mounted/active 双栅栏隔离。
 - 新增 `tests/project-canvas-pane.spec.tsx` 3 项：locale 切换重渲染（zh→en 文案实际变化）、项目隔离与草稿保留（canvasRead 读日志证明 project:one 只读一次）、unregister 对称注销视图、控制器与 locale 字典。
 - 边界：真实 HMR 无残留、运行中项目切换的推送重绑定（无 Remote 订阅通道）与真实 DSH profile 验收仍属父2.3/4.x。
+
+### 5.2a：键盘对象列表等价（同日增补）
+
+- `project-canvas-view.tsx` 画布键盘面补齐：Tab/Shift+Tab 按搜索匹配顺序循环选择，方向键步进移动（Shift×10），Ctrl+D 复制选中（沿用既有 copy 语义，不复制 run/selectedArtifact），Ctrl+Shift+F 适配选区，Delete 移除；输入控件内按键维持原义不劫持（既有 input/textarea/select 守卫）。
+- 新增 `tests/project-canvas-view.spec.tsx` 2 项：真实 controller + jsdom 键盘事件验证选择循环、步进位移、复制、移除，及 inspector 输入框内方向键/Tab 不触发画布编辑。
+- 边界：运行定位（无已连接run）、完整键盘走查与200%缩放键盘路径仍属父5.2/4.x。
 
 ### 继续任务
 

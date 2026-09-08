@@ -11,6 +11,30 @@ function setup() {
   return { controller, remote }
 }
 describe('canvas save and recovery controller', () => {
+  it('restores an unresolved journal as the original pending save and reconciles it without resubmitting', async () => {
+    const { controller, remote } = setup()
+    const document = { schema: 'dsh.project-canvas.v1alpha1', id: 'main', revision: 0,
+      scope: target.scope, camera: { x: 41, y: 3, zoom: 1 }, nodes: [], edges: [] }
+    vi.mocked(remote.canvasRead).mockResolvedValueOnce({ status: 'missing', draft: { requestId: 'original-save', baseRevision: 0, document } })
+    await controller.load()
+    expect(controller.getSnapshot()).toMatchObject({ status: 'ready', dirty: true, saveStatus: 'unknown', editor: { document: { camera: { x: 41 } } } })
+    await controller.save()
+    expect(remote.canvasSave).not.toHaveBeenCalled()
+    vi.mocked(remote.canvasReconcile).mockResolvedValueOnce({ status: 'saved', requestId: 'original-save', revision: 1 })
+    await controller.reconcile()
+    expect(controller.getSnapshot()).toMatchObject({ dirty: false, saveStatus: 'clean', editor: { document: { revision: 1, camera: { x: 41 } } } })
+    expect(remote.canvasReconcile).toHaveBeenLastCalledWith({ ...target, requestId: 'original-save' })
+  })
+  it('applies a saved journal receipt obtained after the initial read instead of displaying the old revision', async () => {
+    const { controller, remote } = setup()
+    const document = { schema: 'dsh.project-canvas.v1alpha1', id: 'main', revision: 3,
+      scope: target.scope, camera: { x: 70, y: 0, zoom: 1 }, nodes: [], edges: [] }
+    vi.mocked(remote.canvasRead).mockResolvedValueOnce({ status: 'ready', document: { ...document, camera: { x: 0, y: 0, zoom: 1 } }, draft: { requestId: 'late-save', baseRevision: 3, document } })
+    vi.mocked(remote.canvasReconcile).mockResolvedValueOnce({ status: 'saved', requestId: 'late-save', revision: 4 })
+    await controller.load()
+    expect(controller.getSnapshot()).toMatchObject({ dirty: false, saveStatus: 'clean', editor: { document: { revision: 4, camera: { x: 70 } } } })
+    expect(remote.canvasSave).not.toHaveBeenCalled()
+  })
   it('does not release an uncertain save on another request not_applied receipt', async () => {
     const { controller, remote } = setup()
     await controller.load(); controller.createDraft()
