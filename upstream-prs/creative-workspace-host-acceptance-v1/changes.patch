@@ -1,0 +1,436 @@
+--- /dev/null
++++ b/apps/web/tests/creative-workspace.e2e.ts
+@@ -0,0 +1,247 @@
++// Keyless real-Host composition proof for the synthetic Creator/Browser fixture.
++import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
++import { realpathSync, statSync } from 'node:fs'
++import { fileURLToPath } from 'node:url'
++import { join } from 'node:path'
++import { tmpdir } from 'node:os'
++import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
++import type { Browser, Page } from 'playwright'
++import { chromium } from 'playwright'
++import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
++import { launchWebScaffold, watchConsole, type WebScaffold } from './scaffold.ts'
++import { newEnglishPage, saveFailureShot } from './support.ts'
++
++const DEFAULT_PLUGIN_ROOT = fileURLToPath(new URL('../../../../../', import.meta.url))
++const PLUGIN_ROOT = realpathSync(process.env.DSH_CREATIVE_WORKSPACE_PLUGIN_ROOT ?? DEFAULT_PLUGIN_ROOT)
++if (!statSync(PLUGIN_ROOT).isDirectory()) throw new Error('DSH_CREATIVE_WORKSPACE_PLUGIN_ROOT must resolve to a directory')
++const OVERLAY = fileURLToPath(new URL('./creative-workspace-overlay.yml', import.meta.url))
++const FIXTURE_ANCHOR = fileURLToPath(new URL('./creative-workspace-fixture/package.json', import.meta.url))
++const INSTALL_ANCHORS = [
++  join(PLUGIN_ROOT, 'packages/bundle/pane-workbench/package.json'),
++  join(PLUGIN_ROOT, 'packages/bundle/dsh-desktop-workbench/package.json'),
++  join(PLUGIN_ROOT, 'packages/bundle/dsh-creator-studio/package.json'),
++  join(PLUGIN_ROOT, 'packages/bundle/dsh-browser-pane/package.json'),
++  FIXTURE_ANCHOR,
++]
++const RESPONSE = 'Synthetic creative image received.'
++const EDITED_BODY = '# Edited in the real Host pane\n\nLIVE_CREATOR_PREVIEW_BODY\n'
++
++async function preserveBootEvidence(page: Page | undefined): Promise<void> {
++  const evidenceDir = process.env.DSH_CREATIVE_WORKSPACE_EVIDENCE_DIR
++  if (page === undefined || evidenceDir === undefined) return
++  await mkdir(evidenceDir, { recursive: true })
++  await page.screenshot({ path: join(evidenceDir, 'creative-workspace-boot-failure.png'), fullPage: true }).catch(() => {})
++}
++
++describe('web e2e: Creator and Browser workspace bundles', () => {
++  let scaffold: WebScaffold
++  let browser: Browser
++  let page: Page
++  let tripwire: ReturnType<typeof watchConsole>
++
++  let replayDir: string | undefined
++  let stopObservation: (() => void) | undefined
++  const requestMessages: unknown[] = []
++
++  beforeAll(async () => {
++    try {
++      replayDir = await mkdtemp(join(tmpdir(), 'dsh-creative-image-replay-'))
++      const replayOverride = join(replayDir, 'override.json')
++      await writeFile(replayOverride, JSON.stringify([{ kind: 'chunks', chunks: [
++        { type: 'block-start', index: 0, blockType: 'text' },
++        { type: 'text-delta', index: 0, text: RESPONSE },
++        { type: 'block-end', index: 0, block: { type: 'text', text: RESPONSE } },
++        { type: 'usage', usage: { inputTokens: 256, outputTokens: 16 } },
++        { type: 'finish', reason: { kind: 'stop' } },
++      ] }]))
++      scaffold = await launchWebScaffold({ extraOverlayPath: OVERLAY, extraInstallAnchors: INSTALL_ANCHORS, replayFixture: join(replayDir, 'override-only.jsonl'), replayOverride, compareReplaySession: false, paceMs: 15 })
++      stopObservation = scaffold.ctx.on('llm/stream', (options: GenerateOptions, next) => { requestMessages.push(structuredClone(options.messages)); return next() })
++      const clientModules = scaffold.ctx.get('clientModules' as never) as { clientPath(id: string): string | undefined } | undefined
++      const modulePaths = {
++        creator: clientModules?.clientPath('@yeisme/dsh-creator-studio'),
++        browser: clientModules?.clientPath('@yeisme/dsh-browser-pane'),
++        fixture: clientModules?.clientPath('@deepseek-ai/dsh-creative-workspace-fixture'),
++      }
++      if (Object.values(modulePaths).some(path => path === undefined)) {
++        throw new Error(`Creator, Browser, and synthetic fixture client modules were not composed: ${JSON.stringify(modulePaths)}`)
++      }
++      browser = await chromium.launch(process.env.DSH_TEST_CHROME_EXECUTABLE === undefined ? {} : { executablePath: process.env.DSH_TEST_CHROME_EXECUTABLE })
++      page = await newEnglishPage(browser)
++      tripwire = watchConsole(page)
++      await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
++      await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
++      const session = page.locator('[data-workspace-session-id="session:creative-test"]')
++      await session.waitFor({ timeout: 30_000 })
++      await session.click()
++      await page.locator('[data-composer-input][contenteditable="true"]').first().waitFor({ timeout: 15_000 })
++      await page.getByRole('button', { name: 'Add pane' }).first().waitFor({ timeout: 30_000 })
++    } catch (error) {
++      await preserveBootEvidence(page)
++      throw error
++    }
++  }, 120_000)
++
++  afterAll(async () => {
++    stopObservation?.()
++    await browser?.close()
++    await scaffold?.close()
++    if (replayDir !== undefined) await rm(replayDir, { recursive: true, force: true })
++  })
++
++  it('mounts both bundles, edits the full body, inserts candidate two through Host, and keeps Browser viewport honest', async () => {
++    onTestFailed(() => saveFailureShot(page, 'web-e2e-creative-workspace'))
++    const input = page.locator('[data-composer-input]').first()
++
++    await page.getByRole('button', { name: 'Add pane' }).first().click()
++    const picker = page.getByRole('dialog', { name: 'Add pane' })
++    await picker.getByRole('button', { name: 'Visual', exact: true }).click()
++    const creator = page.locator('[data-creator-studio][data-mode="visual"]')
++    await creator.waitFor({ timeout: 30_000 })
++    const artifactWorkspace = creator.locator('[data-creator-artifact-workspace]')
++    await artifactWorkspace.waitFor({ timeout: 30_000 })
++
++    const primaryContrast = async () => creator.getByRole('tab', { selected: true }).evaluate(element => {
++      const style = getComputedStyle(element)
++      const luminance = (color: string) => {
++        const rgb = color.match(/[\d.]+/gu)!.slice(0, 3).map(Number).map(value => {
++          const channel = value / 255
++          return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
++        })
++        return rgb[0]! * 0.2126 + rgb[1]! * 0.7152 + rgb[2]! * 0.0722
++      }
++      const foreground = luminance(style.color), background = luminance(style.backgroundColor)
++      return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05)
++    })
++    const lightPrimaryContrast = await primaryContrast()
++    expect(lightPrimaryContrast).toBeGreaterThanOrEqual(4.5)
++
++    const sourceTab = creator.getByRole('tab', { name: 'Source' })
++    await sourceTab.focus()
++    await sourceTab.press('Enter')
++    const editor = creator.locator('[data-creator-artifact-editor] textarea')
++    await expect.poll(() => editor.inputValue().then(value => value.length), { timeout: 15_000 }).toBeGreaterThan(1_200)
++    await editor.fill(EDITED_BODY)
++    const unsaved = creator.getByText('This edit exists only in the current Pane; unsaved-close protection remains active.', { exact: true })
++    await unsaved.waitFor({ timeout: 15_000 })
++    const previewTab = creator.getByRole('tab', { name: 'Preview' })
++    await previewTab.focus()
++    await previewTab.press('Enter')
++    await creator.getByText('LIVE_CREATOR_PREVIEW_BODY', { exact: true }).waitFor({ timeout: 15_000 })
++
++    await creator.getByRole('button', { name: 'Save draft' }).click()
++    await artifactWorkspace.getByRole('button', { name: 'Run action' }).click()
++    await expect.poll(() => unsaved.count(), { timeout: 15_000 }).toBe(0)
++
++    const compareTab = creator.getByRole('tab', { name: 'Compare' })
++    await compareTab.focus()
++    await compareTab.press('Enter')
++    await creator.getByLabel('Candidate version').selectOption('candidate:two')
++    await creator.getByText('SYNTHETIC_SELECTED_VERSION_TWO', { exact: false }).waitFor({ timeout: 15_000 })
++    await creator.getByRole('button', { name: 'Add to main conversation' }).click()
++    const runAttach = artifactWorkspace.getByRole('button', { name: 'Run action' })
++    await expect.poll(() => runAttach.isEnabled(), { timeout: 15_000 }).toBe(true)
++    await runAttach.click()
++    await creator.getByText('The Host Composer confirmed insertion into the target conversation.', { exact: true }).waitFor({ timeout: 30_000 })
++    await expect.poll(() => input.locator('[data-composer-chip]').count(), { timeout: 15_000 }).toBe(1)
++    await input.getByRole('button', { name: /Edit/iu }).click()
++    const referenceEditor = input.getByRole('textbox', { name: /Edit/iu })
++    expect(await referenceEditor.inputValue()).toContain('SYNTHETIC_SELECTED_VERSION_TWO')
++    await input.getByRole('button', { name: /Done/iu }).click()
++
++    const evidenceDir = process.env.DSH_CREATIVE_WORKSPACE_EVIDENCE_DIR
++    await page.setViewportSize({ width: 360, height: 900 })
++    await page.emulateMedia({ colorScheme: 'dark' })
++    await expect.poll(primaryContrast).toBeGreaterThanOrEqual(4.5)
++    const darkPrimaryContrast = await primaryContrast()
++    expect(await creator.isVisible()).toBe(true)
++    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
++    if (evidenceDir !== undefined) {
++      await mkdir(evidenceDir, { recursive: true })
++      await page.screenshot({ path: join(evidenceDir, 'creative-workspace-360-dark.png'), fullPage: true })
++    }
++
++    await page.getByRole('button', { name: 'Add pane' }).first().click()
++    const panePicker = page.getByRole('dialog', { name: 'Add pane' })
++    await panePicker.waitFor()
++    // The normal manifest is loaded, but no real automation provider is supplied.
++    // Capability probing must withhold the entry instead of mounting a dead pane.
++    expect(await panePicker.getByRole('button', { name: 'Browser', exact: true }).count()).toBe(0)
++    expect(await page.locator('[data-dsh-browser-pane]').count()).toBe(0)
++    await panePicker.getByRole('button', { name: 'Close', exact: true }).click()
++    await page.setViewportSize({ width: 960, height: 900 })
++    await page.emulateMedia({ colorScheme: 'light' })
++    expect(await creator.isVisible()).toBe(true)
++    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
++    if (evidenceDir !== undefined) await page.screenshot({ path: join(evidenceDir, 'creative-workspace-960-light.png'), fullPage: true })
++    await page.setViewportSize({ width: 1680, height: 1000 })
++    await artifactWorkspace.getByRole('button', { name: 'Synthetic image', exact: true }).click()
++    await creator.getByRole('tab', { name: 'Preview', exact: true }).click()
++    const stage = creator.locator('[data-dsh-media-image-selection-stage]')
++    await stage.waitFor()
++    const sourceImage = stage.locator('img').first()
++    await expect.poll(() => sourceImage.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
++    const originalWidth = await sourceImage.evaluate(image => (image as HTMLImageElement).naturalWidth)
++    const box = (await sourceImage.boundingBox())!
++    await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2)
++    await page.mouse.down()
++    await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.8)
++    await page.mouse.up()
++    await expect.poll(() => creator.locator('[data-dsh-media-image-selection]').getAttribute('data-selection-width')).not.toBe('1')
++    await creator.locator('[data-dsh-media-image-crop-preview]').waitFor()
++    await creator.getByRole('button', { name: 'Add to main conversation' }).click()
++    await artifactWorkspace.getByRole('button', { name: 'Run action' }).click()
++    await expect.poll(() => input.locator('[data-composer-chip]').count()).toBe(2)
++    await input.click()
++    await input.press('End')
++    await page.keyboard.type(' Describe this selected image region.')
++    await input.press('Enter')
++    await page.getByText(RESPONSE, { exact: true }).waitFor({ timeout: 30_000 })
++    const agent = scaffold.ctx.agents.list().find(agent => agent.id === 'session:creative-test')!
++    const sent = agent.session.snapshotEvents().findLast(event => event.type === 'user/message' && (event.data as { source?: { kind?: string } }).source?.kind === 'user')
++    const refs = (sent?.data as { source?: { references?: Array<{ kind: string; owner: string; snapshot?: { type: string; attachment?: { width: number; height: number; bytes: number } } }> } }).source?.references ?? []
++    const admittedImage = refs.find(reference => reference.owner === 'eikona' && reference.kind === 'image-region')
++    expect(admittedImage?.snapshot?.type).toBe('image')
++    expect(admittedImage?.snapshot?.attachment?.width).toBeGreaterThan(0)
++    expect(admittedImage?.snapshot?.attachment?.width).toBeLessThan(originalWidth)
++    expect(admittedImage?.snapshot?.attachment?.bytes).toBeGreaterThan(0)
++    expect(requestMessages).toHaveLength(1)
++    const nativeImages = (requestMessages[0] as Array<{ content?: Array<{ type?: string }> }>).flatMap(message => message.content ?? []).filter(block => block.type === 'image')
++    expect(nativeImages).toHaveLength(1)
++    if (evidenceDir !== undefined) await page.screenshot({ path: join(evidenceDir, 'creative-image-sent.png'), fullPage: true })
++    expect(tripwire.pageErrors).toEqual([])
++    expect(tripwire.warnings).toEqual([])
++    if (evidenceDir !== undefined) {
++      await writeFile(join(evidenceDir, 'creative-workspace-browser.json'), JSON.stringify({
++        schema_version: 'dsh.creative_workspace.browser.v1',
++        synthetic_creator_owner: true,
++        synthetic_browser_projection: false,
++        real_domain_acceptance: false,
++        real_viewport_provider: false,
++        creator_bundle_registered: true,
++        browser_manifest_loaded: true,
++        browser_pane_registered: false,
++        browser_client_loader_selection: 'normal_manifest',
++        creator_client_loader_selection: 'normal_manifest',
++        full_body_over_1200: true,
++        live_preview: true,
++        selected_candidate: 'candidate:two',
++        host_reference_receipt: true,
++        missing_provider_entry_withheld: true,
++        responsive_widths: [360, 960],
++        themes: ['dark', 'light'],
++        primary_button_contrast: { light: lightPrimaryContrast, dark: darkPrimaryContrast },
++        creator_image_resource: true,
++        image_region_attachment: true,
++        image_cropped_width: admittedImage!.snapshot!.attachment!.width,
++        image_original_width: originalWidth,
++        model_requests: requestMessages.length,
++        model_image_blocks: nativeImages.length,
++        model_transport: 'keyless_replay',
++        provider_request: false,
++        external_requests: false,
++        page_errors: tripwire.pageErrors.length,
++        warnings: tripwire.warnings.length,
++      }, null, 2))
++    }
++  }, 120_000)
++})
+--- /dev/null
++++ b/apps/web/tests/creative-workspace-overlay.yml
+@@ -0,0 +1,11 @@
++- insert:
++    - id: dsh-pane-workbench
++      name: '@yeisme/dsh-pane-workbench'
++    - id: dsh-desktop-workbench
++      name: '@yeisme/dsh-desktop-workbench'
++    - id: creative-workspace-fixture
++      name: '@deepseek-ai/dsh-creative-workspace-fixture'
++    - id: dsh-creator-studio
++      name: '@yeisme/dsh-creator-studio'
++    - id: dsh-browser-pane
++      name: '@yeisme/dsh-browser-pane'
+--- /dev/null
++++ b/apps/web/tests/creative-workspace-fixture/client.mjs
+@@ -0,0 +1,7 @@
++window.__ModuleLoader__.load({ id: '@deepseek-ai/dsh-creative-workspace-fixture', factory: () => {
++  return {
++    name: 'creative-workspace-fixture/client',
++    inject: [],
++    apply() {},
++  }
++} })
+--- /dev/null
++++ b/apps/web/tests/creative-workspace-fixture/cordis.patch.yml
+@@ -0,0 +1,1 @@
++[]
+--- /dev/null
++++ b/apps/web/tests/creative-workspace-fixture/index.mjs
+@@ -0,0 +1,130 @@
++import { mkdir, readFile } from 'node:fs/promises'
++import { createHash } from 'node:crypto'
++import { join } from 'node:path'
++import { createServer } from 'node:http'
++
++const CONTEXT = {
++  tenantRef: 'tenant:creative-test',
++  workspaceRef: 'workspace:creative-test',
++  projectRef: 'project:creative-test',
++  sessionRef: 'session:creative-test',
++  principalRef: 'principal:creative-test',
++  revision: '1',
++  membershipRevision: '1',
++  installationRef: 'install:creative-test',
++  pluginDigest: 'digest:creative-test',
++  policyRevision: 'policy:creative-test',
++  runtimeGeneration: 'runtime:creative-test',
++}
++
++const BASE = Object.freeze({ schema: 'pane.artifact.v1alpha1', owner: 'eikona', kind: 'text', ref: 'artifact:creative-base', version: 'v1', mediaType: 'text/markdown', title: 'Synthetic screenplay', evidenceRefs: [], capabilities: ['preview'] })
++const IMAGE = Object.freeze({ ...BASE, kind: 'image', ref: 'artifact:creative-image', mediaType: 'image/png', title: 'Synthetic image' })
++const IMAGE_BYTES = await readFile(new URL('../../../../packages/skill/skill-badge/assets/dsh-badge.png', import.meta.url))
++let imageUrl
++const CANDIDATE_ONE = Object.freeze({ ...BASE, ref: 'artifact:creative-candidate-one', version: 'v2', title: 'Candidate one' })
++const CANDIDATE_TWO = Object.freeze({ ...BASE, ref: 'artifact:creative-candidate-two', version: 'v3', title: 'Candidate two' })
++const BODY_ONE = '# Candidate one\n\nSynthetic owner version one.\n'
++const BODY_TWO = '# Candidate two\n\nSYNTHETIC_SELECTED_VERSION_TWO\n'
++let baseBody = `# Synthetic screenplay\n\n${'A bounded synthetic scene used only by the real Host integration test. '.repeat(30)}\n`
++let baseRevision = 'content:v1'
++
++const proof = (artifact) => Object.freeze({ id: `reference:${artifact.ref}`, kind: 'file', intent: 'content', scope: 'artifact/body', digest: createHash('sha256').update(artifact.ref === BASE.ref ? baseBody : artifact.ref === CANDIDATE_ONE.ref ? BODY_ONE : BODY_TWO).digest('hex'), freshness: 'fresh', contentRevision: artifact.ref === BASE.ref ? baseRevision : `content:${artifact.version}` })
++const field = (key, label, kind, extra = {}) => ({ key, label, kind, required: true, ...extra })
++const SAVE = Object.freeze({
++  schema: 'pane.action-descriptor.v1alpha1', descriptorRef: 'action:creative-save', owner: 'eikona', actionId: 'synthetic.artifact.save', label: 'Save synthetic draft', targetRef: BASE.ref, targetVersion: BASE.version, context: CONTEXT, risk: 'low', confirmation: 'none', expiresAt: '2999-01-01T00:00:00.000Z', preview: { summary: 'Persist the synthetic test draft.' },
++  fields: [field('body', 'Body', 'textarea', { maxLength: 16_384 }), field('content_revision', 'Content revision', 'text', { maxLength: 160 })],
++})
++const ATTACH = Object.freeze({
++  schema: 'pane.action-descriptor.v1alpha1', descriptorRef: 'action:creative-attach', owner: 'eikona', actionId: 'synthetic.context.attach', label: 'Authorize synthetic reference', targetRef: BASE.ref, targetVersion: BASE.version, context: CONTEXT, risk: 'low', confirmation: 'none', expiresAt: '2999-01-01T00:00:00.000Z', preview: { summary: 'Authorize the selected synthetic version for Host insertion.' },
++  fields: [
++    field('body', 'Body', 'textarea', { maxLength: 16_384 }),
++    field('content_revision', 'Content revision', 'text', { maxLength: 160 }),
++    field('candidate_ref', 'Candidate', 'select', { options: [{ value: 'candidate:one', label: 'Candidate one' }, { value: 'candidate:two', label: 'Candidate two' }] }),
++    field('candidate_version', 'Candidate version', 'select', { options: [{ value: 'v2', label: 'v2' }, { value: 'v3', label: 'v3' }] }),
++  ],
++})
++
++const IMAGE_ATTACH = Object.freeze({ ...ATTACH, descriptorRef: 'action:creative-image-attach', actionId: 'synthetic.image.attach', targetRef: IMAGE.ref, targetVersion: IMAGE.version, fields: [field('range', 'Range', 'text', { maxLength: 1024 })] })
++
++function workspace() {
++  return {
++    status: 'ready',
++    safeMessage: 'Synthetic Creator owner mounted for keyless Host verification.',
++    artifacts: [{
++      artifact: BASE,
++      acceptedVersion: BASE.version,
++      textPreview: { after: baseBody.slice(0, 1_200) },
++      referenceProof: proof(BASE),
++      candidates: [
++        { ref: 'candidate:one', version: CANDIDATE_ONE.version, title: CANDIDATE_ONE.title, status: 'ready', artifact: CANDIDATE_ONE, textPreview: { after: BODY_ONE }, referenceProof: proof(CANDIDATE_ONE) },
++        { ref: 'candidate:two', version: CANDIDATE_TWO.version, title: CANDIDATE_TWO.title, status: 'ready', artifact: CANDIDATE_TWO, textPreview: { after: BODY_TWO }, referenceProof: proof(CANDIDATE_TWO) },
++      ],
++      actions: {
++        saveDraft: { descriptorRef: SAVE.descriptorRef, contentField: 'body', contentRevisionField: 'content_revision' },
++        attachContext: { descriptorRef: ATTACH.descriptorRef, contentField: 'body', contentRevisionField: 'content_revision', candidateRefField: 'candidate_ref', candidateVersionField: 'candidate_version' },
++      },
++    }, { artifact: IMAGE, acceptedVersion: IMAGE.version, candidates: [], referenceProof: { id: 'reference:creative-image', kind: 'image-region', intent: 'content', scope: 'artifact/media', digest: createHash('sha256').update(IMAGE_BYTES).digest('hex'), contentRevision: 'image:v1', freshness: 'fresh' }, actions: { attachContext: { descriptorRef: IMAGE_ATTACH.descriptorRef, rangeField: 'range' } } }],
++  }
++}
++
++const adapter = {
++  owner: 'eikona',
++  transport: 'local',
++  snapshot() {
++    return { schemaVersion: 'creator.owner.snapshot.v1alpha1', owner: 'eikona', transport: 'local', snapshotRef: `snapshot:creative:${baseRevision}`, snapshotVersion: 1, cursor: `cursor:creative:${baseRevision}`, sequence: 1, generatedAt: new Date().toISOString(), context: CONTEXT, status: 'ready', freshness: 'fresh', summary: 'Synthetic Eikona owner ready.', resources: [], actions: [SAVE, ATTACH, IMAGE_ATTACH], artifactWorkspace: workspace() }
++  },
++  dispatch(request) {
++    if (request.actionId === SAVE.actionId) {
++      if (request.values.content_revision !== baseRevision || typeof request.values.body !== 'string') return { status: 'reconcile_required', receiptRef: 'receipt:creative-save-conflict', owner: 'eikona', actionId: SAVE.actionId, reconcileReason: 'content_revision_changed' }
++      baseBody = request.values.body
++      baseRevision = `content:v${Number(baseRevision.slice('content:v'.length)) + 1}`
++      return { status: 'completed', receiptRef: `receipt:creative-save:${baseRevision}`, owner: 'eikona', actionId: SAVE.actionId, summary: 'Synthetic draft persisted.' }
++    }
++    if (request.actionId === ATTACH.actionId || request.actionId === IMAGE_ATTACH.actionId) return { status: 'completed', receiptRef: 'receipt:creative-attach', owner: 'eikona', actionId: request.actionId, summary: 'Synthetic reference authorized.' }
++    return { status: 'rejected', receiptRef: 'receipt:creative-rejected', owner: 'eikona', actionId: request.actionId, summary: 'Synthetic action unavailable.' }
++  },
++  resolveArtifact(artifact) {
++    return artifact.ref === IMAGE.ref && artifact.version === IMAGE.version ? { url: imageUrl, expiresAt: '2999-01-01T00:00:00.000Z' } : undefined
++  },
++  readArtifactImage(artifact) {
++    return artifact.ref === IMAGE.ref && artifact.version === IMAGE.version ? { artifact: IMAGE, bytes: IMAGE_BYTES, contentRevision: 'image:v1', mediaType: IMAGE.mediaType } : undefined
++  },
++  readArtifactContent(artifact) {
++    const content = artifact.ref === BASE.ref ? baseBody : artifact.ref === CANDIDATE_ONE.ref ? BODY_ONE : artifact.ref === CANDIDATE_TWO.ref ? BODY_TWO : undefined
++    return content === undefined ? undefined : { artifact, contentRevision: artifact.ref === BASE.ref ? baseRevision : `content:${artifact.version}`, content }
++  },
++}
++
++export const name = 'creative-workspace-fixture'
++export const inject = ['composerReferenceOwners', 'agents', 'agentPresets', 'workspaceRegistry']
++export async function apply(ctx) {
++  const mediaServer = createServer((request, response) => {
++    if (request.url !== '/synthetic-image' || request.method !== 'GET') { response.writeHead(404).end(); return }
++    response.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' }).end(IMAGE_BYTES)
++  })
++  await new Promise(resolve => mediaServer.listen(0, '127.0.0.1', resolve))
++  imageUrl = `http://127.0.0.1:${mediaServer.address().port}/synthetic-image`
++  ctx.on('dispose', () => new Promise(resolve => mediaServer.close(resolve)))
++  const workspacePath = join(process.cwd(), 'workspace')
++  await mkdir(workspacePath, { recursive: true })
++  const agentHandle = await ctx.agents.create({
++    sessionId: CONTEXT.sessionRef,
++    meta: { cwd: workspacePath },
++    setup: agentCtx => ctx.agentPresets.mount(agentCtx).then(() => undefined),
++  })
++  const workspace = await ctx.workspaceRegistry.create(workspacePath)
++  await workspace.attachSession(agentHandle.agent.id)
++  CONTEXT.workspaceRef = workspace.id
++  const creatorModule = await import(process.env.DSH_CREATIVE_CREATOR_HOST_MODULE)
++  const disposers = [
++    ctx.root.provide('creatorStudioExpectedContext', CONTEXT),
++  ]
++  const ownerMount = ctx.inject(['creatorStudioOwnerDirectory'], () => creatorModule.registerCreatorStudioOwner(ctx, adapter))
++  return async () => {
++    await ownerMount.dispose()
++    for (const dispose of disposers.reverse()) dispose?.()
++    await agentHandle.dispose()
++  }
++}
++
++export default { name, inject, apply }
+--- /dev/null
++++ b/apps/web/tests/creative-workspace-fixture/package.json
+@@ -0,0 +1,22 @@
++{
++  "name": "@deepseek-ai/dsh-creative-workspace-fixture",
++  "version": "0.0.0-test",
++  "private": true,
++  "type": "module",
++  "main": "./index.mjs",
++  "exports": {
++    ".": "./index.mjs",
++    "./client": "./client.mjs",
++    "./cordis.patch.yml": "./cordis.patch.yml",
++    "./package.json": "./package.json"
++  },
++  "dsh": {
++    "bundle": {
++      "patch": "./cordis.patch.yml"
++    },
++    "client": {
++      "inject": [],
++      "platform": "web"
++    }
++  }
++}
