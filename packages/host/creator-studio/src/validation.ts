@@ -69,6 +69,7 @@ const artifactCandidateSchema = z.object({
   artifact: ArtifactRefSchema.optional(),
   textPreview: textPreviewSchema.optional(),
   referenceProof: z.object({
+    contentRevision: z.string().min(1).max(160).optional(),
     id: safeRef,
     kind: z.enum(['file', 'directory', 'selection', 'message', 'terminal', 'image', 'image-region', 'agent', 'skill', 'tool']),
     intent: z.literal('content'),

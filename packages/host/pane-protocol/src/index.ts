@@ -326,6 +326,15 @@ export const PaneActionRequestSchema = z.object({
 })
 export type PaneActionRequestV1 = z.infer<typeof PaneActionRequestSchema>
 
+/** Additive lookup contract: never carries values or authorizes a new execution. */
+export const PaneActionReconcileRequestSchema = z.object({
+  schema: z.literal('pane.action-reconcile-request.v1alpha1'),
+  owner: IdentifierSchema, actionId: IdentifierSchema, expectedTargetRef: OpaqueRefSchema,
+  context: PaneContextSchema, idempotencyKey: PaneActionRequestSchema.shape.idempotencyKey,
+}).strict()
+export type PaneActionReconcileRequestV1 = z.infer<typeof PaneActionReconcileRequestSchema>
+
+
 export const PaneProjectionEntitySchema = z.object({
   ref: OpaqueRefSchema,
   version: z.number().int().nonnegative(),
@@ -475,3 +484,89 @@ export function parsePaneActionRequest(input: unknown): PaneActionRequestV1 {
 export function parsePaneActionReceipt(input: unknown): PaneActionReceiptV1 {
   return PaneActionReceiptSchema.parse(input)
 }
+
+/** Additive, pre-release document contract. This stores drafts, never execution state. */
+export const PROJECT_CANVAS_SCHEMA = 'dsh.project-canvas.v1alpha1' as const
+const CanvasPointSchema = z.object({ x: z.number().finite(), y: z.number().finite() }).strict()
+export const ProjectCanvasScopeSchema = z.object({ workspaceRef: OpaqueRefSchema, projectRef: OpaqueRefSchema }).strict()
+const CanvasNodeBase = {
+  id: IdentifierSchema,
+  title: LabelSchema,
+  position: CanvasPointSchema,
+  size: z.object({ width: z.number().finite().positive(), height: z.number().finite().positive() }).strict(),
+  groupId: IdentifierSchema.optional(),
+}
+const CanvasControlsSchema = z.record(IdentifierSchema, z.union([z.string().max(16_384), z.number().finite(), z.boolean(), z.null()]))
+  .superRefine((value, ctx) => {
+    if (Object.keys(value).length > 64) ctx.addIssue({ code: 'custom', message: 'too many draft controls' })
+    inspectSafeJson(value, ctx)
+  })
+export const ProjectCanvasNodeSchema = z.discriminatedUnion('kind', [
+  z.object({ ...CanvasNodeBase, kind: z.literal('material'), artifact: ArtifactRefSchema }).strict(),
+  z.object({ ...CanvasNodeBase, kind: z.literal('draft'), text: z.string().max(32_768) }).strict(),
+  z.object({ ...CanvasNodeBase, kind: z.literal('operation'), owner: IdentifierSchema, actionRef: OpaqueRefSchema,
+    controls: CanvasControlsSchema, selectedArtifact: ArtifactRefSchema.optional() }).strict(),
+  z.object({ ...CanvasNodeBase, kind: z.literal('result'), artifact: ArtifactRefSchema }).strict(),
+  z.object({ ...CanvasNodeBase, kind: z.literal('group'), collapsed: z.boolean() }).strict(),
+])
+export const ProjectCanvasEdgeSchema = z.discriminatedUnion('kind', [
+  z.object({ id: IdentifierSchema, kind: z.literal('reference'), source: IdentifierSchema, target: IdentifierSchema,
+    label: LabelSchema.optional() }).strict(),
+  z.object({ id: IdentifierSchema, kind: z.literal('execution'), source: IdentifierSchema, target: IdentifierSchema,
+    output: IdentifierSchema, input: IdentifierSchema, purpose: IdentifierSchema }).strict(),
+])
+export const ProjectCanvasDocumentSchema = z.object({
+  schema: z.literal(PROJECT_CANVAS_SCHEMA),
+  scope: ProjectCanvasScopeSchema,
+  id: IdentifierSchema,
+  revision: z.number().int().nonnegative().safe(),
+  camera: z.object({ x: z.number().finite(), y: z.number().finite(), zoom: z.number().finite().positive() }).strict(),
+  nodes: z.array(ProjectCanvasNodeSchema).max(5_000),
+  edges: z.array(ProjectCanvasEdgeSchema).max(20_000),
+}).strict().superRefine((document, ctx) => {
+  const nodes = new Map(document.nodes.map(node => [node.id, node]))
+  if (nodes.size !== document.nodes.length) ctx.addIssue({ code: 'custom', message: 'duplicate node id' })
+  if (new Set(document.edges.map(edge => edge.id)).size !== document.edges.length) {
+    ctx.addIssue({ code: 'custom', message: 'duplicate edge id' })
+  }
+  for (const node of document.nodes) {
+    const seen = new Set([node.id])
+    let parent = node.groupId
+    while (parent !== undefined) {
+      if (seen.has(parent) || nodes.get(parent)?.kind !== 'group') {
+        ctx.addIssue({ code: 'custom', message: 'invalid or cyclic group membership' })
+        break
+      }
+      seen.add(parent)
+      parent = nodes.get(parent)?.groupId
+    }
+  }
+  for (const edge of document.edges) {
+    if (!nodes.has(edge.source) || !nodes.has(edge.target)) ctx.addIssue({ code: 'custom', message: 'edge endpoint missing' })
+    if (edge.kind === 'execution' && nodes.get(edge.target)?.kind !== 'operation') {
+      ctx.addIssue({ code: 'custom', message: 'execution input must target an operation' })
+    }
+  }
+  // Execution cycles remain editable drafts. The workflow planner must reject them before execution.
+})
+export type ProjectCanvasScope = z.infer<typeof ProjectCanvasScopeSchema>
+export type ProjectCanvasNode = z.infer<typeof ProjectCanvasNodeSchema>
+export type ProjectCanvasEdge = z.infer<typeof ProjectCanvasEdgeSchema>
+export type ProjectCanvasDocument = z.infer<typeof ProjectCanvasDocumentSchema>
+
+export const ProjectCanvasReadRequestSchema = z.object({ scope: ProjectCanvasScopeSchema, documentId: IdentifierSchema }).strict()
+export const ProjectCanvasSaveRequestSchema = z.object({ requestId: IdentifierSchema, document: ProjectCanvasDocumentSchema }).strict()
+export const ProjectCanvasReconcileRequestSchema = ProjectCanvasReadRequestSchema.extend({ requestId: IdentifierSchema }).strict()
+export const ProjectCanvasReadResultSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('ready'), document: ProjectCanvasDocumentSchema }).strict(),
+  z.object({ status: z.enum(['missing', 'unavailable', 'forbidden', 'invalid', 'error']) }).strict(),
+])
+export const ProjectCanvasSaveResultSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('saved'), requestId: IdentifierSchema, revision: z.number().int().positive().safe() }).strict(),
+  z.object({ status: z.literal('conflict'), revision: z.number().int().nonnegative().safe() }).strict(),
+  z.object({ status: z.enum(['unavailable', 'forbidden', 'invalid', 'unknown']) }).strict(),
+])
+export type ProjectCanvasReadRequest = z.infer<typeof ProjectCanvasReadRequestSchema>
+export type ProjectCanvasSaveRequest = z.infer<typeof ProjectCanvasSaveRequestSchema>
+export type ProjectCanvasReadResult = z.infer<typeof ProjectCanvasReadResultSchema>
+export type ProjectCanvasSaveResult = z.infer<typeof ProjectCanvasSaveResultSchema>

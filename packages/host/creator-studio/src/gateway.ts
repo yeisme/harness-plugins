@@ -5,13 +5,18 @@ import {
   PANE_ACTION_REQUEST_SCHEMA,
   PaneActionReceiptSchema,
   PaneActionRequestSchema,
+  PaneActionReconcileRequestSchema,
   type PaneActionDescriptorV1,
   type PaneActionFieldDescriptorV1,
   type PaneActionReceiptV1,
   type PaneActionRequestV1,
   type PaneActionValueV1,
+  type ProjectCanvasReadResult,
+  type ProjectCanvasSaveResult,
 } from '@yeisme/dsh-pane-protocol'
+import { ProjectCanvasStore, type ProjectCanvasStorage } from './project-canvas-store.ts'
 import { CreatorStudioOwnerDirectory } from './directory.ts'
+import { validateCreatorArtifactImage } from './artifact-image.ts'
 import {
   CREATOR_STUDIO_OWNERS,
   type CreatorApprovalV1,
@@ -126,7 +131,7 @@ function assetOffset(cursor: string | undefined): number | undefined {
   return Number.isSafeInteger(value) ? value : undefined
 }
 
-function gatewayReceipt(request: Partial<PaneActionRequestV1>, status: PaneActionReceiptV1['status'], summary: string, reconcileReason?: string): PaneActionReceiptV1 {
+function gatewayReceipt(request: Partial<Pick<PaneActionRequestV1, 'owner' | 'actionId' | 'idempotencyKey'>>, status: PaneActionReceiptV1['status'], summary: string, reconcileReason?: string): PaneActionReceiptV1 {
   return PaneActionReceiptSchema.parse({
     status,
     receiptRef: `receipt:creator:${safeIdempotency(request.idempotencyKey ?? 'unknown')}`,
@@ -173,10 +178,31 @@ function requestMatchesDescriptor(request: PaneActionRequestV1, descriptor: Pane
 export class CreatorStudioGateway extends TypertRemoteService {
   private readonly expectedContext: CreatorStudioContextV1 | undefined
   private snapshotVersion = 0
+  private readonly canvas: ProjectCanvasStore | undefined
 
   constructor(ctx: Context) {
     super(ctx, 'creatorStudio')
     this.expectedContext = validateCreatorStudioContext(ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+    const storage = ctx.get('storageDomain' as never) as ProjectCanvasStorage | undefined
+    if (storage !== undefined && typeof storage.open === 'function') {
+      this.canvas = new ProjectCanvasStore(storage, () => validateCreatorStudioContext(ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT)))
+      ctx.effect(() => () => this.canvas?.close(), 'creatorStudio.projectCanvas')
+    }
+  }
+
+  @Remote('canvasRead')
+  async canvasRead(input: unknown): Promise<ProjectCanvasReadResult> {
+    return this.canvas?.read(input) ?? { status: 'unavailable' }
+  }
+
+  @Remote('canvasSave')
+  async canvasSave(input: unknown): Promise<ProjectCanvasSaveResult> {
+    return this.canvas?.save(input) ?? { status: 'unavailable' }
+  }
+
+  @Remote('canvasReconcile')
+  async canvasReconcile(input: unknown): Promise<ProjectCanvasSaveResult> {
+    return this.canvas?.reconcile(input) ?? { status: 'unavailable' }
   }
 
   @Remote('snapshot')
@@ -394,6 +420,32 @@ export class CreatorStudioGateway extends TypertRemoteService {
     }
   }
 
+  @Remote('reconcile')
+  async reconcile(input: unknown): Promise<PaneActionReceiptV1> {
+    const parsed = PaneActionReconcileRequestSchema.safeParse(input)
+    if (!parsed.success) return gatewayReceipt({}, 'unknown', 'The reconciliation request is invalid.', 'request_contract_mismatch')
+    const request = parsed.data
+    const context = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+    if (context === undefined || this.expectedContext === undefined || !sameContext(context, this.expectedContext)
+      || !sameContext(context, request.context as CreatorStudioContextV1)) {
+      return gatewayReceipt(request, 'unknown', 'The reconciliation context is unavailable.', 'context_changed')
+    }
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const owner = request.owner as CreatorStudioOwner
+    const adapter = CREATOR_STUDIO_OWNERS.includes(owner) ? directory?.selected(owner) : undefined
+    if (adapter?.reconcile === undefined) return gatewayReceipt(request, 'unknown', 'The owner reconciliation adapter is unavailable.', 'reconcile_unavailable')
+    try {
+      // Deliberately bypass expired generation descriptors: the owner authorizes lookup of the original key.
+      const receipt = validateCreatorActionReceipt(await adapter.reconcile(request, context))
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (latest === undefined || !sameContext(context, latest)) return gatewayReceipt(request, 'unknown', 'The reconciliation context changed.', 'context_changed')
+      if (receipt?.owner !== owner || receipt.actionId !== request.actionId) return gatewayReceipt(request, 'unknown', 'The owner returned no matching receipt.', 'receipt_contract_mismatch')
+      return receipt
+    } catch {
+      return gatewayReceipt(request, 'unknown', 'The original operation remains uncertain.', 'settlement_unknown')
+    }
+  }
+
   @Remote('dispatch')
   async dispatch(input: unknown): Promise<PaneActionReceiptV1> {
     const parsed = PaneActionRequestSchema.safeParse(input)
@@ -457,6 +509,27 @@ export class CreatorStudioGateway extends TypertRemoteService {
       const content = validateCreatorArtifactContent(await directory.readArtifactContent(owner, artifact.data, this.expectedContext))
       return content?.artifact.owner === owner && content.artifact.ref === artifact.data.ref && content.artifact.version === artifact.data.version ? content : null
     } catch {
+      return null
+    }
+  }
+
+  /** Same-process attachment resolver only: deliberately not a Remote. */
+  async readArtifactImage(input: unknown, signal: AbortSignal) {
+    signal.throwIfAborted()
+    const artifact = ArtifactRefSchema.safeParse(input)
+    if (!artifact.success || this.expectedContext === undefined) return null
+    const owner = artifact.data.owner as CreatorStudioOwner
+    if (!CREATOR_STUDIO_OWNERS.includes(owner)) return null
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    if (directory === undefined) return null
+    const generation = directory.generation
+    try {
+      const image = validateCreatorArtifactImage(await directory.readArtifactImage(owner, artifact.data, this.expectedContext, signal))
+      signal.throwIfAborted()
+      if (directory !== this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) || generation !== directory.generation) return null
+      return image?.artifact.owner === owner && image.artifact.ref === artifact.data.ref && image.artifact.version === artifact.data.version ? image : null
+    } catch {
+      signal.throwIfAborted()
       return null
     }
   }

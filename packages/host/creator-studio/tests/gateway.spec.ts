@@ -11,6 +11,37 @@ import type { CreatorOwnerAdapterV1, CreatorStudioContextV1 } from '../src/types
 
 const contexts: Context[] = []
 
+describe('original operation reconciliation', () => {
+  const request = () => ({ schema: 'pane.action-reconcile-request.v1alpha1', owner: 'eikona', actionId: 'generate.preview',
+    expectedTargetRef: 'project:one', context: expectedContext(), idempotencyKey: 'creator-original-key' })
+  it('queries the original key without snapshot, preview or dispatch', async () => {
+    const receipt = { status: 'completed' as const, receiptRef: 'receipt:original', owner: 'eikona', actionId: 'generate.preview' }
+    const source = adapter({ reconcile: vi.fn(async () => receipt) })
+    const { gateway } = await harness({ context: expectedContext(), adapter: source })
+    expect(await gateway.reconcile(request())).toEqual(receipt)
+    expect(source.reconcile).toHaveBeenCalledWith(request(), expectedContext())
+    expect(source.dispatch).not.toHaveBeenCalled()
+    expect(source.snapshot).not.toHaveBeenCalled()
+  })
+  it('rejects execution payloads and forged scope before calling the owner', async () => {
+    const source = adapter({ reconcile: vi.fn() })
+    const { gateway } = await harness({ context: expectedContext(), adapter: source })
+    expect(await gateway.reconcile({ ...request(), values: { brief: 'must not cross lookup' } })).toMatchObject({ status: 'unknown', reconcileReason: 'request_contract_mismatch' })
+    expect(await gateway.reconcile({ ...request(), context: { ...expectedContext(), projectRef: 'project:other' } })).toMatchObject({ status: 'unknown', reconcileReason: 'context_changed' })
+    expect(source.reconcile).not.toHaveBeenCalled()
+  })
+  it('keeps missing adapters, mismatched receipts and failed lookups unknown without dispatch fallback', async () => {
+    const source = adapter()
+    const { gateway } = await harness({ context: expectedContext(), adapter: source })
+    expect(await gateway.reconcile(request())).toMatchObject({ status: 'unknown', reconcileReason: 'reconcile_unavailable' })
+    source.reconcile = vi.fn(async () => ({ status: 'completed', receiptRef: 'receipt:wrong', owner: 'sonora', actionId: 'generate.preview' }))
+    expect(await gateway.reconcile(request())).toMatchObject({ status: 'unknown', reconcileReason: 'receipt_contract_mismatch' })
+    source.reconcile = vi.fn(async () => { throw new Error('private transport details') })
+    expect(await gateway.reconcile(request())).toMatchObject({ status: 'unknown', reconcileReason: 'settlement_unknown' })
+    expect(source.dispatch).not.toHaveBeenCalled()
+  })
+})
+
 afterEach(async () => {
   vi.restoreAllMocks()
   await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))

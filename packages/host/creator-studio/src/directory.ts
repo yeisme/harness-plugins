@@ -5,6 +5,7 @@ import {
   type CreatorOwnerAdapterV1,
   type CreatorStudioContextV1,
   type CreatorArtifactContentV1,
+  type CreatorArtifactImageV1,
   type CreatorStudioOwner,
   type CreatorStudioTransportPolicyV1,
   type CreatorStudioTransportPreference,
@@ -68,5 +69,10 @@ export class CreatorStudioOwnerDirectory {
 
   async readArtifactContent(owner: CreatorStudioOwner, artifact: ArtifactRefV1, context: CreatorStudioContextV1): Promise<CreatorArtifactContentV1 | undefined> {
     return this.selected(owner)?.readArtifactContent?.(artifact, context)
+  }
+
+  async readArtifactImage(owner: CreatorStudioOwner, artifact: ArtifactRefV1, context: CreatorStudioContextV1, signal: AbortSignal): Promise<CreatorArtifactImageV1 | undefined> {
+    signal.throwIfAborted()
+    return this.selected(owner)?.readArtifactImage?.(artifact, context, signal)
   }
 }

@@ -25,3 +25,6 @@ export {
   validateCreatorStudioSnapshot,
 } from './validation.ts'
 export * from './types.ts'
+export { validateCreatorArtifactImage, CREATOR_ARTIFACT_IMAGE_MAX_BYTES } from './artifact-image.ts'
+export { ProjectCanvasStore, projectCanvasDomainSpec, projectCanvasRowSchema } from './project-canvas-store.ts'
+export type { ProjectCanvasStorage, ProjectCanvasTable, ProjectCanvasDomainSpec } from './project-canvas-store.ts'

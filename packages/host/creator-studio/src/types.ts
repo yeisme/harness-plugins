@@ -3,6 +3,7 @@ import type {
   PaneActionDescriptorV1,
   PaneActionReceiptV1,
   PaneActionRequestV1,
+  PaneActionReconcileRequestV1,
   PaneContextV1,
   PaneStatus,
 } from '@yeisme/dsh-pane-protocol'
@@ -52,10 +53,13 @@ export interface CreatorArtifactCandidateV1 {
 }
 
 export interface CreatorArtifactReferenceProofV1 {
+  /** Required by editable body admission; ties an independent read to this proof. */
+  readonly contentRevision?: string
   readonly id: string
   readonly kind: 'file' | 'directory' | 'selection' | 'message' | 'terminal' | 'image' | 'image-region' | 'agent' | 'skill' | 'tool'
   readonly intent: 'content'
   readonly scope: 'artifact/body' | 'artifact/media'
+  /** Lowercase SHA-256 of the complete UTF-8 body or original image bytes. */
   readonly digest: string
   readonly freshness: 'fresh' | 'stale' | 'frozen' | 'unavailable'
   readonly unavailableReason?: string
@@ -311,6 +315,14 @@ export interface CreatorMediaAccessV1 {
   readonly expiresAt: string
 }
 
+/** Host-only image read. Never included in a snapshot or browser Remote. */
+export interface CreatorArtifactImageV1 {
+  readonly artifact: ArtifactRefV1
+  readonly contentRevision: string
+  readonly mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
+  readonly bytes: Uint8Array
+}
+
 export interface CreatorOwnerAdapterV1 {
   readonly owner: CreatorStudioOwner
   readonly transport: Exclude<CreatorStudioTransport, 'unavailable'>
@@ -319,9 +331,13 @@ export interface CreatorOwnerAdapterV1 {
   snapshot(context: CreatorStudioContextV1): CreatorOwnerSnapshotV1 | Promise<CreatorOwnerSnapshotV1>
   listAssets?(query: CreatorOwnerAssetQueryV1, context: CreatorStudioContextV1): CreatorOwnerAssetListV1 | Promise<CreatorOwnerAssetListV1>
   dispatch(request: PaneActionRequestV1, context: CreatorStudioContextV1): PaneActionReceiptV1 | Promise<PaneActionReceiptV1>
+  /** Look up the original operation; must never resubmit or retry it. Recheck current authorization in the owner. */
+  reconcile?(request: PaneActionReconcileRequestV1, context: CreatorStudioContextV1): PaneActionReceiptV1 | Promise<PaneActionReceiptV1>
   resolveArtifact?(artifact: ArtifactRefV1, context: CreatorStudioContextV1): CreatorMediaAccessV1 | undefined | Promise<CreatorMediaAccessV1 | undefined>
   /** Optional full-body seam for direct editing; never part of a snapshot. */
   readArtifactContent?(artifact: ArtifactRefV1, context: CreatorStudioContextV1): CreatorArtifactContentV1 | undefined | Promise<CreatorArtifactContentV1 | undefined>
+  /** Optional authorized resource read for Host attachment admission, not URL fetching. */
+  readArtifactImage?(artifact: ArtifactRefV1, context: CreatorStudioContextV1, signal: AbortSignal): CreatorArtifactImageV1 | undefined | Promise<CreatorArtifactImageV1 | undefined>
 }
 
 export interface CreatorStudioTransportPolicyV1 {
