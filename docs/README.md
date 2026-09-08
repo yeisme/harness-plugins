@@ -4,6 +4,8 @@
 
 ## 入口
 
+- [创作画布、工作流与五个专业 Pane（规格阶段）](design/dsh-creative-studio-program.md)：八份独立 OpenSpec/tasks 的总入口，覆盖 Eikona、Anatomia、Scaena、Auctra、Sonora；[消费接口与owner边界](interfaces/dsh-creative-studio-contracts.md)、[场景与故障矩阵](qa/dsh-creative-studio-journeys.md)。当前不代表插件功能已实现。
+
 - [Workbench 退役与可复用知识](migrations/workbench-retirement/README.md)：原文快照、任务去向与 owner 边界；[DSH 项目画布与连续性 tasks](../openspec/changes/dsh-project-canvas-continuity-v1/tasks.md) 是新增实施入口，复用既有引用与成果工作区。
 
 - [DSH URL Session 契约（规格已冻结）](protocols/dsh-url-session.md)：一个链接对应一个会话（`/s/<id>` 与 `?s=` 别名）；[OpenSpec 与任务](../openspec/changes/dsh-url-session-v1/proposal.md)。

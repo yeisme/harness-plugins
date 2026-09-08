@@ -16,7 +16,7 @@ Workbench 退役后，图像生成、修改与资产工作必须继续在 DSH Pa
 | 图像生成/编辑/批量动作 | required | cli/eikona | deliver-later（合同核对先行） | owner 合同冻结文档 + adapter 测试 |
 | 项目与资产列表（分页/freshness） | required | cli/eikona | deliver-later | 列表 adapter 单测 |
 | 候选映射与采纳回执 | required | cli/eikona + 本仓工作区 | 复用既有 | 复用 change 证据引用 |
-| 遮罩/局部编辑模型支持 | to-verify | cli/eikona | 合同核对任务 | 支持矩阵（支持/缺失/未验证） |
+| 遮罩/局部编辑模型支持 | required（readiness待核对） | cli/eikona | 合同核对任务 | 支持矩阵（支持/缺失/未验证） |
 | 真实生成/取消/交接 | required | cli/eikona | 真实验收任务 | staging 证据（fixture/real 标注） |
 
 ## Capabilities
@@ -32,3 +32,7 @@ Workbench 退役后，图像生成、修改与资产工作必须继续在 DSH Pa
 ## Impact
 
 拟用路径：`packages/client/ui-eikona-studio`、`packages/host/eikona-studio`、薄 bundle；在脚手架生成前先核对现有包可复用性。不创建第二 provider 运行时、资产账本或版本状态机。
+
+## 页面与范围补全
+
+所有页面与能力均为required：[页面控件设计](../../../docs/design/dsh-eikona-studio.md)。遮罩/音乐/字幕等具体模型或provider能力的未验证状态不构成需求删除。第5组tasks补全页面、原型、owner缺口与恢复；第4组closeout必须依赖它们。

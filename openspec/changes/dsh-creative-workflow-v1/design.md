@@ -51,3 +51,13 @@
 ## Validation
 
 focused reducer/适配测试先行；稳定后全门禁。真实跨领域运行在 Ordo staging 验证并标注 fixture/real。证据写 `temp/integration-test-runs/<run-id>/`，脱敏 owner payload。
+
+## 创建入口、页面与任务边界
+
+[工作流页面](../../../docs/design/dsh-creative-workflow.md)定义模板、手动连线和Agent草案三种入口；均编辑画布change拥有的同一document，不创建额外图模型。模板不携带旧权限，Agent修改给出摘要与撤销，执行另确认。
+
+运行预览由节点/范围列表、固定输入、已知费用和未知项、缺口、人工审阅点组成。确认前草案revision变化即失效。单领域步骤和内部workflow直接进入领域owner；只有跨领域计划由Ordo执行，缺适配任务归agent/ordo，不阻塞专业Pane。第4组验收依赖新增5.1–5.4。
+
+单owner返回多个候选而下游要求一个输入时，必须在流程设计中放人工选择或owner支持的显式选择规则；没有选择时暂停，不自动以最新结果继续。范围扩展和预算变化重新确认；人工审阅只解锁计划中已授权的范围。
+
+视觉例外：无。完整组件复用、内容与control分离、版本迁移、关入口仍可恢复和证据规则见[公共合同](../../../docs/interfaces/dsh-creative-studio-contracts.md)。默认关闭新跨领域执行入口；原单领域运行继续可见且可对账。新schema additive，不重解释既有Ordo plan/grant或Workbench标识。

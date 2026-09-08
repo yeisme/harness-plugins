@@ -32,3 +32,7 @@ Workbench 退役后，视频分析、证据与参考提取工作继续在 DSH Pa
 ## Impact
 
 拟用路径：`packages/client/ui-anatomia-analysis-studio`、`packages/host/anatomia-analysis-studio`、薄 bundle；先核对现有包可复用性。不复制观察状态机、媒体 blob 或证据真源。
+
+## 页面与范围补全
+
+所有页面与能力均为required：[页面控件设计](../../../docs/design/dsh-anatomia-analysis-studio.md)。遮罩/音乐/字幕等具体模型或provider能力的未验证状态不构成需求删除。第5组tasks补全页面、原型、owner缺口与恢复；第4组closeout必须依赖它们。

@@ -41,3 +41,31 @@ Fixture checks SHALL NOT satisfy the real usability task; real loop evidence SHA
 #### Scenario: Only adapter fixtures passed
 - **WHEN** adapter tests pass without a real Scaena production loop
 - **THEN** the real usability task remains incomplete
+
+### Requirement: Shot-level production editing
+The studio SHALL provide project/episode/scene/shot navigation, approved structural edits, asset and audio binding, shot order and duration editing through Scaena actions, without a general multitrack editor.
+
+#### Scenario: 调整时长
+- **WHEN** a user changes a shot duration with bound audio
+- **THEN** the UI shows affected timing and subtitle constraints without mutating or stretching source audio automatically
+
+### Requirement: Production acceptance and delivery are separate
+Run completion, candidate adoption, production acceptance and delivery SHALL retain distinct owner states and receipts.
+
+#### Scenario: 制作成功但交付有缺口
+- **WHEN** rendered shots exist but rights, audio or production review is incomplete
+- **THEN** results remain inspectable and delivery shows blockers rather than a false completed state
+
+### Requirement: Independent direct operation and scope binding
+The professional Pane SHALL be usable without canvas, other professional Panes or cross-domain orchestration; object bindings SHALL preserve owner/ref/version/project and separate the target session.
+
+#### Scenario: 双栏迟到响应
+- **WHEN** a response arrives after switching project or session
+- **THEN** it cannot overwrite the newly selected project, draft or artifact version
+
+### Requirement: Required capability gaps remain owned tasks
+Required capability gaps SHALL have a named owner, missing operation, deliverable, affected consumer task and linked owner OpenSpec task; fixture-only proof SHALL NOT close real usability tasks.
+
+#### Scenario: 只有协议通过
+- **WHEN** a required capability has passed fixture tests but not a real owner journey
+- **THEN** the required capability remains unverified with an actionable task instead of being silently removed

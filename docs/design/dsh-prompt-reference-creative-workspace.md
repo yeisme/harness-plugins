@@ -194,3 +194,12 @@ Requirement 的编号是稳定追踪标识；完整条文位于所属变更的�
 未来实现执行 typecheck、test、build、check:bundles、check:surfaces、test:visual、check:plugins 七门及 OpenSpec 严格校验；集成证据写入本仓库 temp/integration-test-runs/<run-id>/，包含 summary.json、command.txt、stdout.log、stderr.log、env.json 和 artifacts/，使用合成数据，脱敏秘密、真实提示词、provider payload、私有参数和绝对路径。
 
 本次文档交付只验证变更完整性、Requirement／Task 一致性和链接有效性，不运行产品服务或勾选功能任务。精确校验结果见所属变更 verification.md。
+
+
+### 图片成果接入约定（Host-only）
+
+成果 owner 为支持引用的图片提供 `readArtifactImage(artifact, context, signal)`，返回选定 ArtifactRef、contentRevision、PNG／JPEG／WebP／GIF MIME 与有界 Uint8Array；对应 `referenceProof` 的 digest 是完整资源 SHA-256，contentRevision 与读取结果一致。旧 adapter 可继续只提供预览，但不能凭预览 URL 宣称支持发送附件。该读取不加入浏览器 Remote，也不把字节写入 snapshot 或日志。
+
+全图使用 `image` 证明，不附隐藏区域；框选使用 `image-region` 证明和归一化矩形。仅有全图证明时，框选后的“加入主对话”明确禁用，恢复全图后可用。Host 校验授权、版本与内容后，调用既有附件服务做格式校验、实际裁剪和存储。选择模式禁用图片原生拖拽，并捕获指针，避免用户拖动后范围仍停留在全图。
+
+本轮真实 Host 已用合成 owner 验证 726px 原图裁成 364px 附件并发送到 keyless 模型回放；这证明插件／Host 链路，尚不证明真实领域服务或音视频模型接收能力。详情与失败记录见所属 change 的 verification.md。

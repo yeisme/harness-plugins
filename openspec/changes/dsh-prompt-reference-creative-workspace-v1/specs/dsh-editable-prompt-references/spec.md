@@ -11,6 +11,14 @@
 - **WHEN** 用户引用目录
 - **THEN** owner 返回受限清单并显示实际范围，不隐式递归读取全部文件
 
+#### Scenario: Creator body changes during authorized reference resolution
+- **WHEN** 获取 Creator 来源证明后，正文版本、摘要、owner 代次或授权 context 在读取期间发生变化
+- **THEN** 系统拒绝本次引用，不将新正文配上旧证明；合法部分范围保持范围和截断标记
+
+#### Scenario: Provider cleanup fails during bundle disposal
+- **WHEN** 引用 bundle 卸载且一个清理步骤抛出错误
+- **THEN** provider 的可调用状态先被撤销，其余清理步骤仍全部尝试，错误被报告，已卸载 provider 不再返回正文
+
 ### Requirement: EPR-02 Explicit revision-safe source refresh
 系统 SHALL 保持插入快照，不随来源变化自动刷新。刷新 SHALL 先获取授权内容并比较当前草稿，只有用户确认且草稿 revision 仍匹配时才替换；来源不可定位与快照无权使用 SHALL 区分处理。
 
@@ -70,3 +78,12 @@
 #### Scenario: Attachment cannot be resolved
 - **WHEN** 媒体资源不可解析或范围不合法
 - **THEN** 显示具体问题并要求修复，不静默移除媒体或仅发送描述冒充成功
+
+
+#### Scenario: Admit owner image bytes through the Host attachment service
+- **WHEN** Creator 图片成果或框选区域需要加入消息，所属 owner 提供绑定成果版本、contentRevision、媒体类型及完整资源 SHA-256 的授权二进制读取
+- **THEN** Host 复核读取前后权限、owner generation 和证明，复制并限制资源大小，通过既有附件服务校验图像及裁剪范围；二进制读取不作为浏览器 Remote 暴露，预览 URL 不充当发送授权
+
+#### Scenario: Owner image resource changes during admission
+- **WHEN** 图片读取结果的版本、contentRevision、摘要或类型与证明不一致，或者读取期间 owner 被撤销
+- **THEN** 拒绝本次引用解析并保留草稿，不发送旧证明标记的新图片，也不回退到描述文字或任意 URL 抓取

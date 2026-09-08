@@ -18,6 +18,10 @@
 - **WHEN** 用户选择图片区域或音视频时间段并进行批注／基础裁剪
 - **THEN** 范围在预览中可见；裁剪提交产生候选而不覆盖原资源，Agent 修改需显式提交
 
+#### Scenario: Preview HTML structure without executing the document
+- **WHEN** 用户预览或编辑 HTML 成果，正文包含脚本、样式、外部资源或表单
+- **THEN** 静态视图仅呈现允许的标题、列表、表格等结构，不执行脚本、加载资源或连接表单；完整源码仍可编辑，超限或净化失败明确显示状态，可运行页面沿用独立环境预览接口
+
 ### Requirement: CAW-03 Owner-backed drafts and candidate adoption
 编辑草稿持久保存、候选版本、比较和采纳 SHALL 由成果 owner 提供，客户端只保留临时编辑值与安全投影。新候选 SHALL 不自动成为已采纳成果。缺少保存能力 SHALL 明确说明临时保存边界并保护离开时的未保存内容。
 

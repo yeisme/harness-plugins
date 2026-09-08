@@ -41,3 +41,31 @@ Fixture checks SHALL NOT satisfy the real usability task; real loop evidence SHA
 #### Scenario: Only adapter fixtures passed
 - **WHEN** adapter tests pass without a real Auctra writing loop
 - **THEN** the real usability task remains incomplete
+
+### Requirement: Three text modes and explicit version lifecycle
+The studio SHALL support novel chapters, screenplay scenes and general text units; Working Copy save, candidate adoption, Checkpoint, Review and Canon SHALL remain separate actions.
+
+#### Scenario: 采用候选
+- **WHEN** a candidate is successfully applied to the Working Copy
+- **THEN** no Checkpoint, Review submission or Canon acceptance is performed automatically
+
+### Requirement: Lossless editing and atomic changes
+Editing SHALL preserve Unicode, IME and source text; combined structure/body changes SHALL follow the owner atomic change-set and version contract.
+
+#### Scenario: 联合变更冲突
+- **WHEN** one member of an atomic structure/body change-set conflicts
+- **THEN** the UI retains drafts and does not report a partial owner commit
+
+### Requirement: Independent direct operation and scope binding
+The professional Pane SHALL be usable without canvas, other professional Panes or cross-domain orchestration; object bindings SHALL preserve owner/ref/version/project and separate the target session.
+
+#### Scenario: 双栏迟到响应
+- **WHEN** a response arrives after switching project or session
+- **THEN** it cannot overwrite the newly selected project, draft or artifact version
+
+### Requirement: Required capability gaps remain owned tasks
+Required capability gaps SHALL have a named owner, missing operation, deliverable, affected consumer task and linked owner OpenSpec task; fixture-only proof SHALL NOT close real usability tasks.
+
+#### Scenario: 只有协议通过
+- **WHEN** a required capability has passed fixture tests but not a real owner journey
+- **THEN** the required capability remains unverified with an actionable task instead of being silently removed

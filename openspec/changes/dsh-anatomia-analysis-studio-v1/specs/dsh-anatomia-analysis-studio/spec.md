@@ -41,3 +41,31 @@ Fixture checks SHALL NOT satisfy the real usability task; real loop evidence SHA
 #### Scenario: Only adapter fixtures passed
 - **WHEN** adapter tests pass without a real Anatomia analysis loop
 - **THEN** the real usability task remains incomplete
+
+### Requirement: Synchronized playback and temporal navigation
+The studio SHALL offer source import, player, shot/scene timeline, transcript, keyframes and range navigation using a single source version and owner time base.
+
+#### Scenario: 时间码跳转
+- **WHEN** a user selects a shot or evidence time range
+- **THEN** the player seeks the matching source/range or reports a precise media access restriction
+
+### Requirement: Observation evidence is not acceptance
+The studio SHALL retain observed/inferred labels, coverage gaps, conflicting claims and evidence levels; it SHALL NOT automatically accept observations or infer calibrated spatial truth.
+
+#### Scenario: 冲突证据
+- **WHEN** two observations conflict over the same source range
+- **THEN** both claims and their evidence remain visible with the conflict rather than selecting a winner by confidence
+
+### Requirement: Independent direct operation and scope binding
+The professional Pane SHALL be usable without canvas, other professional Panes or cross-domain orchestration; object bindings SHALL preserve owner/ref/version/project and separate the target session.
+
+#### Scenario: 双栏迟到响应
+- **WHEN** a response arrives after switching project or session
+- **THEN** it cannot overwrite the newly selected project, draft or artifact version
+
+### Requirement: Required capability gaps remain owned tasks
+Required capability gaps SHALL have a named owner, missing operation, deliverable, affected consumer task and linked owner OpenSpec task; fixture-only proof SHALL NOT close real usability tasks.
+
+#### Scenario: 只有协议通过
+- **WHEN** a required capability has passed fixture tests but not a real owner journey
+- **THEN** the required capability remains unverified with an actionable task instead of being silently removed

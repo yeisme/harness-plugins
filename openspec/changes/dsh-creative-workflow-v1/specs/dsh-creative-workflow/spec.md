@@ -48,3 +48,24 @@ Fixture checks SHALL NOT satisfy the real usability task; real loop evidence SHA
 #### Scenario: Only reducer fixtures passed
 - **WHEN** scope and reducer tests pass without a real Ordo execution loop
 - **THEN** the real usability task remains incomplete
+
+### Requirement: Templates manual editing and agent drafts
+The workflow SHALL support template instantiation, manual editing and scoped Agent-generated drafts using the canvas document; creating or editing any draft SHALL NOT submit work.
+
+#### Scenario: 套用模板
+- **WHEN** a template references previous model choices or approvals
+- **THEN** current capabilities and authorization are checked anew and no old approval is reused
+
+### Requirement: Domain routing and human selection
+Single-domain operations and internal workflows SHALL use that domain owner directly; cross-domain execution SHALL use Ordo. Missing single-value candidate selection SHALL pause at an explicit review point rather than choosing the newest result.
+
+#### Scenario: 批量候选需要选择
+- **WHEN** an upstream step produces multiple candidates for a single downstream input
+- **THEN** the run waits for an authorized choice without changing its execution scope
+
+### Requirement: Draft revision fences execution confirmation
+Confirmation SHALL reference the previewed draft revision and fixed plan; editing inputs, scope or authorized cost after preview SHALL invalidate confirmation.
+
+#### Scenario: 预览后变更
+- **WHEN** a draft changes before confirmation
+- **THEN** the client requests a fresh preview and does not submit the previous plan

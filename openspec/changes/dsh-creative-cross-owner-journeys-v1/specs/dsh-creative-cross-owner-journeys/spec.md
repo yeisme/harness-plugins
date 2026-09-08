@@ -34,3 +34,10 @@ This change SHALL NOT modify owner contracts or reimplement member change behavi
 #### Scenario: A journey exposes an owner-contract gap
 - **WHEN** a journey reveals a contract gap in a member change
 - **THEN** the gap is recorded with a bidirectional link to the owning change instead of a local workaround
+
+### Requirement: All required domains receive independent real evidence
+Real closeout SHALL require evidence for all five professional journeys and at least one cross-domain production journey, with failure/recovery coverage; compatible member evidence MAY be reused without repeating paid calls.
+
+#### Scenario: 只有两个领域通过
+- **WHEN** two domain journeys pass while another required domain remains unverified
+- **THEN** the aggregate real-closeout task remains incomplete and the verified Panes retain their independent readiness

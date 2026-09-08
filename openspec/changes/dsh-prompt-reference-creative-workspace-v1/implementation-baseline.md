@@ -57,3 +57,20 @@ Scaena 的 review-package export 是 bundle 导出，不等于任意成果到源
 `node scripts/build-editable-reference-host.mjs --plan` 只展示构建顺序；去掉 `--plan` 后重建 staging Host 的 session-controller、session-reference、remotes aggregate、ui-conversation 和 ui-reference，按需使用 `--include-chat`。该脚本要求 Host 依赖基线已经构建，使用逐包 `tsc -p`，不递归重建依赖。它复用 Host 的客户端构建 preset，保留 ModuleLoader、CSS、external 和 purity 规则，并显式关闭 workspace 扩展与输出清理。
 
 RPC 变更需要重新生成所属包的 Typert Host／Remote 产物，再构建 remotes aggregate；仅重建 UI 或单个 Remote 不足以验证真实传输。脚本不得在源文件仍被并发修改时用作最终候选构建。当前已验证脚本语法及默认／含 chat 两种计划；实际执行和端到端结果另记于 verification.md，不以计划检查替代构建通过。
+
+
+## 2026-09-08 实施增量复核
+
+初始矩阵保留用于前后对照；下列结果覆盖其中已发生变化的条目。
+
+| 操作 | 当前代码与证据 | 尚未证明的边界 |
+|---|---|---|
+| 正文读取与再次引用 | Creator Gateway 的 readArtifactContent、带 contentRevision／SHA-256 的 reference owner；真实 Host 编辑、保存、选择 candidate two 并收到 Composer 插入回执 | 测试使用合成 owner，真实领域授权／持久化仍待连接服务 |
+| 候选／动作 UI | 已有 typed artifact workspace、candidate projection、save／adopt／writeback descriptor 消费及乱序回执保护 | 具体采纳／写回动作、冲突和 unknown 对账需要所属服务实现和验收 |
+| Browser Pane | 正常 Client manifest、真实 React renderer、provider 与 viewport probe；无 provider 时不注册入口 | 无真实 provider／viewport，不能报告运行页面可用；开发环境目录与启动 owner 未提供 |
+| 主题按钮 | 共享继承规则使用 :where，实际 Host 主按钮亮暗对比度约 18.90／18.08；视觉回归 106/106 | 最终七门以稳定候选运行结果记录，不把局部样式检查当完整产品验收 |
+| Creator 媒体再次引用 | 当前 Creator reference owner 只接受 artifact/body；Host 引用 registry 已可接收 owner image bytes 并生成真实附件／裁剪 | Creator resolveArtifact 仅给短期访问地址，不是可用于发送的二进制读取证明；需所属 owner 提供带版本、摘要和类型的授权资源读取。现有 Host snapshot 无音视频附件类型，音视频发送必须单独扩展 Host／模型接收合同 |
+
+本轮 Host 证据：`temp/integration-test-runs/creative-workspace-host-2026-09-08T02-30-55-511Z-2641224/`。视觉证据：`temp/integration-test-runs/ui-visual-2026-09-08T02-31-16-676Z-2650882/`。媒体与开发环境缺口影响 3.4、4.5–4.10、5.1–5.3、6.6；不得通过客户端任意 URL fetch、描述文字或合成成功回执绕过。
+
+图片条目后续增量：现已新增 readArtifactImage（Host-only）及 artifact/media owner 解析，真实 Host 合成 owner 框选／原生图片发送通过，见 verification.md。原矩阵中“仅 artifact/body”描述为该次核对的历史状态。真实领域服务、音视频附件、环境目录与启动依赖仍未关闭。

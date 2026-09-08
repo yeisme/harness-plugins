@@ -50,3 +50,29 @@
 ## Validation
 
 focused adapter/组件测试先行；稳定后全门禁。真实分析闭环在 Anatomia staging 验证并标注 fixture/real。证据写 `temp/integration-test-runs/<run-id>/`，脱敏媒体路径与原始 payload。
+
+## 页面、控件与验收补全
+
+[完整页面设计](../../../docs/design/dsh-anatomia-analysis-studio.md)是本change的UI细化，和本design共同约束实施。所有页面均为required；保留二维观察、推断、三维空间证据和生产采用的真相区别。没有完整时序coverage或空间校准时显示缺口，不从二维界面推导精确三维事实。范围分析、审阅和包冻结分别执行owner动作。
+
+| 工作页 | 控件与动作 | 关键行为 |
+|---|---|---|
+| 来源与分析 | 授权来源、媒体概览、分析profile、范围、费用与开始/恢复/取消 | 来源可见不等于允许分析、播放或导出 |
+| 播放器与时间线 | 播放器、镜头/场景条目、字幕、关键帧、区间选择与时间码跳转 | 所有视图绑定同一source/version和owner时间基准 |
+| 观察与证据 | observed/inferred、coverage、证据、冲突与revision比较/审阅 | 模型观察不自动成为accepted fact，缺口不能显示为完整覆盖 |
+| 参考提取 | 片段/关键帧/角色/场景参考、固定版本包与目标交接 | 包固定revision与范围，handoff与生产采用分离 |
+
+完整路径：导入授权视频→分析→镜头/证据定位→审阅观察→提取固定版本参考包→交接。重点恢复：来源失权、时间基准错配、partial coverage、冲突审阅、stale revision包、取消未知。第4组质量/真实验收依赖新增5.1–5.4，不能只交付列表和通用descriptor便关闭。
+
+### UI Contract补全
+
+- 内容主体是主要滚动owner，参数/证据独立滚动；不劫持Composer滚轮或IME。
+- 复用CreatorActionComposer、artifact-workspace、ui-surface/visual-kit、官方Button/Input/Menu/Modal/DiffBlock与rich-media；不新建私有atoms。
+- 图形/媒体选择必须有列表或菜单等价操作；新结果不抢焦点，关闭对话框回到触发控件。
+- 视觉例外：无；不复制Workbench CSS，不增加第二主壳或万能领域表单系统。
+
+## 依赖与回滚补全
+
+本领域直接操作只依赖DSH host与`agent/anatomia`；画布回填、跨领域编排按能力单独接入，不阻塞独立页面。已确认缺口在owner创建最小配套change，而不是在插件中实现领域状态。任务5.1必须留下负责方/操作/所需交付物/受影响任务/双向链接。
+
+默认additive演进；旧kind、方法和closed schema保持兼容。新接口schema由CLI/owner生成，未知critical版本拒绝。禁用本Pane不删除草稿、资源或运行；原operation仍通过原owner查询/对账。采用candidate不自动写源文件、晋级Canon或发布。

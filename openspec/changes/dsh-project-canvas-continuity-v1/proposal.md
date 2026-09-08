@@ -22,3 +22,7 @@
 ## Impact
 
 拟用路径：`packages/client/ui-project-canvas`、`packages/host/project-canvas`、薄 bundle；在脚手架生成前先核对现有包可复用性。不创建独立服务、并列主壳、原生客户端或 Workbench 依赖。原始设计及任务存于 `docs/migrations/workbench-retirement/`。
+
+## 已确认范围扩展
+
+五类节点、六类素材引用、两类连接、复制/撤销/重做、搜索/小地图/运行定位和300节点性能全部纳入。渲染固定 `@xyflow/react@12.11.6`。执行连接编辑由工作流change消费同一document；专业Pane独立打开。见[交互设计](../../../docs/design/dsh-project-canvas.md)。

@@ -32,3 +32,7 @@ Workbench 退役后，小说、剧本和文本版本工作继续在 DSH Pane 内
 ## Impact
 
 拟用路径：`packages/client/ui-auctra-writing-studio`、`packages/host/auctra-writing-studio`、薄 bundle；先核对现有包可复用性。不复制正文存储、版本状态机或 Canon 规则。
+
+## 页面与范围补全
+
+所有页面与能力均为required：[页面控件设计](../../../docs/design/dsh-auctra-writing-studio.md)。遮罩/音乐/字幕等具体模型或provider能力的未验证状态不构成需求删除。第5组tasks补全页面、原型、owner缺口与恢复；第4组closeout必须依赖它们。

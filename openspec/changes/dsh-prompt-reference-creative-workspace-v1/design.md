@@ -28,6 +28,10 @@
 
 安全复审补充的实施约束：Host 在授权准备引用时签发有界、可过期的 opaque 编辑 grant，绑定会话、工作区、对象、类型、范围与原始证明；刷新和编辑投影提交均校验该 grant 和当前敏感内容权限，opaque 文件标识本身不充当授权。跨插件事件仅携带安全引用声明，正文只经认证的 Host RPC／私有输入接口和 editor-scoped 命令流转。
 
+Creator 的 `artifact/body` owner 证明增量提供 `contentRevision`，并以完整 UTF-8 正文的小写 SHA-256 作为 digest。新引用解析要求读取回执的 contentRevision 与证明一致、正文摘要一致，且读取前后的 owner 代次、来源证明、完整 context 和工作区成员关系不变。该字段对旧展示投影保持可选；缺少正文版本绑定时不能启用新授权发送。此规则只校验获取时的原始正文，不限制用户后续自由改写。部分字节范围保留 window 并标记 truncated，不能宣称为完整成果。
+
+引用 provider 随 registry、Gateway、workspaceRegistry 的生命周期绑定。卸载先撤销 provider 的可调用状态，再尝试所有清理操作；任一 disposer 失败不能跳过其余 provider、Gateway 和目录清理，错误集中报告。
+
 生成刷新候选不消费当前 grant，取消或晚到响应丢弃后仍保留当前草稿；仅成功提交可消费对应授权，重复请求按原身份确认。grant 过期或容量淘汰提供明确恢复入口并保留用户编辑，不自动替换正文。具体 TTL／容量为实现资源界限，不作为永久存储承诺。
 
 引用插入时固定，来源后续更新不自动替换。来源不可定位与草稿不可发送是不同状态：已授权保存的文本快照在权限合同允许时继续编辑；访问被撤销、旧快照不可授权或媒体不可解析时显示具体限制，不靠复制成普通文字自动绕过校验。
@@ -175,3 +179,10 @@ Host Pane slot
 ## Open Questions
 
 产品决策已确认，无待用户选择项。具体运行 Host 版本、可用候选／写回／环境 descriptor 和能力导出位置属于任务 1.1–1.3 的技术核验，不在文档阶段假称已支持。发现能力缺口需记录 owner、缺失操作、依赖交付物与受影响验收项；用户要求的真实 Web 完整可用目标不因此自动缩减。
+
+
+### Creator 图片授权读取增量
+
+`CreatorOwnerAdapterV1.readArtifactImage` 为可选 Host 内部能力，返回 ArtifactRef、contentRevision、固定 image MIME 和 Uint8Array；旧 adapter 无此方法时图片发送保持不可用。`CreatorStudioGateway.readArtifactImage` 仅供同进程授权解析，不能带 Remote 装饰器或加入 Typert invocation。共享 snapshot、浏览器 preview 和日志不得承载二进制正文。
+
+图片 proof 延用 contentRevision；artifact/media 的 digest 表达完整原始资源的 lowercase SHA-256。resolver 先验证完整上下文与所选版本的 proof，再读取并复制字节、核对版本／类型／revision／摘要，最后重新核对 owner generation 和权限。接入层最多接收 16 MiB，拒绝共享内存与空资源；最终 Host attachment owner 继续执行自身大小、像素、MIME 和解码门禁。框选坐标只作为明确的 image-region 范围传给现有 deriveImageRegion，普通 image 不接收隐藏区域，任一失败不降级。此增量不宣称音视频附件能力存在；音视频仍需 Host 与模型接收端单独能力协商。

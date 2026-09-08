@@ -8,7 +8,7 @@ The plugin SHALL read audio work, capabilities and outputs only through the publ
 - **THEN** the studio reports an explicit unavailable reason without fake audio work
 
 ### Requirement: Provider capability matrix is owner-sourced
-Voice, subtitle, alignment and export capabilities SHALL come from owner descriptions marked supported, missing or unverified; missing capabilities SHALL NOT render entries.
+Voice, subtitle, alignment and export capabilities SHALL come from owner descriptions marked supported, missing or unverified; missing required capabilities SHALL retain disabled entries with reasons and linked owner tasks.
 
 #### Scenario: Word-level alignment is unverified
 - **WHEN** the owner exposes segment-to-cue only
@@ -41,3 +41,31 @@ Fixture checks SHALL NOT satisfy the real usability task; real loop evidence SHA
 #### Scenario: Only adapter fixtures passed
 - **WHEN** adapter tests pass without a real Sonora audio loop
 - **THEN** the real usability task remains incomplete
+
+### Requirement: Complete audio task families
+The studio SHALL provide independent speech, music and sound-effect configuration, audition and candidate comparison; unavailable required capabilities SHALL expose a reason and linked owner task.
+
+#### Scenario: 音乐尚未真实验证
+- **WHEN** speech tests pass while music or sound-effect capabilities remain fixture-only
+- **THEN** the unverified capability and its required acceptance tasks remain incomplete
+
+### Requirement: Subtitle precision and rights remain truthful
+Subtitle/alignment precision, readability findings, rights, handoff readiness and production acceptance SHALL remain owner-authored and distinct.
+
+#### Scenario: 字幕门禁失败
+- **WHEN** a cue fails timing/readability checks or music lacks production rights
+- **THEN** the UI shows the exact blocker and cannot advertise production-ready handoff or unsupported subtitle precision
+
+### Requirement: Independent direct operation and scope binding
+The professional Pane SHALL be usable without canvas, other professional Panes or cross-domain orchestration; object bindings SHALL preserve owner/ref/version/project and separate the target session.
+
+#### Scenario: 双栏迟到响应
+- **WHEN** a response arrives after switching project or session
+- **THEN** it cannot overwrite the newly selected project, draft or artifact version
+
+### Requirement: Required capability gaps remain owned tasks
+Required capability gaps SHALL have a named owner, missing operation, deliverable, affected consumer task and linked owner OpenSpec task; fixture-only proof SHALL NOT close real usability tasks.
+
+#### Scenario: 只有协议通过
+- **WHEN** a required capability has passed fixture tests but not a real owner journey
+- **THEN** the required capability remains unverified with an actionable task instead of being silently removed

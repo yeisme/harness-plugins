@@ -1,6 +1,6 @@
 # DSH 创作画布与五个专业工作台
 
-本方案依据 2026-09-07 已确认的产品访谈。当前交付是设计、OpenSpec 和实施任务，不是已实现功能；八份 tasks 均独立验收，不继承旧 Workbench 完成证据。独立 Workbench 已退役，本项目不恢复其主壳、BFF、TaskService 或托管平台。
+本方案依据 2026-09-07 已确认的产品访谈。已进入实施：画布编辑内核、Host保存与首个React Flow Pane切片已有分层测试证据，详见[实现基线](../../openspec/changes/dsh-project-canvas-continuity-v1/implementation-baseline.md)。五个专业闭环和跨领域执行尚未验收；八份 tasks 均独立验收，不继承旧 Workbench 完成证据。独立 Workbench 已退役，本项目不恢复其主壳、BFF、TaskService 或托管平台。
 
 ## 1. 产品结构与能力保留
 
@@ -36,7 +36,7 @@ DSH 原有导航 / 项目与会话
 
 ## 3. 画布与工作流语法
 
-节点分为素材、文字草稿、操作步骤、成果、分组框。素材支持图片、视频、声音、文件与领域对象引用。媒体按需加载，离屏暂停视频，节点显示有界缩略预览。渲染固定 `@xyflow/react@12.11.6`，依赖仅在实施任务中安装，本次未修改包或锁文件。
+节点分为素材、文字草稿、操作步骤、成果、分组框。素材支持图片、视频、声音、文件与领域对象引用。媒体按需加载，离屏暂停视频，节点显示有界缩略预览。渲染固定 `@xyflow/react@12.11.6`，依赖已通过pnpm安装并写入锁文件；媒体和完整交互仍须逐项验收。
 
 参考关系只描述灵感、来源、归属和证据，不参与执行。执行连接明确输出版本与输入用途；连接时选择参考图/提示词/声音/镜头资产等用途，不兼容时保留草案并显示原因，禁止隐式转换。缺少选定候选时作为缺失输入，不自动采用最新生成结果。
 
@@ -62,7 +62,7 @@ Agent 可在用户指定范围内整理节点、添加建议步骤、修改流�
 
 ## 6. 成熟度与验收
 
-每个能力分别记录 specification、protocol-verified、fixture-ui-verified、real-owner-verified；这些是交付说明，不新增平台状态机。文档阶段所有新任务保持未勾选。
+每个能力分别记录 specification、protocol-verified、fixture-ui-verified、real-owner-verified；这些是交付说明，不新增平台状态机。仅勾选已有对应证据的最小任务；已通过的内核、存储或fixture浏览器测试不能据此宣称完整产品已可用。
 
 协议完成以本仓 bundle/host/client 合同为界，不依赖官方上游合入。用户可用性另要求真实 DSH staging/profile 和真实 owner；fixture、skip、零匹配不能关闭该任务。可用能力逐 Pane 晋级，综合流程单独验收。
 

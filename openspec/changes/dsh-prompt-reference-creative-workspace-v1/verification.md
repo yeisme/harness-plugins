@@ -206,3 +206,45 @@ root 新增 `src/reference-owner.ts` 并将六个 Creator owner 注册到现有�
 该 bundle noEmit／构建通过，`vitest run tests/bundle.spec.ts` 5/5、exit 0；新增用例使用实际 Gateway 和公共 owner adapter，验证正常读取、伪造 digest／跨会话／撤权拒绝和 registry 卸载。首轮 fixture 缺必填 acceptedVersion，修正 fixture 后通过，没有放宽生产 schema。当前 provider 只完成 artifact/body 正文；媒体真实资源解析仍待 owner/Host 能力对接，不能以文字快照宣称媒体附件完成。
 
 Browser manifest 已补上 dsh.client Web face，Client 等待 paneWorkbench 后 apply；缺 renderer 时在 provider probe 前返回 needs_contract，避免 Node Host 无效探测。相关 bundle 构建和 11 项测试通过，后续还需实际 manifest-driven Loader 证据。
+
+
+### 2026-09-08 正文证明、服务生命周期与完整门禁
+
+Creator 正文解析现要求 proof.contentRevision 与实际读取版本相同，并校验完整 UTF-8 正文 SHA-256；读取前后复核 owner generation、完整 context、workspace 归属及生命周期。局部 byte window 明确标记 truncated。旧展示 proof 可继续省略新增字段，新正文授权不得省略。卸载先撤销授权，再尝试全部 disposer；任一清理失败仍继续其余清理。冻结 expected context 延迟出现时通过 Cordis inject 挂载 Gateway，撤销时解除绑定。Creator bundle 的 tsc、构建和 bundle.spec.ts 8/8 通过，含错误版本、错误正文 hash、读取中撤权、局部范围、清理异常和延迟 context 反例。
+
+七门首轮证据 `temp/integration-test-runs/full-plugins-2026-09-08T01-38-47-689Z-799346/`：typecheck、test、build、check:bundles、check:surfaces、check:plugins 均 exit 0；test:visual 为 103/106。三张中文选区截图重复差异一致；查看 expected／actual／diff 后确认文字内容、布局及焦点状态未改变，按当前渲染更新 selection-zh-360／560／960 三张基线。完整视觉复跑证据 `temp/integration-test-runs/full-plugins-2026-09-08T02-04-22-041Z-1921813/` 为 exit 0、106/106。首轮之后 Creator 生命周期有增量，并已做上述局部验证；这些结果不宣称同一冻结候选的七门最终验收。
+
+真实 Creative Host 的 `creative-workspace-host-2026-09-08T02-14-37-233Z-2173222` 为 exit 1、source_inputs_unchanged=true。截图显示选定 candidate two 已进入主 Composer，并显示成功回执；失败原因是测试精确文案遗漏句首 The。已对齐测试文案后重新运行，不能把该失败包直接改记通过。真实领域 owner 和开发环境验收仍未完成。
+
+
+### 创作候选真实 Host 闭环通过
+
+`node scripts/run-creative-workspace-host-tests.mjs` 最新证据 `temp/integration-test-runs/creative-workspace-host-2026-09-08T02-25-07-930Z-2460373/` 为 exit 0、source_inputs_unchanged=true。真实 ModuleLoader 加载 Creator／Browser，超过 1200 字摘要的正文完整编辑并预览，合成 owner 保存后，选定 candidate two 经真实 Creator 引用 owner 和私有 Host 插入回执进入 Composer，原位编辑内容确认为所选版本。360/960px、亮暗、页面错误／警告为 0。缺 Browser provider 时入口不注册；不等价于真实 viewport 验收。先前测试错误地期待空 Browser Pane，现按已有能力探测合同验证隐藏入口。
+
+验收测试与合成 fixture 已固化到 `upstream-prs/creative-workspace-host-acceptance-v1/`，六个新增文件在临时 Git 目录 apply、逐字节比对 staging、reverse-check 全部通过。该包依赖既有引用 Host 补丁，未直接修改官方 core，也未访问真实领域或模型服务。
+
+本轮 `openspec validate dsh-prompt-reference-creative-workspace-v1 --strict --no-interactive` 通过；`openspec validate --all` 为 160/160；`git diff --check` exit 0。功能 Tasks 仍按全部验收条件保留未勾选，特别是 3.4 媒体附件、4.8/4.9 真实采纳与写回、5.1–5.3 实际环境、6.6 领域运行验收。
+
+
+### 共享按钮继承规则的真实主题回归
+
+复查真实 Host 截图发现 Creator 主按钮文字不可见。新增浏览器计算样式对比度断言后，`creative-workspace-host-2026-09-08T02-28-30-179Z-2553336` 确认亮色对比度仅 1:1。根因为 visual-kit 的 `[data-scope] button{font:inherit;color:inherit}` 比宿主 Button 变体优先级更高。改为零优先级 `:where([data-scope] button)`，保留基础继承并让宿主字号／前景色生效，未复制按钮或新增颜色 token。
+
+visual-kit 构建及 17 tests 通过；Creator bundle 定向构建通过。首次修后 E2E 测试本身 exit 0，但并发 project-canvas 测试新增导致 source fence 失败，记录保留于 `creative-workspace-host-2026-09-08T02-29-59-493Z-2612315`。随后将视觉依赖 visual-kit／surface 纳入运行器 fingerprint，重跑 `creative-workspace-host-2026-09-08T02-30-55-511Z-2641224`：exit 0、source_inputs_unchanged=true；主按钮浅色约 18.90:1、深色约 18.08:1；正文编辑、保存、candidate two 引用、360/960px 及页面无错误仍通过。Host 验收补丁同步更新，真实领域和 viewport 状态保持未验收。
+
+共享样式修复后的完整视觉复跑 `temp/integration-test-runs/ui-visual-2026-09-08T02-31-16-676Z-2650882/` 为 106/106、exit 0；本次未更新任何视觉基线。
+
+
+### 七门完整运行与 Creator 图片资源增量
+
+`temp/integration-test-runs/full-plugins-2026-09-08T02-32-50-105Z-2692751/` 七项 pnpm 门禁全部 exit 0。该运行完成后才开始下列图片代码，不能把其结果当作图片增量的七门证明。
+
+新增 Host-only `CreatorOwnerAdapterV1.readArtifactImage`、有界资源 validator、directory／Gateway 调用和 Creator reference resolver 的 artifact/media 分支。二进制不注册 Remote／Typert；绑定 ArtifactRef、contentRevision、完整 SHA-256、MIME、owner generation 与当前权限；拒绝超过 16 MiB、共享内存、空资源和伪造元数据。普通 image 与 image-region 范围分开，预览 URL 不参与发送读取。Host 20 tests、Creator bundle 10 tests 通过并构建；Creator UI 22 tests、Rich Media 13 tests 通过，相关 typecheck 通过。
+
+真实浏览器暴露图片默认 draggable 拦截框选手势，修复为选择模式禁用原生拖拽并捕获指针，取消指针清理未完成框选；工具条改为换行，避免挤出面板。UI 同时拒绝用全图 proof 加入局部选区，不静默改变 proof.kind 或丢弃选区。
+
+`creative-workspace-host-2026-09-08T02-55-00-525Z-3644636` exit 0、source_inputs_unchanged=true：合成 owner 图片预览、真实鼠标框选、授权再次引用、主 Composer 提交、Host 附件裁剪与 keyless 模型请求通过；原图 726px，实际附件 364px，model_requests=1，provider_request=false，page_errors／warnings=0。调试阶段先修正读取历史事件的筛选：不能把最后一条派生上下文消息当作原始 user source。旧失败证据保留。
+
+随后新增更严格的模型 content 数组 image block 计数断言，`creative-workspace-host-2026-09-08T02-56-55-024Z-3740985` 在启动阶段因并发全仓 build 清理 session-manager 产物失败；确认 PID 3736443 的 pnpm build 当时仍活跃，未重启或清理对方构建。收紧断言需在产物恢复后复跑。当前领域真实服务、音视频附件与开发环境仍未验收。
+
+并发 build PID 已终止且依赖产物恢复后，重跑 `creative-workspace-host-2026-09-08T02-59-27-559Z-3853678` 为 exit 0、source_inputs_unchanged=true；更严格的 model content 数组验证确认恰有 1 个原生 image block，图片附件实际为 364px（原图 726px）。Host 验收补丁六文件 apply、逐字节比对、reverse-check 通过。`openspec validate --all` 160/160，通过严格 change 校验和 git diff --check。
