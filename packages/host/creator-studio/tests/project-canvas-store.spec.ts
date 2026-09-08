@@ -38,7 +38,8 @@ describe('Host project canvas persistence', () => {
     const h = harness()
     const results = await Promise.all(['one', 'two'].map(requestId => h.store.save({ requestId, document: document() })))
     expect(results).toEqual([{ status: 'saved', requestId: 'one', revision: 1 }, { status: 'conflict', revision: 1 }])
-    expect(h.table.put).toHaveBeenCalledOnce()
+    // One write-ahead journal plus one commit for the winner; the stale writer performs neither.
+    expect(h.table.put).toHaveBeenCalledTimes(2)
   })
 
   it('replays the original receipt and rejects request id reuse with different content', async () => {
@@ -47,15 +48,60 @@ describe('Host project canvas persistence', () => {
     const original = await h.store.save(request)
     expect(await h.store.save(request)).toEqual(original)
     expect(await h.store.save({ ...request, document: { ...document(), camera: { x: 1, y: 0, zoom: 1 } } })).toEqual({ status: 'conflict', revision: 1 })
-    expect(h.table.put).toHaveBeenCalledOnce()
+    expect(h.table.put).toHaveBeenCalledTimes(2)
   })
 
-  it('returns unknown for a lost write response and reconciles without another put', async () => {
+  it('returns unavailable before journaling and unknown only after a journaled commit fails', async () => {
     const h = harness()
+    vi.mocked(h.table.put).mockImplementationOnce(async () => { throw new Error('private failure details') })
+    expect(await h.store.save({ requestId: 'save-1', document: document() })).toEqual({ status: 'unavailable' })
+    expect(await h.store.read(read)).toEqual({ status: 'missing' })
+  })
+
+  it('returns unknown for a lost commit response and reconciles without another content write', async () => {
+    const h = harness()
+    vi.mocked(h.table.put).mockImplementationOnce(async (key, value) => { h.rows.set(key, value); return Promise.resolve() })
     vi.mocked(h.table.put).mockImplementationOnce(async (key, value) => { h.rows.set(key, value); throw new Error('private failure details') })
     expect(await h.store.save({ requestId: 'save-1', document: document() })).toEqual({ status: 'unknown' })
     expect(await h.store.reconcile({ ...read, requestId: 'save-1' })).toEqual({ status: 'saved', requestId: 'save-1', revision: 1 })
-    expect(h.table.put).toHaveBeenCalledOnce()
+    expect(h.table.put).toHaveBeenCalledTimes(2)
+  })
+
+  it('recovers a journaled save that never committed and surfaces the draft after remount', async () => {
+    const h = harness()
+    vi.mocked(h.table.put).mockImplementationOnce(async (key, value) => { h.rows.set(key, value); return Promise.resolve() })
+    vi.mocked(h.table.put).mockImplementationOnce(async () => { throw new Error('private failure details') })
+    const draft = { ...document(), camera: { x: 7, y: 8, zoom: 2 } }
+    expect(await h.store.save({ requestId: 'save-1', document: draft })).toEqual({ status: 'unknown' })
+    // A fresh session sees no confirmed document, only the journaled intent.
+    expect(await h.store.read(read)).toEqual({ status: 'missing', draft: { requestId: 'save-1', baseRevision: 0, document: draft } })
+    expect(await h.store.reconcile({ ...read, requestId: 'save-1' })).toEqual({ status: 'not_applied', requestId: 'save-1' })
+    expect(await h.store.read(read)).toEqual({ status: 'missing' })
+    // The recovered draft re-saves under a fresh request id at the same base revision.
+    expect(await h.store.save({ requestId: 'save-2', document: draft })).toEqual({ status: 'saved', requestId: 'save-2', revision: 1 })
+  })
+
+  it('recovers a journaled later save while keeping the confirmed document readable', async () => {
+    const h = harness()
+    const confirmed = await h.store.save({ requestId: 'save-1', document: document() })
+    expect(confirmed).toEqual({ status: 'saved', requestId: 'save-1', revision: 1 })
+    vi.mocked(h.table.put).mockImplementationOnce(async (key, value) => { h.rows.set(key, value); return Promise.resolve() })
+    vi.mocked(h.table.put).mockImplementationOnce(async () => { throw new Error('private failure details') })
+    const edited = { ...document(), revision: 1, camera: { x: 3, y: 4, zoom: 1 } }
+    expect(await h.store.save({ requestId: 'save-2', document: edited })).toEqual({ status: 'unknown' })
+    expect(await h.store.read(read)).toEqual({ status: 'ready', document: { ...document(), revision: 1 }, draft: { requestId: 'save-2', baseRevision: 1, document: edited } })
+    expect(await h.store.reconcile({ ...read, requestId: 'save-2' })).toEqual({ status: 'not_applied', requestId: 'save-2' })
+    expect(await h.store.read(read)).toEqual({ status: 'ready', document: { ...document(), revision: 1 } })
+  })
+
+  it('blocks a new save behind an unsettled journal instead of overwriting it', async () => {
+    const h = harness()
+    vi.mocked(h.table.put).mockImplementationOnce(async (key, value) => { h.rows.set(key, value); return Promise.resolve() })
+    vi.mocked(h.table.put).mockImplementationOnce(async () => { throw new Error('private failure details') })
+    expect(await h.store.save({ requestId: 'save-1', document: document() })).toEqual({ status: 'unknown' })
+    expect(await h.store.save({ requestId: 'save-2', document: document() })).toEqual({ status: 'unknown' })
+    // Both calls belong to the first save (journal plus failed commit); the second save wrote nothing.
+    expect(h.table.put).toHaveBeenCalledTimes(2)
   })
 
   it('does not invent failure or replay when a receipt is absent', async () => {

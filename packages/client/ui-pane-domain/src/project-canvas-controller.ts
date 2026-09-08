@@ -14,6 +14,8 @@ export interface CanvasViewState {
   readonly saveStatus: 'clean' | 'dirty' | 'saving' | 'unknown' | 'conflict' | 'error'
   readonly dirty: boolean
   readonly editor?: ProjectCanvasEditor
+  /** The owner-confirmed revision a conflicting writer committed; set only while saveStatus is conflict. */
+  readonly conflictRevision?: number
 }
 
 /** One controller per project/document. React mount/unmount does not cancel owner work or discard drafts. */
@@ -43,13 +45,32 @@ export class ProjectCanvasController {
     try {
       const result = ProjectCanvasReadResultSchema.parse(await this.remote.canvasRead(this.target))
       if (generation !== this.generation || this.disposed) return
-      if (result.status === 'ready') {
-        const d = result.document
-        if (d.id !== this.target.documentId || d.scope.workspaceRef !== this.target.scope.workspaceRef || d.scope.projectRef !== this.target.scope.projectRef) {
-          this.publish({ ...this.state, status: 'invalid' }); return
+      if (result.status !== 'ready' && result.status !== 'missing') {
+        this.publish({ ...this.state, status: result.status, dirty: false, saveStatus: 'clean' }); return
+      }
+      const confirmed = result.status === 'ready' ? result.document : undefined
+      if (confirmed !== undefined && (confirmed.id !== this.target.documentId
+        || confirmed.scope.workspaceRef !== this.target.scope.workspaceRef || confirmed.scope.projectRef !== this.target.scope.projectRef)) {
+        this.publish({ ...this.state, status: 'invalid' }); return
+      }
+      // A previous session left a journaled save whose commit never settled; reconcile it before showing anything.
+      const draft = result.draft !== undefined && result.draft.baseRevision === (confirmed?.revision ?? 0) ? result.draft : undefined
+      if (result.draft !== undefined && draft !== undefined) {
+        let settled: 'saved' | 'not_applied' | 'unsettled' = 'unsettled'
+        try {
+          const raw = ProjectCanvasSaveResultSchema.safeParse(await this.remote.canvasReconcile({ ...this.target, requestId: result.draft.requestId }))
+          if (generation !== this.generation || this.disposed) return
+          if (raw.success && raw.data.status === 'saved') settled = 'saved'
+          else if (raw.success && raw.data.status === 'not_applied') settled = 'not_applied'
+        } catch { /* the journal stays; this session starts from confirmed facts only */ }
+        if (settled === 'not_applied') {
+          // The submitted draft never landed and the owner document did not move: recover the unsaved edits.
+          this.publish({ status: 'ready', editor: createProjectCanvasEditor(draft.document), dirty: true, saveStatus: 'dirty' })
+          return
         }
-        this.publish({ status: 'ready', editor: createProjectCanvasEditor(d), dirty: false, saveStatus: 'clean' })
-      } else this.publish({ status: result.status, dirty: false, saveStatus: 'clean' })
+      }
+      if (confirmed === undefined) this.publish({ status: 'missing', dirty: false, saveStatus: 'clean' })
+      else this.publish({ status: 'ready', editor: createProjectCanvasEditor(confirmed), dirty: false, saveStatus: 'clean' })
     } catch {
       if (generation === this.generation) this.publish({ ...this.state, status: 'error' })
     }
@@ -101,6 +122,12 @@ export class ProjectCanvasController {
     if (this.disposed || this.pending !== pending) return
     const result = ProjectCanvasSaveResultSchema.safeParse(raw)
     if (!result.success) { this.publish({ ...this.state, saveStatus: 'unknown' }); return }
+    if (result.data.status === 'not_applied') {
+      // The journaled commit never landed: local edits stay unconfirmed and retryable under a fresh request id.
+      this.pending = undefined
+      this.publish({ ...this.state, saveStatus: 'dirty' })
+      return
+    }
     if (result.data.status === 'saved') {
       const editor = this.state.editor!
       if (result.data.requestId !== pending.request.requestId || result.data.revision !== pending.request.document.revision + 1
@@ -114,8 +141,20 @@ export class ProjectCanvasController {
     } else if (result.data.status === 'unknown' || reconciling) this.publish({ ...this.state, saveStatus: 'unknown' })
     else {
       this.pending = undefined
-      this.publish({ ...this.state, saveStatus: result.data.status === 'conflict' ? 'conflict' : 'error' })
+      this.publish({ ...this.state, saveStatus: result.data.status === 'conflict' ? 'conflict' : 'error',
+        conflictRevision: result.data.status === 'conflict' ? result.data.revision : undefined })
     }
+  }
+
+  /** Conflict resolution keeps the local draft by default: reapply rebases it onto the owner-confirmed revision, discard reloads. */
+  resolveConflict(action: 'reapply' | 'discard'): void {
+    if (this.disposed || this.state.saveStatus !== 'conflict') return
+    if (action === 'discard') { void this.load(true); return }
+    const editor = this.state.editor
+    const base = this.state.conflictRevision
+    if (editor === undefined || base === undefined) return
+    this.publish({ ...this.state, editor: { ...editor, document: { ...editor.document, revision: base } },
+      dirty: true, saveStatus: 'dirty', conflictRevision: undefined })
   }
 
   dispose(): void { this.disposed = true; this.generation++; this.listeners.clear() }

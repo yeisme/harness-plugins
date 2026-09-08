@@ -3,12 +3,14 @@ import { z } from 'zod'
 import type { DomainSpec, DomainTableSpec } from '@deepseek-ai/dsh-storage-domain'
 import {
   ProjectCanvasDocumentSchema, ProjectCanvasReadRequestSchema, ProjectCanvasSaveRequestSchema, ProjectCanvasReconcileRequestSchema,
-  type ProjectCanvasDocument, type ProjectCanvasScope, type ProjectCanvasReadResult, type ProjectCanvasSaveResult,
+  type ProjectCanvasDocument, type ProjectCanvasDraft, type ProjectCanvasScope, type ProjectCanvasReadResult, type ProjectCanvasSaveResult,
 } from '@yeisme/dsh-pane-protocol'
 import type { CreatorStudioContextV1 } from './types.ts'
 
 const ReceiptSchema = z.object({ requestId: z.string(), digest: z.string(), revision: z.number().int().positive() }).strict()
-export const projectCanvasRowSchema = z.object({ document: ProjectCanvasDocumentSchema, receipts: z.array(ReceiptSchema).max(32) }).strict()
+/** Write-ahead save intent: present only while a commit never settled, so reconcile can answer definitively. */
+const InflightSchema = z.object({ requestId: z.string(), digest: z.string(), baseRevision: z.number().int().nonnegative().safe(), document: ProjectCanvasDocumentSchema }).strict()
+export const projectCanvasRowSchema = z.object({ document: ProjectCanvasDocumentSchema, receipts: z.array(ReceiptSchema).max(32), inflight: InflightSchema.optional() }).strict()
 type Row = z.infer<typeof projectCanvasRowSchema>
 export interface ProjectCanvasDomainSpec extends DomainSpec {
   readonly name: 'yeisme_project_canvas_v1'
@@ -69,12 +71,23 @@ export class ProjectCanvasStore {
       if (raw === undefined) return { status: 'missing' }
       const row = projectCanvasRowSchema.safeParse(raw)
       if (!row.success || !this.matches(row.data.document, request.data.scope, request.data.documentId)) return { status: 'error' }
-      return { status: 'ready', document: row.data.document }
+      const draft = this.draftOf(row.data, request.data)
+      // A committed row is always at revision >= 1; revision 0 exists only as an unconfirmed write-ahead placeholder.
+      if (row.data.document.revision === 0) return draft === undefined ? { status: 'missing' } : { status: 'missing', ...draft }
+      return { status: 'ready', document: row.data.document, ...(draft ?? {}) }
     } catch { return { status: 'error' } }
   }
 
   private matches(document: ProjectCanvasDocument, scope: ProjectCanvasScope, id: string): boolean {
     return document.scope.workspaceRef === scope.workspaceRef && document.scope.projectRef === scope.projectRef && document.id === id
+  }
+
+  /** The journal is only surfaced when it still matches this scope and document; it never fabricates a confirmed document. */
+  private draftOf(row: Row, request: z.infer<typeof ProjectCanvasReadRequestSchema>): { draft: ProjectCanvasDraft } | undefined {
+    const inflight = row.inflight
+    if (inflight === undefined || !this.matches(inflight.document, request.scope, request.documentId)
+      || inflight.baseRevision !== row.document.revision) return undefined
+    return { draft: { requestId: inflight.requestId, baseRevision: inflight.baseRevision, document: inflight.document } }
   }
 
   async reconcile(input: unknown): Promise<ProjectCanvasSaveResult> {
@@ -89,7 +102,14 @@ export class ProjectCanvasStore {
       const row = projectCanvasRowSchema.safeParse(table.get(this.key(context, request.data.documentId)))
       if (!row.success || !this.matches(row.data.document, request.data.scope, request.data.documentId)) return { status: 'unknown' }
       const receipt = row.data.receipts.find(item => item.requestId === request.data.requestId)
-      return receipt === undefined ? { status: 'unknown' } : { status: 'saved', requestId: receipt.requestId, revision: receipt.revision }
+      if (receipt !== undefined) return { status: 'saved', requestId: receipt.requestId, revision: receipt.revision }
+      const inflight = row.data.inflight
+      if (inflight?.requestId !== request.data.requestId) return { status: 'unknown' }
+      // The commit write is a single atomic row put: no receipt with a live journal means it never landed.
+      const settled: ProjectCanvasSaveResult = { status: 'not_applied', requestId: inflight.requestId }
+      try { await table.put(this.key(context, request.data.documentId), { document: row.data.document, receipts: row.data.receipts }) }
+      catch { /* The settlement stays factual even if clearing the journal fails; a retry settles again. */ }
+      return settled
     } catch { return { status: 'unknown' } }
   }
 
@@ -115,11 +135,20 @@ export class ProjectCanvasStore {
         if (previous !== undefined) return previous.digest === digest
           ? { status: 'saved', requestId, revision: previous.revision }
           : { status: 'conflict', revision }
+        // An unsettled intent for another request must be reconciled first; a new save must not overwrite its journal.
+        if (row?.inflight !== undefined && row.inflight.requestId !== requestId) return { status: 'unknown' }
         if (document.revision !== revision) return { status: 'conflict', revision }
         if (!Number.isSafeInteger(revision + 1)) return { status: 'unavailable' }
+        // Write-ahead journal: if the commit below never settles, reconcile can answer not_applied and
+        // a later session can still recover the submitted document instead of guessing.
+        await table.put(key, projectCanvasRowSchema.parse({
+          document: row?.document ?? { ...document, revision },
+          receipts: row?.receipts ?? [],
+          inflight: { requestId, digest, baseRevision: revision, document },
+        }))
+        writing = true
         const next = projectCanvasRowSchema.parse({ document: { ...document, revision: revision + 1 },
           receipts: [...(row?.receipts ?? []), { requestId, digest, revision: revision + 1 }].slice(-32) })
-        writing = true
         await table.put(key, next)
         return { status: 'saved', requestId, revision: next.document.revision }
       } catch { return { status: writing ? 'unknown' : 'unavailable' } }

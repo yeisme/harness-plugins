@@ -13,7 +13,7 @@ import flowCss from '@xyflow/react/dist/base.css?inline'
 export const canvasZh = {
   title: '项目画布', create: '创建画布', draft: '文字草稿', group: '分组框', material: '素材引用', operation: '操作步骤', result: '成果引用',
   save: '保存', clean: '已确认保存', dirty: '未保存', saving: '保存中', unknown: '保存结果待核对', conflict: '版本冲突：草稿已保留', error: '保存失败：草稿已保留',
-  reconcile: '核对保存', reload: '重新读取', discard: '丢弃未保存修改并重新读取？', cancel: '取消', confirm: '确认', close: '关闭',
+  reconcile: '核对保存', reload: '重新读取', reapply: '在最新版上重存', discard: '丢弃未保存修改并重新读取？', cancel: '取消', confirm: '确认', close: '关闭',
   undo: '撤销', redo: '重做', copy: '复制选中', remove: '移除选中', search: '搜索对象', fit: '适配选区', reference: '参考关系', execution: '执行连接',
   connect: '连接输入', input: '输入参数', purpose: '输入用途', prompt: '提示词', referenceImage: '参考图', audio: '声音', asset: '素材',
   open: '打开专业面板', inspect: '检查运行范围', one: '单节点', branch: '选中分支', all: '完整流程',
@@ -27,7 +27,7 @@ export type CanvasTextKey = keyof typeof canvasZh
 export const canvasEn: Record<CanvasTextKey, string> = {
   title: 'Project canvas', create: 'Create canvas', draft: 'Text draft', group: 'Group', material: 'Material reference', operation: 'Operation', result: 'Result reference',
   save: 'Save', clean: 'Save confirmed', dirty: 'Unsaved', saving: 'Saving', unknown: 'Save outcome unknown', conflict: 'Version conflict: draft retained', error: 'Save failed: draft retained',
-  reconcile: 'Reconcile save', reload: 'Reload', discard: 'Discard unsaved changes and reload?', cancel: 'Cancel', confirm: 'Confirm', close: 'Close',
+  reconcile: 'Reconcile save', reload: 'Reload', reapply: 'Reapply on latest', discard: 'Discard unsaved changes and reload?', cancel: 'Cancel', confirm: 'Confirm', close: 'Close',
   undo: 'Undo', redo: 'Redo', copy: 'Copy selected', remove: 'Remove selected', search: 'Search objects', fit: 'Fit selection', reference: 'Reference relation', execution: 'Execution edge',
   connect: 'Connect input', input: 'Input field', purpose: 'Input purpose', prompt: 'Prompt', referenceImage: 'Reference image', audio: 'Audio', asset: 'Asset',
   open: 'Open professional pane', inspect: 'Inspect run scope', one: 'Single node', branch: 'Selected branch', all: 'Whole workflow',
@@ -179,6 +179,7 @@ function CanvasContent({ controller, artifacts = [], actions = [], resolveMedia,
       <Button className="vk-btn" disabled={!editor.selection.length} onClick={copy}>{t('copy')}</Button><Button className="vk-btn" onClick={fit}>{t('fit')}</Button>
       <Button className="vk-btn" disabled={!state.dirty || state.saveStatus === 'saving' || state.saveStatus === 'unknown'} onClick={() => void controller.save()}>{t('save')}</Button>
       {state.saveStatus === 'unknown' && <Button className="vk-btn" onClick={() => void controller.reconcile()}>{t('reconcile')}</Button>}
+      {state.saveStatus === 'conflict' && <Button className="vk-btn" onClick={() => controller.resolveConflict('reapply')}>{t('reapply')}</Button>}
       <Button className="vk-btn" disabled={state.saveStatus === 'saving' || state.saveStatus === 'unknown'} onClick={() => state.dirty ? setDiscard(true) : void controller.load()}>{t('reload')}</Button>
       <span role="status">{t(state.saveStatus)}</span>
     </SurfaceActionBar>

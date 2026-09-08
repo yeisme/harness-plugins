@@ -72,6 +72,66 @@ describe('canvas save and recovery controller', () => {
     await controller.load(true)
     expect(remote.canvasRead).toHaveBeenCalledTimes(2)
   })
+  it('recovers a journaled draft from a previous session as dirty edits', async () => {
+    const { controller, remote } = setup()
+    const draftDocument = { schema: 'dsh.project-canvas.v1alpha1', id: 'main', revision: 0, camera: { x: 5, y: 6, zoom: 1 },
+      scope: target.scope, nodes: [{ id: 'draft:one', kind: 'draft', title: 'Recovered', text: 'journaled edit', position: { x: 0, y: 0 }, size: { width: 100, height: 80 } }], edges: [] }
+    vi.mocked(remote.canvasRead).mockResolvedValueOnce({ status: 'missing', draft: { requestId: 'save-old', baseRevision: 0, document: draftDocument } })
+    vi.mocked(remote.canvasReconcile).mockResolvedValueOnce({ status: 'not_applied', requestId: 'save-old' })
+    await controller.load()
+    expect(controller.getSnapshot()).toMatchObject({ status: 'ready', dirty: true, saveStatus: 'dirty',
+      editor: { document: { revision: 0, camera: { x: 5, y: 6 }, nodes: [{ id: 'draft:one', text: 'journaled edit' }] } } })
+    await controller.save()
+    expect(controller.getSnapshot()).toMatchObject({ dirty: false, saveStatus: 'clean', editor: { document: { revision: 1 } } })
+  })
+  it('ignores a stale journal whose base revision no longer matches and never reconciles it', async () => {
+    const { controller, remote } = setup()
+    const confirmed = { schema: 'dsh.project-canvas.v1alpha1', id: 'main', revision: 2, camera: { x: 0, y: 0, zoom: 1 },
+      scope: target.scope, nodes: [], edges: [] }
+    vi.mocked(remote.canvasRead).mockResolvedValueOnce({ status: 'ready', document: confirmed,
+      draft: { requestId: 'save-old', baseRevision: 0, document: { ...confirmed, revision: 0 } } })
+    await controller.load()
+    expect(remote.canvasReconcile).not.toHaveBeenCalled()
+    expect(controller.getSnapshot()).toMatchObject({ status: 'ready', dirty: false, saveStatus: 'clean', editor: { document: { revision: 2 } } })
+  })
+  it('settles an unknown save as not_applied, keeps the draft retryable under a fresh request', async () => {
+    let sequence = 0
+    const remote: ProjectCanvasRemote = {
+      canvasRead: vi.fn(async () => ({ status: 'missing' })),
+      canvasSave: vi.fn(async request => ({ status: 'saved', requestId: request.requestId, revision: request.document.revision + 1 })),
+      canvasReconcile: vi.fn(async () => ({ status: 'unknown' })),
+    }
+    const controller = new ProjectCanvasController(remote, target, () => `save-${++sequence}`)
+    await controller.load(); controller.createDraft()
+    controller.edit({ type: 'camera', camera: { x: 9, y: 0, zoom: 1 } })
+    vi.mocked(remote.canvasSave).mockRejectedValueOnce(new Error('lost response'))
+    await controller.save()
+    expect(controller.getSnapshot().saveStatus).toBe('unknown')
+    vi.mocked(remote.canvasReconcile).mockResolvedValueOnce({ status: 'not_applied', requestId: 'save-1' })
+    await controller.reconcile()
+    expect(controller.getSnapshot()).toMatchObject({ dirty: true, saveStatus: 'dirty', editor: { document: { camera: { x: 9 } } } })
+    await controller.save()
+    expect(remote.canvasSave).toHaveBeenCalledTimes(2)
+    expect(controller.getSnapshot()).toMatchObject({ dirty: false, saveStatus: 'clean', editor: { document: { revision: 1 } } })
+  })
+  it('rebases a conflicted draft onto the owner revision on reapply and reloads on discard', async () => {
+    const { controller, remote } = setup()
+    await controller.load(); controller.createDraft()
+    vi.mocked(remote.canvasSave).mockResolvedValueOnce({ status: 'conflict', revision: 3 })
+    await controller.save()
+    expect(controller.getSnapshot()).toMatchObject({ saveStatus: 'conflict', conflictRevision: 3 })
+    controller.resolveConflict('reapply')
+    expect(controller.getSnapshot()).toMatchObject({ dirty: true, saveStatus: 'dirty', editor: { document: { revision: 3 } } })
+    await controller.save()
+    expect(controller.getSnapshot()).toMatchObject({ dirty: false, saveStatus: 'clean', editor: { document: { revision: 4 } } })
+    controller.edit({ type: 'camera', camera: { x: 11, y: 0, zoom: 1 } })
+    vi.mocked(remote.canvasSave).mockResolvedValueOnce({ status: 'conflict', revision: 7 })
+    await controller.save()
+    controller.resolveConflict('discard')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(remote.canvasRead).toHaveBeenCalledTimes(2)
+    expect(controller.getSnapshot()).toMatchObject({ saveStatus: 'clean' })
+  })
   it('rejects a wrong request receipt and late callbacks after disposal', async () => {
     const { controller, remote } = setup()
     await controller.load(); controller.createDraft()

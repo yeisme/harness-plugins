@@ -557,16 +557,25 @@ export type ProjectCanvasDocument = z.infer<typeof ProjectCanvasDocumentSchema>
 export const ProjectCanvasReadRequestSchema = z.object({ scope: ProjectCanvasScopeSchema, documentId: IdentifierSchema }).strict()
 export const ProjectCanvasSaveRequestSchema = z.object({ requestId: IdentifierSchema, document: ProjectCanvasDocumentSchema }).strict()
 export const ProjectCanvasReconcileRequestSchema = ProjectCanvasReadRequestSchema.extend({ requestId: IdentifierSchema }).strict()
+/** Journaled save intent whose commit never settled; lets a later session reconcile instead of guessing. */
+export const ProjectCanvasDraftSchema = z.object({
+  requestId: IdentifierSchema,
+  baseRevision: z.number().int().nonnegative().safe(),
+  document: ProjectCanvasDocumentSchema,
+}).strict()
 export const ProjectCanvasReadResultSchema = z.discriminatedUnion('status', [
-  z.object({ status: z.literal('ready'), document: ProjectCanvasDocumentSchema }).strict(),
-  z.object({ status: z.enum(['missing', 'unavailable', 'forbidden', 'invalid', 'error']) }).strict(),
+  z.object({ status: z.literal('ready'), document: ProjectCanvasDocumentSchema, draft: ProjectCanvasDraftSchema.optional() }).strict(),
+  z.object({ status: z.literal('missing'), draft: ProjectCanvasDraftSchema.optional() }).strict(),
+  z.object({ status: z.enum(['unavailable', 'forbidden', 'invalid', 'error']) }).strict(),
 ])
 export const ProjectCanvasSaveResultSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('saved'), requestId: IdentifierSchema, revision: z.number().int().positive().safe() }).strict(),
   z.object({ status: z.literal('conflict'), revision: z.number().int().nonnegative().safe() }).strict(),
+  z.object({ status: z.literal('not_applied'), requestId: IdentifierSchema }).strict(),
   z.object({ status: z.enum(['unavailable', 'forbidden', 'invalid', 'unknown']) }).strict(),
 ])
 export type ProjectCanvasReadRequest = z.infer<typeof ProjectCanvasReadRequestSchema>
 export type ProjectCanvasSaveRequest = z.infer<typeof ProjectCanvasSaveRequestSchema>
+export type ProjectCanvasDraft = z.infer<typeof ProjectCanvasDraftSchema>
 export type ProjectCanvasReadResult = z.infer<typeof ProjectCanvasReadResultSchema>
 export type ProjectCanvasSaveResult = z.infer<typeof ProjectCanvasSaveResultSchema>
