@@ -53,7 +53,7 @@ export function buildPanelStyles(options: BuildPanelStylesOptions): string {
 
   const css = `${root} *,${root} *::before,${root} *::after{box-sizing:border-box}
 ${root}{${tokenBlock};--vk-radius-sm:${s.radius.sm};--vk-radius-md:${s.radius.md};--vk-radius-lg:${s.radius.lg};--vk-radius-xl:${s.radius.xl};--vk-ctrl-icon:${s.control.icon};--vk-ctrl-button:${s.control.button};--vk-ctrl-input:${s.control.input};--vk-ctrl-touch:${s.control.touch};--vk-font-small:${s.font.small};--vk-font-body:${s.font.body};--vk-font-strong:${s.font.strong};--vk-font-heading:${s.font.heading};--vk-font-title:${s.font.title};--vk-gap-xs:${s.gap.xs};--vk-gap-xl:${s.gap.xl};--vk-gap-sm:${s.gap.sm};--vk-gap-md:${s.gap.md};--vk-gap-lg:${s.gap.lg};min-width:0;color:var(--vk-text-primary);background:var(--vk-bg-base);font-family:inherit;font-size:var(--vk-font-body);line-height:1.45}
-${root} button{font:inherit;color:inherit}
+:where(${root} button){font:inherit;color:inherit}
 ${root} button:focus-visible,${root} input:focus-visible,${root} textarea:focus-visible,${root} select:focus-visible,${root} a:focus-visible,${root} [tabindex]:focus-visible{outline:2px solid var(--vk-border-focus);outline-offset:2px}
 ${root}{--vk-tone-positive:var(--vk-state-positive);--vk-tone-info:var(--vk-state-info);--vk-tone-warn:var(--vk-state-warn);--vk-tone-critical:var(--vk-state-error);--vk-tone-neutral:var(--vk-state-neutral)}
 ${root} .vk-header{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:var(--vk-gap-md);min-width:0;padding:var(--vk-gap-lg) 12px;background:color-mix(in srgb,var(--vk-bg-layer-1) 94%,transparent);border-bottom:1px solid var(--vk-border-l2);backdrop-filter:blur(14px)}

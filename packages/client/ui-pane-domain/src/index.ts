@@ -6,6 +6,7 @@ import { DOMAIN_OWNERS, type DomainOwner } from './owners.js'
 import { registerDomainPaneViews } from './registry.js'
 import { normalizeDomainSnapshot, type DomainItemV1, type DomainSnapshotV1 } from './snapshot.js'
 import type { DomainOwnerSourceService } from './owner-source.js'
+import { registerProjectCanvasPane } from './project-canvas-pane.js'
 
 interface PaneWorkbenchFace {
   registerView(input: unknown): () => void
@@ -78,7 +79,7 @@ function readOwnerSnapshot(ctx: Context, owner: DomainOwner): DomainSnapshotV1 {
 export function apply(ctx: Context): () => void {
   const pane = ctx.get('paneWorkbench') as PaneWorkbenchFace | undefined
   if (pane === undefined) return () => {}
-  return registerDomainPaneViews(pane, {
+  const unregisterDomain = registerDomainPaneViews(pane, {
     getSnapshot: owner => readOwnerSnapshot(ctx, owner),
     subscribe: (owner, listener) => liveOwnerSource(ctx, owner)?.subscribe?.(listener) ?? (() => {}),
     // Deep-link 只产生 typed openView 请求（如 Ordo task → Subagent session view），
@@ -89,6 +90,8 @@ export function apply(ctx: Context): () => void {
       if (request !== undefined) pane.openView?.(request)
     },
   })
+  const unregisterCanvas = registerProjectCanvasPane(ctx, pane)
+  return () => { unregisterCanvas(); unregisterDomain() }
 }
 
 export { DOMAIN_BADGES, DOMAIN_OWNERS, DOMAIN_PANE_KINDS, EIKONA_DEFAULT_MODEL, SUBAGENT_BADGE } from './owners.js'
@@ -213,3 +216,10 @@ export type {
 
 const DomainPanePlugin = { inject, apply }
 export default DomainPanePlugin
+
+export { createProjectCanvasEditor, editProjectCanvas, searchProjectCanvas } from './project-canvas.js'
+export type { ProjectCanvasEditor, ProjectCanvasEdit, ProjectCanvasEditResult } from './project-canvas.js'
+export { inspectCanvasRunScope } from './project-canvas-workflow.js'
+export type { CanvasRunScope, CanvasScopeInspection } from './project-canvas-workflow.js'
+export { ProjectCanvasView } from './project-canvas-view.js'
+export { ProjectCanvasController } from './project-canvas-controller.js'

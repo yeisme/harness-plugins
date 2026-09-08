@@ -3,6 +3,7 @@ import {
   ArtifactRefSchema,
   PaneActionReceiptSchema,
   PaneActionRequestSchema,
+  PaneActionReconcileRequestSchema,
 } from '@yeisme/dsh-pane-protocol'
 import {
   validateCreatorMediaAccess,
@@ -73,6 +74,13 @@ const strict = (typeSymbol: string, schema: StrictSchema) => ({ mode: 'strict' a
 export const creatorStudioRemoteContribution = {
   package: '@yeisme/dsh-creator-studio-host',
   descriptors: [
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.reconcile@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'reconcile',
+      invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('PaneActionReconcileRequestV1', PaneActionReconcileRequestSchema) }],
+      result: strict('PaneActionReceiptV1', PaneActionReceiptSchema),
+    },
     {
       id: '@yeisme/dsh-creator-studio-host/creatorStudio.snapshot@1',
       service: 'creatorStudio', namespace: 'creatorStudio', method: 'snapshot',

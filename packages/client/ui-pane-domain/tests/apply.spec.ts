@@ -44,6 +44,7 @@ describe('apply', () => {
       'workspace.pinax',
       'workspace.anatomia',
       'workspace.ordo-team',
+      'creator.canvas',
     ])
     const html = renderToStaticMarkup(createElement(views.get('workspace.ordo-team')!))
     expect(html).toContain('data-badge="Ordo"')

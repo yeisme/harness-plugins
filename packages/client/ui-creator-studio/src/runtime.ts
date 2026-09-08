@@ -34,6 +34,7 @@ export interface CreatorStudioRuntimeV1 {
     descriptor: PaneActionDescriptorV1,
     values: Readonly<Record<string, PaneActionValueV1>>,
   ): Promise<PaneActionReceiptV1>
+  reconcileAction?(descriptor: PaneActionDescriptorV1): Promise<PaneActionReceiptV1>
   decideApproval(decisionRef: string): Promise<PaneActionReceiptV1>
 }
 
@@ -53,6 +54,7 @@ export function createCreatorStudioRuntime(controller: CreatorStudioController):
       descriptor: PaneActionDescriptorV1,
       values: Readonly<Record<string, PaneActionValueV1>>,
     ) => controller.dispatchAction(descriptor, values),
+    reconcileAction: (descriptor: PaneActionDescriptorV1) => controller.reconcileAction(descriptor),
     decideApproval: (decisionRef: string) => controller.decideApproval(decisionRef),
   })
 }

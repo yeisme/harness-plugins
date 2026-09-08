@@ -316,6 +316,34 @@ describe('CreatorArtifactWorkspace', () => {
     expect(dispatchAction).toHaveBeenCalledWith(crop, expect.objectContaining({ range: JSON.stringify({ kind: 'time', startMs: 2500, endMs: 9000 }) }))
   })
 
+  it.each(['image', 'image-region'] as const)('uses %s proof without silently changing its range semantics', async kind => {
+    const artifact = { ...textArtifact('artifact:referenced-image', '3', 'Image'), kind: 'image', mediaType: 'image/png' } as const
+    const attach = descriptor({ ref: 'action:eikona:image-attach', actionId: 'context.attach', label: 'Authorize image', targetRef: artifact.ref, targetVersion: artifact.version, fields: [] })
+    const proof = { id: 'reference:image', kind, intent: 'content' as const, scope: 'artifact/media', digest: 'digest:image', freshness: 'fresh' as const }
+    const data = ownerWith([{ artifact, acceptedVersion: '3', media: { width: 1000, height: 500 }, referenceProof: proof, candidates: [], actions: { attachContext: { descriptorRef: attach.descriptorRef } } }], [attach])
+    const target = { workspaceId: 'workspace:one', conversationId: 'conversation:one' }
+    const insertReference = vi.fn(async (input: any) => ({ version: 1 as const, requestId: input.requestId, target, ok: true }))
+    const dispatchAction = vi.fn(async () => ({ status: 'completed' as const, receiptRef: 'receipt:image', owner: 'eikona', actionId: 'context.attach' }))
+    render(<CreatorArtifactWorkspace owner={data.owner as never} snapshot={data.snapshot} state={stateOf(data.snapshot)} runtime={{ resolveArtifact: vi.fn(async () => 'https://media.example/image.png'), readArtifactContent: vi.fn(async () => undefined), dispatchAction }} composerBridge={{ snapshot: () => ({ available: true, target }), insertReference }} />)
+    await waitFor(() => expect(document.querySelector('[data-dsh-media-image-selection-stage]')).not.toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: '加入主对话' }))
+    fireEvent.click(screen.getByRole('button', { name: '执行操作' }))
+    await waitFor(() => expect(insertReference).toHaveBeenCalledTimes(1))
+    const reference = insertReference.mock.calls[0]![0].reference
+    expect(reference.kind).toBe(kind)
+    if (kind === 'image') expect(reference).not.toHaveProperty('region')
+    else expect(reference.region).toEqual({ x: 0, y: 0, width: 1, height: 1 })
+    expect(reference).not.toHaveProperty('bytes')
+    expect(reference).not.toHaveProperty('url')
+    const stage = document.querySelector('[data-dsh-media-image-selection-stage]') as HTMLElement
+    vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 100, width: 200, height: 100, toJSON: () => ({}) })
+    fireEvent.pointerDown(stage, { clientX: 20, clientY: 20, pointerId: 1 })
+    fireEvent.pointerUp(stage, { clientX: 120, clientY: 80, pointerId: 1 })
+    const add = screen.getByRole('button', { name: '加入主对话' }) as HTMLButtonElement
+    await waitFor(() => expect(add.disabled).toBe(kind === 'image'))
+    if (kind === 'image') expect(add.title).toContain('不支持当前框选范围')
+  })
+
   it('does not invent a media time range when the owner omitted duration', async () => {
     const artifact = { ...textArtifact('artifact:unknown-duration', '1', 'Unknown duration'), kind: 'audio', mediaType: 'audio/mpeg' } as const
     const crop = descriptor({ ref: 'action:eikona:unknown-duration', actionId: 'artifact.audio.crop', label: 'Crop', targetRef: artifact.ref, targetVersion: artifact.version, fields: [{ key: 'range', label: 'Range', kind: 'text', required: true }] })
@@ -420,8 +448,15 @@ describe('CreatorArtifactWorkspace', () => {
     const openEnvironment = descriptor({ ref: 'action:eikona:environment', actionId: 'environment.preview.open', label: 'Open preview', targetRef: html.ref, targetVersion: html.version, fields: [] })
     const dispatchAction = vi.fn(async () => ({ status: 'accepted' as const, receiptRef: 'receipt:environment', owner: 'eikona', actionId: openEnvironment.actionId }))
     rendered.rerender(<CreatorArtifactWorkspace owner={{ ...data.owner, actions: [openEnvironment], artifactWorkspace: { status: 'ready', safeMessage: 'Ready.', artifacts: [{ artifact: html, acceptedVersion: '1', candidates: [], actions: { openEnvironment: { descriptorRef: openEnvironment.descriptorRef } } }] } } as never} snapshot={data.snapshot} state={stateOf(data.snapshot)} runtime={{ ...runtime, dispatchAction, readArtifactContent: vi.fn(async () => ({ artifact: html, contentRevision: '1', content: '<script>window.__creatorExecuted=true</script><h1>Safe</h1>' })) } as never} />)
-    await waitFor(() => expect(document.querySelector('[data-preview-kind="safe-html-source"]')).not.toBeNull())
-    expect(document.querySelector('[data-preview-kind="safe-html-source"]')?.textContent).toContain('window.__creatorExecuted')
+    await screen.findByRole('heading', { name: 'Safe' })
+    expect(document.querySelector('[data-preview-kind="static-html"] script')).toBeNull()
+    expect(document.querySelector('[data-preview-kind="static-html"]')?.textContent).not.toContain('window.__creatorExecuted')
+    fireEvent.click(screen.getByRole('tab', { name: '源码' }))
+    await waitFor(() => expect((document.querySelector('[data-creator-artifact-editor] textarea') as HTMLTextAreaElement).value).toContain('<script>window.__creatorExecuted=true</script>'))
+    fireEvent.change(document.querySelector('[data-creator-artifact-editor] textarea')!, { target: { value: '<h1>Edited HTML</h1><table><tr><td>Cell</td></tr></table>' } })
+    fireEvent.click(screen.getByRole('tab', { name: '预览' }))
+    await screen.findByRole('heading', { name: 'Edited HTML' })
+    expect(document.querySelector('[data-static-html-content] td')?.textContent).toBe('Cell')
     expect((window as typeof window & { __creatorExecuted?: boolean }).__creatorExecuted).toBeUndefined()
     fireEvent.click(screen.getByRole('button', { name: '打开开发预览' }))
     fireEvent.click(screen.getByRole('button', { name: '执行操作' }))

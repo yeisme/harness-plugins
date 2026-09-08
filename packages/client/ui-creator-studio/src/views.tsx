@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useState, useSyncExternalStore, type ChangeEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   ArtifactIntentV1,
   ArtifactRefV1,
-  PaneActionDescriptorV1,
   PaneActionReceiptV1,
-  PaneActionValueV1,
 } from '@yeisme/dsh-pane-protocol'
 import type {
   CreatorApprovalV1,
@@ -26,7 +24,6 @@ import {
 } from '@yeisme/dsh-client-ui-surface'
 import { MediaPreviewPane, type MediaRefV1 } from '@yeisme/dsh-rich-media/client'
 import { CreatorStudioController, type CreatorStudioViewState } from './controller.ts'
-import type { CreatorStudioRuntimeV1 } from './runtime.ts'
 import {
   CreatorActionComposer as SharedCreatorActionComposer,
   CreatorGenerationView as SharedCreatorGenerationView,
@@ -186,71 +183,7 @@ export function CreatorResourceCard({ resource, owner, projectRef, onIntent, t }
   </article>
 }
 
-function fieldHasValue(value: PaneActionValueV1 | undefined): boolean {
-  if (value === undefined) return false
-  if (typeof value === 'string') return value.trim().length > 0
-  if (Array.isArray(value)) return value.length > 0
-  return true
-}
-
-function ActionField({ field, value, artifacts, onChange, t }: { field: PaneActionDescriptorV1['fields'][number]; value: PaneActionValueV1 | undefined; artifacts: readonly ArtifactRefV1[]; onChange(value: PaneActionValueV1 | undefined): void; t: CreatorStudioTranslator }): ReactNode {
-  if (field.kind === 'boolean') return <label className="cs-confirm"><input type="checkbox" checked={value === true} onChange={event => onChange(event.currentTarget.checked)} /><span>{field.label}</span></label>
-  if (field.kind === 'select') return <label className="cs-field ys-field"><span>{field.label}</span><select value={typeof value === 'string' ? value : ''} required={field.required} onChange={event => onChange(event.currentTarget.value)}><option value="">{t('action.choose')}</option>{field.options?.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-  if (field.kind === 'multiselect') {
-    const selected = Array.isArray(value) ? value : []
-    return <fieldset className="cs-field ys-field"><legend>{field.label}</legend>{field.options?.map(option => <label className="cs-confirm" key={option.value}><input type="checkbox" checked={selected.includes(option.value)} onChange={event => onChange(event.currentTarget.checked ? [...selected, option.value] : selected.filter(item => item !== option.value))} /><span>{option.label}</span></label>)}</fieldset>
-  }
-  if (field.kind === 'artifact_ref') {
-    const selected = typeof value === 'object' && value !== null && !Array.isArray(value) ? `${value.owner}:${value.ref}:${value.version}` : ''
-    const available = artifacts.filter(artifact => field.artifactKinds === undefined || field.artifactKinds.includes(artifact.kind))
-    return <label className="cs-field ys-field"><span>{field.label}</span><select value={selected} required={field.required} onChange={event => onChange(available.find(artifact => `${artifact.owner}:${artifact.ref}:${artifact.version}` === event.currentTarget.value))}><option value="">{t('action.chooseArtifact')}</option>{available.map(artifact => <option key={`${artifact.owner}:${artifact.ref}:${artifact.version}`} value={`${artifact.owner}:${artifact.ref}:${artifact.version}`}>{artifact.title}</option>)}</select></label>
-  }
-  if (field.kind === 'number') return <label className="cs-field ys-field"><span>{field.label}</span><input type="number" value={typeof value === 'number' ? value : ''} min={field.min} max={field.max} required={field.required} onChange={event => onChange(event.currentTarget.value === '' ? undefined : Number(event.currentTarget.value))} /></label>
-  const common = { value: typeof value === 'string' ? value : '', placeholder: field.placeholder, minLength: field.minLength, maxLength: field.maxLength, required: field.required, onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(event.currentTarget.value) }
-  return <label className="cs-field ys-field"><span>{field.label}</span>{field.kind === 'textarea' ? <textarea {...common} /> : <input type="text" {...common} />}</label>
-}
-
-export function CreatorActionComposer({ owner, task, snapshot, state, controller, onDirty, t }: { owner: CreatorOwnerProjectionV1; task: CreatorStudioTask; snapshot: CreatorStudioSnapshotV1; state: CreatorStudioViewState; controller: Pick<CreatorStudioRuntimeV1, 'dispatchAction'>; onDirty?(dirty: boolean): void; t: CreatorStudioTranslator }): ReactNode {
-  const descriptors = owner.actions.filter(action => action.presentation?.task === task || action.presentation?.task === undefined)
-  const [selectedRef, setSelectedRef] = useState<string | undefined>(descriptors[0]?.descriptorRef)
-  const descriptor = descriptors.find(item => item.descriptorRef === selectedRef) ?? descriptors[0]
-  const [values, setValues] = useState<Readonly<Record<string, PaneActionValueV1>>>({})
-  const [confirmed, setConfirmed] = useState(false)
-  useEffect(() => { setSelectedRef(descriptors[0]?.descriptorRef); setValues({}); setConfirmed(false) }, [owner.snapshotRef, task])
-  const dirty = Object.keys(values).length > 0
-  useEffect(() => { onDirty?.(dirty); return () => onDirty?.(false) }, [dirty, onDirty])
-  const artifacts = snapshot.owners.flatMap(item => item.resources.flatMap(resource => resource.artifact === undefined ? [] : [resource.artifact]))
-  if (descriptor === undefined) return <SurfaceState className="cs-composer" phase="disabled" title={t('action.unavailable.title', { owner: owner.owner })} description={t('action.unavailable.description')} data-action-unavailable />
-  const requiredMissing = descriptor.fields.some(field => field.required && !fieldHasValue(values[field.key]))
-  const stale = owner.status !== 'ready' || owner.freshness !== 'fresh' || Date.parse(descriptor.expiresAt) <= Date.now()
-  const confirmationMissing = descriptor.confirmation !== 'none' && !confirmed
-  const pending = state.pendingDescriptorRef === descriptor.descriptorRef
-  const disabled = stale || confirmationMissing || requiredMissing || pending
-  const disabledReason = stale ? t('action.stale')
-    : pending ? t('action.disabled.pending')
-      : requiredMissing ? t('action.disabled.required')
-        : confirmationMissing ? t('action.disabled.confirmation')
-          : undefined
-  const submit = async (): Promise<void> => {
-    const receipt = await controller.dispatchAction(descriptor, values)
-    if (receipt.status === 'accepted' || receipt.status === 'completed' || receipt.status === 'partial') {
-      setValues({})
-      setConfirmed(false)
-      onDirty?.(false)
-    }
-  }
-  return <aside className="cs-composer" data-action-composer={descriptor.actionId}>
-    <header><div><h3>{descriptor.label}</h3><p className="cs-muted">{descriptor.preview.summary}</p></div><span className="cs-badge" data-risk={descriptor.risk}>{descriptor.risk}</span></header>
-    {descriptors.length > 1 && <label className="cs-field ys-field"><span>{t('action.label')}</span><select value={descriptor.descriptorRef} onChange={event => { setSelectedRef(event.currentTarget.value); setValues({}); setConfirmed(false) }}>{descriptors.map(item => <option key={item.descriptorRef} value={item.descriptorRef}>{item.label}</option>)}</select></label>}
-    {descriptor.preview.cost !== undefined && <div className="cs-metric" data-tone="warning">{t('action.estimatedCost', { currency: descriptor.preview.cost.currency, amount: descriptor.preview.cost.amount })}</div>}
-    {descriptor.preview.rights !== undefined && <div className="cs-receipt" data-status={descriptor.preview.rights.status}>{descriptor.preview.rights.summary}</div>}
-    {descriptor.fields.map(field => <ActionField key={field.key} field={field} value={values[field.key]} artifacts={artifacts} t={t} onChange={value => setValues(current => value === undefined ? Object.fromEntries(Object.entries(current).filter(([key]) => key !== field.key)) : { ...current, [field.key]: value })} />)}
-    {descriptor.confirmation !== 'none' && <label className="cs-confirm"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.currentTarget.checked)} /><span>{t(descriptor.confirmation === 'approval' ? 'action.confirmApproval' : 'action.confirmMutation')}</span></label>}
-    {disabledReason === undefined ? null : <p className={stale ? 'cs-alert' : 'cs-disabled-reason'} role="status">{disabledReason}</p>}
-    <span data-risk={descriptor.risk}><Button className="cs-button" size="sm" variant="primary" type="button" disabled={disabled} title={disabledReason} onClick={() => void submit()}>{pending ? t('action.pending') : t(descriptor.confirmation === 'approval' ? 'action.submitApproval' : 'action.execute')}</Button></span>
-    {state.lastReceipt?.actionId === descriptor.actionId && <div className="cs-receipt" data-status={state.lastReceipt.status}><strong>{state.lastReceipt.status}</strong><span>{state.lastReceipt.summary ?? state.lastReceipt.reconcileReason ?? state.lastReceipt.receiptRef}</span></div>}
-  </aside>
-}
+export { CreatorActionComposer } from './projection-components.tsx'
 
 export function CreatorReviewList({ snapshot, limit, t }: { snapshot: CreatorStudioSnapshotV1; limit?: number; t: CreatorStudioTranslator }): ReactNode {
   const reviews = limit === undefined ? snapshot.reviews : snapshot.reviews.slice(0, limit)

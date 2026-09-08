@@ -119,6 +119,16 @@ function ActionField({ field, value, artifacts, onChange, t }: { field: PaneActi
   return <label className="cs-field ys-field"><span>{field.label}</span>{field.kind === 'textarea' ? <textarea {...common} /> : <input type="text" {...common} />}</label>
 }
 
+/** Seed the canonical model only when the owner explicitly offers that model field/value. */
+function initialActionValues(descriptor: PaneActionDescriptorV1 | undefined, initial?: Readonly<Record<string, PaneActionValueV1>>): Readonly<Record<string, PaneActionValueV1>> {
+  const values = { ...initial }
+  if (descriptor?.owner !== 'eikona' || descriptor.presentation?.task !== 'image') return values
+  const field = descriptor.fields.find(item => item.key === 'model')
+  const model = 'openai/gpt-5.4-image-2'
+  if (field?.kind === 'select' && values.model === undefined && field.options?.some(option => option.value === model)) values.model = model
+  return values
+}
+
 export function CreatorActionComposer({
   owner,
   task,
@@ -138,7 +148,7 @@ export function CreatorActionComposer({
   readonly task: CreatorStudioTask
   readonly snapshot: CreatorStudioSnapshotV1
   readonly state: CreatorStudioViewState
-  readonly controller: Pick<CreatorStudioRuntimeV1, 'dispatchAction'>
+  readonly controller: Pick<CreatorStudioRuntimeV1, 'dispatchAction' | 'reconcileAction'>
   readonly onDirty?: (dirty: boolean) => void
   readonly t?: CreatorStudioTranslator
   /** Pins a server-authored descriptor for an embedded lifecycle action. */
@@ -158,10 +168,10 @@ export function CreatorActionComposer({
     : owner.actions.filter(action => action.descriptorRef === descriptorRef)
   const [selectedRef, setSelectedRef] = useState<string | undefined>(descriptors[0]?.descriptorRef)
   const descriptor = descriptors.find(item => item.descriptorRef === selectedRef) ?? descriptors[0]
-  const [values, setValues] = useState<Readonly<Record<string, PaneActionValueV1>>>(initialValues ?? {})
-  const [confirmed, setConfirmed] = useState(false)
+  const [values, setValues] = useState<Readonly<Record<string, PaneActionValueV1>>>(() => initialActionValues(descriptor, initialValues))
+  const [confirmed, setConfirmed] = useState<string | false>(false)
   const lockedValueSignature = lockedValueKeys.join('\u0000')
-  useEffect(() => { setSelectedRef(descriptors[0]?.descriptorRef); setValues(initialValues ?? {}); setConfirmed(false) }, [task, descriptorRef])
+  useEffect(() => { setSelectedRef(descriptors[0]?.descriptorRef); setValues(initialActionValues(descriptors[0], initialValues)); setConfirmed(false) }, [task, descriptorRef])
   useEffect(() => {
     setValues(current => {
       const next = { ...current }
@@ -179,28 +189,33 @@ export function CreatorActionComposer({
   if (descriptor === undefined) return <SurfaceState className="cs-composer" phase="disabled" title={t('action.unavailable.title', { owner: owner.owner })} description={t('action.unavailable.description')} data-action-unavailable />
   const requiredMissing = descriptor.fields.some(field => field.required && !fieldHasValue(values[field.key]))
   const stale = owner.status !== 'ready' || owner.freshness !== 'fresh' || Date.parse(descriptor.expiresAt) <= Date.now()
-  const confirmationMissing = descriptor.confirmation !== 'none' && !confirmed
+  const confirmationSignature = JSON.stringify([descriptor, values])
+  const confirmationMissing = descriptor.confirmation !== 'none' && confirmed !== confirmationSignature
   const pending = state.pendingDescriptorRef === descriptor.descriptorRef
   const disabled = stale || confirmationMissing || requiredMissing || pending
   const disabledReason = stale ? t('action.stale') : pending ? t('action.disabled.pending') : requiredMissing ? t('action.disabled.required') : confirmationMissing ? t('action.disabled.confirmation') : undefined
   const submit = async (): Promise<void> => {
-    const receipt = await controller.dispatchAction(descriptor, values)
+    const submittedValues = values
+    const receipt = await controller.dispatchAction(descriptor, submittedValues)
     onReceipt?.(receipt)
     if (((receipt.status === 'accepted' || receipt.status === 'completed') && !retainValuesOnAccepted) || (receipt.status === 'partial' && !retainValuesOnPartial)) {
-      setValues({})
+      setValues(current => current === submittedValues ? initialActionValues(descriptor) : current)
       setConfirmed(false)
-      onDirty?.(false)
     }
   }
   return <aside className="cs-composer" data-action-composer={descriptor.actionId}>
     <header><div><h3>{descriptor.label}</h3><p className="cs-muted">{descriptor.preview.summary}</p></div><span className="cs-badge" data-risk={descriptor.risk}>{descriptor.risk}</span></header>
-    {descriptors.length > 1 && <label className="cs-field ys-field"><span>{t('action.label')}</span><select value={descriptor.descriptorRef} onChange={event => { setSelectedRef(event.currentTarget.value); setValues({}); setConfirmed(false) }}>{descriptors.map(item => <option key={item.descriptorRef} value={item.descriptorRef}>{item.label}</option>)}</select></label>}
-    {descriptor.preview.cost !== undefined && <div className="cs-metric" data-tone="warning">{t('action.estimatedCost', { currency: descriptor.preview.cost.currency, amount: descriptor.preview.cost.amount })}</div>}
+    {descriptors.length > 1 && <label className="cs-field ys-field"><span>{t('action.label')}</span><select value={descriptor.descriptorRef} onChange={event => { setSelectedRef(event.currentTarget.value); setValues(initialActionValues(descriptors.find(item => item.descriptorRef === event.currentTarget.value))); setConfirmed(false) }}>{descriptors.map(item => <option key={item.descriptorRef} value={item.descriptorRef}>{item.label}</option>)}</select></label>}
+    <div className="cs-metric" data-cost-state={descriptor.preview.cost === undefined ? 'unknown' : descriptor.preview.cost.estimate ? 'estimated' : 'quoted'} data-tone="warning">{descriptor.preview.cost === undefined ? t('action.costUnknown') : t(descriptor.preview.cost.estimate ? 'action.estimatedCost' : 'action.quotedCost', { currency: descriptor.preview.cost.currency, amount: descriptor.preview.cost.amount })}</div>
     {descriptor.preview.rights !== undefined && <div className="cs-receipt" data-status={descriptor.preview.rights.status}>{descriptor.preview.rights.summary}</div>}
     {descriptor.fields.filter(field => !lockedValueKeys.includes(field.key)).map(field => <ActionField key={field.key} field={field} value={values[field.key]} artifacts={artifacts} t={t} onChange={value => setValues(current => value === undefined ? Object.fromEntries(Object.entries(current).filter(([key]) => key !== field.key)) : { ...current, [field.key]: value })} />)}
-    {descriptor.confirmation !== 'none' && <label className="cs-confirm"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.currentTarget.checked)} /><span>{t(descriptor.confirmation === 'approval' ? 'action.confirmApproval' : 'action.confirmMutation')}</span></label>}
+    {descriptor.confirmation !== 'none' && <label className="cs-confirm"><input type="checkbox" checked={confirmed === confirmationSignature} onChange={event => setConfirmed(event.currentTarget.checked ? confirmationSignature : false)} /><span>{t(descriptor.confirmation === 'approval' ? 'action.confirmApproval' : 'action.confirmMutation')}</span></label>}
     {disabledReason === undefined ? null : <p className={stale ? 'cs-alert' : 'cs-disabled-reason'} role="status">{disabledReason}</p>}
     <span data-risk={descriptor.risk}><Button className="cs-button" size="sm" variant="primary" type="button" disabled={disabled} title={disabledReason} onClick={() => void submit()}>{pending ? t('action.pending') : t(descriptor.confirmation === 'approval' ? 'action.submitApproval' : 'action.execute')}</Button></span>
+    {state.lastReceipt?.owner === descriptor.owner && state.lastReceipt.actionId === descriptor.actionId
+      && ['unknown', 'reconcile_required', 'pending'].includes(state.lastReceipt.status) && <Button className="cs-button" type="button"
+        disabled={controller.reconcileAction === undefined || pending} title={controller.reconcileAction === undefined ? t('action.reconcileUnavailable') : undefined}
+        onClick={() => { void controller.reconcileAction?.(descriptor) }}>{t('action.reconcile')}</Button>}
     {state.lastReceipt?.actionId === descriptor.actionId && <div className="cs-receipt" data-status={state.lastReceipt.status}><strong>{state.lastReceipt.status}</strong><span>{state.lastReceipt.summary ?? state.lastReceipt.reconcileReason ?? state.lastReceipt.receiptRef}</span></div>}
   </aside>
 }

@@ -11,6 +11,7 @@ import type { ComposerReferenceOwnerRegistryV1 } from '@yeisme/dsh-desktop-workb
 import { createCreatorReferenceOwner } from './reference-owner.js'
 import {
   CREATOR_STUDIO_OWNER_DIRECTORY,
+  CREATOR_STUDIO_EXPECTED_CONTEXT,
   CreatorStudioGateway,
   CreatorStudioOwnerDirectory,
   CREATOR_STUDIO_OWNERS,
@@ -32,6 +33,7 @@ export {
   validateCreatorOwnerAssetList,
   validateCreatorMediaAccess,
   validateCreatorArtifactContent,
+  validateCreatorArtifactImage,
   validateCreatorOwnerSnapshot,
   validateCreatorStudioContext,
   validateCreatorStudioSnapshot,
@@ -40,6 +42,7 @@ export type {
   CreatorArtifactActionBindingV1,
   CreatorArtifactCandidateV1,
   CreatorArtifactContentV1,
+  CreatorArtifactImageV1,
   CreatorArtifactLifecycleActionsV1,
   CreatorArtifactReferenceProofV1,
   CreatorArtifactWorkspaceItemV1,
@@ -87,11 +90,15 @@ const creatorStudioTypertContribution = {
       tags: [],
       members: [
         { kind: 'method', name: 'snapshot', signature: 'snapshot(): Promise<CreatorStudioSnapshotV1>' },
+        { kind: 'method', name: 'reconcile', signature: 'reconcile(input: unknown): Promise<PaneActionReceiptV1>' },
         { kind: 'method', name: 'dispatch', signature: 'dispatch(input: unknown): Promise<PaneActionReceiptV1>' },
         { kind: 'method', name: 'resolveArtifact', signature: 'resolveArtifact(input: unknown): Promise<CreatorMediaAccessV1 | null>' },
         { kind: 'method', name: 'readArtifactContent', signature: 'readArtifactContent(input: unknown): Promise<CreatorArtifactContentV1 | null>' },
         { kind: 'method', name: 'assets', signature: 'assets(input: unknown): Promise<CreatorAssetPageV1>' },
         { kind: 'method', name: 'decideApproval', signature: 'decideApproval(input: unknown): Promise<PaneActionReceiptV1>' },
+        { kind: 'method', name: 'canvasRead', signature: 'canvasRead(input: unknown): Promise<ProjectCanvasReadResult>' },
+        { kind: 'method', name: 'canvasSave', signature: 'canvasSave(input: unknown): Promise<ProjectCanvasSaveResult>' },
+        { kind: 'method', name: 'canvasReconcile', signature: 'canvasReconcile(input: unknown): Promise<ProjectCanvasSaveResult>' },
       ],
       types: [],
     }],
@@ -99,6 +106,13 @@ const creatorStudioTypertContribution = {
     objects: [],
   },
   invocations: [
+    ...(['canvasRead', 'canvasSave', 'canvasReconcile', 'reconcile'] as const).map(method => ({
+      id: `@yeisme/dsh-creator-studio-host#creatorStudio/${method}`,
+      service: 'creatorStudio', namespace: 'creatorStudio', method,
+      invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }],
+      result: { mode: 'src-json' },
+    })),
     {
       id: '@yeisme/dsh-creator-studio-host#creatorStudio/snapshot',
       service: 'creatorStudio', namespace: 'creatorStudio', method: 'snapshot',
@@ -144,6 +158,7 @@ const creatorStudioTypertContribution = {
 
 type SharedCreatorStudioMount = {
   referenceOwnerMount?: FiberHandle | undefined
+  revokeReferenceOwners?: (() => void) | undefined
   references: number
   tail: Promise<void>
   bridge?: FiberHandle | undefined
@@ -206,22 +221,48 @@ async function acquireCreatorStudio(ctx: Context): Promise<() => Promise<void>> 
       }
     }
     if (current.bridge === undefined && root.get('creatorStudio') === undefined) {
-      current.bridge = await root.plugin(CreatorStudioGateway)
+      // A profile may publish its frozen context after this installer starts.
+      // Bind the Gateway lifetime to that context instead of capturing absence
+      // permanently or reading a changing context halfway through an RPC.
+      current.bridge = root.inject([CREATOR_STUDIO_EXPECTED_CONTEXT] as never, async (scope: Context) => {
+        const gateway = await scope.plugin(CreatorStudioGateway)
+        return () => gateway.dispose()
+      })
     }
     if (current.referenceOwnerMount === undefined) {
-      current.referenceOwnerMount = root.inject(['composerReferenceOwners'] as never, (scope: Context) => {
+      current.referenceOwnerMount = root.inject(['composerReferenceOwners', 'creatorStudio', 'workspaceRegistry'] as never, (scope: Context) => {
         const registry = scope.get('composerReferenceOwners' as never) as ComposerReferenceOwnerRegistryV1 | undefined
-        const gateway = root.get('creatorStudio') as CreatorStudioGateway | undefined
+        const gateway = scope.get('creatorStudio') as CreatorStudioGateway | undefined
         if (registry?.version !== 1 || typeof registry.register !== 'function' || gateway === undefined) return
         const workspaceForSession = (sessionId: string): string | undefined => {
-          const workspaces = root.get('workspaceRegistry' as never) as { list(): readonly { id: string; sessionIds: readonly string[] }[] } | undefined
+          const workspaces = scope.get('workspaceRegistry' as never) as { list(): readonly { id: string; sessionIds: readonly string[] }[] } | undefined
           return workspaces?.list().find(workspace => workspace.sessionIds.includes(sessionId))?.id
         }
         const disposers: Array<() => void> = []
+        let active = true
+        const revokeAll = (): void => {
+          active = false
+          const errors: unknown[] = []
+          for (const dispose of disposers.splice(0).reverse()) {
+            try { dispose() } catch (error) { errors.push(error) }
+          }
+          if (errors.length > 0) throw new AggregateError(errors, 'Creator reference provider cleanup failed')
+        }
+        current.revokeReferenceOwners = revokeAll
         try {
-          for (const owner of CREATOR_STUDIO_OWNERS) disposers.push(registry.register(owner, createCreatorReferenceOwner(gateway, owner, workspaceForSession)))
-        } catch (error) { for (const dispose of disposers.reverse()) dispose(); throw error }
-        return () => { for (const dispose of disposers.reverse()) dispose() }
+          // Cordis returns context-bound proxies, so object identity is not a
+          // service generation token. The injected lifecycles revoke this
+          // closure before either registry or Gateway is replaced.
+          for (const owner of CREATOR_STUDIO_OWNERS) disposers.push(registry.register(owner, createCreatorReferenceOwner(gateway, owner, workspaceForSession, () => active)))
+        } catch (error) {
+          try { revokeAll() } catch (cleanupError) { throw new AggregateError([error, cleanupError], 'Creator reference registration failed') }
+          throw error
+        }
+        return () => {
+          try { revokeAll() } finally {
+            if (current.revokeReferenceOwners === revokeAll) current.revokeReferenceOwners = undefined
+          }
+        }
       })
     }
     if (current.unregisterTypert === undefined) {
@@ -251,17 +292,21 @@ async function releaseCreatorStudio(root: Context, mount: SharedCreatorStudioMou
     const disposeDirectory = mount.disposeDirectory
     const unregisterTypert = mount.unregisterTypert
     const referenceOwnerMount = mount.referenceOwnerMount
+    const revokeReferenceOwners = mount.revokeReferenceOwners
+    mount.revokeReferenceOwners = undefined
     mount.referenceOwnerMount = undefined
     mount.bridge = undefined
     mount.directory = undefined
     mount.disposeDirectory = undefined
     mount.unregisterTypert = undefined
-    await unregisterTypert?.()
-    await referenceOwnerMount?.dispose()
-    await bridge?.dispose()
-    disposeDirectory?.()
+    const errors: unknown[] = []
+    // Revoke body access first; still attempt every cleanup if one fails.
+    for (const cleanup of [() => revokeReferenceOwners?.(), () => referenceOwnerMount?.dispose(), () => unregisterTypert?.(), () => bridge?.dispose(), () => disposeDirectory?.()]) {
+      try { await cleanup() } catch (error) { errors.push(error) }
+    }
     const store = mounts()
     if (mount.references === 0 && store.get(root) === mount) store.delete(root)
+    if (errors.length > 0) throw new AggregateError(errors, 'Creator Studio cleanup failed')
   })
   mount.tail = teardown.catch(() => undefined)
   await teardown

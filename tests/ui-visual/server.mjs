@@ -3,6 +3,7 @@ import { createServer } from 'node:http'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
+import { projectCanvasPage } from './project-canvas-page.mjs'
 import {
   Surface,
   SurfaceActionBar,
@@ -42,6 +43,7 @@ function esmShimFromGlobal(globalName) {
 }
 
 const statusFlowVendor = {
+  '/canvas-client.js': () => readFileSync(new URL('../../packages/bundle/pane-domain/lib/client.js', import.meta.url), 'utf8'),
   '/vendor/react.global.js': () => wrapCjsGlobal(join(reactDir, 'cjs/react.production.min.js'), 'React'),
   '/vendor/scheduler.global.js': () => wrapCjsGlobal(join(schedulerDir, 'cjs/scheduler.production.min.js'), 'Scheduler'),
   '/vendor/react-dom.global.js': () => `${wrapCjsGlobal(join(reactDomDir, 'cjs/react-dom.production.min.js'), 'ReactDOM', { react: 'React', scheduler: 'Scheduler' })}window.ReactDOMClient = { createRoot: window.ReactDOM.createRoot, hydrateRoot: window.ReactDOM.hydrateRoot };\n`,
@@ -302,6 +304,12 @@ createServer((request, response) => {
   if (vendorAsset !== undefined) {
     response.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' })
     response.end(vendorAsset())
+    return
+  }
+  if (url.pathname === '/project-canvas') {
+    const width = [360, 560, 960].includes(Number(url.searchParams.get('width'))) ? Number(url.searchParams.get('width')) : 960
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+    response.end(projectCanvasPage(width, statusFlowImportMap))
     return
   }
   if (url.pathname === '/pane-menus') {

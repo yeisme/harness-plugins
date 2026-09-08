@@ -22,6 +22,7 @@ import {
   MediaCompareRenderer,
   MediaImageRenderer,
   MediaPlaybackRenderer,
+  StaticHtmlPreview,
   parseDelimitedTable,
   type MediaImageSelectionV1,
   type MediaRefV1,
@@ -124,13 +125,14 @@ function CandidateComparison({ item, candidate, runtime, t }: { readonly item: C
   return <TextComparison item={item} candidate={candidate} t={t} />
 }
 
-function TextDraftPreview({ artifact, body }: { readonly artifact: ArtifactRefV1; readonly body: string }) {
+function TextDraftPreview({ artifact, body, t }: { readonly artifact: ArtifactRefV1; readonly body: string; readonly t: CreatorStudioTranslator }) {
   const type = artifact.mediaType.toLowerCase()
+  if (type === 'text/html' || type === 'application/xhtml+xml') return <div className="cs-artifact-preview" data-creator-artifact-preview data-preview-kind="static-html"><StaticHtmlPreview source={body} labels={{ title: t('workspace.html.title'), notice: t('workspace.html.notice'), loading: t('workspace.html.loading'), empty: t('workspace.html.empty'), unavailable: t('workspace.html.unavailable'), tooLarge: t('workspace.html.tooLarge') }} /></div>
   if (type === 'text/markdown' || type === 'text/x-markdown') return <div className="cs-artifact-preview" data-creator-artifact-preview data-preview-kind="markdown"><MarkdownText text={body} /></div>
   if (type === 'text/csv' || type === 'text/tab-separated-values') return <div className="cs-artifact-preview" data-creator-artifact-preview data-preview-kind="table"><LocalTableGrid media={mediaOf(artifact)} rows={parseDelimitedTable(body, type === 'text/tab-separated-values' ? '\t' : ',').rows} /></div>
   if (type.includes('mermaid') || artifact.kind === 'diagram') return <div className="cs-artifact-preview" data-creator-artifact-preview data-preview-kind="mermaid"><MarkdownText text={`\`\`\`mermaid\n${body}\n\`\`\``} /></div>
-  const lang = type.includes('html') ? 'html' : type.includes('javascript') ? 'javascript' : type.includes('typescript') ? 'typescript' : undefined
-  return <div className="cs-artifact-preview" data-creator-artifact-preview data-preview-kind={lang === 'html' ? 'safe-html-source' : 'code'}><CodeBlock code={body} {...(lang === undefined ? {} : { lang })} /></div>
+  const lang = type.includes('javascript') ? 'javascript' : type.includes('typescript') ? 'typescript' : undefined
+  return <div className="cs-artifact-preview" data-creator-artifact-preview data-preview-kind="code"><CodeBlock code={body} {...(lang === undefined ? {} : { lang })} /></div>
 }
 
 function ResolvedMediaPreview({ artifact, item, runtime, selection, onSelectionChange, t }: { readonly artifact: ArtifactRefV1; readonly item: CreatorArtifactWorkspaceItemV1; readonly runtime: Pick<CreatorStudioRuntimeV1, 'resolveArtifact'>; readonly selection: MediaSelection; readonly onSelectionChange: (selection: MediaSelection) => void; readonly t: CreatorStudioTranslator }) {
@@ -154,12 +156,17 @@ function ResolvedMediaPreview({ artifact, item, runtime, selection, onSelectionC
 function defaultSelection(item: CreatorArtifactWorkspaceItemV1): MediaSelection { return item.artifact.mediaType.startsWith('image/') ? { kind: 'image', region: { x: 0, y: 0, width: 1, height: 1 } } : item.media?.durationMs === undefined ? { kind: 'unavailable' } : { kind: 'time', range: { startMs: 0, endMs: item.media.durationMs } } }
 function rangeValue(selection: MediaSelection): string | undefined { return selection.kind === 'image' ? JSON.stringify({ kind: 'image', ...selection.region }) : selection.kind === 'time' ? JSON.stringify({ kind: 'time', ...selection.range }) : undefined }
 
-function buildComposerReference(input: { readonly artifact: ArtifactRefV1; readonly proof: CreatorArtifactReferenceProofV1; readonly selection: MediaSelection }): ComposerReferenceV2 {
+function buildComposerReference(input: { readonly artifact: ArtifactRefV1; readonly proof: CreatorArtifactReferenceProofV1; readonly selection: MediaSelection }): ComposerReferenceV2 | undefined {
+  if (input.selection.kind === 'image') {
+    const region = input.selection.region
+    if (input.proof.scope !== 'artifact/media' || !['image', 'image-region'].includes(input.proof.kind)) return undefined
+    if (input.proof.kind === 'image' && (region.x !== 0 || region.y !== 0 || region.width !== 1 || region.height !== 1)) return undefined
+  }
   return {
     id: input.proof.id, kind: input.proof.kind, intent: input.proof.intent, owner: input.artifact.owner, ref: input.artifact.ref, version: input.artifact.version,
     label: input.artifact.title, scope: input.proof.scope, digest: input.proof.digest, freshness: input.proof.freshness,
     ...(input.proof.unavailableReason === undefined ? {} : { unavailableReason: input.proof.unavailableReason }),
-    ...(input.selection.kind === 'image' ? { region: input.selection.region } : input.selection.kind === 'time' ? { window: { start: input.selection.range.startMs, end: input.selection.range.endMs } } : {}),
+    ...(input.selection.kind === 'image' && input.proof.kind === 'image-region' ? { region: input.selection.region } : input.selection.kind === 'time' ? { window: { start: input.selection.range.startMs, end: input.selection.range.endMs } } : {}),
   }
 }
 
@@ -284,6 +291,7 @@ export function CreatorArtifactWorkspace({ owner, snapshot, state, runtime, comp
     if (actionArtifact.mediaType.startsWith('text/') && bridge.features?.editablePrompt !== true) { setComposerMessage(t('workspace.composerMissing')); return }
     const requestId = `creator-reference-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
     const reference = buildComposerReference({ artifact: actionArtifact, proof, selection })
+    if (reference === undefined) { setComposerMessage(t('workspace.referenceRangeUnsupported')); return }
     const abort = new AbortController()
     composerAbort.current = abort
     composerPending.current = { requestId, target: bridge.target, reference, status: 'pending' }
@@ -348,11 +356,13 @@ export function CreatorArtifactWorkspace({ owner, snapshot, state, runtime, comp
       throw error
     }
   }
+  const attachProof = selectedCandidate?.referenceProof ?? selected.referenceProof
+  const unsupportedReferenceRange = attachProof !== undefined && buildComposerReference({ artifact: selectedCandidate?.artifact ?? selected.artifact, proof: attachProof, selection }) === undefined
   const actionAvailable = (next: LifecycleAction): boolean => {
     const binding = selectedAction(selected, next)
-    return binding !== undefined && lifecyclePendingDescriptor === undefined && contentIssue(next) === undefined && !(binding.rangeField !== undefined && selection.kind === 'unavailable') && !(next === 'attachContext' && (composerPending.current !== undefined || (attachKey !== undefined && drafts[attachKey] !== undefined)))
+    return binding !== undefined && lifecyclePendingDescriptor === undefined && contentIssue(next) === undefined && !(binding.rangeField !== undefined && selection.kind === 'unavailable') && !(next === 'attachContext' && (unsupportedReferenceRange || composerPending.current !== undefined || (attachKey !== undefined && drafts[attachKey] !== undefined)))
   }
-  const actionUnavailableReason = (next: LifecycleAction): string => lifecyclePendingDescriptor !== undefined ? t('action.disabled.pending') : next === 'attachContext' && attachKey !== undefined && drafts[attachKey] !== undefined ? t('workspace.referenceUnsaved') : contentIssue(next) !== undefined ? t('workspace.contentOutOfBounds', contentIssue(next)) : t('workspace.actionUnavailable')
+  const actionUnavailableReason = (next: LifecycleAction): string => next === 'attachContext' && unsupportedReferenceRange ? t('workspace.referenceRangeUnsupported') : lifecyclePendingDescriptor !== undefined ? t('action.disabled.pending') : next === 'attachContext' && attachKey !== undefined && drafts[attachKey] !== undefined ? t('workspace.referenceUnsaved') : contentIssue(next) !== undefined ? t('workspace.contentOutOfBounds', contentIssue(next)) : t('workspace.actionUnavailable')
   const switchItem = (ref: string): void => { setSelectedRef(ref); setCandidateRef(undefined); setAction(undefined); if (composerPending.current === undefined) setComposerMessage(undefined) }
   const updateSelection = (next: MediaSelection): void => { if (key !== undefined) setSelections(current => ({ ...current, [key]: next })) }
   const duration = selected.media?.durationMs
@@ -361,7 +371,7 @@ export function CreatorArtifactWorkspace({ owner, snapshot, state, runtime, comp
     <div className="cs-actions" role="group" aria-label={t('workspace.artifactSelection')}>{items.map(item => <Button key={JSON.stringify([item.artifact.owner, item.artifact.ref, item.artifact.version])} className="cs-button" size="sm" variant={item.artifact.ref === selected.artifact.ref ? 'primary' : 'toolbar'} type="button" onClick={() => switchItem(item.artifact.ref)}>{item.artifact.title}</Button>)}</div>
     <div className="cs-actions" role="tablist" aria-label={t('workspace.viewSelection')}>{(['preview', 'source', 'compare'] as const).map(next => <Button key={next} className="cs-button" size="sm" variant={view === next ? 'primary' : 'toolbar'} type="button" role="tab" aria-selected={view === next} onClick={() => setView(next)}>{t(next === 'preview' ? 'workspace.preview' : next === 'source' ? 'workspace.source' : 'workspace.compare')}</Button>)}</div>
     {view === 'preview' && (selected.artifact.mediaType.startsWith('text/') || selected.artifact.kind === 'text' || selected.artifact.kind === 'code' || selected.artifact.kind === 'diagram'
-      ? body === undefined ? <SurfaceState phase={bodyState?.status === 'loading' ? 'loading' : 'disabled'} title={bodyState?.status === 'error' ? t('workspace.bodyError') : bodyState?.status === 'unavailable' ? t('workspace.bodyUnavailable') : t('workspace.previewUnavailable')} /> : <TextDraftPreview artifact={selected.artifact} body={body} />
+      ? body === undefined ? <SurfaceState phase={bodyState?.status === 'loading' ? 'loading' : 'disabled'} title={bodyState?.status === 'error' ? t('workspace.bodyError') : bodyState?.status === 'unavailable' ? t('workspace.bodyUnavailable') : t('workspace.previewUnavailable')} /> : <TextDraftPreview artifact={selected.artifact} body={body} t={t} />
       : <ResolvedMediaPreview artifact={selected.artifact} item={selected} runtime={runtime} selection={selection} onSelectionChange={updateSelection} t={t} />)}
     {view === 'source' && <label className="cs-field ys-field" data-creator-artifact-editor><span>{t('workspace.sourceLabel')}</span>{bodyState?.status === 'loading' ? <SurfaceState phase="loading" title={t('workspace.loadingBody')} /> : body !== undefined ? <textarea value={body} onChange={event => { const value = event.currentTarget.value; if (key !== undefined) setDrafts(current => ({ ...current, [key]: value })) }} /> : <SurfaceState phase="disabled" title={bodyState?.status === 'error' ? t('workspace.bodyError') : t('workspace.bodyUnavailable')} />}<small>{t('workspace.sourceHint')}</small></label>}
     {view === 'compare' && (selected.candidates.length === 0 ? <SurfaceState phase="disabled" title={t('workspace.candidateUnavailable')} description={t('workspace.candidateUnavailable.description')} /> : <><label className="cs-field ys-field"><span>{t('workspace.candidate')}</span><select value={selectedCandidate?.ref ?? ''} onChange={event => setCandidateRef(event.currentTarget.value)}>{selected.candidates.map(candidate => <option value={candidate.ref} key={candidate.ref}>{candidate.title} · {candidate.version} · {candidate.status}</option>)}</select></label>{selectedCandidate !== undefined && <CandidateComparison item={selected} candidate={selectedCandidate} runtime={runtime} t={t} />}</>)}

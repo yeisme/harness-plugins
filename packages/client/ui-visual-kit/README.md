@@ -25,6 +25,8 @@ const panelStyles = buildPanelStyles({
 4. 自有规则只消费 `--vk-*` 变量，不写 `--dsw-alias-*` 字面量 fallback、不写状态色 hex；状态色用 `--vk-state-*` 或 `--vk-tone-*`。
 5. 测试断言样式串来自 `buildPanelStyles()`（相等断言）、token 单点、scope 隔离（见 `ui-pane-domain/tests/visual-adoption.spec.ts`、`ui-creator-studio/tests/styles.spec.ts`）。
 
+基础按钮继承使用零优先级 `:where(...)`，仅提供默认字体与文字颜色。宿主 Button 的 primary／toolbar 等变体应保留自身前景色和字号；面板不得用高优先级通配按钮规则覆盖。实际 Host 亮暗主题需验证主按钮文字对比度。
+
 ## 状态语义
 
 `statusTone(status)` 把 owner 词表映射到 `positive/info/warn/critical/neutral`；词表外落 neutral。状态不得只靠颜色表达——配文本或 aria。tone 色值：`--vk-state-positive #51c58b`、`info #6aa8ff`、`warn #f0b45a`、`error #ee6b72`、`neutral #8b8b94`。

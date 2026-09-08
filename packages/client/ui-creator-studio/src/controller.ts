@@ -8,6 +8,7 @@ import {
   type PaneActionDescriptorV1,
   type PaneActionReceiptV1,
   type PaneActionValueV1,
+  type PaneActionReconcileRequestV1,
 } from '@yeisme/dsh-pane-protocol'
 import {
   validateCreatorAssetPage,
@@ -26,6 +27,7 @@ import {
 export interface CreatorStudioRemote {
   snapshot(): Promise<RemoteResult<CreatorStudioSnapshotV1>>
   dispatch(request: unknown): Promise<RemoteResult<PaneActionReceiptV1>>
+  reconcile?(request: PaneActionReconcileRequestV1): Promise<RemoteResult<PaneActionReceiptV1>>
   resolveArtifact(artifact: ArtifactRefV1): Promise<RemoteResult<CreatorMediaAccessV1 | null>>
   readArtifactContent?(artifact: ArtifactRefV1): Promise<RemoteResult<CreatorArtifactContentV1 | null>>
   assets?(query: CreatorAssetQueryV1): Promise<RemoteResult<unknown>>
@@ -84,6 +86,7 @@ export class CreatorStudioController {
   private snapshotRef: string | undefined
   private snapshotVersion = -1
   private contextKey: string | undefined
+  private readonly actionFlights = new Map<string, { request: PaneActionReconcileRequestV1; receipt: PaneActionReceiptV1 | null; reading?: boolean }>()
 
   constructor(private readonly remote: CreatorStudioRemote) {}
 
@@ -105,6 +108,15 @@ export class CreatorStudioController {
     if (this.disposed || current.snapshot?.context === undefined) {
       return this.localReceipt(descriptor, 'reconcile_required', 'Creator Studio context is unavailable.', 'context_unavailable')
     }
+    const scope = current.snapshot.context
+    if (descriptor.context.workspaceRef !== scope.workspaceRef || descriptor.context.projectRef !== scope.projectRef) {
+      return this.localReceipt(descriptor, 'reconcile_required', 'The action belongs to another project.', 'context_mismatch')
+    }
+    // A refreshed descriptor or session must not authorize repeating an uncertain operation.
+    const actionKey = JSON.stringify([scope.tenantRef, scope.workspaceRef, scope.projectRef, descriptor.owner, descriptor.actionId, descriptor.targetRef])
+    if (this.actionFlights.has(actionKey)) {
+      return this.actionFlights.get(actionKey)!.receipt ?? this.localReceipt(descriptor, 'pending', 'The original action is still pending.', 'action_pending')
+    }
     const request = PaneActionRequestSchema.parse({
       schema: PANE_ACTION_REQUEST_SCHEMA,
       descriptorRef: descriptor.descriptorRef,
@@ -113,27 +125,64 @@ export class CreatorStudioController {
       expectedTargetRef: descriptor.targetRef,
       expectedTargetVersion: descriptor.targetVersion,
       context: descriptor.context,
-      idempotencyKey: `creator-${descriptor.descriptorRef}-${Date.now()}`.replace(/[^a-z0-9._:-]/giu, '-').slice(0, 160),
+      idempotencyKey: `creator-${crypto.randomUUID()}`,
       values,
     })
     const generation = this.generation
+    const submittedContext = this.contextKey
+    const flight = { request: { schema: 'pane.action-reconcile-request.v1alpha1' as const, owner: request.owner,
+      actionId: request.actionId, expectedTargetRef: request.expectedTargetRef, context: request.context, idempotencyKey: request.idempotencyKey }, receipt: null as PaneActionReceiptV1 | null }
+    this.actionFlights.set(actionKey, flight)
     this.store.set({ ...current, pendingDescriptorRef: descriptor.descriptorRef, errorCode: null })
     let receipt: PaneActionReceiptV1
     try {
       const result = await this.remote.dispatch(request)
-      if (!this.current(generation)) return this.localReceipt(descriptor, 'unknown', 'The previous Creator Studio generation was replaced.', 'generation_replaced')
       if (!result.ok) receipt = this.localReceipt(descriptor, 'unknown', 'The owner action Remote did not settle.', result.error.code)
       else receipt = PaneActionReceiptSchema.safeParse(result.value).success
+        && (result.value.owner === undefined || result.value.owner === descriptor.owner)
+        && (result.value.actionId === undefined || result.value.actionId === descriptor.actionId)
         ? PaneActionReceiptSchema.parse(result.value)
         : this.localReceipt(descriptor, 'unknown', 'The owner returned an invalid action receipt.', 'receipt_contract_mismatch')
     } catch {
       receipt = this.localReceipt(descriptor, 'unknown', 'The owner action transport is uncertain.', 'settlement_unknown')
+    }
+    if (['unknown', 'reconcile_required', 'pending'].includes(receipt.status)) flight.receipt = receipt
+    else this.actionFlights.delete(actionKey)
+    if (!this.current(generation) || this.contextKey !== submittedContext) {
+      return this.localReceipt(descriptor, 'unknown', 'The previous Creator Studio context was replaced.', 'generation_replaced')
     }
     if (this.current(generation)) {
       const next = this.store.getSnapshot()
       this.store.set({ ...next, pendingDescriptorRef: null, lastReceipt: receipt })
       if (receipt.status === 'accepted' || receipt.status === 'completed' || receipt.status === 'partial') void this.refresh()
     }
+    return receipt
+  }
+
+  async reconcileAction(descriptor: PaneActionDescriptorV1): Promise<PaneActionReceiptV1> {
+    const scope = this.store.getSnapshot().snapshot?.context
+    if (this.disposed || scope === undefined) return this.localReceipt(descriptor, 'unknown', 'The current project is unavailable.', 'context_unavailable')
+    const key = JSON.stringify([scope.tenantRef, scope.workspaceRef, scope.projectRef, descriptor.owner, descriptor.actionId, descriptor.targetRef])
+    const flight = this.actionFlights.get(key)
+    if (flight === undefined) return this.localReceipt(descriptor, 'unknown', 'No original operation identity is available.', 'operation_identity_unavailable')
+    if (flight.receipt === null || flight.reading) return this.localReceipt(descriptor, 'pending', 'The original operation is being observed.', 'action_pending')
+    if (this.remote.reconcile === undefined) return this.localReceipt(descriptor, 'unknown', 'The owner reconciliation route is unavailable.', 'reconcile_unavailable')
+    const generation = this.generation, contextKey = this.contextKey
+    flight.reading = true
+    let receipt: PaneActionReceiptV1
+    try {
+      const result = await this.remote.reconcile({ ...flight.request, context: scope })
+      const parsed = result.ok ? PaneActionReceiptSchema.safeParse(result.value) : undefined
+      receipt = parsed?.success && parsed.data.owner === descriptor.owner && parsed.data.actionId === descriptor.actionId
+        ? parsed.data : this.localReceipt(descriptor, 'unknown', 'No matching original operation receipt was returned.', 'settlement_unknown')
+    } catch { receipt = this.localReceipt(descriptor, 'unknown', 'The original operation is still uncertain.', 'settlement_unknown') }
+    finally { flight.reading = false }
+    // A rejected lookup is not proof that the original execution failed.
+    if (['completed', 'accepted', 'partial', 'failed'].includes(receipt.status)) this.actionFlights.delete(key)
+    else { receipt = { ...receipt, status: 'unknown' }; flight.receipt = receipt }
+    if (!this.current(generation) || this.contextKey !== contextKey) return this.localReceipt(descriptor, 'unknown', 'The project context changed during lookup.', 'generation_replaced')
+    this.store.set({ ...this.store.getSnapshot(), lastReceipt: receipt })
+    if (['completed', 'accepted', 'partial'].includes(receipt.status)) void this.refresh()
     return receipt
   }
 
@@ -280,13 +329,13 @@ export class CreatorStudioController {
     this.snapshotRef = snapshot.snapshotRef
     this.snapshotVersion = snapshot.snapshotVersion
     const current = this.store.getSnapshot()
-    this.store.set({ ...current, phase: 'ready', snapshot, errorCode: null, pendingDescriptorRef: null })
+    this.store.set({ ...current, phase: 'ready', snapshot, errorCode: null })
   }
 
   private publishError(generation: number, errorCode: string): void {
     if (!this.current(generation)) return
     const current = this.store.getSnapshot()
-    this.store.set({ ...current, phase: 'error', errorCode, pendingDescriptorRef: null })
+    this.store.set({ ...current, phase: 'error', errorCode })
   }
 
   private current(generation: number): boolean {

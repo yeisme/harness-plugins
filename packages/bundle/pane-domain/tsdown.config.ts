@@ -1,4 +1,5 @@
 import { defineConfig } from 'tsdown'
+import { inlineCssPlugin } from '../../../scripts/inline-css-plugin.mjs'
 
 const clientExternals = [
   'react',
@@ -29,6 +30,8 @@ export default defineConfig([
   },
   {
     entry: { client: 'src/client.ts' },
+    plugins: [inlineCssPlugin()],
+    define: { 'process.env.NODE_ENV': JSON.stringify('production'), 'import.meta.env.MODE': JSON.stringify('production') },
     outDir: 'lib',
     format: 'cjs',
     platform: 'browser',
