@@ -24,7 +24,7 @@
 - [x] 3.4 P0 实现不透明 cursor 分页、stableKey 去重、已加载计数、显式加载更多。依赖：3.2；验收：筛选切换中的旧页、重复页和无总数来源。
 - [x] 3.5 P0 实现 32 页／1000 摘要 LRU、30s TTL／5min stale 和后台更新；缓存键包含权限与项目上下文。依赖：3.3、3.4；验收：过期淘汰、跨项目／profile／locale 不串用。
 - [x] 3.6 P0 补齐权限拒绝、provider 卸载、HMR、会话更新、搜索关闭的清理；无权限 generation 时缓存只保留当前打开周期。依赖：3.5；验收：撤权后旧片段不可见且无在途回写。
-- [ ] 3.7 P0 阶段 B 验收：真实 owner 能力可用时执行分页／命中打开；不可用时只验适配合同，保留对应功能任务未完成。依赖：3.1–3.6；验收：证据明确区分实际查询与 mock。
+- [ ] 3.7 P0 阶段 B 验收：真实 owner 能力可用时执行分页／命中打开；不可用时只验适配合同，保留对应功能任务未完成。依赖：3.1–3.6；验收：证据明确区分实际查询与 mock。 Recheck 2026-09-09: `[external-gate skipped]` 维持——live history owner 仍缺（alpha 0.1.5-alpha.1 dsh-session/dsh-agent tarball 全量 grep historySearch/searchHistory/long-term-history 0 命中，next 仍 0.1.2-rc.1）；只验适配合同的证据边界不变，功能任务保持未勾。
   - 进展（2026-09-07）：已注入当前 profile `ctx.sessions.list` conversation-search owner（空列表=available+empty，缺失 seam=unavailable；不覆盖 owner-provided host；open 委托 `sessions.open`）。Vitest 覆盖 available+empty／query hit／cursor pagination／abort／contract_mismatch／open／无 HTML-path-token 泄漏。证据 `temp/integration-test-runs/workspace-search-conversation-owner-2026-09-07T04-23-26-839Z-2293966/`（`live_query=not_verified`，`mock_query=verified`）。官方宿主 live query 未跑，按任务条款保留本项未勾。
 
 ## 4. C. 打开行为、搜索 Pane 与常用筛选
