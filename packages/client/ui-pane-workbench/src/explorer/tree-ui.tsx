@@ -8,6 +8,7 @@ import { windowVirtualRows } from '../virtual-window.js'
 import { EXPLORER_STYLES } from './styles.js'
 import type { ExplorerOpenAdapterV1 } from './open-adapter.js'
 import { getExplorerRuntime, subscribeExplorerRuntime, type ExplorerMetadataV1, type ExplorerMutationProposalV1, type ExplorerRuntimeSourceV1, type ExplorerRuntimeV2 } from './runtime.js'
+import { createExplorerWatchController } from './explorer-watch.js'
 import {
   createExplorerTreeState,
   explorerRowHeight,
@@ -483,11 +484,31 @@ export function ExplorerTreeView(props: PaneLocalViewProps & { readonly runtimeS
     props.runtimeSource?.getSnapshot ?? getExplorerRuntime,
   )
   const narrow = useNarrowViewport()
+  // followups 1.1：同步镜像最新树状态，watch 事件折叠与 reconcile 都基于最新值，
+  // 不覆盖用户在事件间隙做出的选择/焦点/滚动锚点。
+  const explorerViewState = useRef(state)
+  explorerViewState.current = state
+  const applyState = (next: ExplorerTreeStateV1): void => {
+    explorerViewState.current = next
+    setState(next)
+  }
   useEffect(() => {
     if (runtime === undefined) return
     let live = true
-    void runtime.roots().then(nodes => { if (live) setState(current => reduceExplorerTree(current, { type: 'hydrate_roots', nodes })) }).catch(error => { if (live) setState(current => ({ ...current, freshness: 'offline', errors: { ...current.errors, root: error instanceof Error ? error.message : 'failed to load roots' } })) })
+    void runtime.roots().then(nodes => { if (live) applyState(reduceExplorerTree(explorerViewState.current, { type: 'hydrate_roots', nodes })) }).catch(error => { if (live) applyState({ ...explorerViewState.current, freshness: 'offline', errors: { ...explorerViewState.current.errors, root: error instanceof Error ? error.message : 'failed to load roots' } }) })
     return () => { live = false }
+  }, [runtime])
+  // followups 1.1：owner watch 能力在场才绑定；缺位时保持显式读取，不伪造事件也不轮询。
+  useEffect(() => {
+    if (runtime?.fileWatch === undefined) return
+    const controller = createExplorerWatchController({
+      source: runtime.fileWatch,
+      getRoots: () => runtime.roots(),
+      listChildren: ref => runtime.listChildren(ref),
+      getState: () => explorerViewState.current,
+      setState: applyState,
+    })
+    return () => controller.dispose()
   }, [runtime])
   useEffect(() => {
     if (runtime?.search === undefined) return
@@ -495,12 +516,14 @@ export function ExplorerTreeView(props: PaneLocalViewProps & { readonly runtimeS
     const timer = setTimeout(() => {
       const query = state.filter.trim()
       const request = query === '' ? runtime.roots() : runtime.search!(query)
-      void request.then(nodes => { if (live) setState(current => {
-        const next = reduceExplorerTree(current, { type: 'hydrate_roots', nodes })
-        const errors = { ...next.errors }; delete errors.search
-        return { ...next, errors }
-      }) })
-        .catch(error => { if (live) setState(current => ({ ...current, errors: { ...current.errors, search: error instanceof Error ? error.message : 'Search unavailable' } })) })
+      void request.then(nodes => {
+        if (!live) return
+        const next = reduceExplorerTree(explorerViewState.current, { type: 'hydrate_roots', nodes })
+        const errors = { ...next.errors }
+        delete errors.search
+        applyState({ ...next, errors })
+      })
+        .catch(error => { if (live) applyState({ ...explorerViewState.current, errors: { ...explorerViewState.current.errors, search: error instanceof Error ? error.message : 'Search unavailable' } }) })
     }, 150)
     return () => { live = false; clearTimeout(timer) }
   }, [runtime, state.filter])
@@ -514,5 +537,5 @@ export function ExplorerTreeView(props: PaneLocalViewProps & { readonly runtimeS
       createElement(SurfaceState, { phase: 'error', title: state.errors.root }),
     )
   }
-  return createElement(ExplorerTree, { state, runtime, narrow, onIntent: setState })
+  return createElement(ExplorerTree, { state, runtime, narrow, onIntent: applyState })
 }

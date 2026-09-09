@@ -1,3 +1,4 @@
+import type { ExplorerWatchSourceV1 } from './explorer-watch.js'
 import type { ExplorerTreeNodeV1 } from './tree-state.js'
 
 export interface ExplorerMetadataV1 {
@@ -22,6 +23,11 @@ export interface ExplorerRuntimeV2 {
   addReference?(node: ExplorerTreeNodeV1): Promise<{ readonly ok: boolean; readonly reason?: string }>
   readonly mutation?: ExplorerResourceMutationRuntimeV1
   readonly transfer?: ExplorerTransferRuntimeV1
+  /**
+   * Optional owner file-watch source (FileWatchCapabilityV1, followups 1.1).
+   * Absent keeps honest on-demand refresh: no synthetic events, no polling.
+   */
+  readonly fileWatch?: ExplorerWatchSourceV1
 }
 
 export interface ExplorerMutationProposalV1 {

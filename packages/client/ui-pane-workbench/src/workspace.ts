@@ -123,6 +123,18 @@ export type PaneWorkspaceIntentV1 =
   | { readonly type: 'pin_view'; readonly viewId: string; readonly pinned?: boolean }
   | { readonly type: 'set_view_dirty'; readonly viewId: string; readonly dirty: boolean }
   | {
+    /**
+     * pane-workspace-followups 1.2：提交 owner 复核后的引用恢复状态。
+     * 只改状态/版本/注意位与有界原因，不换 resourceKey、不清 dirty、不移动分组。
+     */
+    readonly type: 'set_view_status'
+    readonly viewId: string
+    readonly status: PaneViewRuntimeStatus
+    readonly resourceVersion?: string
+    readonly attention?: boolean
+    readonly detail?: string
+  }
+  | {
     /** V3 2.6 safe presentation update: bounded title with control characters stripped. */
     readonly type: 'update_view_presentation'
     readonly viewId: string
@@ -1073,6 +1085,24 @@ export function sanitizePresentationTitle(input: string | undefined): string | u
   return stripped === '' ? undefined : stripped
 }
 
+const METADATA_PERSIST_ALLOWLIST: ReadonlySet<string> = new Set(['reopen'])
+
+/**
+ * Persisted-safe view metadata (followups 1.2): a strict allow-list. Only the
+ * bounded `reopen` recovery reason survives; every other metadata key (and any
+ * non-string value) is dropped so persisted envelopes stay safe projections.
+ */
+export function sanitizeViewMetadata(input: unknown): Readonly<Record<string, JsonValue>> | undefined {
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) return undefined
+  const output: Record<string, JsonValue> = {}
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (!METADATA_PERSIST_ALLOWLIST.has(key) || typeof value !== 'string') continue
+    const stripped = value.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 200)
+    if (stripped !== '') output[key] = stripped
+  }
+  return Object.keys(output).length > 0 ? output : undefined
+}
+
 function applyBulkClose(state: PaneWorkspaceV1, intent: Extract<PaneWorkspaceIntentV1, { type: 'bulk_close' }>): PaneWorkspaceReducerResultV1 {
   const preflight = preflightBulkClose(state, intent.groupId, intent.mode, intent.sourceViewId, intent.decision)
   if (!preflight.accepted) {
@@ -1285,6 +1315,21 @@ export function reducePaneWorkspace(state: PaneWorkspaceV1, intent: PaneWorkspac
       const snapshot = cloneSnapshot(state)
       snapshot.views[view.id] = { ...view, dirty: intent.dirty, pinned: intent.dirty || view.pinned, preview: intent.dirty ? false : view.preview }
       return result(commit(state, snapshot, false), true, intent.dirty ? 'dirty' : 'clean')
+    }
+    case 'set_view_status': {
+      const view = viewFor(state, intent.viewId)
+      if (view === undefined) return result(state, false, 'unknown_view', 'View not found.')
+      const snapshot = cloneSnapshot(state)
+      const detail = sanitizePresentationTitle(intent.detail)
+      snapshot.views[view.id] = {
+        ...view,
+        status: intent.status,
+        stale: intent.status === 'stale' ? true : intent.status === 'ready' ? false : view.stale,
+        attention: intent.attention ?? (intent.status === 'conflict' ? true : view.attention),
+        ...(intent.resourceVersion === undefined ? {} : { resourceVersion: intent.resourceVersion.slice(0, 80) }),
+        ...(detail === undefined ? {} : { metadata: { ...view.metadata, reopen: detail } }),
+      }
+      return result(commit(state, snapshot, false), true, 'status_updated')
     }
     case 'move_group': {
       const group = groupFor(state, intent.groupId)

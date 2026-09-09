@@ -2,7 +2,7 @@
 
 由 scripts/openspec-tasks.py 维护状态。
 
-- [ ] 1.1 设计并验证目录 owner watch 与 gap reconcile
-- [ ] 1.2 实现 opaque 文件引用恢复和 dirty 冲突路径
+- [x] 1.1 设计并验证目录 owner watch 与 gap reconcile | evidence: 合同层交付（官方 fs-watch seam 未合入，不伪造真实 watch）：ExplorerWatchController 按 FileWatchCapabilityV1 能力探测绑定、缺位诚实降级；watch 事件折叠+未知 ref created/renamed 触发单次定向父目录 owner 重读；sequence gap 标 reconcile_required 并合并一次权威重读（reconcile_apply 保留仍在的展开/选择/焦点/滚动锚点，锚点不回退根，飞行中事件被该次读吸收、新 gap 才再读一次），零轮询零定时器。独立12项测试+explorer 22项/菜单10项/controller/persistence 回归全绿：temp/integration-test-runs/explorer-watch-file-reopen-20260909T051000Z/。真实 host watch 端到端未验证（blocked on upstream-prs/fs-watch 合入发布版），测试用合成事件流如实断言。
+- [x] 1.2 实现 opaque 文件引用恢复和 dirty 冲突路径 | evidence: 合同层+真实 controller 交付：FileReferenceAdmissionV1 owner 复核端口（resolve ref/权限/版本，缺位=deferred 不伪造 ready）；恢复映射 ready/stale/conflict/unresolved，经新 set_view_status intent 提交（不换 resourceKey、不清 dirty、不开替代文件）；dirty+外部版本变更走 conflict（autoOverwrite/dropBuffer 恒 false，缓冲保留、版本保持打开版）；missing/forbidden 保留 Pane 占位+有界原因；持久化信封增列 resourceVersion+reopen 白名单元数据（rawPrompt 等密钥仍被剥除）。9项新测试覆盖真实 PaneWorkbenchController 跨重挂载序列化恢复链（两次 remount 状态存活）：同上证据目录。真实 owner 复核面与浏览器刷新未验证（seam 缺位），admission 为假实现。
 - [x] 1.3 补齐目录上下文菜单与键盘焦点恢复 | evidence: 原生上下文菜单、行绑定、generation防迟到、取消/确认回焦通过；独立32项Explorer测试+原生菜单5项及完整视觉106项通过。证据见design.md；无真实文件mutation。
 - [x] 1.4 验证布局模板和跨项目恢复场景 | evidence: 真实controller 10项（两/三栏混合项目、重复恢复去重、会话身份、序列化重建、同步/异步dirty guard、过期许可）：temp/integration-test-runs/preset-continuity-strengthened-20260907T105132133690Z/（补丁包upstream-prs/pane-preset-continuity-tests）。renderer缺口已补：真实 SemanticFileEditor 双 Pane 未保存正文挂载期独立、重挂载（布局恢复）不串绑定不跨 Pane 泄漏草稿、保存只落本 entry（editor.spec.tsx 5/5；证据 temp/integration-test-runs/editor-renderer-independence-2026-09-07T16-52-07-199Z-263447/）。未保存正文不跨重挂载持久化=既有产品语义（component-local draft），测试如实断言不伪造恢复。

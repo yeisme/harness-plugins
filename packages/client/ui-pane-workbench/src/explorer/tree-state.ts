@@ -75,6 +75,18 @@ export type ExplorerTreeIntentV1 =
   | { readonly type: 'focus'; readonly ref?: string }
   | { readonly type: 'filter'; readonly query: string }
   | { readonly type: 'watch'; readonly event: ExplorerTreeWatchEventV1 }
+  /**
+   * pane-workspace-followups 1.1：一次权威重读后的整树合并。gap reconcile 的落点——
+   * 以 owner 当前列表替换可见树，同时保留仍然存在的展开、选择、焦点与滚动锚点；
+   * sequence/cursor 以触发 reconcile 的事件为基线，后续连续事件不再误报 gap。
+   */
+  | {
+    readonly type: 'reconcile_apply'
+    readonly roots: readonly ExplorerTreeNodeV1[]
+    readonly childrenByRef: Readonly<Record<string, readonly ExplorerTreeNodeV1[]>>
+    readonly baselineSequence?: number
+    readonly baselineCursor?: string
+  }
   /** 3.4 窄屏：进入内容页（记录返回焦点行）/ 返回 Explorer。 */
   | { readonly type: 'narrow_content'; readonly ref: string }
   | { readonly type: 'narrow_return' }
@@ -274,6 +286,8 @@ export function reduceExplorerTree(state: ExplorerTreeStateV1, intent: ExplorerT
     }
     case 'watch':
       return applyWatch(state, intent.event)
+    case 'reconcile_apply':
+      return applyReconcile(state, intent)
   }
 }
 
@@ -311,6 +325,17 @@ function applyWatch(state: ExplorerTreeStateV1, event: ExplorerTreeWatchEventV1)
     }
   }
   if (node === undefined) {
+    // 未知 ref 的 created/renamed：事件本身不带名称，树不能编造行；
+    // 只把已知父目录标 stale，由 owner 增量重读（或 gap reconcile）带回权威行。
+    const parent = event.parentRef !== undefined ? state.nodes[event.parentRef] : undefined
+    if ((event.op === 'created' || event.op === 'renamed') && parent !== undefined) {
+      return {
+        ...state,
+        sequence: event.sequence,
+        cursor: event.cursor,
+        nodes: { ...state.nodes, [parent.ref]: { ...parent, freshness: 'stale' } },
+      }
+    }
     return { ...state, sequence: event.sequence, cursor: event.cursor }
   }
   return {
@@ -326,6 +351,56 @@ function applyWatch(state: ExplorerTreeStateV1, event: ExplorerTreeWatchEventV1)
       },
     },
   }
+}
+
+/**
+ * 权威重读合并（1.1 gap reconcile 落点）。以 owner 返回的 roots + 已展开目录列表替换可见树：
+ * - 仍然存在的展开/选择/焦点/主行/勾选/滚动锚点原样保留；消失的引用如实清空，
+ *   滚动锚点不回退到根。
+ * - 任何拒绝行（不安全投影）标记 contract_mismatch，不出现在树里。
+ * - sequence/cursor 使用基线（触发 reconcile 的事件序号），使后续连续事件正常折叠。
+ */
+function applyReconcile(
+  state: ExplorerTreeStateV1,
+  intent: Extract<ExplorerTreeIntentV1, { readonly type: 'reconcile_apply' }>,
+): ExplorerTreeStateV1 {
+  const rootsAccepted = acceptNodes(intent.roots)
+  let rejected = rootsAccepted.rejected
+  const nodes: Record<string, ExplorerTreeNodeV1> = {}
+  const children: Record<string, readonly string[]> = { root: rootsAccepted.accepted.map(node => node.ref) }
+  for (const node of rootsAccepted.accepted) nodes[node.ref] = node
+  for (const [parentRef, listed] of Object.entries(intent.childrenByRef)) {
+    const batch = acceptNodes(listed)
+    rejected += batch.rejected
+    children[parentRef] = batch.accepted.map(node => node.ref)
+    for (const node of batch.accepted) nodes[node.ref] = node
+  }
+  for (const key of Object.keys(children)) {
+    if (key !== 'root' && nodes[key] === undefined) delete children[key]
+  }
+  const exists = (ref: string | undefined): ref is string => ref !== undefined && nodes[ref] !== undefined
+  const selectedRef = exists(state.selectedRef) ? state.selectedRef : undefined
+  const errors: Record<string, string> = {}
+  for (const [ref, reason] of Object.entries(state.errors)) {
+    if (nodes[ref] !== undefined) errors[ref] = reason
+  }
+  return evictCache({
+    ...state,
+    roots: children.root ?? [],
+    nodes,
+    children,
+    expandedRefs: state.expandedRefs.filter(ref => exists(ref) && nodes[ref]!.hasChildren),
+    selectedRef,
+    primaryRef: exists(state.primaryRef) ? state.primaryRef : undefined,
+    checkedRefs: state.checkedRefs.filter(ref => exists(ref)),
+    focusedRef: exists(state.focusedRef) ? state.focusedRef : selectedRef ?? rootsAccepted.accepted[0]?.ref,
+    scrollAnchor: state.scrollAnchor !== undefined && exists(state.scrollAnchor.ref) ? state.scrollAnchor : undefined,
+    loadingRefs: state.loadingRefs.filter(ref => exists(ref)),
+    errors,
+    freshness: rejected > 0 ? 'contract_mismatch' : 'fresh',
+    sequence: intent.baselineSequence ?? state.sequence,
+    cursor: intent.baselineCursor ?? state.cursor,
+  })
 }
 
 export function explorerRowHeight(pointer: 'fine' | 'coarse'): number {

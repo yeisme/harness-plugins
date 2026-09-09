@@ -2,12 +2,14 @@ import {
   PANE_WORKSPACE_SCHEMA,
   createPaneWorkspace,
   normalizePaneWorkspace,
+  sanitizeViewMetadata,
   type PaneGroupV1,
   type PaneRegionId,
   type PaneSplitNodeV1,
   type PaneViewInstanceV1,
   type PaneWorkspaceV1,
 } from './workspace.js'
+import type { JsonValue } from '@yeisme/dsh-pane-protocol'
 
 export const PANE_WORKSPACE_PERSISTED_V1_SCHEMA = 'pane.workspace.persisted.v1alpha1' as const
 export const PANE_WORKSPACE_PERSISTED_SCHEMA = 'pane.workspace.persisted.v2' as const
@@ -35,6 +37,10 @@ export interface PanePersistedViewV1 {
   readonly duplicate: boolean
   readonly closePolicy: PaneViewInstanceV1['closePolicy']
   readonly status: PaneViewInstanceV1['status']
+  /** Opened resource version; lets remount recovery compare owner versions honestly (followups 1.2). */
+  readonly resourceVersion?: string
+  /** Bounded safe metadata (e.g. reopen reasons). Absent on older envelopes. */
+  readonly metadata?: Readonly<Record<string, JsonValue>>
 }
 
 export interface PaneWorkspacePersistedV2 {
@@ -79,6 +85,8 @@ export function serializePaneWorkspace(state: PaneWorkspaceV1): PaneWorkspacePer
       duplicate: view.duplicate,
       closePolicy: view.closePolicy,
       status: view.status,
+      ...(view.resourceVersion === undefined ? {} : { resourceVersion: view.resourceVersion }),
+      ...(view.metadata === undefined ? {} : { metadata: sanitizeViewMetadata(view.metadata) }),
     }])),
     activeRegion: state.activeRegion,
     activeGroupId: state.activeGroupId,
