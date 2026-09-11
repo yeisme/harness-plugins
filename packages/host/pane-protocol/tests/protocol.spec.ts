@@ -139,6 +139,21 @@ describe('pane protocol', () => {
     expect(result.success).toBe(false)
   })
 
+  it('accepts an optional read-only session share URL on handoff descriptors (dsh-url-session-v1 §6.3)', () => {
+    // 有字段：两种合法路由形式都通过。
+    expect(ArtifactRefSchema.safeParse({ ...artifact, sessionUrl: 'http://127.0.0.1:3080/?s=sess-a' }).success).toBe(true)
+    expect(ArtifactRefSchema.safeParse({ ...artifact, sessionUrl: 'http://127.0.0.1:3080/s/sess-a' }).success).toBe(true)
+    // 缺字段：旧消费者/旧描述符照常解析（additive，不 required）。
+    expect(ArtifactRefSchema.safeParse(artifact).success).toBe(true)
+  })
+
+  it('rejects session URLs that smuggle credentials, fragments, or extra query', () => {
+    expect(ArtifactRefSchema.safeParse({ ...artifact, sessionUrl: 'http://user:pass@127.0.0.1:3080/?s=sess-a' }).success).toBe(false)
+    expect(ArtifactRefSchema.safeParse({ ...artifact, sessionUrl: 'http://127.0.0.1:3080/?s=sess-a&token=x' }).success).toBe(false)
+    expect(ArtifactRefSchema.safeParse({ ...artifact, sessionUrl: 'http://127.0.0.1:3080/?s=sess-a#frag' }).success).toBe(false)
+    expect(ArtifactRefSchema.safeParse({ ...artifact, sessionUrl: 'file:///app/?s=sess-a' }).success).toBe(false)
+  })
+
   it('rejects unsafe artifact fields and absolute paths', () => {
     expect(ArtifactRefSchema.safeParse({ ...artifact, ref: '/private/project/image.png' }).success).toBe(false)
     expect(ArtifactRefSchema.safeParse({ ...artifact, rawPrompt: 'private' }).success).toBe(false)

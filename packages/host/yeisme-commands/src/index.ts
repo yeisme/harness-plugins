@@ -2,6 +2,9 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { CommandDefinition, CommandResult } from '@deepseek-ai/dsh-commands'
+import { yeismeUrlCommand } from './url-command.js'
+export { YEISME_URL_COMMAND_NAME, sessionShareUrl, webOrigin, yeismeUrlCommand, yeismeUrlCommandHandler } from './url-command.js'
+export type { UrlCommandDeps, WebServerLike } from './url-command.js'
 
 export const YEISME_COMMAND_PREFIX = 'yeisme-'
 export const YEISME_COMMAND_NAME = /^yeisme-[a-z0-9]+(?:[_-][a-z0-9]+)*$/
@@ -65,12 +68,23 @@ export const YEISMO_NOTICE_COMMAND: YeismeCommandDefinition = {
 }
 
 export const name = 'yeisme-commands'
-export const inject = ['commands']
+export const inject = ['commands', 'webServer']
 
 export function apply(ctx: Context): () => void {
   const commands = ctx.get('commands') as CommandRegistryLike | undefined
   if (commands === undefined) return () => {}
-  return registerYeismeCommand(commands, YEISMO_NOTICE_COMMAND)
+  const disposers = [registerYeismeCommand(commands, YEISMO_NOTICE_COMMAND)]
+  // /yeisme-url 只在 Web 运行时在场时注册（capability probe：tui 等无
+  // webServer 的 profile 不出现死命令）。
+  try {
+    const server = ctx.get('webServer') as { readonly port?: unknown; readonly host?: unknown } | undefined
+    if (server !== undefined && typeof server.port === 'number' && typeof server.host === 'string') {
+      disposers.push(registerYeismeCommand(commands, yeismeUrlCommand({ server: { port: server.port, host: server.host } })))
+    }
+  } catch {
+    // webServer 缺席（未注入或未 bind）：跳过 url 命令，不中断其它命令。
+  }
+  return () => { for (const dispose of disposers) dispose() }
 }
 
 const YeismeCommandsPlugin = { name, inject, apply }

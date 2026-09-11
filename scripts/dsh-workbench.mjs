@@ -69,6 +69,9 @@ try {
   if (!readFileSync(resolve(source, 'packages/host/frontend-static/src/index.ts'), 'utf8').includes('historyFallback')) {
     await run('bash', ['upstream-prs/frontend-static-history-fallback/apply.sh', source])
   }
+  if (!readFileSync(resolve(source, 'packages/bundle/web-app/src/startup.ts'), 'utf8').includes('resumeSession')) {
+    await run('bash', ['upstream-prs/url-session-web-resume/apply.sh', source])
+  }
   await run('bash', ['upstream-prs/tools-pane-layout-v1/apply.sh', source])
   await run('bash', ['upstream-prs/tools-draft-target-v1/apply.sh', source])
   let compatibleBundle = false

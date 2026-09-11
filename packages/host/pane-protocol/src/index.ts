@@ -20,6 +20,14 @@ export const PANE_PROTOCOL_LIMITS = Object.freeze({
   actionValueChars: 16_384,
 })
 
+export const PANE_TEXT_BODY_BYTES = 2 * 1024 * 1024
+const TextBodySchema = z.object({ field: z.string().min(1).max(120), content: z.string().max(PANE_TEXT_BODY_BYTES) }).strict().superRefine((body, ctx) => {
+  const bytes = new TextEncoder().encode(body.content)
+  if (bytes.byteLength > PANE_TEXT_BODY_BYTES || new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes) !== body.content) {
+    ctx.addIssue({ code: 'custom', path: ['content'], message: 'text body must be valid UTF-8 within the byte limit' })
+  }
+})
+
 const SAFE_IDENTIFIER = /^[a-z0-9][a-z0-9._:/-]*$/i
 const PACKAGE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
 const WINDOWS_ABSOLUTE_PATH = /^[A-Za-z]:[\\/]/
@@ -56,6 +64,21 @@ export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() => z.union([
 
 const IdentifierSchema = z.string().min(1).max(120).regex(SAFE_IDENTIFIER)
 const LabelSchema = z.string().min(1).max(PANE_PROTOCOL_LIMITS.labelChars)
+
+/**
+ * Optional read-only dsh session share URL on artifact descriptors
+ * (dsh-url-session-v1 §6.3). Strictly `http(s)://host[:port]` + one session
+ * route form (`/s/<id>` or `/?s=<id>`): no userinfo, no fragment, no query
+ * beyond the single `s` alias. Carries no authority — the artifact's
+ * capabilities still govern every mutation; old consumers without the field
+ * keep parsing unchanged.
+ */
+const SAFE_SESSION_URL = /^https?:\/\/[^\s@/:]+(?::\d+)?(?:\/s\/[A-Za-z0-9][A-Za-z0-9._-]{0,127}|\/\?s=[A-Za-z0-9][A-Za-z0-9._-]{0,127})$/
+const SessionUrlSchema = z.string().max(512).superRefine((value, ctx) => {
+  if (!SAFE_SESSION_URL.test(value)) {
+    ctx.addIssue({ code: 'custom', message: 'sessionUrl must be an http(s) session share URL without userinfo, fragments, or extra query' })
+  }
+})
 const SummarySchema = z.string().max(PANE_PROTOCOL_LIMITS.artifactSummaryChars)
 const OpaqueRefSchema = z.string().min(1).max(PANE_PROTOCOL_LIMITS.refChars).superRefine((value, ctx) => {
   if (value.startsWith('/') || WINDOWS_ABSOLUTE_PATH.test(value) || UNC_PATH.test(value)) {
@@ -76,6 +99,11 @@ function jsonBytes(value: unknown): number {
 
 /** Rejects secrets, private host paths, executable URLs, and oversized generic payloads. */
 function inspectSafeJson(value: unknown, ctx: z.RefinementCtx, path: PropertyKey[] = []): void {
+  if (typeof value === 'string' && path.at(-1) === 'sessionUrl' && SAFE_SESSION_URL.test(value)) {
+    // §6.3 read-only session share URL: shape-validated at the field schema,
+    // so the blanket raw-URL rejection below does not re-flag it.
+    return
+  }
   if (typeof value === 'string') {
     if (value.startsWith('/') || WINDOWS_ABSOLUTE_PATH.test(value) || UNC_PATH.test(value)) {
       ctx.addIssue({ code: 'custom', path, message: 'absolute paths are not allowed' })
@@ -224,6 +252,7 @@ export const ArtifactRefSchema = z.object({
   summary: SummarySchema.optional(),
   evidenceRefs: z.array(OpaqueRefSchema).max(64),
   capabilities: z.array(IdentifierSchema).max(64),
+  sessionUrl: SessionUrlSchema.optional(),
 }).strict().superRefine((value, ctx) => inspectSafeJson(value, ctx))
 export type ArtifactRefV1 = z.infer<typeof ArtifactRefSchema>
 
@@ -292,10 +321,12 @@ export const PaneActionDescriptorSchema = z.object({
     evidenceRefs: z.array(OpaqueRefSchema).max(64).optional(),
   }).strict(),
   fields: z.array(PaneActionFieldDescriptorSchema).max(PANE_PROTOCOL_LIMITS.actionFields),
+  textBody: z.object({ field: IdentifierSchema, maxBytes: z.number().int().positive().max(PANE_TEXT_BODY_BYTES) }).strict().optional(),
   presentation: PanePresentationSchema.optional(),
 }).strict().superRefine((value, ctx) => {
   inspectSafeJson(value, ctx)
   const keys = value.fields.map(field => field.key)
+  if (value.textBody && !value.fields.some(field => field.key === value.textBody?.field && field.kind === 'textarea')) ctx.addIssue({ code: 'custom', path: ['textBody'], message: 'text body must bind an existing textarea' })
   if (new Set(keys).size !== keys.length) ctx.addIssue({ code: 'custom', path: ['fields'], message: 'action field keys must be unique' })
 })
 export type PaneActionDescriptorV1 = z.infer<typeof PaneActionDescriptorSchema>
@@ -319,12 +350,28 @@ export const PaneActionRequestSchema = z.object({
   context: PaneContextSchema,
   idempotencyKey: z.string().min(8).max(160),
   values: z.record(IdentifierSchema, PaneActionValueSchema),
+  textBody: TextBodySchema.optional(),
 }).strict().superRefine((value, ctx) => {
-  if (Object.keys(value.values).length > PANE_PROTOCOL_LIMITS.actionFields) {
+  if (value.textBody && Object.hasOwn(value.values, value.textBody.field)) ctx.addIssue({ code: 'custom', path: ['textBody'], message: 'text body must not duplicate an action value' })
+  if (Object.keys(value.values).length + (value.textBody ? 1 : 0) > PANE_PROTOCOL_LIMITS.actionFields) {
     ctx.addIssue({ code: 'custom', path: ['values'], message: 'too many action values' })
   }
 })
 export type PaneActionRequestV1 = z.infer<typeof PaneActionRequestSchema>
+
+/** Keeps legacy requests unchanged; only advertised text bodies use the bounded side channel. */
+export function encodePaneActionValues(descriptor: PaneActionDescriptorV1, values: Readonly<Record<string, PaneActionValueV1>>): Pick<PaneActionRequestV1, 'values' | 'textBody'> {
+  const binding = descriptor.textBody
+  const content = binding && values[binding.field]
+  if (!binding || typeof content !== 'string' || content.length <= PANE_PROTOCOL_LIMITS.actionValueChars) return { values: { ...values } }
+  const remaining = { ...values }
+  delete remaining[binding.field]
+  return { values: remaining, textBody: { field: binding.field, content } }
+}
+
+export function decodePaneActionValues(request: PaneActionRequestV1): Record<string, PaneActionValueV1> {
+  return request.textBody ? { ...request.values, [request.textBody.field]: request.textBody.content } : request.values
+}
 
 /** Additive lookup contract: never carries values or authorizes a new execution. */
 export const PaneActionReconcileRequestSchema = z.object({
@@ -505,7 +552,7 @@ export const ProjectCanvasNodeSchema = z.discriminatedUnion('kind', [
   z.object({ ...CanvasNodeBase, kind: z.literal('material'), artifact: ArtifactRefSchema }).strict(),
   z.object({ ...CanvasNodeBase, kind: z.literal('draft'), text: z.string().max(32_768) }).strict(),
   z.object({ ...CanvasNodeBase, kind: z.literal('operation'), owner: IdentifierSchema, actionRef: OpaqueRefSchema,
-    controls: CanvasControlsSchema, selectedArtifact: ArtifactRefSchema.optional() }).strict(),
+    controls: CanvasControlsSchema, selectedArtifact: ArtifactRefSchema.optional(), inputReviewRequired: z.literal(true).optional() }).strict(),
   z.object({ ...CanvasNodeBase, kind: z.literal('result'), artifact: ArtifactRefSchema }).strict(),
   z.object({ ...CanvasNodeBase, kind: z.literal('group'), collapsed: z.boolean() }).strict(),
 ])
