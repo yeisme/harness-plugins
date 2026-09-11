@@ -2,9 +2,6 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
-    environment: 'node',
-    // 组件 spec 以文件级注释切换 jsdom；include 覆盖 .tsx。
-    include: ['./tests/**/*.spec.ts', './tests/**/*.spec.tsx'],
     // ui-primitives 带内联 katex css（mcp-inspector 同坑）：inline 装载。
     server: { deps: { inline: ['@deepseek-ai/dsh-client-ui-primitives'] } },
   },

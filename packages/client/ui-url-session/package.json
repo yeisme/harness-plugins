@@ -1,7 +1,7 @@
 {
   "name": "@yeisme/dsh-client-ui-url-session",
   "version": "0.1.0-rc.1",
-  "description": "DSH URL session codec: /s/<id> canonical route, ?s= alias, and dsh-session mention id extraction (pure functions, no host imports)",
+  "description": "DSH URL session client: /s/<id> & ?s= codec, URL↔session sync controller, missing-session state and session-link entries",
   "main": "lib/index.js",
   "scripts": {
     "test": "vitest run",
@@ -18,15 +18,23 @@
   "files": [
     "lib/index.js",
     "lib/codec.js",
+    "lib/client-entry.js",
     "lib/types/**/*.js",
     "lib/types/**/*.d.ts",
     "README.md"
   ],
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1"
+    "@deepseek-ai/cordis": "^4.0.1",
+    "react": "^18.3.1"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.7",
+    "@testing-library/react": "^16.1.0",
+    "@types/react": "~18.3.31",
+    "jsdom": "^30.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "tsdown": "^0.22.14",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
@@ -40,7 +48,11 @@
       "types": "./lib/types/codec.d.ts",
       "default": "./lib/codec.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./client": {
+      "types": "./lib/types/client-entry.d.ts",
+      "default": "./lib/client-entry.js"
+    }
   },
   "dsh": {
     "client": {

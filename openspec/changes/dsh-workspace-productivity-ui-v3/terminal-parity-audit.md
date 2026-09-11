@@ -57,3 +57,17 @@
 2. `upstream-prs/` 固化 `TerminalInteractiveCapabilityV1` 系列（task 1.3 解除 park）并被上游接受，形成可对照合同。
 
 任一成立后重跑本矩阵，把「DSH 侧对应面」列从缺位改为实际合同条目，并按差异回写 owning design。
+
+## 2026-09-11 增量复核：dsh-terminal 0.1.5-rc.2 官方 interactive PTY backend API
+
+- npm `@deepseek-ai/dsh-terminal` next 前移至 0.1.5-rc.2（alpha 0.1.5-alpha.2；证据 temp/alpha-grep-0911/）。官方**首次**出现 interactive PTY API，对照基准从「无 official note/API」升级为「有 backend 接口、无 Agent Note」。
+- rc.2 API 面（lib/types/types.d.ts）：`TerminalBackend.spawn(TerminalBackendSpawnSpec) → TerminalBackendSession`；会话 = `motd/pid?/startSend(独占 send 操作：done Promise + readOutput() 有界读 + cancel()→SIGINT)/read(offset,count 有界 scrollback)/signal(前台进程组 SIGINT|SIGTERM|SIGKILL|SIGTSTP|SIGHUP)/status()/close(reason)`；`TerminalWaitReason = stdin_read|inferred_idle|timeout|session_exit`；`TerminalBackendCleanupError`（spawn 失败/清理失败聚合）。
+- 逐组映射更新（原 7 组 6 缺失、1 部分）：
+  - **interactive send/input 互斥**：方向已可对照（独占 startSend + wait reason 语义 ≈ input lease 的官方表达）——**部分覆盖（新增）**。
+  - **有界输出读取**：read/readOutput 有界分页 ≈ TerminalHostV2 scrollback 语义子集——部分覆盖。
+  - **信号/进程组/close 清理**：signal/close/cleanup error 语义在场——部分覆盖。
+  - **raw VT**：无（行式文本模型，无字节流面）——缺失维持。
+  - **resize（cols/rows）**：无任何 resize/尺寸 API——缺失维持。
+  - **frame/duplex WebSocket 传输**：backend 进程内接口，无传输层——缺失维持。
+  - **detach/kill/replay**：无显式 detach 语义（close 语义相邻）；replay 无——大部分缺失维持。
+- 判定：2.1「无未映射 required capability」仍未达成（raw VT/resize/frame/duplex/replay 未覆盖），但对照源从零变为官方 API；1.3 的 TerminalInteractiveCapabilityV1 冻结面（raw VT/duplex/resize）未被 rc.2 覆盖，upstream-prs/terminal interactive 固化通道仍未执行。pane-v3 7.1 所需 **client 侧 terminal service**（dsh-web/dsh-session/dsh-agent 的 terminals registry/service）在 rc.2 仍 0 命中——rc.2 的 interface 是 agent 侧 backend provider 面，不是浏览器 pane 可消费的 service。

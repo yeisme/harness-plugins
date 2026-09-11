@@ -1,0 +1,15 @@
+{
+  "name": "@yeisme/dsh-url-session",
+  "version": "0.1.0-rc.1",
+  "description": "DSH session URL deep links and copy actions",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": { ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" }, "./client": { "types": "./lib/types/client/index.d.ts", "default": "./lib/client.js" }, "./cordis.patch.yml": "./cordis.patch.yml", "./package.json": "./package.json" },
+  "files": ["lib", "cordis.patch.yml", "README.md"],
+  "scripts": { "typecheck": "tsc -p tsconfig.json --noEmit", "build": "tsc -p tsconfig.json && tsdown", "test": "vitest run" },
+  "dependencies": { "@yeisme/dsh-client-ui-url-session": "workspace:*" },
+  "devDependencies": { "@deepseek-ai/cordis": "^4.0.1", "typescript": "^5.9.3", "tsdown": "^0.22.14", "vitest": "^3.2.7" },
+  "peerDependencies": { "@deepseek-ai/cordis": "^4.0.1" },
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" }, "client": { "inject": [], "platform": "web" } }
+}

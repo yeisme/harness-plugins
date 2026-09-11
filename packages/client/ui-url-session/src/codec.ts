@@ -94,6 +94,11 @@ export function sessionUrl(input: SessionUrlInput): string {
   return `${base}${path}`
 }
 
+/** 校验单个 SessionId 字面量（供 controller/入口复用同一保守字符集）。 */
+export function isValidSessionId(value: string): boolean {
+  return typeof value === 'string' && SESSION_ID.test(value)
+}
+
 /** 从 `dsh-session:<id>` mention 抽出 SessionId；非规范形式返回 null（P4 内跳复用）。 */
 export function mentionSessionId(uri: string): string | null {
   if (typeof uri !== 'string' || !uri.startsWith(MENTION_PREFIX)) return null

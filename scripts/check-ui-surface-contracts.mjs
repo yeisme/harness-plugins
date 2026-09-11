@@ -25,21 +25,23 @@ const clientCatalog = {
   'ui-pane-side-chat': 'adopted',
   'ui-pane-subagent': 'adopted',
   'ui-pane-workbench': 'adopted',
-  'ui-personal-radar': 'excluded', // view-model/controller face; pane rendering is owned by the host workbench
+  'ui-personal-radar': 'adopted', // market face uses Surface; legacy text face remains compatible
   'ui-semantic-file-editor': 'adopted',
   'ui-session-cookie-manager': 'adopted',
-  'ui-selection-annotation': 'adopted',
+  'ui-selection-annotation': 'adopted', // DOM-anchored annotation ink layer over the shared Surface composition
   'ui-session-tags': 'adopted',
   'ui-session-status': 'excluded', // pure view-model/state logic; Web rendering is owned by ui-command-experience-web (SESSION_STATUS_VIEW_ID)
+  'ui-token-usage': 'adopted', // balance/insights panes consume the shared Surface
   'ui-structured-content': 'embed',
   'ui-surface': 'adopted',
-  'ui-token-usage': 'adopted',
   'ui-visual-kit': 'excluded',
-  'ui-url-session': 'excluded', // pure route codec/view-model; Web sync UI ships with dsh-url-session-v1 §3
+  'ui-url-session': 'embed', // dsh-url-session-v1 §3: missing-session state + session-link menu consume official primitives and --vk-* tokens
 }
 
 /** @type {Record<string, 'adopted'|'embed'|'excluded'|'pending'>} */
 const bundleCatalog = {
+  // dsh-context 是上游 fork（Apache-2.0），自带 lc-* 样式命名空间，不接入统一面板视觉系统
+  'dsh-context': 'excluded',
   'dsh-desktop-workbench': 'adopted',
   'dsh-file-document': 'adopted',
   'dsh-rich-media': 'embed',
@@ -58,6 +60,9 @@ const delegatedSurfaceOwners = new Map([
 const dynamicStyleAllowlist = new Map([
   ['packages/client/ui-pane-domain/src/project-canvas-view.tsx', 'user-controlled React Flow node width and height'],
   ['packages/client/ui-pane-workbench/src/drag-visuals.tsx', 'pointer and measured drag geometry'],
+  ['packages/client/ui-creator-studio/src/image-viewport.tsx', 'measured natural size × zoom scale; static CSS cannot express runtime image geometry'],
+  ['packages/client/ui-selection-annotation/src/client/AnnotationCanvas.tsx', 'annotation ink positioned by measured DOM region geometry'],
+  ['packages/client/ui-token-usage/src/client/insights-panel.tsx', 'segmented bar widths are runtime data proportions'],
   ['packages/client/ui-pane-workbench/src/explorer/tree-ui.tsx', 'virtual tree height, offset and depth indentation'],
   ['packages/client/ui-pane-workbench/src/git/source-control.tsx', 'virtual list height and offset'],
   ['packages/client/ui-pane-workbench/src/management-center.tsx', 'virtual pane-management list height and offset'],
@@ -71,12 +76,10 @@ const dynamicStyleAllowlist = new Map([
   ['packages/client/ui-desktop-workbench/src/client/docx-preview.tsx', 'measured document preview container geometry'],
   ['packages/client/ui-creator-studio/src/views.tsx', 'progress and waveform values'],
   ['packages/client/ui-pane-subagent/src/view.ts', 'tree depth indentation'],
-  ['packages/client/ui-mcp-inspector/src/client/McpInspectorView.tsx', 'coverage proportions and activity timeline geometry'],
-  ['packages/client/ui-token-usage/src/client/insights-panel.tsx', 'usage composition segment proportions'],
+  ['packages/client/ui-mcp-inspector/src/client/McpInspectorView.tsx', 'coverage proportions'],
   ['packages/bundle/dsh-file-document/src/client/file-document-panel.tsx', 'tree depth indentation and owner-authorized preview media sizing'],
   ['packages/client/ui-desktop-workbench/src/client/git-pane.tsx', 'diff and measured workbench state'],
   ['packages/bundle/dsh-rich-media/src/client/media-library.tsx', 'virtual media row geometry'],
-  ['packages/client/ui-selection-annotation/src/client/AnnotationCanvas.tsx', 'normalized marker geometry over an image surface'],
 ])
 
 function sourceFiles(dir) {

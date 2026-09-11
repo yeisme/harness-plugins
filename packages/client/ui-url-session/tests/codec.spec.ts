@@ -67,3 +67,21 @@ describe('mentionSessionId', () => {
     expect(mentionSessionId(uri)).toBe(expected)
   })
 })
+
+describe('query-alias-without-friority fixtures (§3.5 P1 兼容硬门槛)', () => {
+  test('query-alias-without-fallback: only query, no path route, no fallback needed', () => {
+    // 纯上游 location 形状（普通对象，无 URL 实例、无 patch）：?s= 仍然工作。
+    expect(parseSessionLocation({ protocol: 'http:', pathname: '/', search: '?s=sess-a' })).toEqual({ sessionId: 'sess-a', source: 'query' })
+    expect(parseSessionLocation({ protocol: 'https:', pathname: '/index.html', search: '?other=1&s=sess-b' })).toEqual({ sessionId: 'sess-b', source: 'query' })
+  })
+
+  test('query-alias-without-fallback: electron file:// origin parses without http', () => {
+    expect(parseSessionLocation({ protocol: 'file:', pathname: '/app/index.html', search: '?s=sess-a' })).toEqual({ sessionId: 'sess-a', source: 'query' })
+    expect(sessionUrl({ origin: 'file://', sessionId: 'sess-a', form: 'alias' })).toBe('file:/// ?s=sess-a'.replace(' ', ''))
+  })
+
+  test('query-alias-without-fallback: bare upstream root leaves sessions unspecified', () => {
+    expect(parseSessionLocation({ protocol: 'http:', pathname: '/', search: '' })).toEqual({ sessionId: null, source: null })
+    expect(parseSessionLocation({ protocol: 'http:', pathname: '/assets/app.js', search: '?v=3' })).toEqual({ sessionId: null, source: null })
+  })
+})
