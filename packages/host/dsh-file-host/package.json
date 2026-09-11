@@ -30,7 +30,8 @@
   },
   "dependencies": {
     "@yeisme/dsh-file-document": "workspace:*",
-    "@yeisme/dsh-git-host": "workspace:*"
+    "@yeisme/dsh-git-host": "workspace:*",
+    "chokidar": "^4.0.3"
   },
   "devDependencies": {
     "tsdown": "^0.22.14",

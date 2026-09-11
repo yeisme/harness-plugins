@@ -6,6 +6,11 @@ export const EXPLORER_STYLES = buildPanelStyles({ scope: 'explorer-tree', extra:
 [data-explorer-tree] .pwr-explorer-header{padding:var(--vk-gap-md);gap:var(--vk-gap-md);border-bottom:1px solid var(--vk-border-l1)}
 [data-explorer-tree] .ys-context-title{font-size:var(--vk-font-small);font-weight:500;color:var(--vk-text-tertiary)}
 [data-explorer-tree] .ys-context-actions{flex:1;min-width:0}
+[data-explorer-tree] .pwr-explorer-header-actions{display:flex;flex:1 1 auto;min-width:0;align-items:center;gap:var(--vk-gap-sm)}
+[data-explorer-tree] .pwr-explorer-watch-pill{flex:none;padding:0 8px;height:var(--vk-ctrl-button);display:inline-flex;align-items:center;border:1px solid var(--vk-border-l1);border-radius:999px;color:var(--vk-text-tertiary);background:var(--vk-bg-layer-1);font-size:var(--vk-font-micro);font-weight:600;white-space:nowrap}
+[data-explorer-tree] .pwr-explorer-watch-pill[data-file-watch='live']{color:var(--vk-state-success,var(--vk-text-link));border-color:color-mix(in srgb,var(--vk-state-success,var(--vk-text-link)) 45%,var(--vk-border-l1))}
+[data-explorer-tree] .pwr-explorer-watch-pill[data-freshness='stale'],[data-explorer-tree] .pwr-explorer-watch-pill[data-freshness='reconcile_required'],[data-explorer-tree] .pwr-explorer-watch-pill[data-freshness='contract_mismatch']{color:var(--vk-state-warn,var(--vk-text-secondary))}
+[data-explorer-tree] .pwr-explorer-refresh{flex:none}
 [data-explorer-tree] .pwr-explorer-filter{width:100%;min-width:0;height:var(--vk-ctrl-button);min-height:var(--vk-ctrl-button);font-size:var(--vk-font-small);border-radius:var(--vk-radius-sm)}
 [data-explorer-tree] .pwr-explorer-filter input{height:100%;min-height:0;font-size:var(--vk-font-small);padding:0 var(--vk-gap-md);border-radius:var(--vk-radius-sm)}
 [data-explorer-tree] .pwr-explorer-resource-actions{flex:none;padding:var(--vk-gap-xs) var(--vk-gap-md);border-bottom:1px solid var(--vk-border-l1);background:var(--vk-bg-layer-1)}

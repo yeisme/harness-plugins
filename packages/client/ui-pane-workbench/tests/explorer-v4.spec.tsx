@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { createElement, useState } from 'react'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { createElement, useState, StrictMode } from 'react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { setActiveLocale } from '../src/i18n/locale.js'
 import { PaneWorkbenchController } from '../src/controller.js'
@@ -29,6 +29,7 @@ import {
   registerPaneWorkbenchCoreViews,
   windowVirtualRows,
   type ExplorerTreeNodeV1,
+  type ExplorerTreeStateV1,
 } from '../src/index.js'
 import { ExplorerTree, ExplorerTreeView } from '../src/explorer/tree-ui.js'
 import { createExplorerRuntimeSource } from '../src/explorer/runtime.js'
@@ -429,7 +430,6 @@ describe('ComposerReferenceCapabilityV1', () => {
     controller.dispatch({ type: 'mark_stale', ref: 'file:readme', version: 'v6' })
     render(createElement(ComposerReferenceDock, { controller }))
     const disabled = document.querySelector('[data-reference-view-current="r1"] button') as HTMLButtonElement
-    expect(disabled.disabled).toBe(true)
 
 describe('explorer per-kind file icons (file-preview-dispatch)', () => {
   it('maps common media, document, archive and code extensions', () => {
@@ -455,5 +455,60 @@ describe('explorer per-kind file icons (file-preview-dispatch)', () => {
     }
   })
 })
+
+describe('explorer watch pill + explicit refresh (dsh-explorer-live-watch)', () => {
+  function watchRuntime(overrides: Record<string, unknown> = {}) {
+    return {
+      roots: vi.fn(async () => [
+        node({ ref: 'dir:src', name: 'src', kind: 'directory', hasChildren: true }),
+        node({ ref: 'file:readme', name: 'README.md' }),
+      ]),
+      listChildren: vi.fn(async () => [node({ ref: 'file:index', name: 'index.ts', parentRef: 'dir:src' })]),
+      openResource: vi.fn(async () => ({ ok: true })),
+      ...overrides,
+    } as never
+  }
+
+  it('shows the honest on-demand pill when the runtime has no watch source', () => {
+    const { container } = render(createElement(ExplorerTree, { state: hydrated(), runtime: watchRuntime() }))
+    const pill = container.querySelector('[data-file-watch]')
+    expect(pill?.getAttribute('data-file-watch')).toBe('ondemand')
+    expect(pill?.getAttribute('data-freshness')).toBe('fresh')
+  })
+
+  it('shows the live pill when the runtime advertises FileWatchCapabilityV1', () => {
+    const runtime = watchRuntime({
+      fileWatch: { capabilities: ['FileWatchCapabilityV1'], watch: () => ({ subscribe: () => () => {}, snapshotCursor: () => '0' }) },
+    })
+    const { container } = render(createElement(ExplorerTree, { state: hydrated(), runtime }))
+    expect(container.querySelector('[data-file-watch]')?.getAttribute('data-file-watch')).toBe('live')
+  })
+
+  it('refresh re-reads roots and expanded dirs while preserving expansion', async () => {
+    let generation = 1
+    const runtime = watchRuntime({
+      roots: vi.fn(async () => generation === 1
+        ? [node({ ref: 'dir:src', name: 'src', kind: 'directory', hasChildren: true }), node({ ref: 'file:readme', name: 'README.md' })]
+        : [node({ ref: 'dir:src', name: 'src', kind: 'directory', hasChildren: true }), node({ ref: 'file:readme', name: 'README.md' }), node({ ref: 'file:notes', name: 'notes.md' })]),
+    })
+    let state = hydrated()
+    state = reduceExplorerTree(state, { type: 'expand', ref: 'dir:src' })
+    state = reduceExplorerTree(state, { type: 'select', ref: 'file:readme' })
+    const intents: ExplorerTreeStateV1[] = []
+    function Harness(): ReactNode {
+      const [current, setCurrent] = useState(state)
+      return createElement(ExplorerTree, { state: current, runtime, onIntent: next => { intents.push(next); setCurrent(next) } })
+    }
+    render(createElement(Harness))
+    generation = 2
+    fireEvent.click(screen.getByRole('button', { name: '刷新目录树' }))
+    await waitFor(() => expect(screen.getByText('notes.md')).toBeDefined())
+    const last = intents.at(-1)!
+    expect(last.expandedRefs).toContain('dir:src')
+    expect(last.selectedRef).toBe('file:readme')
+    expect(runtime.listChildren).toHaveBeenCalledWith('dir:src')
+  })
+})
+    expect(disabled.disabled).toBe(true)
   })
 })

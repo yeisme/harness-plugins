@@ -15,6 +15,7 @@ import {
   flattenExplorerTree,
   moveExplorerFocus,
   reduceExplorerTree,
+  type ExplorerTreeNodeV1,
   type ExplorerTreeRowV1,
   type ExplorerTreeStateV1,
 } from './tree-state.js'
@@ -98,6 +99,26 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
   const runtimeRef = useRef(props.runtime)
   runtimeRef.current = props.runtime
   const emit = (next: ExplorerTreeStateV1): void => { latest.current = next; props.onIntent?.(next) }
+
+  // dsh-explorer-live-watch：活度徽标 + 用户显式刷新（视图级权威重读，走
+  // reconcile_apply 语义保留展开/选择/焦点/滚动锚点；ondemand 模式同样可用）。
+  const watchLive = props.runtime?.fileWatch !== undefined
+  const [refreshing, setRefreshing] = useState(false)
+  const refresh = (): void => {
+    const runtime = props.runtime
+    if (runtime === undefined || refreshing) return
+    setRefreshing(true)
+    const start = latest.current
+    const expanded = [...start.expandedRefs]
+    void Promise.all([runtime.roots(), Promise.all(expanded.map(ref => runtime.listChildren(ref)))])
+      .then(([roots, childLists]) => {
+        const childrenByRef: Record<string, readonly ExplorerTreeNodeV1[]> = {}
+        expanded.forEach((ref, index) => { childrenByRef[ref] = childLists[index] ?? [] })
+        emit(reduceExplorerTree(latest.current, { type: 'reconcile_apply', roots, childrenByRef }))
+      })
+      .catch(() => { /* 重读失败保持现状；行级错误由既有 errors 面呈现 */ })
+      .finally(() => { setRefreshing(false) })
+  }
   const focused = props.state.focusedRef === undefined
     ? undefined
     : rows.find(row => row.ref === props.state.focusedRef)
@@ -330,13 +351,33 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
     createElement(SurfaceContextBar, {
       className: 'pwr-explorer-header',
       title: props.breadcrumb?.at(-1)?.name ?? t('explorer.root'),
-      actions: createElement(Input, {
-        className: 'pwr-explorer-filter',
-        'aria-label': t('explorer.search'),
-        placeholder: t('explorer.search'),
-        value: props.state.filter,
-        onChange: event => emit(reduceExplorerTree(props.state, { type: 'filter', query: event.currentTarget.value })),
-      }),
+      actions: createElement('span', { className: 'pwr-explorer-header-actions' },
+        createElement('span', {
+          className: 'pwr-explorer-watch-pill',
+          'data-file-watch': watchLive ? 'live' : 'ondemand',
+          'data-freshness': props.state.freshness,
+          role: 'status',
+          'aria-label': watchLive ? '目录树实时监听中' : '目录树按需刷新',
+          title: watchLive ? 'owner watch 在线：外部改动自动刷新' : '按需刷新：点击「刷新」重读工作区',
+        }, watchLive ? 'live' : '手动'),
+        createElement(Button, {
+          type: 'button',
+          size: 'sm',
+          variant: 'toolbar',
+          className: 'pwr-explorer-refresh',
+          'aria-label': '刷新目录树',
+          title: '重读工作区根目录与已展开目录（保留展开、选择与焦点）',
+          disabled: props.runtime === undefined || refreshing,
+          onClick: () => { refresh() },
+        }, refreshing ? '刷新中…' : '刷新'),
+        createElement(Input, {
+          className: 'pwr-explorer-filter',
+          'aria-label': t('explorer.search'),
+          placeholder: t('explorer.search'),
+          value: props.state.filter,
+          onChange: event => emit(reduceExplorerTree(props.state, { type: 'filter', query: event.currentTarget.value })),
+        }),
+      ),
     }),
     props.state.errors.search ? createElement(SurfaceState, { phase: 'error', title: props.state.errors.search }) : null,
     props.runtime?.mutation === undefined ? null : createElement('details', { onClickCapture: (event: { target: EventTarget }) => { if (event.target instanceof Element && !event.target.closest('.pwr-explorer-action-draft')) { invalidateProposal(); actionContext.current = undefined } }, ref: actionsRef, className: 'pwr-explorer-resource-actions', 'data-explorer-resource-actions': true },

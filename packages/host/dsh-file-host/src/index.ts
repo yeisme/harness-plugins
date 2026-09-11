@@ -962,6 +962,7 @@ export function createExplorerFileHost(options: ExplorerFileHostOptions = {}): F
     const parsed = await response.json() as { ok?: boolean; value?: unknown; error?: { code?: unknown; message?: string } }
     if (parsed.ok !== true) {
       const error = new Error(parsed.error?.message ?? `HTTP ${response.status}`)
+      Object.assign(error, { status: response.status })
       if (typeof parsed.error?.code === 'string') Object.assign(error, { code: parsed.error.code })
       throw error
     }
@@ -1022,14 +1023,95 @@ export function createExplorerFileHost(options: ExplorerFileHostOptions = {}): F
     return value as readonly FileEntryV1[]
   }
 
+  // dsh-explorer-live-watch: owner SSE watch stream. v1 streams the whole
+  // workspace — the `parentRef` argument is accepted for contract parity but
+  // does not scope the stream; the client folds events per parent anyway.
+  const watchSupported = typeof EventSource === 'function'
+  const WATCH_RECONNECT_MAX_MS = 15_000
+  const WATCH_OPS: ReadonlySet<string> = new Set(['created', 'changed', 'deleted', 'renamed'])
+  let watchCursor = '0'
+  let watchSource: EventSource | undefined
+  let watchListeners = new Set<(event: FileWatchEventV1) => void>()
+  let watchReconnectTimer: ReturnType<typeof setTimeout> | undefined
+  let watchReconnectDelayMs = 1_000
+
+  const parseWatchEvent = (value: unknown): FileWatchEventV1 | undefined => {
+    if (typeof value !== 'object' || value === null) return undefined
+    const record = value as Partial<FileWatchEventV1> & { readonly parentRef?: unknown }
+    if (typeof record.cursor !== 'string' || record.cursor === '' || record.cursor.length > 64) return undefined
+    if (typeof record.sequence !== 'number' || !Number.isSafeInteger(record.sequence) || record.sequence <= 0) return undefined
+    if (typeof record.op !== 'string' || !WATCH_OPS.has(record.op)) return undefined
+    if (typeof record.entryRef !== 'string' || !isSafeFileTreeRef(record.entryRef)) return undefined
+    if (record.parentRef !== undefined && (typeof record.parentRef !== 'string' || !isSafeFileTreeRef(record.parentRef))) return undefined
+    if (typeof record.occurredAt !== 'string' || record.occurredAt.length > 64) return undefined
+    return {
+      cursor: record.cursor,
+      sequence: record.sequence,
+      op: record.op as FileWatchOp,
+      entryRef: record.entryRef,
+      ...(record.parentRef === undefined ? {} : { parentRef: record.parentRef }),
+      occurredAt: record.occurredAt,
+    }
+  }
+
+  const openWatchStream = (): void => {
+    if (!watchSupported || watchSource !== undefined || watchReconnectTimer !== undefined) return
+    const sessionId = options.sessionId?.()
+    if (sessionId === undefined || sessionId === '') return
+    const since = watchCursor !== '0' ? `&since=${encodeURIComponent(watchCursor)}` : ''
+    const source = new EventSource(`/yeisme-files/api/fs.watch.streamV1?sessionId=${encodeURIComponent(sessionId)}${since}`)
+    watchSource = source
+    source.addEventListener('cursor', event => {
+      try {
+        const parsed = JSON.parse((event as MessageEvent<string>).data) as { readonly cursor?: unknown }
+        if (typeof parsed.cursor === 'string' && parsed.cursor !== '') watchCursor = parsed.cursor
+        watchReconnectDelayMs = 1_000
+      } catch { /* malformed cursor frame: keep the current cursor */ }
+    })
+    source.addEventListener('fs', event => {
+      try {
+        const parsed = parseWatchEvent(JSON.parse((event as MessageEvent<string>).data))
+        if (parsed !== undefined) {
+          watchCursor = parsed.cursor
+          for (const listener of [...watchListeners]) listener(parsed)
+        }
+      } catch { /* malformed frame: dropped, the subscription stays */ }
+    })
+    // Managed reconnect with the latest cursor: the built-in auto-reconnect
+    // would replay from the original `since` and duplicate events.
+    source.onerror = () => {
+      source.close()
+      if (watchSource === source) watchSource = undefined
+      if (watchListeners.size === 0) return
+      const delay = watchReconnectDelayMs
+      watchReconnectDelayMs = Math.min(WATCH_RECONNECT_MAX_MS, watchReconnectDelayMs * 2)
+      watchReconnectTimer = setTimeout(() => {
+        watchReconnectTimer = undefined
+        openWatchStream()
+      }, delay)
+    }
+  }
+
+  const closeWatchStream = (): void => {
+    watchSource?.close()
+    watchSource = undefined
+    if (watchReconnectTimer !== undefined) {
+      clearTimeout(watchReconnectTimer)
+      watchReconnectTimer = undefined
+    }
+    watchCursor = '0'
+    watchReconnectDelayMs = 1_000
+  }
+
   const opaqueHost: FileHostV1 = {
     version: '0.1.0-rc.1',
     capability: 'file-host',
     get capabilities() {
       const legacy = legacyHost.capabilities ?? []
+      const watchCapabilities = watchSupported ? [FILE_WATCH_CAPABILITY] : []
       return opaqueRefsAvailable
-        ? [...new Set([...legacy, FILE_OPAQUE_REF_CAPABILITY, FILE_TREE_PROJECTION_CAPABILITY_V2, ...ownerCapabilities])]
-        : legacy
+        ? [...new Set([...legacy, FILE_OPAQUE_REF_CAPABILITY, FILE_TREE_PROJECTION_CAPABILITY_V2, ...ownerCapabilities, ...watchCapabilities])]
+        : [...new Set([...legacy, ...watchCapabilities])]
     },
     async listEntries(parentRef) {
       try {
@@ -1115,6 +1197,22 @@ export function createExplorerFileHost(options: ExplorerFileHostOptions = {}): F
         const value = await callOpaque('fs.revealV2', { ref })
         return parseReveal(value)
       },
+    },
+    // Owner live watch (dsh-explorer-live-watch): lazy SSE stream shared by
+    // every handle; the last unsubscribe closes it.
+    watch(_parentRef?: string): FileWatchHandle {
+      return {
+        capability: FILE_WATCH_CAPABILITY,
+        subscribe(listener) {
+          watchListeners.add(listener)
+          openWatchStream()
+          return () => {
+            watchListeners.delete(listener)
+            if (watchListeners.size === 0) closeWatchStream()
+          }
+        },
+        snapshotCursor: () => watchCursor,
+      }
     },
     inspect: {
       capability: FILE_INSPECT_CAPABILITY,

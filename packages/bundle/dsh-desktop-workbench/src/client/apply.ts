@@ -24,7 +24,7 @@ import {
 } from '@yeisme/dsh-client-ui-session-tags/client'
 import type { FileEntryV1 } from '@yeisme/dsh-file-document'
 import { classifyFileEntry, MEDIA_HOST_CONTEXT_KEY, isMediaHostV1, listSeededMedia, MediaPreviewPane, subscribeSeededMedia, type MediaHostV1, type MediaRefV1 } from '@yeisme/dsh-rich-media/client'
-import { createExplorerFileHost, createExplorerGitHost, createFileHostFromWorkspaces, FILE_HOST_CONTEXT_KEY, isFileHostV1, type FileHostV1, type FileResourceMutationIntentV1, type FileTreeNodeV2, type FileTreePageV2 } from '@yeisme/dsh-file-host'
+import { createExplorerFileHost, createExplorerGitHost, createFileHostFromWorkspaces, FILE_HOST_CONTEXT_KEY, FILE_WATCH_CAPABILITY, isFileHostV1, type FileHostV1, type FileResourceMutationIntentV1, type FileTreeNodeV2, type FileTreePageV2 } from '@yeisme/dsh-file-host'
 import { isTerminalHostV2, TERMINAL_HOST_CONTEXT_KEY, type TerminalHostV2 } from '@yeisme/dsh-terminal-host'
 import { resolveTerminalPaneRemote } from '@yeisme/dsh-terminal'
 import {
@@ -962,6 +962,11 @@ export function apply(ctx: ClientContext): () => void {
     }
     const runtime: ExplorerRuntimeV2 = {
       getRootRef: () => rootRef,
+      // dsh-explorer-live-watch：host 具备 watch 能力即作为 owner source 注入，
+      // ExplorerWatchController 随即绑定（缺位保持显式读取，不伪造事件）。
+      ...(fileHost.watch !== undefined && fileHost.capabilities?.includes(FILE_WATCH_CAPABILITY) === true
+        ? { fileWatch: fileHost }
+        : {}),
       roots: async () => rememberPage(await fileHost.treeV2!.roots({ limit: 200 })),
       listChildren: async ref => rememberPage(await fileHost.treeV2!.listChildren(ref, { limit: 200 })),
       search: async query => rememberPage(await fileHost.treeV2!.search({ query, limit: 200 })),

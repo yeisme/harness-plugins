@@ -34,6 +34,7 @@ import {
   type FileHostV1,
 } from '@yeisme/dsh-file-host'
 import { createOpaqueFileRefRegistry, FILE_OPAQUE_REF_HOST_CONTEXT_KEY, handleYeismeFilesApi, NodeFileResourceMutationOwner, NodeFileTransferOwner } from '@yeisme/dsh-file-host/node'
+import { createWorkspaceWatchRegistry } from '@yeisme/dsh-file-host/node'
 import { createTerminalHostPlaceholder, type TerminalHostV1, type TerminalHostV2 } from '@yeisme/dsh-terminal-host'
 import { createNotificationHostPlaceholder, type NotificationHostV1 } from '@yeisme/dsh-notify-host'
 
@@ -171,6 +172,9 @@ export function apply(ctx: DesktopWorkbenchNodeContext): () => void {
     }
   }
   const opaqueRefs = createOpaqueFileRefRegistry()
+  // dsh-explorer-live-watch: owner-side refcounted watchers; no SSE subscriber
+  // means no filesystem watcher at all. Torn down with the bundle.
+  const watchRegistry = createWorkspaceWatchRegistry((workspace: string, target: string, directory: boolean) => opaqueRefs.mint(workspace, target, directory))
   const mutationOwners = new Map<string, NodeFileResourceMutationOwner>()
   const transferOwners = new Map<string, NodeFileTransferOwner>()
   const mutationOwner = (cwd: string): NodeFileResourceMutationOwner => {
@@ -248,10 +252,12 @@ export function apply(ctx: DesktopWorkbenchNodeContext): () => void {
       opaqueRefs,
       mutationOwner,
       transferOwner,
+      watchRegistry,
     }),
   })
   return () => {
     dispose()
+    watchRegistry.dispose()
     if (typeof unprovideReferenceOwners === 'function') unprovideReferenceOwners()
     if (typeof unprovide === 'function') unprovide()
     for (const teardown of disposers) teardown()

@@ -40,6 +40,7 @@ import {
   type FileWorkspaceEditPreviewV1,
   type FileWorkspaceEditReceiptV1,
   FILE_INSPECT_CAPABILITY,
+  isSafeFileWatchEvent,
   FILE_TREE_PROJECTION_CAPABILITY_V2,
   type FileInspectCapabilityV1,
   type FileInspectProofV1,
@@ -64,6 +65,10 @@ import {
   type WorkspaceTreeEntryLike,
   type WorkspaceTreeListingLike,
 } from './index.js'
+import type { WorkspaceWatchRegistry } from './watch-registry.js'
+
+export { createWorkspaceWatchRegistry, WATCH_BUFFER_MAX } from './watch-registry.js'
+export type { WatchRefMinter, WorkspaceWatchHandleV1, WorkspaceWatchRegistry } from './watch-registry.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -152,6 +157,15 @@ export class OpaqueFileRefRegistry {
     this.byTarget.set(key, record)
     this.byRef.set(record.ref, record)
     return record
+  }
+
+  /**
+   * Deterministic ref for one watched path (dsh-explorer-live-watch). Same
+   * key space as tree listings, so watcher events and later listings agree
+   * on the ref without exposing the path.
+   */
+  mint(workspace: string, target: string, directory: boolean): OpaqueFileRecord {
+    return this.issue(workspace, target, directory)
   }
 
   async list(cwd: string, parentRef?: string): Promise<readonly FileEntryV1[]> {
@@ -1780,6 +1794,9 @@ export interface FilesApiRequest {
 
 export interface FilesApiResponse {
   writeHead(status: number, headers: Record<string, string>): void
+  /** Streaming writes for the SSE watch stream; absent on buffered mocks. */
+  write?(chunk: string): boolean
+  on?(event: 'close', listener: () => void): void
   end(body: string | Uint8Array): void
 }
 
@@ -1829,26 +1846,96 @@ export interface YeismeFilesApiOptions {
   opaqueRefs?: OpaqueFileRefRegistry
   mutationOwner?(cwd: string): FileResourceMutationCapabilityV1
   transferOwner?(cwd: string): NodeFileTransferOwner
+  /** Owner watch registry (dsh-explorer-live-watch); absent disables the stream. */
+  watchRegistry?: WorkspaceWatchRegistry
 }
 
 /**
  * POST /yeisme-files/api/fs.tree and /yeisme-files/api/fs.read.
  * Same JSON envelope as the community sidebar API, different prefix.
  */
+/**
+ * GET /yeisme-files/api/fs.watch.streamV1?sessionId=&since= — SSE live watch
+ * (dsh-explorer-live-watch-v1). Session-owner fenced like the opaque POST
+ * methods; replays buffered events beyond `since`, then streams live events
+ * as `event: fs` records (validated `isSafeFileWatchEvent`). The first
+ * `event: cursor` frame carries the owner cursor; a 15s comment heartbeat
+ * keeps intermediaries from buffering the stream. Connection close releases
+ * the refcounted watcher.
+ */
+async function handleWatchStream(
+  req: FilesApiRequest,
+  res: FilesApiResponse,
+  requestUrl: URL,
+  options: YeismeFilesApiOptions,
+): Promise<void> {
+  if (req.method !== 'GET') {
+    writeJson(res, 405, { ok: false, error: { code: 'method-error', message: 'fs.watch.streamV1 requires GET' } })
+    return
+  }
+  const sessionId = requestUrl.searchParams.get('sessionId') ?? undefined
+  const resolvedCwd = sessionId === undefined ? undefined : options.sessionCwd(sessionId)
+  if (resolvedCwd === undefined || resolvedCwd === '') {
+    writeJson(res, 403, { ok: false, error: { code: 'forbidden', message: 'session workspace owner is unavailable' } })
+    return
+  }
+  const registry = options.watchRegistry
+  if (registry === undefined) {
+    writeJson(res, 404, { ok: false, error: { code: 'not-found', message: 'file watch capability is unavailable' } })
+    return
+  }
+  let handle
+  try {
+    handle = await registry.acquire(requireAbsolute(resolvedCwd))
+  } catch {
+    writeJson(res, 503, { ok: false, error: { code: 'fs-error', message: 'workspace watcher is unavailable' } })
+    return
+  }
+  res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', connection: 'keep-alive' })
+  const send = (chunk: string): boolean => {
+    try { return res.write?.(chunk) ?? false } catch { return false }
+  }
+  send('retry: 3000\n\n')
+  send(`event: cursor\ndata: ${JSON.stringify({ cursor: handle.snapshotCursor() })}\n\n`)
+  for (const event of handle.eventsSince(requestUrl.searchParams.get('since') ?? undefined)) {
+    if (!isSafeFileWatchEvent(event)) continue
+    send(`event: fs\ndata: ${JSON.stringify(event)}\n\n`)
+  }
+  const unsubscribe = handle.subscribe(event => {
+    if (!isSafeFileWatchEvent(event)) return
+    send(`event: fs\ndata: ${JSON.stringify(event)}\n\n`)
+  })
+  const heartbeat = setInterval(() => { send(': ka\n\n') }, 15_000)
+  let closed = false
+  const finish = (): void => {
+    if (closed) return
+    closed = true
+    clearInterval(heartbeat)
+    unsubscribe()
+    handle.release()
+  }
+  ;(req as { on?: (event: 'close', listener: () => void) => void }).on?.('close', finish)
+  res.on?.('close', finish)
+}
+
 export async function handleYeismeFilesApi(
   req: FilesApiRequest,
   res: FilesApiResponse,
   options: YeismeFilesApiOptions,
 ): Promise<void> {
-  if (req.method !== 'POST') {
-    writeJson(res, 405, { ok: false, error: { code: 'method-error', message: 'method not allowed' } })
-    return
-  }
   const requestUrl = new URL(req.url ?? '/', 'http://dsh.internal')
   const pathname = requestUrl.pathname
   const method = pathname.startsWith('/yeisme-files/api/') ? pathname.slice('/yeisme-files/api/'.length) : undefined
   if (method === undefined || method.includes('/')) {
     writeJson(res, 404, { ok: false, error: { code: 'not-found', message: 'unknown files API method' } })
+    return
+  }
+  if (method === 'fs.watch.streamV1') {
+    await handleWatchStream(req, res, requestUrl, options)
+    return
+  }
+  if (req.method !== 'POST') {
+    writeJson(res, 405, { ok: false, error: { code: 'method-error', message: 'method not allowed' } })
     return
   }
   try {

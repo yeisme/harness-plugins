@@ -1,3 +1,25 @@
+## 2026-09-11: dsh-explorer-live-watch-v1 — 目录树 live watch 落地（本会话）
+
+- 用户确认推翻 09-09「等上游 fs-watch」注记，owner 侧交付真实 watch：`watch-registry.ts`（chokidar@^4 新依赖，按 workspace realpath 引用计数、`OpaqueFileRefRegistry.mint` 确定性铸造 ref、registry 生命周期单调 sequence 跨 watcher 重启不回退、每 generation 512 环形缓冲、恒忽略 .git——gitignore 命中路径照发因树以 ignored 标志列出）+ `fs.watch.streamV1` SSE（唯一 GET 方法、sessionId query fence、cursor/since 重放/15s 心跳/close→release）+ 浏览器 host `watch()`（懒单例 EventSource、形状校验丢弃、error 以最新 cursor 受管重连、末位退订 close）+ apply.ts runtime 广告 `fileWatch` + explorer 头部活度徽标（data-file-watch=live/ondemand）与「刷新」按钮（视图级 reconcile_apply 重读）。
+- 验证：file-host 67/67、desktop-workbench 61/61、pane-workbench 本 lane 绿、六检查器 PASS、bundles 29/29、dsh:workbench --check、pane-menus visual 5/5。真机：真实 webServer 403 fence 两验；完整浏览器 live 目视留 dogfood（session 首帧 header 格式漂移：官方 loader 对旧 session 报 corrupt zstd——上游问题，默认 home boot 也被它崩掉）。
+- **reveal-in-tree 未做**：会话中途发现并行 search-center lane 已落地完整链路（reveal-channel/reveal-navigation + runtime.revealResource 绑 fs.revealV2 + tree-ui 消费 + revealExplorerResource 面），change spec/tasks 已如实撤销该项防双实现。**先查 git status/diff 再立任务，并行 lane 可能已做完。**
+
+### 坑
+- 桌面 bundle 消费 node-only 新导出必须重 build dsh-file-host（desktop-workbench 对着 lib/types typecheck）；再下游（ui-pane-workbench 的并行 search 类型）也可能要先 build 其 lib 才 typecheck 得过——按依赖顺序补 build 即可解。
+- EventSource 自带重连会用旧 since 重放产生重复：必须 onerror → close → 以最新 cursor 主动重开。
+- 树列表以 ignored 标志**列出** gitignored 条目——「树看得见」≠「未忽略」，watch ignore 集只排除 .git 才与列表一致。
+- ui-pane-workbench/visual 直接 `playwright test` 不起 fixture 服务器（invalid URL）：用 `pnpm run test:visual -- visual-<name>.spec.ts`（runner 支持 spec 文件名过滤）。
+- 并行 lane 遗留红（非本 lane）：dsh-projection.spec（dsh-session rc.6 × dsh-llm rc.1 多实例 CallId 运行时导出缺失）、region-chrome（其 chrome/shared.ts 在途）。
+## 2026-09-10: dsh-file-preview-dispatch-v1 — per-file 预览分派面落地（本会话）
+
+- OpenSpec change `dsh-file-preview-dispatch-v1` 全任务勾选（strict valid）：新内容视图 `desktop.preview`（singleton:false，每文件一 Tab）+ `FilePreviewDispatchPane`（ui-desktop-workbench）接通 rich-media 预览平台 registry（首个生产消费者）；openFile 路由改为 classify：text/image 留 `desktop.file`，audio/video/pdf/table/document/archive/binary/未知二进制全部进 `desktop.preview`（hex 兜底取代「二进制文件不支持文本预览」死路）。
+- rich-media：format-kinds 增音视频（mkv/flac/opus/…）与归档（zip/jar/tar/gz/7z/rar）行；新渲染器 `yeisme:audio/video`（MediaPlaybackRenderer+allowBlobUrl）、`yeisme:archive`（zip 中央目录 ranged 读取，locateZipEocd/parseZipCentralDirectory 新 additive API）、`yeisme:binary-hex`（256B hex，family 阶段 priority 140 压过 archive 的 130；zip 仍走 exact 阶段命中 archive）。媒体库回归纯库 + 侧栏「媒体」按钮（补 dsh-web-render-preview 冻结 Requirement 的实现缺口）。explorer 树行按扩展出 image/audio/video/pdf/archive/code/document 图标（presentation-only）。
+- 验证：四包 typecheck/test/build 绿（rich-media 187、ui-desktop-workbench 72、desktop-workbench 45、pane-workbench explorer 全绿）；check:bundles 29/29；dsh:workbench --check 通过；openspec 166/166。
+
+### 跨 lane 事故与修复（重要）
+
+- 本会话误用 `git stash` 做归因实验，把并行会话 397 文件 in-flight 波全部卷入 stash；pop 被 pnpm-lock 冲突挡住后恢复（保新 lockfile），但 92 个 tracked 文件（ui/host/bundle 的 token-usage + selection-annotation 全套）从工作树丢失（` D`），导致 surface 门「unclassified」、visual 服务器 ENOENT 崩溃、78 fixture boot 失败。经 `git checkout --` 从 HEAD 恢复 + 补建两个新包 surface 分类/dynamicStyle allowlist + 补 build 后：visual 90/126（剩 36 全是并行 lane fixture boot：selection-actions 27 + tools 9）、check:plugins 只剩 dsh-context SAFEPROJ 2 findings（并行 lane 未跟踪 fork 包）。**教训：共享仓有活跃并行会话时绝不用 stash；归因用 worktree。**
+- 并行 lane 依赖图混杂（dsh-session 19 实例、dsh-llm 10 实例）：dsh-session@rc.6 × dsh-llm@rc.1 组合运行时缺 `CallId` 导出 → ui-pane-workbench dsh-projection.spec 失败 + rich-media media-node.tsx 类型崩（SessionEventMap 增强跨实例失效）。media-node 已本地加宽（narrowMediaRefEvent 判别联合，运行时不变）；dsh-projection.spec 留给并行 lane 对齐版本后自愈。
 ## 2026-09-07 PM: spec advance — in-flight wave committed, tools-location 7/8, followups 2/4, url-session codec, seven studio changes authored
 
 - In-flight 138-file wave committed as 9 units (archives x4 → specs; workbench retirement + canvas program; url-session protocol; creative workspace impl; search owner wiring; browser pane view split; tools-location design; G21 day7; katex vitest fix). Tree clean after.
