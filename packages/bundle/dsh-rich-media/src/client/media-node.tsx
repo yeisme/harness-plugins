@@ -86,32 +86,52 @@ function locationOf(context: ConversationNodeContext<MediaNodeData>): Conversati
   return context.start?.location ?? context.matches[0]?.location ?? { kind: 'unresolved' }
 }
 
+/**
+ * The session-event union arrives from the runtime's `@deepseek-ai/dsh-session`
+ * instance. The `SessionEventMap` augmentation above extends it with the
+ * `media/ref` family, but pnpm may resolve several same-version instances of
+ * that package across the workspace graph, so the runtime's union can lack the
+ * augmented keys at compile time. Widen locally instead of relying on the
+ * augmentation reaching every instance; the runtime behavior is unchanged.
+ */
+type MediaRefSessionEvent =
+  | { readonly type: 'media/ref'; readonly data: MediaRefEventData }
+  | { readonly type: 'media/ref/update'; readonly data: MediaRefUpdateEventData }
+  | { readonly type: 'media/ref/remove'; readonly data: MediaRefRemoveEventData }
+
+const narrowMediaRefEvent = (event: { readonly type: string }): MediaRefSessionEvent | undefined =>
+  event.type === 'media/ref' || event.type === 'media/ref/update' || event.type === 'media/ref/remove'
+    ? event as MediaRefSessionEvent
+    : undefined
+
 export const mediaNodeDefinition: ConversationNodeDefinition<MediaNodeData> = {
   kind: 'media-ref',
   target: 'chat',
-  match: (event) => {
+  match: (incoming) => {
+    const event = narrowMediaRefEvent(incoming)
+    if (event === undefined) return null
     if (event.type === 'media/ref') {
       return { id: event.data.mediaId, role: 'start' }
     }
-    if (event.type === 'media/ref/update' || event.type === 'media/ref/remove') {
-      return { id: event.data.mediaId, role: 'update' }
-    }
-    return null
+    return { id: event.data.mediaId, role: 'update' }
   },
   start: (_context, match) => {
-    if (match.event.type !== 'media/ref') throw new Error('media-ref requires media/ref start')
+    const event = narrowMediaRefEvent(match.event)
+    if (event?.type !== 'media/ref') throw new Error('media-ref requires media/ref start')
     return {
-      mediaId: match.event.data.mediaId,
-      media: match.event.data.media,
-      title: match.event.data.title,
-      ...match.event.data.summary === undefined ? {} : { summary: match.event.data.summary },
+      mediaId: event.data.mediaId,
+      media: event.data.media,
+      title: event.data.title,
+      ...event.data.summary === undefined ? {} : { summary: event.data.summary },
     }
   },
   update: (context, match) => {
     const state = context.state
     if (state === undefined) return state
-    if (match.event.type === 'media/ref/update') {
-      const data = match.event.data
+    const event = narrowMediaRefEvent(match.event)
+    if (event === undefined) return state
+    if (event.type === 'media/ref/update') {
+      const data = event.data
       return {
         ...state,
         media: data.media,
@@ -119,8 +139,8 @@ export const mediaNodeDefinition: ConversationNodeDefinition<MediaNodeData> = {
         ...data.summary === undefined ? {} : { summary: data.summary },
       }
     }
-    if (match.event.type === 'media/ref/remove') {
-      const data = match.event.data
+    if (event.type === 'media/ref/remove') {
+      const data = event.data
       return {
         ...state,
         removed: true,

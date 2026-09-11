@@ -17,6 +17,10 @@ import { DOCX_MEDIA_TYPE, documentPreviewKindOf, XLSSM_MEDIA_TYPE, XLSX_MEDIA_TY
 import { MediaDocxRenderer } from './docx-renderer.tsx'
 import { MediaSheetRenderer } from './sheet-renderer.tsx'
 import { MediaTextSourceRenderer } from './text-source.tsx'
+import { MediaPlaybackRenderer } from '../media-renderers.tsx'
+import { MediaArchiveRenderer } from './archive-view.tsx'
+import { MediaBinaryHexRenderer } from './binary-hex.tsx'
+import { ZIP_ARCHIVE_MEDIA_TYPES } from './archive-listing.ts'
 import type {
   PreviewFamily,
   PreviewRendererDescriptorV1,
@@ -132,6 +136,54 @@ export const previewBinaryNoticeDescriptor: PreviewRendererDescriptorV1 = {
   load: async () => binaryNotice,
 }
 
+/**
+ * Native-first audio/video playback on the owner-granted short-lived URL.
+ * The object URL is owner-authorized access-handle state, so `allowBlobUrl`
+ * is the explicit carve-out; `rejectUnsafePlayback` guards still apply.
+ */
+const playbackPreview = ({ resource, access }: PreviewRendererProps): ReactElement => {
+  if (access === undefined || access.url === undefined) return unsupported('媒体授权不可用，请使用打开或下载。')
+  return <MediaPlaybackRenderer media={mediaRefOfResource(resource)} url={access.url} allowBlobUrl />
+}
+
+/** Binary family inspector: zip central-directory listing, hex fallback. */
+const archivePreview = (props: PreviewRendererProps): ReactElement => <MediaArchiveRenderer {...props} />
+
+/** Bounded hex/ASCII view for binaries without a dedicated renderer. */
+const binaryHexPreview = (props: PreviewRendererProps): ReactElement => <MediaBinaryHexRenderer {...props} />
+
+export const previewAudioRendererDescriptor: PreviewRendererDescriptorV1 = {
+  id: 'yeisme:audio',
+  families: ['audio'],
+  priority: 100,
+  load: async () => playbackPreview,
+}
+
+export const previewVideoRendererDescriptor: PreviewRendererDescriptorV1 = {
+  id: 'yeisme:video',
+  families: ['video'],
+  priority: 100,
+  load: async () => playbackPreview,
+}
+
+export const previewArchiveRendererDescriptor: PreviewRendererDescriptorV1 = {
+  id: 'yeisme:archive',
+  families: ['binary'],
+  mediaTypes: [...ZIP_ARCHIVE_MEDIA_TYPES],
+  priority: 130,
+  load: async () => archivePreview,
+}
+
+// Family-stage winner for binaries without an exact renderer (priority 140
+// beats the archive descriptor's 130; zip MIME still resolves to the archive
+// descriptor first because the exact-MIME stage runs before family).
+export const previewBinaryHexRendererDescriptor: PreviewRendererDescriptorV1 = {
+  id: 'yeisme:binary-hex',
+  families: ['binary'],
+  priority: 140,
+  load: async () => binaryHexPreview,
+}
+
 /** All format descriptors in registration order. */
 export const FILE_PREVIEW_DESCRIPTORS: readonly PreviewRendererDescriptorV1[] = Object.freeze([
   previewTextRendererDescriptor,
@@ -139,6 +191,10 @@ export const FILE_PREVIEW_DESCRIPTORS: readonly PreviewRendererDescriptorV1[] = 
   previewSheetRendererDescriptor,
   previewDocxRendererDescriptor,
   previewPdfRendererDescriptor,
+  previewAudioRendererDescriptor,
+  previewVideoRendererDescriptor,
+  previewArchiveRendererDescriptor,
+  previewBinaryHexRendererDescriptor,
   previewBinaryNoticeDescriptor,
 ])
 

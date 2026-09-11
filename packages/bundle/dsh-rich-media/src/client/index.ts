@@ -65,17 +65,37 @@ export type { BoundedSource } from './preview/sources.ts'
 export { classifyFileEntry, documentPreviewKindOf, DOCX_MEDIA_TYPE, PPTX_MEDIA_TYPE, XLSSM_MEDIA_TYPE, XLSX_MEDIA_TYPE } from './preview/format-kinds.ts'
 export { ARCHIVE_ENTRY_LIST_MAX, ARCHIVE_ENTRY_NAME_MAX, ZIP_ARCHIVE_MEDIA_TYPES, isZipArchiveMediaType, parseZipEntryList } from './preview/archive-listing.ts'
 export type { ArchiveEntryListV1, ArchiveEntryV1 } from './preview/archive-listing.ts'
+export {
+  CENTRAL_DIRECTORY_SCAN_MAX,
+  EOCD_SCAN_WINDOW,
+  locateZipEocd,
+  parseZipCentralDirectory,
+} from './preview/archive-listing.ts'
+export type { ZipCentralDirectoryLocationV1 } from './preview/archive-listing.ts'
 export type { DocumentPreviewKind, FileEntryClassification } from './preview/format-kinds.ts'
 export {
   FILE_PREVIEW_DESCRIPTORS,
   mediaRefOfResource,
+  previewArchiveRendererDescriptor,
+  previewAudioRendererDescriptor,
+  previewBinaryHexRendererDescriptor,
   previewBinaryNoticeDescriptor,
   previewCsvRendererDescriptor,
   previewDocxRendererDescriptor,
   previewPdfRendererDescriptor,
   previewSheetRendererDescriptor,
   previewTextRendererDescriptor,
+  previewVideoRendererDescriptor,
   registerFilePreviewRenderers,
 } from './preview/descriptors.tsx'
+export { MediaArchiveRenderer } from './preview/archive-view.tsx'
+export { BINARY_HEX_CAP, BinaryHexTable, MediaBinaryHexRenderer } from './preview/binary-hex.tsx'
+export type { BinaryHexFactsV1 } from './preview/binary-hex.tsx'
+export { PreviewRendererRegistry } from './preview/registry.ts'
+export type { PreviewResolveInput } from './preview/registry.ts'
+export { LocalResourcePreviewHost } from './preview/access.ts'
+export type { LocalResourcePreviewHostOptions, PreviewOwnerSourceV1, PreviewAccessHandleInput } from './preview/access.ts'
+export { mediaFamilyOf } from './preview/adapters.ts'
+export type { PreviewFamily, PreviewRendererComponentType, PreviewRendererDescriptorV1, PreviewRendererProps, PreviewResourceV1 } from './preview/types.ts'
 export const name = 'dsh-rich-media'
 export const inject = ['slots', 'uiConversation'] as const

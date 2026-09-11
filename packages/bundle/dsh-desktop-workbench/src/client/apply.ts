@@ -10,6 +10,7 @@ import {
   FILE_IMAGE_REGION_REFERENCE_EVENT,
   FILE_IMAGE_REGION_REFERENCE_RESULT_EVENT,
   FilePane,
+  FilePreviewDispatchPane,
   GitPane,
   ConversationManager,
   TerminalPane,
@@ -122,6 +123,19 @@ function fallbackMediaType(kind: MediaRefV1['kind']): string {
   if (kind === 'video') return 'video/mp4'
   if (kind === 'pdf') return 'application/pdf'
   return 'application/octet-stream'
+}
+
+/**
+ * file-preview-dispatch routing: text-family and image entries keep the
+ * `desktop.file` editor path; everything else (audio/video/pdf/table/document/
+ * archive/binary, including unknown binaries) opens the per-file
+ * `desktop.preview` dispatch view so nothing lands on a dead-end error.
+ * Exported for contract tests.
+ */
+export function routesToPreviewDispatch(entry: FileEntryV1): boolean {
+  if (entry.kind === 'image') return false
+  if (entry.kind === 'text') return false
+  return classifyFileEntry(entry.name, entry.mediaType)?.kind !== 'text'
 }
 
 /** FileEntry to MediaRef projection; exported for contract tests. */
@@ -872,16 +886,17 @@ export function apply(ctx: ClientContext): () => void {
     if (binary === undefined || binary.truncated || binary.bytes.byteLength === 0 || typeof URL.createObjectURL !== 'function') return undefined
     return URL.createObjectURL(new Blob([new Uint8Array(binary.bytes)], { type: binary.mediaType ?? media.mediaType }))
   }
-  const openMedia = (entry: FileEntryV1, media: MediaRefV1, preview: boolean): void => {
-    seededMedia.set(media.ref, media)
-    seededMediaEntries.set(media.ref, entry)
+  // file-preview-dispatch: one Tab per opened resource, never a singleton takeover.
+  const openPreviewDispatch = (entry: FileEntryV1, preview: boolean): void => {
+    const sessionId = currentSessionId(ctx)
+    openFilesById.set(entry.id, { entry, ...(sessionId === undefined ? {} : { sessionId }) })
     workbench.openView({
-      kind: 'desktop.media',
-      resourceKey: media.ref,
+      kind: 'desktop.preview',
+      resourceKey: entry.id,
       role: 'content',
       preferredRegion: 'right',
       retention: 'snapshot',
-      singleton: true,
+      singleton: false,
       preview,
       pinned: !preview,
       title: entry.name,
@@ -889,9 +904,8 @@ export function apply(ctx: ClientContext): () => void {
   }
   const openFile = (entry: FileEntryV1, preview: boolean): void => {
     if (entry.kind === 'directory') return
-    const media = fileEntryToMediaRef(entry)
-    if (media !== undefined && media.kind !== 'image') {
-      openMedia(entry, media, preview)
+    if (routesToPreviewDispatch(entry)) {
+      openPreviewDispatch(entry, preview)
       return
     }
     const sessionId = currentSessionId(ctx)
@@ -1075,6 +1089,15 @@ export function apply(ctx: ClientContext): () => void {
       },
     },
     {
+      descriptor: { kind: 'desktop.preview', label: '文件预览', componentKey: 'desktop-preview', role: 'content', preferredRegion: 'right', retention: 'snapshot', singleton: false, presentation: { description: '按类型分派的单文件预览：音视频、PDF、表格、文档、归档与二进制。' } },
+      component: props => {
+        const resourceKey = props?.view?.resourceKey
+        const opened = resourceKey === undefined ? undefined : openFilesById.get(resourceKey)
+        if (opened === undefined) return createElement('p', { role: 'status' }, '文件不可用。')
+        return createElement(FilePreviewDispatchPane, { host: fileHost, entry: opened.entry })
+      },
+    },
+    {
       descriptor: { kind: 'desktop.documents', label: '文档', componentKey: 'desktop-documents', role: 'content', preferredRegion: 'right', retention: 'snapshot', singleton: true, presentation: { description: '文档库：浏览并打开文档类文件。' } },
       component: () => createElement(FilePane, { host: fileHost, tabId: 'documents', showPreviewPanel: false, compact: true, onOpenEntry: entry => openFile(entry, true) }),
     },
@@ -1090,7 +1113,7 @@ export function apply(ctx: ClientContext): () => void {
     },
   )
   views.push({
-    descriptor: { kind: 'desktop.media', label: '媒体', componentKey: 'desktop-media', role: 'content', preferredRegion: 'right', retention: 'snapshot', singleton: true, presentation: { description: '预览图片、音频、视频与 PDF 媒体文件。' } },
+    descriptor: { kind: 'desktop.media', label: '媒体', componentKey: 'desktop-media', role: 'content', preferredRegion: 'right', retention: 'snapshot', singleton: true, presentation: { description: '媒体库：浏览会话媒体投影与聊天媒体；单文件预览在文件预览 Tab 打开。' } },
     component: props => createElement(MediaPane, {
       host: mediaHost,
       seeded: seededMedia,
@@ -1452,6 +1475,15 @@ export function apply(ctx: ClientContext): () => void {
       name: 'sidebar.footer.action', id: 'desktop-workbench-sidebar-files', order: 40,
     }, filesButton)))
   }
+  const openMediaLibrary = (): void => workbench.openView({
+    kind: 'desktop.media', resourceKey: 'desktop:media', role: 'content', preferredRegion: 'right',
+    retention: 'snapshot', singleton: true, pinned: true, title: '媒体',
+  })
+  // dsh-web-render-preview：侧栏常驻「媒体」库入口（无 mediaHost 时面板显示诚实空态）。
+  const mediaButton = (): ReactNode => createElement(DesktopSidebarAction, { wide: false, label: '媒体', title: '打开媒体库', icon: 'media', onClick: openMediaLibrary })
+  disposers.push(slots.inject('sidebar.footer.action', () => slots.register({
+    name: 'sidebar.footer.action', id: 'desktop-workbench-sidebar-media', order: 42,
+  }, mediaButton)))
   // 4.5「查看当前版本」：owner inspect 重解析真值 + 打开刷新后的内容视图。
   const viewCurrentReference = fileHost === undefined || fileHost.inspect === undefined
     ? undefined

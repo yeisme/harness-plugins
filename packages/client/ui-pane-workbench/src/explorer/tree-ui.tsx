@@ -51,10 +51,34 @@ export interface ExplorerTreeUiProps {
   readonly runtime?: ExplorerRuntimeV2
 }
 
+/**
+ * Presentation-only extension → icon hints (file-preview-dispatch). The glyph
+ * never gates preview or renderer choice — owner inspect/classify stays the
+ * authority; unknown extensions fall back to the generic file glyph.
+ */
+const FILE_ICON_EXTENSIONS: Readonly<Record<string, WorkbenchIconName>> = Object.freeze({
+  png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', bmp: 'image', avif: 'image', ico: 'image', svg: 'image',
+  mp3: 'audio', wav: 'audio', ogg: 'audio', m4a: 'audio', flac: 'audio', aac: 'audio', opus: 'audio', aif: 'audio', aiff: 'audio', wma: 'audio', mid: 'audio', midi: 'audio',
+  mp4: 'video', webm: 'video', mov: 'video', mkv: 'video', avi: 'video', flv: 'video', m4v: 'video', mts: 'video', m2ts: 'video', '3gp': 'video', ogm: 'video',
+  pdf: 'pdf',
+  zip: 'archive', jar: 'archive', tar: 'archive', gz: 'archive', tgz: 'archive', bz2: 'archive', xz: 'archive', '7z': 'archive', rar: 'archive',
+  ts: 'code', tsx: 'code', js: 'code', mjs: 'code', cjs: 'code', jsx: 'code', py: 'code', go: 'code', rs: 'code', java: 'code',
+  c: 'code', cpp: 'code', h: 'code', sh: 'code', bash: 'code', zsh: 'code', sql: 'code', css: 'code', scss: 'code', html: 'code',
+  htm: 'code', xml: 'code', json: 'code', yaml: 'code', yml: 'code', toml: 'code',
+  md: 'document', markdown: 'document', mdx: 'document', txt: 'document', log: 'document',
+  csv: 'document', tsv: 'document', docx: 'document', xlsx: 'document', xlsm: 'document', pptx: 'document', odt: 'document', ods: 'document',
+})
+
+export function explorerFileIconOf(name: string): WorkbenchIconName {
+  const dot = name.lastIndexOf('.')
+  const extension = dot <= 0 ? undefined : name.slice(dot + 1).toLowerCase()
+  return extension === undefined ? 'file' : FILE_ICON_EXTENSIONS[extension] ?? 'file'
+}
+
 function iconForRow(row: ExplorerTreeRowV1): WorkbenchIconName {
   if (row.node.kind === 'directory') return 'folder'
   if (row.node.gitDecoration === 'conflict') return 'git-branch'
-  return 'file'
+  return explorerFileIconOf(row.node.name)
 }
 
 function decorationLabel(kind: string | undefined): string | undefined {

@@ -33,6 +33,8 @@ import {
 import { ExplorerTree, ExplorerTreeView } from '../src/explorer/tree-ui.js'
 import { createExplorerRuntimeSource } from '../src/explorer/runtime.js'
 import { PaneViewRegistry } from '../src/view-registry.js'
+import { explorerFileIconOf } from '../src/explorer/tree-ui.js'
+import { isWorkbenchIconName } from '../src/icon.js'
 
 afterEach(() => {
   setActiveLocale('en')
@@ -428,5 +430,30 @@ describe('ComposerReferenceCapabilityV1', () => {
     render(createElement(ComposerReferenceDock, { controller }))
     const disabled = document.querySelector('[data-reference-view-current="r1"] button') as HTMLButtonElement
     expect(disabled.disabled).toBe(true)
+
+describe('explorer per-kind file icons (file-preview-dispatch)', () => {
+  it('maps common media, document, archive and code extensions', () => {
+    expect(explorerFileIconOf('bundle.zip')).toBe('archive')
+    expect(explorerFileIconOf('capture.mkv')).toBe('video')
+    expect(explorerFileIconOf('voice.flac')).toBe('audio')
+    expect(explorerFileIconOf('manual.pdf')).toBe('pdf')
+    expect(explorerFileIconOf('cover.png')).toBe('image')
+    expect(explorerFileIconOf('main.ts')).toBe('code')
+    expect(explorerFileIconOf('notes.md')).toBe('document')
+    expect(explorerFileIconOf('data.csv')).toBe('document')
+  })
+
+  it('falls back to the generic file glyph for unknown or extensionless names', () => {
+    expect(explorerFileIconOf('data.unknownext')).toBe('file')
+    expect(explorerFileIconOf('Makefile')).toBe('file')
+    expect(explorerFileIconOf('README')).toBe('file')
+  })
+
+  it('only registers presentation icons that exist in the icon set', () => {
+    for (const name of ['image', 'audio', 'video', 'pdf', 'archive', 'code'] as const) {
+      expect(isWorkbenchIconName(name)).toBe(true)
+    }
+  })
+})
   })
 })

@@ -27,6 +27,7 @@ export default defineConfig([
   {
     alias: {
       '@yeisme/dsh-file-document/client': fileURLToPath(new URL('../../bundle/dsh-file-document/src/client/index.ts', import.meta.url)),
+      '@yeisme/dsh-rich-media/client': fileURLToPath(new URL('../../bundle/dsh-rich-media/src/client/index.ts', import.meta.url)),
       '@yeisme/dsh-client-ui-structured-content': fileURLToPath(new URL('../ui-structured-content/src/index.ts', import.meta.url)),
       '@yeisme/dsh-client-ui-visual-kit': fileURLToPath(new URL('../ui-visual-kit/src/index.ts', import.meta.url)),
     },

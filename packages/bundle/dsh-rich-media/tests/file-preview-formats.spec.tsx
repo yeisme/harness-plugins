@@ -125,8 +125,14 @@ describe('registry descriptors', () => {
     expect(registry.resolve({ mediaType: DOCX_MEDIA_TYPE, family: 'document' })?.id).toBe('yeisme:docx')
     expect(registry.resolve({ mediaType: 'text/plain', family: 'text' })?.id).toBe('yeisme:text')
     expect(registry.resolve({ mediaType: 'application/pdf', family: 'pdf' })?.id).toBe('yeisme:pdf')
-    // Unknown binaries and PPTX land on the honest degrade notice, never a format guess.
-    expect(registry.resolve({ mediaType: 'application/octet-stream', family: 'binary' })?.id).toBe('yeisme:binary-notice')
+    // Unknown binaries land on the bounded hex view; zip resolves by exact MIME
+    // ahead of the family stage; PPTX (document family) keeps the honest notice.
+    expect(registry.resolve({ mediaType: 'application/octet-stream', family: 'binary' })?.id).toBe('yeisme:binary-hex')
+    expect(registry.resolve({ mediaType: 'application/x-tar', family: 'binary' })?.id).toBe('yeisme:binary-hex')
+    expect(registry.resolve({ mediaType: 'application/zip', family: 'binary' })?.id).toBe('yeisme:archive')
+    expect(registry.resolve({ mediaType: 'application/java-archive', family: 'binary' })?.id).toBe('yeisme:archive')
+    expect(registry.resolve({ mediaType: 'audio/ogg', family: 'audio' })?.id).toBe('yeisme:audio')
+    expect(registry.resolve({ mediaType: 'video/x-matroska', family: 'video' })?.id).toBe('yeisme:video')
     expect(registry.resolve({ mediaType: PPTX_MEDIA_TYPE, family: 'document' })?.id).toBe('yeisme:binary-notice')
     dispose()
     expect(registry.size()).toBe(0)
@@ -288,9 +294,10 @@ describe('interaction-space anchor hints (data-source-*)', () => {
 })
 
 describe('descriptor exports', () => {
-  it('exposes six descriptors covering the format matrix', () => {
+  it('exposes ten descriptors covering the format matrix', () => {
     expect(FILE_PREVIEW_DESCRIPTORS.map(descriptor => descriptor.id)).toEqual([
-      'yeisme:text', 'yeisme:csv', 'yeisme:sheet', 'yeisme:docx', 'yeisme:pdf', 'yeisme:binary-notice',
+      'yeisme:text', 'yeisme:csv', 'yeisme:sheet', 'yeisme:docx', 'yeisme:pdf',
+      'yeisme:audio', 'yeisme:video', 'yeisme:archive', 'yeisme:binary-hex', 'yeisme:binary-notice',
     ])
   })
 })

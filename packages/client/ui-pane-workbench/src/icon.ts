@@ -35,6 +35,12 @@ export type WorkbenchIconName =
   | 'collapse'
   | 'font-decrease'
   | 'font-increase'
+  | 'image'
+  | 'audio'
+  | 'video'
+  | 'pdf'
+  | 'archive'
+  | 'code'
 
 /** Additive semantic icon set. Registrations reference names, never glyph markup. */
 export const WORKBENCH_ICON_NAMES = [
@@ -44,6 +50,7 @@ export const WORKBENCH_ICON_NAMES = [
   'message', 'chevron-right', 'chevron-down', 'git',
   'git-branch', 'folder', 'window', 'agents', 'list', 'collapse',
   'font-decrease', 'font-increase',
+  'image', 'audio', 'video', 'pdf', 'archive', 'code',
 ] as const satisfies readonly WorkbenchIconName[]
 
 const WORKBENCH_ICON_NAME_SET: ReadonlySet<string> = new Set(WORKBENCH_ICON_NAMES)
@@ -87,6 +94,13 @@ const PATHS: Record<WorkbenchIconName, string> = {
   collapse: 'M4 5h16v14H4zM15 5v14M11 9l-4 3 4 3',
   'font-decrease': 'M5 18h6M8 6v12M14 10h7M14 14h5',
   'font-increase': 'M4 18h8M8 6v12M15 12h6M18 9v6',
+  // file-preview-dispatch: per-kind file glyphs for the explorer tree.
+  image: 'M4 5h16v14H4zM8 11l2.5 3 3-4 3.5 5M9 8h.01',
+  audio: 'M9 18V6l10-2v12M9 18a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Zm10-2a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Z',
+  video: 'M4 6h11v12H4zM15 10l5-3v10l-5-3',
+  pdf: 'M7 3h7l4 4v14H7zM14 3v5h4M10 13h1.5a1.5 1.5 0 0 1 0 3H10v-3Zm0 3v3',
+  archive: 'M4 5h16v14H4zM8 5v3m0 2v3m0 2v3m2-9h5',
+  code: 'M9 8l-4 4 4 4M15 8l4 4-4 4M13 5l-2 14',
 }
 
 export interface WorkbenchIconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {

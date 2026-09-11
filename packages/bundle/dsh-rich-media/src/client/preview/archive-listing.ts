@@ -19,9 +19,9 @@ export const ARCHIVE_ENTRY_LIST_MAX = 200
 /** Maximum entry-name length carried per entry; longer names truncate honestly. */
 export const ARCHIVE_ENTRY_NAME_MAX = 200
 /** EOCD backward scan window: 64 KiB zip64 comment cap + EOCD record. */
-const EOCD_SCAN_WINDOW = 65_536 + 22
+export const EOCD_SCAN_WINDOW = 65_536 + 22
 /** Hard budget on central-directory bytes parsed per call. */
-const CENTRAL_DIRECTORY_SCAN_MAX = 4 * 1024 * 1024
+export const CENTRAL_DIRECTORY_SCAN_MAX = 4 * 1024 * 1024
 /** Central-directory file header fixed size (before name/extra/comment). */
 const CENTRAL_HEADER_FIXED = 46
 /** EOCD record size without the trailing comment. */
@@ -100,33 +100,65 @@ function findEocdOffset(bytes: Uint8Array): number | undefined {
  * never touched, so a corrupted or hostile payload cannot affect the list.
  */
 export function parseZipEntryList(bytes: Uint8Array): ArchiveEntryListV1 | undefined {
-  const eocd = findEocdOffset(bytes)
+  const located = locateZipEocd(bytes)
+  if (located === undefined) return undefined
+  const end = Math.min(bytes.byteLength, located.centralOffset + Math.min(located.centralSize, CENTRAL_DIRECTORY_SCAN_MAX))
+  return parseZipCentralDirectory(bytes.subarray(located.centralOffset, end), located.declaredEntries)
+}
+
+/** EOCD facts needed to fetch the central directory with ranged reads. */
+export interface ZipCentralDirectoryLocationV1 {
+  /** Entry count declared in the EOCD (0xffff means zip64). */
+  readonly declaredEntries: number
+  readonly centralSize: number
+  readonly centralOffset: number
+}
+
+/**
+ * Locate the end-of-central-directory record in a tail buffer (the last
+ * `EOCD_SCAN_WINDOW` bytes of the archive). Range-friendly companion to
+ * `parseZipEntryList`: callers can fetch only the tail, then only the
+ * central directory, without loading the payload region.
+ */
+export function locateZipEocd(tail: Uint8Array): ZipCentralDirectoryLocationV1 | undefined {
+  const eocd = findEocdOffset(tail)
   if (eocd === undefined) return undefined
-  const declaredEntries = readU16LE(bytes, eocd + 10)
-  const centralSize = readU32LE(bytes, eocd + 12)
-  const centralOffset = readU32LE(bytes, eocd + 16)
+  return {
+    declaredEntries: readU16LE(tail, eocd + 10),
+    centralSize: readU32LE(tail, eocd + 12),
+    centralOffset: readU32LE(tail, eocd + 16),
+  }
+}
+
+/**
+ * Parse one central-directory chunk whose offset 0 is the archive's
+ * `centralOffset`. `declaredEntries` comes from `locateZipEocd`. Same
+ * honesty rules as `parseZipEntryList` (caps, malformed flag, no payload
+ * reads).
+ */
+export function parseZipCentralDirectory(chunk: Uint8Array, declaredEntries: number): ArchiveEntryListV1 {
+  const end = Math.min(chunk.byteLength, CENTRAL_DIRECTORY_SCAN_MAX)
   const zip64 = declaredEntries === ZIP64_COUNT_SENTINEL
-  const end = Math.min(bytes.byteLength, centralOffset + Math.min(centralSize, CENTRAL_DIRECTORY_SCAN_MAX))
-  let offset = centralOffset
+  let offset = 0
   const entries: ArchiveEntryV1[] = []
   let malformed = false
   let expandedBytesTotal = 0
   while (entries.length < ARCHIVE_ENTRY_LIST_MAX && offset + CENTRAL_HEADER_FIXED <= end) {
-    if (readU32LE(bytes, offset) !== CENTRAL_SIGNATURE) {
+    if (readU32LE(chunk, offset) !== CENTRAL_SIGNATURE) {
       malformed = true
       break
     }
-    const uncompressedSize = readU32LE(bytes, offset + 24)
-    const nameLength = readU16LE(bytes, offset + 28)
-    const extraLength = readU16LE(bytes, offset + 30)
-    const commentLength = readU16LE(bytes, offset + 32)
+    const uncompressedSize = readU32LE(chunk, offset + 24)
+    const nameLength = readU16LE(chunk, offset + 28)
+    const extraLength = readU16LE(chunk, offset + 30)
+    const commentLength = readU16LE(chunk, offset + 32)
     const nameStart = offset + CENTRAL_HEADER_FIXED
     const nextOffset = nameStart + nameLength + extraLength + commentLength
     if (nameStart + nameLength > end || nextOffset <= offset) {
       malformed = true
       break
     }
-    const decoded = new TextDecoder('utf-8', { fatal: false }).decode(bytes.subarray(nameStart, nameStart + nameLength))
+    const decoded = new TextDecoder('utf-8', { fatal: false }).decode(chunk.subarray(nameStart, nameStart + nameLength))
     const sanitized = sanitizeEntryName(decoded)
     const isDirectory = sanitized.name.endsWith('/')
     entries.push({

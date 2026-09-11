@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fileEntryToMediaRef, mediaKindOf } from '../src/client/apply.ts'
+import { fileEntryToMediaRef, mediaKindOf, routesToPreviewDispatch } from '../src/client/apply.ts'
 import type { FileEntryV1 } from '@yeisme/dsh-file-document'
 
 function entryOf(name: string, kind = 'file', mediaType: string | undefined = undefined): FileEntryV1 {
@@ -42,9 +42,28 @@ describe('file-preview-formats file mapping', () => {
     expect(fileEntryToMediaRef(entryOf('legacy.doc'))).toMatchObject({ kind: 'document', mediaType: 'application/msword' })
   })
 
-  it('still drops unknown extensionless binaries', () => {
+  it('still drops unknown extensionless binaries from the legacy media mapping', () => {
     expect(mediaKindOf(entryOf('binary-blob'))).toBeUndefined()
     expect(fileEntryToMediaRef(entryOf('binary-blob'))).toBeUndefined()
+  })
+
+  it('routes media, documents, archives and unknown binaries to the dispatch view', () => {
+    expect(routesToPreviewDispatch(entryOf('manual.pdf', 'file'))).toBe(true)
+    expect(routesToPreviewDispatch(entryOf('voice.mp3', 'file'))).toBe(true)
+    expect(routesToPreviewDispatch(entryOf('capture.mkv'))).toBe(true)
+    expect(routesToPreviewDispatch(entryOf('mix.flac'))).toBe(true)
+    expect(routesToPreviewDispatch(entryOf('data.csv'))).toBe(true)
+    expect(routesToPreviewDispatch(entryOf('bundle.zip', 'archive'))).toBe(true)
+    expect(routesToPreviewDispatch(entryOf('pack.7z', 'archive'))).toBe(true)
+    expect(routesToPreviewDispatch(entryOf('binary-blob'))).toBe(true)
+  })
+
+  it('keeps the editor path for text family and images', () => {
+    expect(routesToPreviewDispatch(entryOf('notes.md', 'text'))).toBe(false)
+    expect(routesToPreviewDispatch(entryOf('dump.json'))).toBe(false)
+    expect(routesToPreviewDispatch(entryOf('conf.yaml'))).toBe(false)
+    expect(routesToPreviewDispatch(entryOf('main.ts'))).toBe(false)
+    expect(routesToPreviewDispatch(entryOf('cover.png', 'image'))).toBe(false)
   })
 
   it('honors a declared media type when the extension is unknown', () => {
