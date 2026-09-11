@@ -1,0 +1,116 @@
+--- a/packages/host/frontend-static/src/index.ts
++++ b/packages/host/frontend-static/src/index.ts
+@@ -26,14 +26,22 @@
+ /** Services required before the authenticated fallback seat can be claimed. */
+ export const inject = ['webServer', 'connection']
+ 
+-/** Plugin config: the dist anchor. */
++/** Plugin config: the dist anchor plus the opt-in SPA history fallback. */
+ export interface Config {
+   /** Absolute path of index.html inside the dist root. */
+   distIndex: string
++  /**
++   * Opt-in SPA history fallback: on a GET/HEAD static miss, serve the rendered
++   * index instead of 404 when the pathname carries no file extension, or the
++   * request's Accept header asks for text/html. Default false keeps the
++   * stock 404 semantics for deployments that do not use path routes.
++   */
++  historyFallback?: boolean
+ }
+ 
+ export const Config: z<Config> = z.object({
+   distIndex: z.string().required(),
++  historyFallback: z.boolean().default(false),
+ })
+ 
+ const HTML_MIME = 'text/html; charset=utf-8'
+@@ -67,11 +75,14 @@
+  * @param authorizeIndex - authenticates an index response before its bytes are read.
+  * @param renderIndex - produces the index.html body (structured injection
+  * rendering) for the dist root and configured index path.
++ * @param shouldFallback - when true, a static miss serves the authenticated
++ * rendered index instead of 404 (the caller owns the method/Accept gating).
+  */
+ export async function serveStatic(
+   pathname: string, res: ServerResponse, distRoot: string, distIndex: string,
+   authorizeIndex: () => boolean,
+   renderIndex: () => Promise<string>,
++  shouldFallback: () => boolean = () => false,
+ ): Promise<void> {
+   const target = resolve(normalize(join(distRoot, pathname)))
+   // Traversal rejection: the target must be distRoot itself (`/`) or stay under
+@@ -94,9 +105,16 @@
+       type = MIME[extname(target)] ?? 'application/octet-stream'
+     }
+   } catch (error) {
+-    // Only absent or non-file targets are 404; other filesystem failures reach
+-    // the webserver's request-failure handling.
++    // Only absent or non-file targets are miss candidates; other filesystem
++    // failures reach the webserver's request-failure handling.
+     if (!STATIC_MISS_CODES.has((error as NodeJS.ErrnoException).code)) throw error
++    if (shouldFallback()) {
++      if (!authorizeIndex()) return
++      const indexBody = await renderIndex()
++      res.writeHead(200, { 'content-type': HTML_MIME })
++      res.end(indexBody)
++      return
++    }
+     res.writeHead(404)
+     res.end()
+     return
+@@ -131,6 +149,7 @@
+     }
+     /* v8 ignore next -- node:http always sets url on server requests */
+     const rawPath = new URL(req.url ?? '/', 'http://x').pathname
++    const fallbackEnabled = config.historyFallback === true
+     await serveStatic(
+       decodeURIComponent(rawPath),
+       res,
+@@ -138,6 +157,14 @@
+       distIndex,
+       () => ctx.connection.authorizeIndex(req, res),
+       renderIndex,
++      () => {
++        if (!fallbackEnabled) return false
++        // No file extension (a path route) always falls back; an extension
++        // only falls back when the client explicitly asks for HTML.
++        if (extname(rawPath) === '') return true
++        const accept = req.headers.accept
++        return typeof accept === 'string' && accept.includes('text/html')
++      },
+     )
+   }), 'frontend-static: fallback seat')
+ }
+--- a/packages/bundle/web-app/src/index.ts
++++ b/packages/bundle/web-app/src/index.ts
+@@ -55,6 +55,13 @@
+   surfaceContext: boolean
+   /** Explicit `--trusted-host` authorities from this invocation. */
+   trustedHosts: string[]
++  /**
++   * Opt in to the SPA history fallback on the mounted frontend-static seat:
++   * path-shaped GET/HEAD misses (no file extension, or Accept: text/html)
++   * serve the rendered index instead of 404. Default false keeps stock
++   * semantics; the composing profile layer may restate it to true.
++   */
++  historyFallback?: boolean
+ }
+ 
+ export const Config: z<Config> = z.object({
+@@ -62,6 +69,7 @@
+   printUrl: z.boolean().default(true),
+   surfaceContext: z.boolean().default(true),
+   trustedHosts: z.array(String).default([]),
++  historyFallback: z.boolean().default(false),
+ })
+ 
+ /** Bind-dependent Web values shared by the trust fence and URL display. */
+@@ -238,7 +246,7 @@
+   const handoffBrowser = config.openBrowser && !launchedThroughSsh(ctx)
+   // Release dependent rows only after bind-dependent trust has been sampled once.
+   ctx.provide(WEB_RUNTIME_SERVICE, runtime)
+-  ctx.plugin(FrontendStatic, { distIndex: internals.resolveDistIndex() })
++  ctx.plugin(FrontendStatic, { distIndex: internals.resolveDistIndex(), historyFallback: config.historyFallback === true })
+   if (config.surfaceContext) {
+     ctx.inject(['systemPrompt'], (promptCtx) => {
+       addHarnessSourceSection(promptCtx, SOURCE_ROOT)

@@ -66,6 +66,11 @@ try {
   if (!existsSync(resolve(source, 'packages/client/ui-conversation/src/client/conversation/navigation.ts'))) {
     await run('bash', ['upstream-prs/session-tools-workspace/apply.sh', source])
   }
+  if (!readFileSync(resolve(source, 'packages/host/frontend-static/src/index.ts'), 'utf8').includes('historyFallback')) {
+    await run('bash', ['upstream-prs/frontend-static-history-fallback/apply.sh', source])
+  }
+  await run('bash', ['upstream-prs/tools-pane-layout-v1/apply.sh', source])
+  await run('bash', ['upstream-prs/tools-draft-target-v1/apply.sh', source])
   let compatibleBundle = false
   try { checkWorkbenchRuntime(root); compatibleBundle = true } catch { /* Rebuild incomplete or stale local artifacts below. */ }
   if (rebuild || !compatibleBundle || !existsSync(resolve(source, 'apps/cli/lib/bin.js')) || !existsSync(resolve(source, 'apps/web/dist/index.html'))) {
