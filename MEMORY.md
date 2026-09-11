@@ -1,3 +1,7 @@
+## 2026-09-11 末: sonora 1.1/1.2 合同冻结 + 遗漏注记补齐（c1e48ed 已推）
+
+- dsh-sonora-audio-studio-v1 0→2/15：1.1 owner HEAD 2c59817 合同复检（相对 09-08 基线零变更、七面 digest、未跟踪 workspace.go 在途排除）；1.2 consumer/UI Contract 冻结核对（脚手架复用实证）。2.x/5.x 实现任务留 studio lane owner（ui-creator-studio 是其实现面——此前会话已建 auctra/eikona 组件）。
+- ecosystem 2.2/3.1/3.2、productivity 3.2/3.3 补当日注记。至此全部活跃 change 的开任务都有当日处置：url-session 22/23、sonora 2/15、19+7 外部门注记、其余并行/用户/owner 门。
 ## 2026-09-11 午后: spec 推进波——url-session 5/23→22/23 + 全仓外部门 rc.2 复检（本会话）
 
 - `dsh-url-session-v1` 三提交（e86a6eb/48f914d/884eb42，已推）：§3 客户端接线（sessions seam adapter+probe、History push/replace/popstate 反向、缺失空态 embed conversation.input.dock、会话头部复制/新标签 Menu、query-alias 夹具）；§4 bundle 转发+README；§5 upstream-prs/frontend-static-history-fallback（Config 开关默认 false+serveStatic shouldFallback+web-app 前传，矩阵 7/7，staging 管道幂等接入）；§6 upstream-prs/url-session-web-resume（--resume flag+resumeUrlSuffix，链式 12/12）+ /yeisme-url 命令（host yeisme-commands，Agent.id 即 SessionId，webServer probe）+ pane-protocol ArtifactRefV1 可选 sessionUrl（窄豁免 inspectSafeJson）；§7 门（7.3 按 acceptance 留开：staging session 首帧格式漂移无法建 live 证据）。
