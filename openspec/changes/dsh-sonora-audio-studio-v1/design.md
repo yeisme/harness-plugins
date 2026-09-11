@@ -19,6 +19,29 @@
 
 ## UI Contract
 
+### 转写能力只读列表增量
+
+- Surface classification：adopted，嵌在既有audio workspace Section中；不新建主壳、音频运行器或报价系统。
+- 视觉顺序：能力探测边界→provider/model与fixture标记→语言/精度/费用/限制→失败provider。复用SurfaceSection、SurfaceState、官方Button及cs/vk token；以列表和dl表达，不做卡片墙。
+- 状态：首次loading；空profiles仅说明未返回可用项；缺诊断标志显式unknown；刷新失败保留旧目录并标stale；不可用provider保留ID、稳定错误码与owner配置提示，无假执行按钮。
+- 响应式：360/560/960下字段和值两列、长ref换行，沿用workspace滚动；键盘Tab/Enter刷新；不引入动画。完整context key变化卸载旧读，组件请求代次忽略迟到结果。
+- 中英文及生成pseudo覆盖transcription.cap命名空间。能力目录不给出实际执行报价，不将external_runtime或未知费用换算为零，不从segment合成word能力。当前只覆盖转写，TTS/music/SFX/clone矩阵仍需各自owner合同。
+
+独立目录读取：Creator Gateway/Remote新增readTranscriptionCatalog，浏览器传入当前完整Creator context；Host核对当前授权scope、directory generation和adapter身份，迟到结果不跨上下文返回。它不进入字幕执行snapshot，也不参与费用确认；即使目录探测等待，已审阅字幕仍可直接导出。客户端仅在snapshot上下文建立后读取，reset/dispose或上下文变化丢弃结果。
+
+能力矩阵输入合同增量：Host仅消费Sonora的capability_probe目录，保留fixture、失败provider和诊断是否可用；cost_model为外部runtime或未知时不能显示零费用，探测成功不能代替生成预览/确认。缺失诊断标志表示未知，不能把缺失provider视为删除。此数据读取与字幕导出独立，后续UI不得要求ASR目录就绪才允许已审阅字幕导出。
+
+### 字幕回执结果查看与下载增量
+
+- Surface classification：沿用声音workspace内的adopted Section，不增加主壳或CSS系统；遵循`docs/design/dsh-unified-panel-visual-system.md`。
+- 视觉顺序：已有确认/执行区域→字幕成果按钮→用户主动打开的固定版本正文。新回执只更新可选入口，不自动替换当前阅读。
+- 复用SurfaceSection、SurfaceState、官方Button/CodeBlock、现有cs-actions和locale。正文读取继续走readArtifactContent，不放入snapshot或持久浏览器store。
+- 状态：无成果不显示；打开时loading；读取失败/版本变化/超限显示可重试错误；成功预览并提供下载；下载前独立重新授权读取，拒绝时不生成Blob。正文绝不截断后作为完整文件下载。
+- 响应式：360/560/960px沿用workspace scroll与按钮换行；不强制展开并排Pane。键盘Tab/Enter可完成查看/下载；无新动画、焦点劫持或颜色例外。
+- 中英文及自动生成pseudo使用subtitle.results命名空间，CodeBlock使用字幕专用复制标签及共享复制成功标签。当前正文始终显示已选成果名称与完整版本号；新回执的入口不改变该标识，长摘要在窄Pane换行。完整Creator context作为组件key，项目/权限身份变化卸载并丢弃迟到读结果。
+- 当前scope：标准正文接口支持的完整字幕可保存为SRT/WebVTT；超过256Ki字符仍需owner文件下载能力，不能把这个子路径视为整个声音台交付。
+- 当前primitive构建的CodeBlock CSS导出为空，复制按钮缺少可读底色；仅在cs-subtitle-code内补充共享token按钮/焦点样式，不改变官方组件结构。外层查看/下载按钮直接使用既有vk-btn class。
+
 - Surface classification: adopted（ui-surface；画布节点内嵌波形/字幕缩略用 ui-visual-kit）
 - Surface kind: workspace（声音主 Pane）+ inspector（segment/字幕详情）
 - First / second / third visual priority: 当前声音工作与状态 / 主要执行动作 / 能力矩阵与产物版本

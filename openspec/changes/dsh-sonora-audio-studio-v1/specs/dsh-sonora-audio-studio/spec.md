@@ -10,6 +10,14 @@ The plugin SHALL read audio work, capabilities and outputs only through the publ
 ### Requirement: Provider capability matrix is owner-sourced
 Voice, subtitle, alignment and export capabilities SHALL come from owner descriptions marked supported, missing or unverified; missing required capabilities SHALL retain disabled entries with reasons and linked owner tasks.
 
+#### Scenario: 目录探测不阻塞直接操作
+- **WHEN** 转写能力目录探测等待，而已审阅字幕具备有效导出descriptor
+- **THEN** 目录经独立只读入口获取，字幕导出仍可执行；目录不作为执行或费用批准
+
+#### Scenario: 目录读取期间上下文变化
+- **WHEN** 浏览器期望的项目/权限上下文不匹配，或等待期间membership、adapter绑定发生变化
+- **THEN** Host不返回跨上下文目录，客户端reset/dispose后忽略迟到响应，不能把旧目录显示为新项目能力
+
 #### Scenario: Word-level alignment is unverified
 - **WHEN** the owner exposes segment-to-cue only
 - **THEN** the alignment entry shows the boundary explicitly and no word-level claim is made
