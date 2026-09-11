@@ -7,6 +7,8 @@ import type {
   PaneContextV1,
   PaneStatus,
 } from '@yeisme/dsh-pane-protocol'
+import type { SonoraTranscriptionCatalog } from './sonora-transcription-catalog.ts'
+import type { SonoraWorksTableResult } from './sonora-works-table.ts'
 
 export const CREATOR_STUDIO_OWNERS = ['eikona', 'scaena', 'sonora', 'auctra', 'pinax', 'anatomia'] as const
 export type CreatorStudioOwner = (typeof CREATOR_STUDIO_OWNERS)[number]
@@ -324,10 +326,34 @@ export interface CreatorArtifactImageV1 {
 }
 
 export interface CreatorOwnerAdapterV1 {
+  readScaenaTable?(query: import('./scaena-table-contract.ts').ScaenaTableQuery, context: CreatorStudioContextV1): Promise<import('./scaena-table-contract.ts').ScaenaTableResult>
+  selectScaenaPackage?(query: import('./scaena-package-contract.ts').ScaenaPackageQuery, context: CreatorStudioContextV1): Promise<import('./scaena-package-contract.ts').ScaenaPackageResult>
+  inputIntake?: import("./input-intake.ts").CreatorInputIntake
+
+  readEikonaCandidateImage?(query: import('./eikona-asset-contract.ts').EikonaImageQuery, context: CreatorStudioContextV1): ReturnType<import('./eikona-discovery-client.ts').EikonaDiscoveryClient['readCandidateImage']>
+  listEikonaBatchInputs?(input: { limit: number; cursor?: string | undefined }, context: CreatorStudioContextV1): Promise<unknown>
+  readEikonaBatchMembers?(input: { operationRef: string; offset: number; limit: number }, context: CreatorStudioContextV1): Promise<unknown>
+  readEikonaBatchPlan?(input: { batchRef: string; digest: string }, context: CreatorStudioContextV1): Promise<unknown>
+  readEikonaBatchInput?(input: { batchRef: string; digest: string }, context: CreatorStudioContextV1): Promise<unknown>
+  readEikonaApprovalStatus?(input: { approvalRef: string }, context: CreatorStudioContextV1): Promise<unknown>
+  revokeEikonaPreparationApproval?(input: unknown, context: CreatorStudioContextV1): Promise<unknown>
+  approveEikonaPreparation?(input: unknown, context: CreatorStudioContextV1): Promise<unknown>
+  prepareEikonaGeneration?(input: unknown, context: CreatorStudioContextV1): Promise<unknown>
+  readEikonaAssetPage?(query: { cursor?: string; limit?: number }, context: CreatorStudioContextV1): Promise<import('./eikona-asset-contract.ts').EikonaAssetPage>
+  readEikonaReview?(query: { runId: string }, context: CreatorStudioContextV1): Promise<import('./eikona-review-contract.ts').EikonaReviewResult>
+  selectEikonaCandidate?(query: unknown, context: CreatorStudioContextV1): Promise<import('./eikona-selection-contract.ts').EikonaSelectionResult>
+  saveAuctraRecoveryDraft?(query: import('./editor-recovery-contract.ts').EditorRecoverySaveQueryV1, context: CreatorStudioContextV1): ReturnType<import('./auctra-working-copy-client.ts').AuctraWorkingCopyClient['saveRecoveryDraft']>
+  listAuctraRecoveryDrafts?(query: { readonly artifact?: ArtifactRefV1; readonly cursor?: string; readonly limit?: number }, context: CreatorStudioContextV1): ReturnType<import('./auctra-working-copy-client.ts').AuctraWorkingCopyClient['listRecoveryDrafts']>
+  readAuctraRecoveryDraft?(claim: import('./auctra-editor-recovery.ts').AuctraRecoveryDraftSummary, context: CreatorStudioContextV1): ReturnType<import('./auctra-working-copy-client.ts').AuctraWorkingCopyClient['readRecoveryDraft']>
+  readCandidatePage?(query: import('./candidate-history.ts').CreatorCandidateQueryV1, context: CreatorStudioContextV1): Promise<import('./candidate-history.ts').CreatorCandidatePageV1>
   readonly owner: CreatorStudioOwner
   readonly transport: Exclude<CreatorStudioTransport, 'unavailable'>
   /** Service adapters set this only after explicit endpoint/auth configuration. */
   readonly configured?: boolean
+  /** Sonora capability probes are independent from executable action snapshots. */
+  readTranscriptionCatalog?(context: CreatorStudioContextV1): Promise<SonoraTranscriptionCatalog | undefined>
+  /** 声音工作列表（§2.1）：owner table projection 一页；缺省即第一页。 */
+  readWorksTable?(context: CreatorStudioContextV1, cursor?: string): Promise<SonoraWorksTableResult>
   snapshot(context: CreatorStudioContextV1): CreatorOwnerSnapshotV1 | Promise<CreatorOwnerSnapshotV1>
   listAssets?(query: CreatorOwnerAssetQueryV1, context: CreatorStudioContextV1): CreatorOwnerAssetListV1 | Promise<CreatorOwnerAssetListV1>
   dispatch(request: PaneActionRequestV1, context: CreatorStudioContextV1): PaneActionReceiptV1 | Promise<PaneActionReceiptV1>

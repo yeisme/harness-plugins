@@ -1,3 +1,25 @@
+import { scaenaTableQuerySchema, scaenaTableResultSchema } from './scaena-table-contract.ts'
+import { scaenaPackageQuerySchema, scaenaPackageResultSchema } from './scaena-package-contract.ts'
+import { inputQuerySchema } from "./input-contract.ts"
+import { eikonaBatchMembersQuerySchema, eikonaBatchMembersResultSchema, matchesEikonaBatchMembers } from './eikona-batch-members.ts'
+import { eikonaBatchPlanResultSchema } from './eikona-batch-plan.ts'
+import { eikonaBatchPageQuerySchema, eikonaBatchPageResultSchema } from './eikona-batch-input.ts'
+import { eikonaBatchInputQuerySchema, eikonaBatchInputResultSchema } from './eikona-batch-input.ts'
+import type { EikonaDraftReadResult, EikonaDraftSaveResult } from './eikona-draft-contract.ts'
+import { EikonaDraftStore, type EikonaDraftStorage } from './eikona-draft-store.ts'
+import { eikonaStatusInputSchema, eikonaStatusResultSchema, matchesEikonaStatus } from './eikona-approval-status.ts'
+import { eikonaRevokeInputSchema, eikonaRevokeResultSchema, matchesEikonaRevoke } from './eikona-preparation-approval.ts'
+import { eikonaApprovalInputSchema, eikonaApprovalResultSchema, matchesEikonaApproval } from './eikona-preparation-approval.ts'
+import { matchesEikonaPreparationInput, eikonaPreparationInputSchema, eikonaPreparationResultSchema } from './eikona-preparation-contract.ts'
+import { eikonaReviewQuerySchema, eikonaReviewResultSchema } from './eikona-review-contract.ts'
+import { eikonaSelectionQuerySchema, eikonaSelectionResultSchema } from './eikona-selection-contract.ts'
+import { eikonaImageQuerySchema, eikonaImageResultSchema, eikonaAssetQuerySchema, eikonaAssetPageSchema } from './eikona-asset-contract.ts'
+import type { CreatorOwnerAdapterV1 } from './types.ts'
+import { createHash } from 'node:crypto'
+import { editorRecoverySaveQuerySchema, editorRecoverySavedSchema, editorRecoveryQuerySchema, editorRecoverySummarySchema, editorRecoveryPageSchema, editorRecoveryReadSchema } from './editor-recovery-contract.ts'
+import { z } from 'zod'
+import { creatorCandidateQuerySchema, creatorCandidatePageSchema } from './candidate-history.ts'
+import { creatorOperationRecoveryPageSchema, type CreatorOperationRecoveryPageV1 } from './operation-recovery-contract.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import {
@@ -5,18 +27,23 @@ import {
   PANE_ACTION_REQUEST_SCHEMA,
   PaneActionReceiptSchema,
   PaneActionRequestSchema,
+  decodePaneActionValues,
   PaneActionReconcileRequestSchema,
   type PaneActionDescriptorV1,
   type PaneActionFieldDescriptorV1,
   type PaneActionReceiptV1,
+  type PaneActionReconcileRequestV1,
   type PaneActionRequestV1,
   type PaneActionValueV1,
   type ProjectCanvasReadResult,
   type ProjectCanvasSaveResult,
 } from '@yeisme/dsh-pane-protocol'
 import { ProjectCanvasStore, type ProjectCanvasStorage } from './project-canvas-store.ts'
+import { OperationRecoveryStore, type OperationRecoveryStorage, type OperationRecoveryRow } from './operation-recovery-store.ts'
 import { CreatorStudioOwnerDirectory } from './directory.ts'
 import { validateCreatorArtifactImage } from './artifact-image.ts'
+import { sonoraTranscriptionCatalogSchema, type SonoraTranscriptionCatalog } from './sonora-transcription-catalog.ts'
+import type { SonoraWorksTableResult } from './sonora-works-table.ts'
 import {
   CREATOR_STUDIO_OWNERS,
   type CreatorApprovalV1,
@@ -45,6 +72,7 @@ import {
   validateCreatorOwnerSnapshot,
   validateCreatorStudioContext,
   validateCreatorStudioSnapshot,
+  validateCreatorOwnerViewSnapshot,
 } from './validation.ts'
 
 export const CREATOR_STUDIO_EXPECTED_CONTEXT = 'creatorStudioExpectedContext'
@@ -170,24 +198,63 @@ function requestMatchesDescriptor(request: PaneActionRequestV1, descriptor: Pane
     || request.expectedTargetVersion !== descriptor.targetVersion
     || !sameContext(request.context as CreatorStudioContextV1, descriptor.context as CreatorStudioContextV1)) return false
   const fields = new Map(descriptor.fields.map(field => [field.key, field]))
-  if (Object.keys(request.values).some(key => !fields.has(key))) return false
-  return descriptor.fields.every(field => fieldValueValid(field, request.values[field.key]))
+  const values = decodePaneActionValues(request)
+  if (request.textBody && (descriptor.textBody?.field !== request.textBody.field
+    || new TextEncoder().encode(request.textBody.content).byteLength > descriptor.textBody.maxBytes)) return false
+  if (Object.keys(values).some(key => !fields.has(key))) return false
+  return descriptor.fields.every(field => fieldValueValid(request.textBody?.field === field.key
+    ? { ...field, maxLength: undefined } : field, values[field.key]))
 }
 
 /** Safe Remote shared by all Creator Studio views. It owns no domain canonical state. */
 export class CreatorStudioGateway extends TypertRemoteService {
-  private readonly expectedContext: CreatorStudioContextV1 | undefined
+  private get expectedContext(): CreatorStudioContextV1 | undefined {
+    return validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+  }
   private snapshotVersion = 0
+  private readonly eikonaDrafts: EikonaDraftStore | undefined
   private readonly canvas: ProjectCanvasStore | undefined
+  private readonly operations: OperationRecoveryStore | undefined
 
   constructor(ctx: Context) {
     super(ctx, 'creatorStudio')
-    this.expectedContext = validateCreatorStudioContext(ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
-    const storage = ctx.get('storageDomain' as never) as ProjectCanvasStorage | undefined
+    const storage = ctx.get('storageDomain' as never) as (ProjectCanvasStorage & OperationRecoveryStorage & EikonaDraftStorage) | undefined
     if (storage !== undefined && typeof storage.open === 'function') {
+      this.eikonaDrafts = new EikonaDraftStore(storage, () => validateCreatorStudioContext(ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT)))
       this.canvas = new ProjectCanvasStore(storage, () => validateCreatorStudioContext(ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT)))
-      ctx.effect(() => () => this.canvas?.close(), 'creatorStudio.projectCanvas')
+      this.operations = new OperationRecoveryStore(storage, () => validateCreatorStudioContext(ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT)))
+      ctx.effect(() => async () => { await this.eikonaDrafts?.close(); await this.operations?.close(); await this.canvas?.close() }, 'creatorStudio.projectCanvas')
     }
+  }
+
+  @Remote('inputRequest')
+  async inputRequest(input:unknown) {
+    const parsed=inputQuerySchema.safeParse(input),context=this.expectedContext
+    const latest=validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+    if(!parsed.success)return {status:'invalid_input' as const}
+    if(!context||!latest||!sameContext(context,latest))return {status:'permission_denied' as const}
+    const directory=this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory|undefined
+    const adapter=directory?.selected(parsed.data.owner),intake=adapter?.inputIntake
+    if(!intake)return {status:'unavailable' as const}
+    const generation=directory?.generation,result=await intake.run(parsed.data,context)
+    const current=validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+    if(!current||!sameContext(context,current)||directory?.generation!==generation||directory?.selected(parsed.data.owner)!==adapter)return {status:'permission_denied' as const}
+    return result
+  }
+
+  @Remote('readEikonaDraft')
+  async readEikonaDraft(input: unknown): Promise<EikonaDraftReadResult> {
+    return this.eikonaDrafts?.read(input) ?? { status: 'unavailable' }
+  }
+
+  @Remote('saveEikonaDraft')
+  async saveEikonaDraft(input: unknown): Promise<EikonaDraftSaveResult> {
+    return this.eikonaDrafts?.save(input) ?? { status: 'unavailable' }
+  }
+
+  @Remote('reconcileEikonaDraft')
+  async reconcileEikonaDraft(input: unknown): Promise<EikonaDraftSaveResult> {
+    return this.eikonaDrafts?.reconcile(input) ?? { status: 'unavailable' }
   }
 
   @Remote('canvasRead')
@@ -205,10 +272,88 @@ export class CreatorStudioGateway extends TypertRemoteService {
     return this.canvas?.reconcile(input) ?? { status: 'unavailable' }
   }
 
+  @Remote('recallOperationIdentity')
+  async recallOperationIdentity(input: unknown): Promise<PaneActionReconcileRequestV1 | null> {
+    const context = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+    if (context === undefined || this.expectedContext === undefined || !sameContext(context, this.expectedContext) || this.operations === undefined) return null
+    const parsed = z.object({ owner: z.string().min(1).max(64), actionId: z.string().min(1).max(160), expectedTargetRef: z.string().min(1).max(512) }).strict().safeParse(input)
+    if (!parsed.success) return null
+    const row = await this.recoveryRow(parsed.data)
+    const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+    if (!latest || !sameContext(context, latest)) return null
+    return row ? { ...row.request, context } : null
+  }
+
+  @Remote('listOperationRecoveries')
+  async listOperationRecoveries(): Promise<CreatorOperationRecoveryPageV1> {
+    const unavailable = { schemaVersion: 'creator.operation-recovery-page.v1alpha1' as const, status: 'unavailable' as const }
+    const context = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+    if (!context || !this.expectedContext || !sameContext(context, this.expectedContext) || !this.operations) return unavailable
+    const result = await this.operations.list()
+    const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+    if (result.status !== 'ready' || !latest || !sameContext(context, latest)) return unavailable
+    const page = creatorOperationRecoveryPageSchema.safeParse({ schemaVersion: unavailable.schemaVersion, status: 'ready', context,
+      operations: result.rows.map(row => ({ request: { ...row.request, context }, targetVersion: row.targetVersion })) })
+    return page.success ? page.data : unavailable
+  }
+
+  private async recoveryRow(query: { owner: string; actionId: string; expectedTargetRef: string }): Promise<OperationRecoveryRow | undefined> {
+    const result = await this.operations?.list()
+    return result?.status === 'ready' ? result.rows.find(row => row.request.owner === query.owner && row.request.actionId === query.actionId
+      && row.request.expectedTargetRef === query.expectedTargetRef) : undefined
+  }
+
   @Remote('snapshot')
   async snapshot(): Promise<CreatorStudioSnapshotV1> {
+    return this.composeSnapshot()
+  }
+
+  @Remote('selectScaenaPackage')
+  async selectScaenaPackage(input: unknown) {
+    const query = scaenaPackageQuerySchema.safeParse(input), context = this.expectedContext
+    if (!query.success) return { status: 'invalid_input' as const }
+    if (!context) return { status: 'permission_denied' as const }
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('scaena')
+    if (!adapter?.selectScaenaPackage) return { status: 'unavailable' as const }
+    const generation = directory?.generation
+    try {
+      const result = scaenaPackageResultSchema.safeParse(await adapter.selectScaenaPackage(query.data, context))
+      const latest = this.expectedContext
+      if (!latest || !sameContext(context, latest) || directory?.generation !== generation || directory?.selected('scaena') !== adapter) return { status: 'permission_denied' as const }
+      if (!result.success || (result.data.status === 'ready' && result.data.packageRef !== query.data.packageRef)) return { status: 'unconfirmed' as const }
+      return result.data
+    } catch { return { status: 'unconfirmed' as const } }
+  }
+
+  @Remote('readScaenaTable')
+  async readScaenaTable(input: unknown) {
+    const query = scaenaTableQuerySchema.safeParse(input), context = this.expectedContext
+    if (!query.success) return { status: 'invalid_input' as const }
+    if (!context) return { status: 'permission_denied' as const }
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('scaena')
+    if (!adapter?.readScaenaTable) return { status: 'unavailable' as const }
+    const generation = directory?.generation
+    try {
+      const result = scaenaTableResultSchema.safeParse(await adapter.readScaenaTable(query.data, context))
+      const latest = this.expectedContext
+      if (!latest || !sameContext(context, latest) || directory?.generation !== generation || directory?.selected('scaena') !== adapter) return { status: 'permission_denied' as const }
+      if (!result.success || (result.data.status === 'ready' && result.data.view.breakdown_ref !== query.data.breakdownRef)) return { status: 'unconfirmed' as const }
+      return result.data
+    } catch { return { status: 'unconfirmed' as const } }
+  }
+
+  @Remote('snapshotOwner')
+  async snapshotOwner(input: unknown): Promise<CreatorStudioSnapshotV1> {
+    return this.composeSnapshot(z.enum(CREATOR_STUDIO_OWNERS).parse(input))
+  }
+
+  private async composeSnapshot(onlyOwner?: CreatorStudioOwner): Promise<CreatorStudioSnapshotV1> {
+    const requestedOwners = onlyOwner === undefined ? CREATOR_STUDIO_OWNERS : [onlyOwner]
+    const context = this.expectedContext
     const now = new Date().toISOString()
-    if (this.expectedContext === undefined) {
+    if (context === undefined) {
       return {
         schemaVersion: 'creator.studio.snapshot.v1alpha1',
         snapshotRef: 'creator:studio:context-unavailable',
@@ -218,7 +363,7 @@ export class CreatorStudioGateway extends TypertRemoteService {
         freshness: 'unknown',
         reasonCode: 'context_unavailable',
         safeMessage: 'Creator Studio is waiting for a frozen tenant and workspace context.',
-        owners: CREATOR_STUDIO_OWNERS.map(owner => fallbackOwner(owner, 'contract_mismatch', 'Owner context is unavailable.')),
+        owners: requestedOwners.map(owner => fallbackOwner(owner, 'contract_mismatch', 'Owner context is unavailable.')),
         reviews: [],
         jobs: [],
       }
@@ -227,29 +372,29 @@ export class CreatorStudioGateway extends TypertRemoteService {
     if (directory === undefined) {
       return {
         schemaVersion: 'creator.studio.snapshot.v1alpha1',
-        snapshotRef: `creator:studio:${this.expectedContext.runtimeGeneration}:directory-unavailable`,
+        snapshotRef: `creator:studio:${context.runtimeGeneration}:directory-unavailable`,
         snapshotVersion: 0,
         generatedAt: now,
         status: 'offline',
         freshness: 'unknown',
         reasonCode: 'owner_directory_unavailable',
         safeMessage: 'Creator Studio owner adapters are not mounted.',
-        context: this.expectedContext,
-        owners: CREATOR_STUDIO_OWNERS.map(owner => fallbackOwner(owner, 'offline', 'Owner adapter is not mounted.')),
+        context: context,
+        owners: requestedOwners.map(owner => fallbackOwner(owner, 'offline', 'Owner adapter is not mounted.')),
         reviews: [],
         jobs: [],
       }
     }
 
-    const owners = await Promise.all(CREATOR_STUDIO_OWNERS.map(async owner => {
+    const owners = await Promise.all(requestedOwners.map(async owner => {
       const adapter = directory.selected(owner)
       if (adapter === undefined) return fallbackOwner(owner, 'offline', 'Owner adapter is not mounted.')
       try {
-        const snapshot = validateCreatorOwnerSnapshot(await adapter.snapshot(this.expectedContext!))
+        const snapshot = validateCreatorOwnerSnapshot(await adapter.snapshot(context!))
         if (snapshot === undefined || snapshot.owner !== owner || snapshot.transport !== adapter.transport) {
           return fallbackOwner(owner, 'contract_mismatch', 'Owner projection did not match the Creator Studio contract.')
         }
-        if (!sameContext(this.expectedContext!, snapshot.context)) {
+        if (!sameContext(context!, snapshot.context)) {
           return fallbackOwner(owner, 'contract_mismatch', 'Owner projection context changed; reconcile is required.')
         }
         return asProjection(snapshot)
@@ -257,25 +402,29 @@ export class CreatorStudioGateway extends TypertRemoteService {
         return fallbackOwner(owner, 'offline', 'Owner projection is unavailable.')
       }
     }))
+    const latestContext = this.expectedContext
+    if (!latestContext || !sameContext(context, latestContext) || directory !== this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY)) {
+      return { schemaVersion: 'creator.studio.snapshot.v1alpha1', snapshotRef: 'creator:studio:context-changed', snapshotVersion: ++this.snapshotVersion,
+        generatedAt: now, status: 'contract_mismatch', freshness: 'unknown', reasonCode: 'context_unavailable',
+        safeMessage: 'The project context changed. Reload the workspace.', owners: requestedOwners.map(owner => fallbackOwner(owner, 'contract_mismatch', 'Project context changed.')), reviews: [], jobs: [] }
+    }
     const aggregate = overallStatus(owners)
     const scaena = owners.find(owner => owner.owner === 'scaena')
-    const operations = this.readOperations()
+    const operations = onlyOwner === undefined ? this.readOperations() : undefined
     const snapshot: CreatorStudioSnapshotV1 = {
       schemaVersion: 'creator.studio.snapshot.v1alpha1',
-      snapshotRef: `creator:studio:${this.expectedContext.runtimeGeneration}:${directory.generation}`,
+      snapshotRef: `creator:studio:${context.runtimeGeneration}:${directory.generation}${onlyOwner === undefined ? '' : `:${onlyOwner}`}`,
       snapshotVersion: ++this.snapshotVersion,
       generatedAt: now,
       ...aggregate,
-      context: this.expectedContext,
+      context: context,
       owners,
       ...(scaena?.production === undefined ? {} : { production: scaena.production }),
       reviews: scaena?.reviews ?? [],
       jobs: scaena?.jobs ?? [],
-      operations: operations.operations,
-      generationRuns: operations.generationRuns,
-      approvals: operations.approvals,
+      ...(operations === undefined ? {} : { operations: operations.operations, generationRuns: operations.generationRuns, approvals: operations.approvals }),
     }
-    return validateCreatorStudioSnapshot(snapshot) ?? {
+    return (onlyOwner === undefined ? validateCreatorStudioSnapshot(snapshot) : validateCreatorOwnerViewSnapshot(snapshot)) ?? {
       schemaVersion: snapshot.schemaVersion,
       snapshotRef: snapshot.snapshotRef,
       snapshotVersion: snapshot.snapshotVersion,
@@ -284,7 +433,7 @@ export class CreatorStudioGateway extends TypertRemoteService {
       freshness: 'unknown',
       reasonCode: 'partial_owner_projection',
       safeMessage: 'Creator Studio could not validate the composed owner projection.',
-      context: this.expectedContext,
+      context: context,
       owners: snapshot.owners,
       reviews: [],
       jobs: [],
@@ -434,12 +583,16 @@ export class CreatorStudioGateway extends TypertRemoteService {
     const owner = request.owner as CreatorStudioOwner
     const adapter = CREATOR_STUDIO_OWNERS.includes(owner) ? directory?.selected(owner) : undefined
     if (adapter?.reconcile === undefined) return gatewayReceipt(request, 'unknown', 'The owner reconciliation adapter is unavailable.', 'reconcile_unavailable')
+    const remembered = await this.recoveryRow(request)
+    if (remembered && remembered.request.idempotencyKey !== request.idempotencyKey) return gatewayReceipt(request, 'unknown', 'Use the stored original request key.', 'original_key_mismatch')
+    const lookup = remembered ? { ...remembered.request, context } : request
     try {
       // Deliberately bypass expired generation descriptors: the owner authorizes lookup of the original key.
-      const receipt = validateCreatorActionReceipt(await adapter.reconcile(request, context))
+      const receipt = validateCreatorActionReceipt(await adapter.reconcile(lookup, context))
       const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
       if (latest === undefined || !sameContext(context, latest)) return gatewayReceipt(request, 'unknown', 'The reconciliation context changed.', 'context_changed')
       if (receipt?.owner !== owner || receipt.actionId !== request.actionId) return gatewayReceipt(request, 'unknown', 'The owner returned no matching receipt.', 'receipt_contract_mismatch')
+      if (remembered && ['completed', 'failed'].includes(receipt.status)) await this.operations?.forget(remembered)
       return receipt
     } catch {
       return gatewayReceipt(request, 'unknown', 'The original operation remains uncertain.', 'settlement_unknown')
@@ -451,7 +604,8 @@ export class CreatorStudioGateway extends TypertRemoteService {
     const parsed = PaneActionRequestSchema.safeParse(input)
     if (!parsed.success) return gatewayReceipt({}, 'reconcile_required', 'The action request did not match the Creator Studio contract.', 'request_contract_mismatch')
     const request = parsed.data
-    if (this.expectedContext === undefined || !sameContext(this.expectedContext, request.context as CreatorStudioContextV1)) {
+    const context = this.expectedContext
+    if (context === undefined || !sameContext(context, request.context as CreatorStudioContextV1)) {
       return gatewayReceipt(request, 'reconcile_required', 'The action context changed; request a new owner preview.', 'context_changed')
     }
     const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
@@ -462,8 +616,8 @@ export class CreatorStudioGateway extends TypertRemoteService {
     const adapter = directory.selected(owner)
     if (adapter === undefined) return gatewayReceipt(request, 'reconcile_required', 'The requested owner adapter is unavailable.', 'owner_unavailable')
     let snapshot: CreatorOwnerSnapshotV1 | undefined
-    try { snapshot = validateCreatorOwnerSnapshot(await adapter.snapshot(this.expectedContext)) } catch { /* converted below */ }
-    if (snapshot === undefined || snapshot.status !== 'ready' || snapshot.freshness !== 'fresh' || !sameContext(this.expectedContext, snapshot.context)) {
+    try { snapshot = validateCreatorOwnerSnapshot(await adapter.snapshot(context)) } catch { /* converted below */ }
+    if (snapshot === undefined || snapshot.status !== 'ready' || snapshot.freshness !== 'fresh' || !sameContext(context, snapshot.context)) {
       return gatewayReceipt(request, 'reconcile_required', 'The owner action snapshot is not fresh; reconcile before dispatch.', 'owner_snapshot_not_fresh')
     }
     const descriptor = snapshot.actions.find(action => action.descriptorRef === request.descriptorRef)
@@ -473,9 +627,27 @@ export class CreatorStudioGateway extends TypertRemoteService {
     if (Date.parse(descriptor.expiresAt) <= Date.now()) {
       return gatewayReceipt(request, 'reconcile_required', 'The owner action preview expired; request a new preview.', 'descriptor_expired')
     }
+    let reserved: OperationRecoveryRow | undefined
+    if (this.operations) {
+      const result = await this.operations.reserve(request)
+      if (result.status === 'existing') return gatewayReceipt(request, 'reconcile_required', 'An original request is already stored; reconcile it before another execution.', 'original_operation_pending')
+      if (result.status !== 'saved') return gatewayReceipt(request, 'reconcile_required', 'The original request could not be saved; no owner operation was sent.', 'recovery_storage_unavailable')
+      reserved = result.row
+    }
+    const latestContext = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+    if (!latestContext || !sameContext(context, latestContext) || directory !== this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) || directory.selected(owner) !== adapter) {
+      return gatewayReceipt(request, 'reconcile_required', 'The context changed before sending the owner operation.', 'context_changed')
+    }
     try {
-      const receipt = validateCreatorActionReceipt(await adapter.dispatch({ ...request, schema: PANE_ACTION_REQUEST_SCHEMA }, this.expectedContext))
-      return receipt ?? gatewayReceipt(request, 'unknown', 'The owner returned no verifiable action receipt.', 'settlement_unknown')
+      const receipt = validateCreatorActionReceipt(await adapter.dispatch({ ...request, schema: PANE_ACTION_REQUEST_SCHEMA }, context))
+      const settled = receipt?.owner === owner && receipt.actionId === request.actionId ? receipt
+        : gatewayReceipt(request, 'unknown', 'The owner returned no matching action receipt.', 'settlement_unknown')
+      const currentContext = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (!currentContext || !sameContext(context, currentContext) || directory !== this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) || directory.selected(owner) !== adapter) {
+        return gatewayReceipt(request, 'unknown', 'The context changed while awaiting the owner result.', 'context_changed')
+      }
+      if (reserved && ['completed', 'failed', 'rejected'].includes(settled.status)) await this.operations?.forget(reserved)
+      return settled
     } catch {
       return gatewayReceipt(request, 'unknown', 'The owner action transport or settlement is uncertain.', 'settlement_unknown')
     }
@@ -483,17 +655,403 @@ export class CreatorStudioGateway extends TypertRemoteService {
 
   @Remote('resolveArtifact')
   async resolveArtifact(input: unknown) {
+    const context = this.expectedContext
     const artifact = ArtifactRefSchema.safeParse(input)
-    if (!artifact.success || this.expectedContext === undefined) return null
+    if (!artifact.success || context === undefined) return null
     const owner = artifact.data.owner as CreatorStudioOwner
     if (!CREATOR_STUDIO_OWNERS.includes(owner)) return null
     const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
     if (directory === undefined) return null
     try {
-      return validateCreatorMediaAccess(await directory.resolveArtifact(owner, artifact.data, this.expectedContext)) ?? null
+      const result = await directory.resolveArtifact(owner, artifact.data, context)
+      const latest = this.expectedContext
+      return latest && sameContext(context, latest) ? validateCreatorMediaAccess(result) ?? null : null
     } catch {
       return null
     }
+  }
+
+  /** Independent read: capability discovery never gates subtitle export dispatch. */
+  /** 声音工作列表一页（§2.1）：context/owner/generation 三重 fence 后透传结果。 */
+  @Remote('readWorksTable')
+  async readWorksTable(input?: unknown): Promise<SonoraWorksTableResult | { status: 'rejected'; reason: 'invalid_input' } | null> {
+    const cursor = typeof input === 'string' ? input : undefined
+    if (input !== undefined && cursor === undefined) return { status: 'rejected', reason: 'invalid_input' }
+    const context = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+    if (context === undefined || this.expectedContext === undefined || !sameContext(context, this.expectedContext)) return null
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('sonora')
+    if (directory === undefined || adapter?.readWorksTable === undefined) return null
+    const generation = directory.generation
+    try {
+      const result = await adapter.readWorksTable(context, cursor)
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (latest === undefined || !sameContext(context, latest) || this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) !== directory
+        || directory.generation !== generation || directory.selected('sonora') !== adapter) return null
+      return result
+    } catch { return null }
+  }
+
+  @Remote('readTranscriptionCatalog')
+  async readTranscriptionCatalog(input?: unknown): Promise<SonoraTranscriptionCatalog | null> {
+    const context = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+    if (context === undefined || this.expectedContext === undefined || !sameContext(context, this.expectedContext)) return null
+    if (input !== undefined) {
+      const expected = validateCreatorStudioContext(input)
+      if (expected === undefined || !sameContext(context, expected)) return null
+    }
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('sonora')
+    if (directory === undefined || adapter?.readTranscriptionCatalog === undefined) return null
+    const generation = directory.generation
+    try {
+      const result = await adapter.readTranscriptionCatalog(context)
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (latest === undefined || !sameContext(context, latest) || this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) !== directory
+        || directory.generation !== generation || directory.selected('sonora') !== adapter) return null
+      const parsed = sonoraTranscriptionCatalogSchema.safeParse(result)
+      return parsed.success ? parsed.data : null
+    } catch { return null }
+  }
+
+  /** Bounded candidate history read; never starts an owner operation. */
+  @Remote('saveAuctraRecoveryDraft')
+  async saveAuctraRecoveryDraft(input: unknown) {
+    const query = editorRecoverySaveQuerySchema.safeParse(input)
+    if (!query.success) return { status: 'invalid_input' as const }
+    const context = this.expectedContext === undefined ? undefined : { ...this.expectedContext }
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('auctra')
+    if (!context || !directory || !adapter?.saveAuctraRecoveryDraft) return { status: 'unavailable' as const }
+    const generation = directory.generation
+    try {
+      const result = editorRecoverySavedSchema.safeParse(await adapter.saveAuctraRecoveryDraft(query.data, context))
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (!latest || !sameContext(context, latest) || this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) !== directory
+        || directory.generation !== generation || directory.selected('auctra') !== adapter) return { status: 'unconfirmed' as const }
+      if (!result.success) return { status: 'unconfirmed' as const }
+      if (result.data.status === 'ready') {
+        const draft = result.data.value.draft
+        if (draft.baseVersion !== query.data.base.contentRevision || draft.contentDigest !== createHash('sha256').update(query.data.content).digest('hex')
+          || draft.byteLength !== new TextEncoder().encode(query.data.content).byteLength || draft.revision !== (query.data.previous?.revision ?? 0) + 1
+          || (query.data.previous !== undefined && draft.ref !== query.data.previous.ref)) return { status: 'unconfirmed' as const }
+      }
+      return result.data
+    } catch { return { status: 'unconfirmed' as const } }
+  }
+
+  @Remote('listAuctraRecoveryDrafts')
+  async listAuctraRecoveryDrafts(input: unknown = {}) {
+    const query = editorRecoveryQuerySchema.safeParse(input)
+    if (!query.success) return { status: 'invalid_input' as const }
+    return this.auctraRecoveryCall(adapter => adapter.listAuctraRecoveryDrafts?.({ ...(query.data.artifact === undefined ? {} : { artifact: query.data.artifact }), ...(query.data.cursor === undefined ? {} : { cursor: query.data.cursor }), ...(query.data.limit === undefined ? {} : { limit: query.data.limit }) }, { ...this.expectedContext! }), false, query.data.limit ?? 50)
+  }
+
+  @Remote('readAuctraRecoveryDraft')
+  async readAuctraRecoveryDraft(input: unknown) {
+    const claim = editorRecoverySummarySchema.safeParse(input)
+    if (!claim.success) return { status: 'invalid_input' as const }
+    const result = await this.auctraRecoveryCall(adapter => adapter.readAuctraRecoveryDraft?.(claim.data, { ...this.expectedContext! }), true)
+    if (result.status === 'ready' && 'content' in result.value) {
+      if (JSON.stringify(result.value.draft) !== JSON.stringify(claim.data)
+        || createHash('sha256').update(result.value.content).digest('hex') !== claim.data.contentDigest
+        || new TextEncoder().encode(result.value.content).byteLength !== claim.data.byteLength) return { status: 'unconfirmed' as const }
+    }
+    return result
+  }
+
+  private async auctraRecoveryCall(call: (adapter: CreatorOwnerAdapterV1) => unknown, content: boolean, limit = 100) {
+    const context = this.expectedContext === undefined ? undefined : { ...this.expectedContext }
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('auctra')
+    if (!context || !directory || !adapter) return { status: 'unavailable' as const }
+    const generation = directory.generation
+    try {
+      const value = await call(adapter)
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (!latest || !sameContext(context, latest) || this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) !== directory
+        || directory.generation !== generation || directory.selected('auctra') !== adapter) return { status: 'permission_denied' as const }
+      const parsed = (content ? editorRecoveryReadSchema : editorRecoveryPageSchema).safeParse(value)
+      if (!parsed.success) return { status: 'unconfirmed' as const }
+      if (parsed.data.status === 'ready' && 'drafts' in parsed.data.value && (parsed.data.value.drafts.length > limit
+        || new Set(parsed.data.value.drafts.map(draft => draft.ref)).size !== parsed.data.value.drafts.length)) return { status: 'unconfirmed' as const }
+      return parsed.data
+    } catch { return { status: 'unconfirmed' as const } }
+  }
+
+  @Remote('readEikonaCandidateImage')
+  async readEikonaCandidateImage(input: unknown) {
+    const query = eikonaImageQuerySchema.safeParse(input)
+    if (!query.success) return { status: 'invalid_input' as const }
+    const context = this.expectedContext === undefined ? undefined : { ...this.expectedContext }
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('eikona')
+    if (!context || !directory || !adapter?.readEikonaCandidateImage) return { status: 'unavailable' as const }
+    const generation = directory.generation
+    try {
+      const result = await adapter.readEikonaCandidateImage(query.data, context)
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (!latest || !sameContext(context, latest) || this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) !== directory
+        || generation !== directory.generation || adapter !== directory.selected('eikona')) return { status: 'permission_denied' as const }
+      if (result.status !== 'ready') {
+        const failure = eikonaImageResultSchema.safeParse(result)
+        return failure.success ? failure.data : { status: 'unconfirmed' as const }
+      }
+      const value = result.value
+      if (!(value.bytes instanceof Uint8Array) || value.bytes.length === 0 || value.bytes.length > 16 * 1024 * 1024
+        || value.artifactRef !== query.data.artifactRef || value.contentDigest !== query.data.contentDigest) return { status: 'unconfirmed' as const }
+      const bytes = Buffer.from(value.bytes)
+      if (createHash('sha256').update(bytes).digest('hex') !== query.data.contentDigest) return { status: 'unconfirmed' as const }
+      return eikonaImageResultSchema.parse({ status: 'ready', value: { artifactRef: value.artifactRef, contentDigest: value.contentDigest,
+        mediaType: value.mediaType, byteLength: bytes.length, base64: bytes.toString('base64') } })
+    } catch { return { status: 'unconfirmed' as const } }
+  }
+
+  @Remote('readEikonaReview')
+  async readEikonaReview(input: unknown) {
+    const query = eikonaReviewQuerySchema.safeParse(input)
+    if (!query.success) return { status: 'invalid_input' as const }
+    const context = this.expectedContext === undefined ? undefined : { ...this.expectedContext }
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('eikona')
+    if (!context || !directory || !adapter?.readEikonaReview) return { status: 'unavailable' as const }
+    const generation = directory.generation
+    try {
+      const value = await adapter.readEikonaReview(query.data, context)
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (!latest || !sameContext(context, latest) || this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) !== directory
+        || generation !== directory.generation || adapter !== directory.selected('eikona')) return { status: 'permission_denied' as const }
+      const parsed = eikonaReviewResultSchema.safeParse(value)
+      if (!parsed.success || (parsed.data.status === 'ready' && parsed.data.runId !== query.data.runId)) return { status: 'needs_contract' as const }
+      return parsed.data
+    } catch { return { status: 'unconfirmed' as const } }
+  }
+  @Remote('selectEikonaCandidate')
+  async selectEikonaCandidate(input: unknown) {
+    const query = eikonaSelectionQuerySchema.safeParse(input)
+    if (!query.success) return { status: 'invalid_input' as const }
+    const context = this.expectedContext === undefined ? undefined : { ...this.expectedContext }
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('eikona')
+    if (!context || !directory || !adapter?.selectEikonaCandidate) return { status: 'unavailable' as const }
+    const generation = directory.generation
+    try {
+      const value = await adapter.selectEikonaCandidate(query.data, context)
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (!latest || !sameContext(context, latest) || this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) !== directory
+        || generation !== directory.generation || adapter !== directory.selected('eikona')) return { status: 'permission_denied' as const }
+      const parsed = eikonaSelectionResultSchema.safeParse(value)
+      if (!parsed.success) return { status: 'needs_contract' as const }
+      if (parsed.data.status === 'selected' && (!query.data.selection || parsed.data.selection.artifactRef !== query.data.selection.artifactRef
+        || parsed.data.selection.contentDigest !== query.data.selection.contentDigest)) return { status: 'needs_contract' as const }
+      if (parsed.data.status === 'cleared' && query.data.selection !== null) return { status: 'needs_contract' as const }
+      return parsed.data
+    } catch { return { status: 'unconfirmed' as const } }
+  }
+  @Remote('listEikonaBatchInputs')
+  async listEikonaBatchInputs(input: unknown) {
+    const query = eikonaBatchPageQuerySchema.safeParse(input)
+    if (!query.success) return { status: 'invalid_input' as const }
+    const context = this.expectedContext === undefined ? undefined : { ...this.expectedContext }
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('eikona')
+    if (!context || !directory || !adapter?.listEikonaBatchInputs) return { status: 'unavailable' as const }
+    const generation = directory.generation
+    try {
+      const value = await adapter.listEikonaBatchInputs(query.data, context)
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (!latest || !sameContext(context, latest) || this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) !== directory
+        || generation !== directory.generation || adapter !== directory.selected('eikona')) return { status: 'unconfirmed' as const }
+      const parsed = eikonaBatchPageResultSchema.safeParse(value)
+      if (!parsed.success || !(parsed.data.status !== 'ready' || (parsed.data.items.length <= query.data.limit && (parsed.data.nextCursor === undefined || parsed.data.nextCursor !== query.data.cursor)))) return { status: 'unconfirmed' as const }
+      return parsed.data
+    } catch { return { status: 'unconfirmed' as const } }
+  }
+
+  @Remote('readEikonaBatchMembers')
+  async readEikonaBatchMembers(input: unknown) {
+    const query = eikonaBatchMembersQuerySchema.safeParse(input)
+    if (!query.success) return { status: 'invalid_input' as const }
+    const context = this.expectedContext === undefined ? undefined : { ...this.expectedContext }
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('eikona')
+    if (!context || !directory || !adapter?.readEikonaBatchMembers) return { status: 'unavailable' as const }
+    const generation = directory.generation
+    try {
+      const value = await adapter.readEikonaBatchMembers(query.data, context)
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (!latest || !sameContext(context, latest) || this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) !== directory
+        || generation !== directory.generation || adapter !== directory.selected('eikona')) return { status: 'unconfirmed' as const }
+      const parsed = eikonaBatchMembersResultSchema.safeParse(value)
+      if (!parsed.success || !matchesEikonaBatchMembers(parsed.data, query.data)) return { status: 'unconfirmed' as const }
+      return parsed.data
+    } catch { return { status: 'unconfirmed' as const } }
+  }
+
+  @Remote('readEikonaBatchPlan')
+  async readEikonaBatchPlan(input: unknown) {
+    const query = eikonaBatchInputQuerySchema.safeParse(input)
+    if (!query.success) return { status: 'invalid_input' as const }
+    const context = this.expectedContext === undefined ? undefined : { ...this.expectedContext }
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('eikona')
+    if (!context || !directory || !adapter?.readEikonaBatchPlan) return { status: 'unavailable' as const }
+    const generation = directory.generation
+    try {
+      const value = await adapter.readEikonaBatchPlan(query.data, context)
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (!latest || !sameContext(context, latest) || this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) !== directory
+        || generation !== directory.generation || adapter !== directory.selected('eikona')) return { status: 'unconfirmed' as const }
+      const parsed = eikonaBatchPlanResultSchema.safeParse(value)
+      if (!parsed.success || !(parsed.data.status !== 'ready' || (parsed.data.batchRef === query.data.batchRef && parsed.data.digest === query.data.digest))) return { status: 'unconfirmed' as const }
+      return parsed.data
+    } catch { return { status: 'unconfirmed' as const } }
+  }
+
+  @Remote('readEikonaBatchInput')
+  async readEikonaBatchInput(input: unknown) {
+    const query = eikonaBatchInputQuerySchema.safeParse(input)
+    if (!query.success) return { status: 'invalid_input' as const }
+    const context = this.expectedContext === undefined ? undefined : { ...this.expectedContext }
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('eikona')
+    if (!context || !directory || !adapter?.readEikonaBatchInput) return { status: 'unavailable' as const }
+    const generation = directory.generation
+    try {
+      const value = await adapter.readEikonaBatchInput(query.data, context)
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (!latest || !sameContext(context, latest) || this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) !== directory
+        || generation !== directory.generation || adapter !== directory.selected('eikona')) return { status: 'unconfirmed' as const }
+      const parsed = eikonaBatchInputResultSchema.safeParse(value)
+      if (!parsed.success || !(parsed.data.status !== 'ready' || (parsed.data.batchRef === query.data.batchRef && parsed.data.digest === query.data.digest))) return { status: 'unconfirmed' as const }
+      return parsed.data
+    } catch { return { status: 'unconfirmed' as const } }
+  }
+
+  @Remote('readEikonaApprovalStatus')
+  async readEikonaApprovalStatus(input: unknown) {
+    const query = eikonaStatusInputSchema.safeParse(input)
+    if (!query.success) return { status: 'invalid_input' as const }
+    const context = this.expectedContext === undefined ? undefined : { ...this.expectedContext }
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('eikona')
+    if (!context || !directory || !adapter?.readEikonaApprovalStatus) return { status: 'unavailable' as const }
+    const generation = directory.generation
+    try {
+      const value = await adapter.readEikonaApprovalStatus(query.data, context)
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (!latest || !sameContext(context, latest) || this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) !== directory
+        || generation !== directory.generation || adapter !== directory.selected('eikona')) return { status: 'unconfirmed' as const }
+      const parsed = eikonaStatusResultSchema.safeParse(value)
+      if (!parsed.success || !matchesEikonaStatus(query.data, parsed.data)) return { status: 'unconfirmed' as const }
+      return parsed.data
+    } catch { return { status: 'unconfirmed' as const } }
+  }
+
+  @Remote('revokeEikonaPreparationApproval')
+  async revokeEikonaPreparationApproval(input: unknown) {
+    const query = eikonaRevokeInputSchema.safeParse(input)
+    if (!query.success) return { status: 'invalid_input' as const }
+    const context = this.expectedContext === undefined ? undefined : { ...this.expectedContext }
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('eikona')
+    if (!context || !directory || !adapter?.revokeEikonaPreparationApproval) return { status: 'unavailable' as const }
+    const generation = directory.generation
+    try {
+      const value = await adapter.revokeEikonaPreparationApproval(query.data, context)
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (!latest || !sameContext(context, latest) || this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) !== directory
+        || generation !== directory.generation || adapter !== directory.selected('eikona')) return { status: 'unconfirmed' as const }
+      const parsed = eikonaRevokeResultSchema.safeParse(value)
+      if (!parsed.success || !matchesEikonaRevoke(query.data, parsed.data)) return { status: 'unconfirmed' as const }
+      return parsed.data
+    } catch { return { status: 'unconfirmed' as const } }
+  }
+
+  @Remote('approveEikonaPreparation')
+  async approveEikonaPreparation(input: unknown) {
+    const query = eikonaApprovalInputSchema.safeParse(input)
+    if (!query.success) return { status: 'invalid_input' as const }
+    const context = this.expectedContext === undefined ? undefined : { ...this.expectedContext }
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('eikona')
+    if (!context || !directory || !adapter?.approveEikonaPreparation) return { status: 'unavailable' as const }
+    const generation = directory.generation
+    try {
+      const value = await adapter.approveEikonaPreparation(query.data, context)
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (!latest || !sameContext(context, latest) || this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) !== directory
+        || generation !== directory.generation || adapter !== directory.selected('eikona')) return { status: 'unconfirmed' as const }
+      const parsed = eikonaApprovalResultSchema.safeParse(value)
+      if (!parsed.success || !matchesEikonaApproval(query.data, parsed.data)) return { status: 'unconfirmed' as const }
+      return parsed.data
+    } catch { return { status: 'unconfirmed' as const } }
+  }
+
+  @Remote('prepareEikonaGeneration')
+  async prepareEikonaGeneration(input: unknown) {
+    const query = eikonaPreparationInputSchema.safeParse(input)
+    if (!query.success) return { status: 'invalid_input' as const }
+    const context = this.expectedContext === undefined ? undefined : { ...this.expectedContext }
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('eikona')
+    if (!context || !directory || !adapter?.prepareEikonaGeneration) return { status: 'unavailable' as const }
+    const generation = directory.generation
+    try {
+      const value = await adapter.prepareEikonaGeneration(query.data, context)
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (!latest || !sameContext(context, latest) || this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) !== directory
+        || generation !== directory.generation || adapter !== directory.selected('eikona')) return { status: 'permission_denied' as const }
+      const parsed = eikonaPreparationResultSchema.safeParse(value)
+      if (!parsed.success || !matchesEikonaPreparationInput(query.data, parsed.data)) return { status: 'needs_contract' as const }
+      return parsed.data
+    } catch { return { status: 'unconfirmed' as const } }
+  }
+
+  @Remote('readEikonaAssetPage')
+  async readEikonaAssetPage(input: unknown) {
+    const query = eikonaAssetQuerySchema.safeParse(input)
+    if (!query.success) return { status: 'invalid_input' as const }
+    const context = this.expectedContext === undefined ? undefined : { ...this.expectedContext }
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('eikona')
+    if (!context || !directory || !adapter?.readEikonaAssetPage) return { status: 'unavailable' as const }
+    const generation = directory.generation
+    try {
+      const value = await adapter.readEikonaAssetPage({ limit: query.data.limit, ...(query.data.cursor === undefined ? {} : { cursor: query.data.cursor }) }, context)
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (!latest || !sameContext(context, latest) || this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) !== directory
+        || generation !== directory.generation || adapter !== directory.selected('eikona')) return { status: 'permission_denied' as const }
+      const parsed = eikonaAssetPageSchema.safeParse(value)
+      if (!parsed.success || (parsed.data.status === 'ready' && (parsed.data.items.length > query.data.limit
+        || new Set(parsed.data.items.map(item => item.ref)).size !== parsed.data.items.length))) return { status: 'unconfirmed' as const }
+      return parsed.data
+    } catch { return { status: 'unconfirmed' as const } }
+  }
+
+  @Remote('readCandidatePage')
+  async readCandidatePage(input: unknown) {
+    const query = creatorCandidateQuerySchema.safeParse(input)
+    const failure = { schemaVersion: 'creator.candidate-page.v1alpha1' as const, status: 'unavailable' as const }
+    if (!query.success || this.expectedContext === undefined) return { ...failure, status: 'invalid_input' as const }
+    const context = { ...this.expectedContext }
+    const owner = query.data.artifact.owner as CreatorStudioOwner
+    if (!CREATOR_STUDIO_OWNERS.includes(owner)) return failure
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected(owner)
+    if (!directory || !adapter?.readCandidatePage) return failure
+    const generation = directory.generation
+    try {
+      const page = creatorCandidatePageSchema.safeParse(await adapter.readCandidatePage(query.data, context))
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (!latest || !sameContext(context, latest) || this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) !== directory
+        || directory.generation !== generation || directory.selected(owner) !== adapter) return { ...failure, status: 'permission_denied' as const }
+      if (!page.success) return { ...failure, status: 'unconfirmed' as const }
+      if (page.data.status === 'ready' && (page.data.candidates.length > query.data.limit
+        || page.data.artifact.ref !== query.data.artifact.ref || page.data.artifact.version !== query.data.artifact.version
+        || page.data.artifact.owner !== owner)) return { ...failure, status: 'unconfirmed' as const }
+      return page.data
+    } catch { return { ...failure, status: 'unconfirmed' as const } }
   }
 
   /** Explicit ephemeral editor-body read; never composed into a snapshot. */
@@ -501,12 +1059,18 @@ export class CreatorStudioGateway extends TypertRemoteService {
   async readArtifactContent(input: unknown) {
     const artifact = ArtifactRefSchema.safeParse(input)
     if (!artifact.success || this.expectedContext === undefined) return null
+    const context = { ...this.expectedContext }
     const owner = artifact.data.owner as CreatorStudioOwner
     if (!CREATOR_STUDIO_OWNERS.includes(owner)) return null
     const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
     if (directory === undefined) return null
+    const generation = directory.generation
+    const adapter = directory.selected(owner)
     try {
-      const content = validateCreatorArtifactContent(await directory.readArtifactContent(owner, artifact.data, this.expectedContext))
+      const content = validateCreatorArtifactContent(await directory.readArtifactContent(owner, artifact.data, context))
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (latest === undefined || !sameContext(context, latest) || directory !== this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY)
+        || generation !== directory.generation || adapter !== directory.selected(owner)) return null
       return content?.artifact.owner === owner && content.artifact.ref === artifact.data.ref && content.artifact.version === artifact.data.version ? content : null
     } catch {
       return null
@@ -516,17 +1080,19 @@ export class CreatorStudioGateway extends TypertRemoteService {
   /** Same-process attachment resolver only: deliberately not a Remote. */
   async readArtifactImage(input: unknown, signal: AbortSignal) {
     signal.throwIfAborted()
+    const context = this.expectedContext
     const artifact = ArtifactRefSchema.safeParse(input)
-    if (!artifact.success || this.expectedContext === undefined) return null
+    if (!artifact.success || context === undefined) return null
     const owner = artifact.data.owner as CreatorStudioOwner
     if (!CREATOR_STUDIO_OWNERS.includes(owner)) return null
     const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
     if (directory === undefined) return null
     const generation = directory.generation
     try {
-      const image = validateCreatorArtifactImage(await directory.readArtifactImage(owner, artifact.data, this.expectedContext, signal))
+      const image = validateCreatorArtifactImage(await directory.readArtifactImage(owner, artifact.data, context, signal))
       signal.throwIfAborted()
-      if (directory !== this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) || generation !== directory.generation) return null
+      const latest = this.expectedContext
+      if (!latest || !sameContext(context, latest) || directory !== this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) || generation !== directory.generation) return null
       return image?.artifact.owner === owner && image.artifact.ref === artifact.data.ref && image.artifact.version === artifact.data.version ? image : null
     } catch {
       signal.throwIfAborted()
