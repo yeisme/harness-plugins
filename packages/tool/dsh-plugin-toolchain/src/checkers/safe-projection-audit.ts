@@ -16,6 +16,20 @@ import { listWorkspacePackages, readCodeLines, sourceFiles, type WorkspacePackag
  * 2) host 投影形状（host src 的 interface/type 字段名）：敏感命名字段进入导出类型；
  * 3) wire fixture（fixtures/ 与 *.fixture.*）：值形态含敏感键/绝对路径/URL。
  */
+/**
+ * owner 复核豁免表：观测门红线在此路径上被 owner 显式放行（G21 清零决策记录）。
+ * 键为仓库相对路径（正斜杠），值为允许的规则码集合。新增条目必须写明复核
+ * 日期与理由；只豁免已复核形态，不豁免整文件或整包。
+ */
+const REVIEWED_EXEMPTIONS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  // fork owner 复核 2026-09-11：只读公开 npm registry 元数据的版本检查——无凭据、
+  // 无用户数据、1h TTL 缓存、失败静默回退静态版本；逐源串行不并发。
+  ['packages/bundle/dsh-context/src/client/latestVersion.ts', new Set(['SAFEPROJ/RAW_FETCH'])],
+  // fork owner 复核 2026-09-11：插件自我描述的仓库链接构建期回退字面量——不是
+  // host→client 投影 URL，不参与资源加载，仅用于 Plugin 卡片跳转与测试断言。
+  ['packages/bundle/dsh-context/src/client/meta.ts', new Set(['SAFEPROJ/RAW_URL_LITERAL'])],
+])
+
 export function runSafeProjectionAudit(root: string): CheckerReport {
   const findings: Finding[] = []
   const notes: string[] = []
@@ -30,8 +44,15 @@ export function runSafeProjectionAudit(root: string): CheckerReport {
         const rel = relative(root, file)
         const source = readFileSync(file, 'utf8')
         const ownerAuthorizedUrlSource = source.includes('SAFEPROJ: owner-authorized URL source')
+        const exempted = REVIEWED_EXEMPTIONS.get(rel.replaceAll('\\', '/'))
         for (const { line, text } of readCodeLines(file)) {
+          const before = findings.length
           auditBrowserLine(rel, line, text, findings, ownerAuthorizedUrlSource)
+          if (exempted !== undefined) {
+            for (let index = before; index < findings.length; index += 1) {
+              if (exempted.has(findings[index]!.code)) findings.splice(index--, 1)
+            }
+          }
         }
       }
     }

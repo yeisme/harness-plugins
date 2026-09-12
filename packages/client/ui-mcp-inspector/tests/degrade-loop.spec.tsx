@@ -18,7 +18,7 @@ describe('McpInspectorView degrade path', () => {
       // getSnapshot should be cached" on every render and loop forever.
       await new Promise(resolve => { setTimeout(resolve, 50) })
       expect(errorSpy.mock.calls.some(call => String(call[0]).includes('getSnapshot'))).toBe(false)
-      expect(screen.getByText('Catalog unavailable; activity remains visible')).toBeDefined()
+      expect(screen.getByText('Catalog unavailable; recheck is available')).toBeDefined()
     } finally {
       errorSpy.mockRestore()
     }

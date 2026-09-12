@@ -17,8 +17,6 @@ import {
   inject,
   McpInspectorView,
   name,
-  deriveMcpActivity,
-  splitMcpToolName,
   filterCatalog,
 } from '../../../client/ui-mcp-inspector/src/client/index.ts';
 
@@ -26,8 +24,6 @@ describe('dsh-mcp-inspector bundle entry', () => {
   it('re-exports the client plugin surface', () => {
     expect(apply).toBeTypeOf('function');
     expect(McpInspectorView).toBeDefined();
-    expect(deriveMcpActivity).toBeTypeOf('function');
-    expect(splitMcpToolName).toBeTypeOf('function');
     expect(name).toBe('client-ui-mcp-inspector');
     expect(filterCatalog).toBeTypeOf('function');
   });

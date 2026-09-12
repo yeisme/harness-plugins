@@ -3,9 +3,7 @@ vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({ Menu: () => null }))
 
 import { renderToStaticMarkup } from 'react-dom/server'
 import { apply, inject, name } from '../src/client/index.ts'
-import { deriveMcpActivity } from '../src/client/activity.ts'
 import { renderToolsInspectorTree } from '../src/client/McpInspectorView.tsx'
-import type { ActivityRunningCall, ActivityToolResultNode } from '../src/client/activity.ts'
 
 function collect(node: unknown, into: { text: string[]; tags: string[]; handlers: string[] }): void {
   if (node == null || typeof node === 'boolean') return
@@ -80,24 +78,12 @@ describe('Tools pane registration', () => {
 })
 
 describe('Tools inspector tree', () => {
-  test('shows catalog-unavailable degrade and session MCP activity', () => {
-    const nodes: ActivityToolResultNode[] = [
-      {
-        kind: 'tool-result',
-        seq: 1,
-        time: 2_000,
-        call: { name: 'mcp__github__create_issue' },
-        callTime: 1_000,
-        isError: true,
-      },
-    ]
-    const runningCalls: ActivityRunningCall[] = [{ name: 'mcp__github__list_prs', time: 3_000 }]
+  test('shows catalog-unavailable degrade', () => {
     const tree = renderToolsInspectorTree({
       catalogState: { status: 'unavailable', message: 'catalog: unavailable in this version' },
       query: '',
       family: 'all',
       enabled: 'all',
-      servers: deriveMcpActivity(nodes, runningCalls),
       onQueryChange: () => {},
       onFamilyChange: () => {},
       onEnabledChange: () => {},
@@ -111,10 +97,6 @@ describe('Tools inspector tree', () => {
     expect(html).not.toContain('catalog: unavailable in this version')
     expect(html).not.toContain('transport failure')
     expect(html).toContain('Tools')
-    expect(html).toContain('mcp__github')
-    expect(html).toContain('running')
-    expect(html).toContain('error')
-    expect(html).not.toMatch(/connected|healthy/i)
     expect(collected.tags).toContain('input')
     expect(collected.tags).toContain('button')
     expect(collected.tags).toContain('style')
@@ -166,7 +148,6 @@ describe('Tools inspector tree', () => {
       query: 'write',
       family: 'all',
       enabled: 'all',
-      servers: [],
       onQueryChange: () => {},
       onFamilyChange: () => {},
       onEnabledChange: () => {},

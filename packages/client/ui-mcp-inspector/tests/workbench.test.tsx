@@ -59,34 +59,21 @@ describe('Tools workbench', () => {
     expect(html).toContain('aria-pressed="true"')
   })
 
-  it('renders list and timeline activity without tool arguments or results', () => {
-    const html = renderToStaticMarkup(renderToolsInspectorTree({ ...base, activeSection: 'activity', activityMode: 'timeline', now: 60_000 }))
-    expect(html).toContain('tools-timeline-track')
-    expect(html).toContain('mcp__github / list_prs')
-    expect(html).toContain('read_file')
-    expect(html).toContain('Skill invocation')
-    expect(html).not.toMatch(/arguments|provider payload|raw prompt/i)
-  })
-
   it('uses the zh locale for every visible control and status surface', () => {
     const translator: ToolsTranslator = key => zh[key]
-    const html = renderToStaticMarkup(renderToolsInspectorTree({ ...base, t: translator, activeSection: 'activity', now: 60_000 }))
+    const html = renderToStaticMarkup(renderToolsInspectorTree({ ...base, t: translator, now: 60_000 }))
     expect(html).toContain('目录完整')
     expect(html).toContain('搜索名称、描述或来源')
-    expect(html).toContain('本会话 3 调用')
-    expect(html).toContain('时间线')
     expect(html).not.toContain('Catalog complete')
   })
 
-  it('keeps activity visible when the catalog endpoint is missing', () => {
+  it('keeps the catalog degrade surface explicit when the endpoint is missing', () => {
     const html = renderToStaticMarkup(renderToolsInspectorTree({
       ...base,
       catalogState: { status: 'error', message: 'endpoint_not_found', code: 'endpoint_not_found' },
-      activeSection: 'activity',
       canRefresh: true,
     }))
     expect(html).toContain('Tool catalog service is not installed or is version-incompatible')
-    expect(html).toContain('mcp__github / list_prs')
     expect(html).toContain('<code>endpoint_not_found</code>')
     expect(html).not.toMatch(/HTTP 404|transport failure|authorization/)
   })

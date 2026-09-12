@@ -13,7 +13,6 @@ const clientCatalog = {
   'ui-command-experience-web': 'adopted',
   'ui-conversation-rewrite': 'adopted',
   'ui-creator-studio': 'adopted',
-  'ui-interaction-space': 'adopted',
   'ui-desktop-workbench': 'adopted',
   'ui-devtools': 'adopted',
   'ui-mcp-inspector': 'adopted',
@@ -28,11 +27,10 @@ const clientCatalog = {
   'ui-personal-radar': 'adopted', // market face uses Surface; legacy text face remains compatible
   'ui-semantic-file-editor': 'adopted',
   'ui-session-cookie-manager': 'adopted',
-  'ui-selection-annotation': 'adopted', // DOM-anchored annotation ink layer over the shared Surface composition
   'ui-session-tags': 'adopted',
   'ui-session-status': 'excluded', // pure view-model/state logic; Web rendering is owned by ui-command-experience-web (SESSION_STATUS_VIEW_ID)
-  'ui-token-usage': 'adopted', // balance/insights panes consume the shared Surface
   'ui-structured-content': 'embed',
+  'ui-template-registry': 'embed', // embedded vk-token studio view; scaffold slice, not yet on the shared Surface
   'ui-surface': 'adopted',
   'ui-visual-kit': 'excluded',
   'ui-url-session': 'embed', // dsh-url-session-v1 §3: missing-session state + session-link menu consume official primitives and --vk-* tokens
@@ -61,8 +59,6 @@ const dynamicStyleAllowlist = new Map([
   ['packages/client/ui-pane-domain/src/project-canvas-view.tsx', 'user-controlled React Flow node width and height'],
   ['packages/client/ui-pane-workbench/src/drag-visuals.tsx', 'pointer and measured drag geometry'],
   ['packages/client/ui-creator-studio/src/image-viewport.tsx', 'measured natural size × zoom scale; static CSS cannot express runtime image geometry'],
-  ['packages/client/ui-selection-annotation/src/client/AnnotationCanvas.tsx', 'annotation ink positioned by measured DOM region geometry'],
-  ['packages/client/ui-token-usage/src/client/insights-panel.tsx', 'segmented bar widths are runtime data proportions'],
   ['packages/client/ui-pane-workbench/src/explorer/tree-ui.tsx', 'virtual tree height, offset and depth indentation'],
   ['packages/client/ui-pane-workbench/src/git/source-control.tsx', 'virtual list height and offset'],
   ['packages/client/ui-pane-workbench/src/management-center.tsx', 'virtual pane-management list height and offset'],

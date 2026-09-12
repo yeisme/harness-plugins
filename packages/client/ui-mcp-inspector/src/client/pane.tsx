@@ -1,36 +1,13 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type JSX } from 'react'
-import type { ClientContext, ISessions, SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
-import { deriveToolActivity, type ActivityRunningCall, type ActivityToolResultNode } from './activity.ts'
+import type { ClientContext, ISessions } from '@deepseek-ai/dsh-client-runtime/client'
 import { ToolsInspectorContent, type ToolsTranslator } from './McpInspectorView.tsx'
 import { SessionToolsWorkspace } from './workspace-state.ts'
 import { Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Surface } from '@yeisme/dsh-client-ui-surface'
-import type { ToolActivityRecord } from './activity.ts'
-
-const EMPTY_ACTIVITY = deriveToolActivity([], [])
-const idleSubscribe = () => () => {}
-const emptySnapshot = () => undefined
-interface ActivityFields {
-  readonly nodes?: readonly { readonly kind: string }[]
-  readonly runningCalls?: readonly ActivityRunningCall[]
-}
-interface ActivitySource {
-  subscribe(listener: () => void): () => void
-  getSnapshot(): ActivityFields | { readonly legacy: ActivityFields } | undefined
-}
-
-/** New hosts keep chat projections separate from session lifecycle; older hosts expose them on session. */
-function activitySource(ctx: ClientContext, current: string | undefined, session: SessionFace | undefined): ActivitySource | undefined {
-  if (current !== undefined && session !== undefined) {
-    let ui: { binding(id: string): { target(name: string): ActivitySource } } | undefined
-    try { ui = typeof ctx.get === 'function' ? ctx.get('uiConversation' as never) as unknown as typeof ui : undefined } catch { /* Optional on older hosts. */ }
-    if (typeof ui?.binding === 'function') {
-      const binding = ui.binding(current)
-      if (typeof binding.target === 'function') return binding.target('chat')
-    }
-  }
-  return session as unknown as ActivitySource | undefined
-}
+import { addCapabilityReference } from './draft-reference.ts'
+import { SkillDocumentReader } from './SkillDocumentReader.tsx'
+import { readSkillDocument } from './skill-document-remote.ts'
+import type { ToolHubItemV1 } from './wire.ts'
 
 export interface ToolsPaneProps {
   readonly ctx: ClientContext
@@ -44,7 +21,6 @@ export interface ToolsPaneProps {
   readonly onOpenSession?: (() => void) | undefined
   readonly onManage?: (() => void) | undefined
   readonly onSessionSelected?: ((id: string) => void) | undefined
-  readonly onRevealCall?: ((record: ToolActivityRecord) => boolean | void) | undefined
 }
 
 /** Explicit affinity: global current is never used to bind this view. */
@@ -65,7 +41,8 @@ export function ToolsPane(props: ToolsPaneProps): JSX.Element {
 }
 
 function BoundToolsPane(props: ToolsPaneProps): JSX.Element {
-  const { ctx, sessions, sessionId, workspace, t } = props
+  const { sessions, sessionId, workspace, t } = props
+  const sessionSummary = useSyncExternalStore(sessions.list.subscribe.bind(sessions.list), sessions.list.getSnapshot.bind(sessions.list), sessions.list.getSnapshot.bind(sessions.list))
   const [moreOpen, setMoreOpen] = useState(false)
   const moreTrigger = useRef<HTMLButtonElement>(null)
   const moreLabels = useRef(new Map<string, HTMLSpanElement>())
@@ -116,19 +93,49 @@ function BoundToolsPane(props: ToolsPaneProps): JSX.Element {
       : event.key === 'ArrowDown' ? (index + 1) % buttons.length : (index - 1 + buttons.length) % buttons.length
     buttons[next]?.focus()
   }
-  const resource = useMemo(() => workspace.get(sessionId), [workspace, sessionId])
-  useEffect(() => workspace.retain(sessionId), [workspace, sessionId])
+  const sessionResource = useMemo(() => workspace.get(sessionId), [workspace, sessionId])
+  const installedResource = useMemo(() => workspace.get(), [workspace])
+  const selection = useSyncExternalStore(sessionResource.state.subscribe, sessionResource.state.getSnapshot, sessionResource.state.getSnapshot)
+  const catalogScope = props.manager ? 'installed' : selection.scope
+  const resource = catalogScope === 'session' ? sessionResource : installedResource
+  const sessionCatalog = useSyncExternalStore(sessionResource.controller.subscribe.bind(sessionResource.controller), sessionResource.controller.getSnapshot.bind(sessionResource.controller), sessionResource.controller.getSnapshot.bind(sessionResource.controller))
+  useEffect(() => {
+    // Both owner catalogs stay retained while this bound pane swaps scope.
+    // Releasing the inactive one would dispose its controller beneath the
+    // memoized resource and let a later A → installed → A render go stale.
+    const releaseSession = workspace.retain(sessionId)
+    const releaseInstalled = workspace.retain()
+    return () => { releaseInstalled(); releaseSession() }
+  }, [workspace, sessionId])
   useEffect(() => sessionId ? (sessions as unknown as { present?(id: string): () => void }).present?.(sessionId) : undefined, [sessions, sessionId])
-  const session = sessionId === undefined ? undefined : sessions.binding(sessionId as never)?.session
-  const source = useMemo(() => activitySource(ctx, sessionId, session), [ctx, sessionId, session])
-  const snapshot = useSyncExternalStore(source?.subscribe.bind(source) ?? idleSubscribe, source?.getSnapshot.bind(source) ?? emptySnapshot, source?.getSnapshot.bind(source) ?? emptySnapshot)
-  const activity = useMemo(() => {
-    if (!snapshot) return EMPTY_ACTIVITY
-    const fields = 'legacy' in snapshot ? snapshot.legacy : snapshot
-    return deriveToolActivity((fields.nodes ?? []).filter(node => node.kind === 'tool-result') as unknown as ActivityToolResultNode[], fields.runningCalls ?? [])
-  }, [snapshot])
-  return <ToolsInspectorContent activity={activity} controller={resource.controller} viewState={resource.state} t={t} readOnlyCatalog={!props.manager} globalManagement={!!props.manager}
-    contextLabel={props.manager ? t('view.globalTools') : t('view.tools')} onRevealCall={props.onRevealCall}
+  const boundSessionLabel = sessionId === undefined ? undefined : sessionSummary.byId?.[sessionId as never]?.displayTitle ?? sessionId
+  const sessionItemFor = (item: ToolHubItemV1): ToolHubItemV1 | undefined => sessionCatalog.status === 'ready'
+    ? sessionCatalog.catalog.items.find(candidate => candidate.name === item.name && candidate.family === item.family)
+    : undefined
+  const admissionReason = (item: ToolHubItemV1): string | undefined => {
+    if (sessionId === undefined || catalogScope === 'session') return item.availability === 'available' ? undefined : item.disabledReason ?? t('draft.boundUnavailable')
+    if (sessionCatalog.status !== 'ready') return t('draft.boundUnknown')
+    const candidate = sessionItemFor(item)
+    if (candidate === undefined) return t('draft.boundUnavailable')
+    return candidate.availability === 'available' ? undefined : candidate.disabledReason ?? t('draft.boundUnavailable')
+  }
+  const activeCatalog = resource.controller.getSnapshot()
+  const activeDetail = selection.selectedId === undefined || activeCatalog.status !== 'ready'
+    ? undefined : activeCatalog.catalog.items.find((item: ToolHubItemV1) => item.id === selection.selectedId)
+  const draftDisabledReason = activeDetail === undefined ? undefined : admissionReason(activeDetail)
+  return <ToolsInspectorContent controller={resource.controller} viewState={sessionResource.state} t={t} readOnlyCatalog={!props.manager} globalManagement={!!props.manager}
+    contextLabel={props.manager ? t('view.globalTools') : t('view.tools')}
+    renderReference={(item, generation) => item.family === 'skill' ? <SkillDocumentReader
+      key={JSON.stringify([item.id, item.source, generation, catalogScope])} item={item} installed={catalogScope === 'installed'} t={t}
+      read={(input, signal) => readSkillDocument(props.ctx, input, signal)} /> : null}
+    scope={catalogScope}
+    preferChinesePurpose={t('search.placeholder').startsWith('搜索')}
+    {...(boundSessionLabel === undefined ? {} : { boundSessionLabel })}
+    {...(sessionId === undefined ? {} : { boundSessionId: sessionId })}
+    {...(sessionId === undefined ? {} : { onAddToDraft: item => addCapabilityReference(props.ctx, sessionId, sessionItemFor(item) ?? item) })}
+    {...(draftDisabledReason === undefined ? {} : { draftDisabledReason })}
+    {...(!props.manager ? { onScopeChange: (scope: 'session' | 'installed') => sessionResource.state.set('scope', scope) } : {})}
+    {...(props.onOpenSession === undefined ? {} : { onOpenSession: props.onOpenSession })}
     toolbarActions={actions.length > 0 ? <div className="tools-context-actions" onKeyDown={onMoreKeyDown}>
       <Menu open={moreOpen} portal align="end" compact
         anchor={<button ref={moreTrigger} type="button" className="vk-btn" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen(!moreOpen)}>{t('action.more')}</button>}

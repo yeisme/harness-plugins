@@ -27,3 +27,11 @@ authenticatedUrl 包装保持原语义。
 ## 与 dsh-url-session-v1 的关系
 
 §6.1 交付；§6.2（会话内 `/url` 命令）与 §6.3（handoff 只读字段）待各自 seam/切片。
+
+## 2026-09-12 重叠消解
+
+`frontend-static-history-fallback` 的 changes.patch 已把 `historyFallback` 的
+interface 字段块与 z.object 默认值纳入自身；本包原先重复添加同一块，在干净重放
+序列时冲突。已将本包 index.ts 两个 hunk 改为：historyFallback 块作上下文，仅新增
+`resumeSession` 增量。startup.ts hunk 与 new-files 不变。重放序列中本包始终位于
+frontend-static-history-fallback 之后。

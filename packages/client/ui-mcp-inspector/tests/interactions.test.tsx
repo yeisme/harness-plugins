@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { renderToolsInspectorTree } from '../src/client/McpInspectorView.tsx'
+import { ToolsInspectorContent, renderToolsInspectorTree } from '../src/client/McpInspectorView.tsx'
+import { ToolsViewState } from '../src/client/workspace-state.ts'
+import { zh } from '../src/client/locales.ts'
 
 afterEach(cleanup)
 
@@ -14,7 +16,7 @@ const catalog = {
   toolsAvailable: true,
   mcpInventoryAvailable: false,
   items: [
-    { id: 'mcp:github' as const, family: 'mcp' as const, origin: 'mcp' as const, name: 'github', label: 'mcp__github', description: 'GitHub', source: 'mcp-client', availability: 'available' as const, enabled: true, canToggle: true },
+    { id: 'mcp:github' as const, family: 'mcp' as const, origin: 'mcp' as const, name: 'github', label: 'mcp__github', description: 'GitHub', source: 'mcp-client', availability: 'available' as const, enabled: true, canToggle: true, purpose: { zh: '查询代码托管信息', category: 'operations', searchTerms: ['代码'] } },
     { id: 'skill:writer' as const, family: 'skill' as const, origin: 'skill' as const, name: 'writer', label: 'writer', description: 'Write', source: 'user', availability: 'disabled' as const, enabled: false, canToggle: true },
   ],
 }
@@ -25,7 +27,6 @@ function props(overrides: Record<string, unknown> = {}) {
     query: '',
     family: 'all' as const,
     enabled: 'all' as const,
-    activity: { calls: 1, errors: 0, running: 1, records: [{ itemId: 'mcp:github' as const, family: 'mcp' as const, server: 'github', tool: 'list_prs', time: 2_000, durationMs: null, isError: false, running: true, sequence: 1 }] },
     onQueryChange: vi.fn(),
     onFamilyChange: vi.fn(),
     onEnabledChange: vi.fn(),
@@ -56,29 +57,31 @@ describe('Tools workbench controls', () => {
     expect(input.onToggle).toHaveBeenCalledWith('mcp:github', false)
   })
 
-  it('wires activity view/filter controls and safe recheck recovery', () => {
-    const input = props({ activeSection: 'activity', canRefresh: true, catalogState: { status: 'error', message: 'endpoint_not_found', code: 'endpoint_not_found' } })
-    render(renderToolsInspectorTree(input))
-    fireEvent.click(screen.getByRole('button', { name: 'Timeline' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Running' }))
-    fireEvent.click(screen.getAllByRole('button', { name: 'Recheck' })[0])
-    expect(input.onActivityModeChange).toHaveBeenCalledWith('timeline')
-    expect(input.onActivityFilterChange).toHaveBeenCalledWith('running')
-    expect(input.onRefresh).toHaveBeenCalled()
-    expect(screen.queryByText(/HTTP 404|transport failure/)).toBeNull()
+  it('uses the maintained Chinese purpose in a Chinese catalog row while details retain the source description', () => {
+    render(renderToolsInspectorTree(props({ preferChinesePurpose: true, t: (key: keyof typeof zh) => zh[key] })))
+    expect(screen.getByText('查询代码托管信息')).toBeTruthy()
   })
-})
 
-it.each(['list', 'timeline'] as const)('selects the complete %s call row while retaining running status', mode => {
-  const onSelectCall = vi.fn()
-  const input = props({ activeSection: 'activity', activityMode: mode, selectedCall: '1-2000-list_prs', onSelectCall })
-  const view = render(renderToolsInspectorTree(input))
-  const row = view.container.querySelector(`[data-selected="true"]`)!
-  expect(row).toBeTruthy()
-  const button = row.querySelector('button')!
-  expect(button.getAttribute('aria-pressed')).toBe('true')
-  fireEvent.click(row.querySelector('.tools-record-status')!)
-  expect(onSelectCall).toHaveBeenCalledWith('1-2000-list_prs')
-  expect(row.textContent).toContain('running')
-  expect(view.container.querySelector('.tools-call-details button')).toBe(document.activeElement)
+  it('moves narrow detail focus to its own Back control so Escape restores the row', async () => {
+    const state = new ToolsViewState()
+    const controllerState = { status: 'ready' as const, catalog }
+    const controller = {
+      getSnapshot: () => controllerState,
+      pendingIdSnapshot: () => undefined,
+      subscribe: () => () => {},
+      refresh: async () => {},
+      setEnabled: async () => ({ ok: false as const, code: 'toggle-unsupported' as const, message: 'no' }),
+      dispose: () => {},
+    }
+    render(<ToolsInspectorContent controller={controller as never} viewState={state} />)
+    const row = screen.getByRole('button', { name: 'View details for mcp__github' })
+    fireEvent.click(row)
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    const back = screen.getByRole('button', { name: 'Back to catalog' })
+    expect(document.activeElement).toBe(back)
+    fireEvent.keyDown(back, { key: 'Escape' })
+    await new Promise(resolve => requestAnimationFrame(resolve))
+    expect(document.activeElement).toBe(row)
+  })
+
 })

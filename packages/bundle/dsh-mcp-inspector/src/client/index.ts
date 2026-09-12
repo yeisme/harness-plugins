@@ -11,21 +11,11 @@ export {
   apply,
   inject,
   McpInspectorView,
-  deriveMcpActivity,
-  deriveToolActivity,
-  splitMcpToolName,
   filterCatalog,
   en,
   NS,
   zh,
 } from '@yeisme/dsh-client-ui-mcp-inspector/client'
 export type {
-  ActivityRunningCall,
-  ActivityToolResultNode,
-  McpCallRecord,
   McpInspectorKey,
-  McpServerActivity,
-  ToolActivityFamily,
-  ToolActivityRecord,
-  ToolActivitySnapshot,
 } from '@yeisme/dsh-client-ui-mcp-inspector/client'
