@@ -73,7 +73,7 @@ const exitCode = await (async () => {
     const surface = page.locator('.pwr-search-surface')
     step('search-pane-mounted', await surface.count() === 1, `surfaces=${await surface.count()}`)
     const paneBox = await surface.boundingBox().catch(() => null)
-    const combobox = surface.getByRole('combobox')
+    const combobox = surface.getByRole('combobox', { name: /Search sessions|搜索会话/ })
     step('search-combobox', await combobox.isVisible().catch(() => false), 'combobox visible')
 
     // 3. Empty query: grouped list, no injected HTML, honest unavailable history.

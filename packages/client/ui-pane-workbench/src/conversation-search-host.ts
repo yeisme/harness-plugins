@@ -19,6 +19,17 @@ const HTML_TAG = /<[^>]*>/g
 const ABSOLUTE_PATH = /^(?:\/|[A-Za-z]:[\\/]|\\\\)/
 const EXECUTABLE_URL = /^(?:https?|file|javascript|data):/i
 const TOKENISH = /(?:bearer\s+[a-z0-9._~+/=-]+|(?:sk|pk|api)[_-][a-z0-9]{16,}|eyJ[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9._-]+)/i
+const sessionListHosts = new WeakMap<PaneConversationSearchHostV1, SessionListSearchSeamV1>()
+
+/** Identify this metadata-only adapter without changing the V1 wire contract. */
+export function isSessionListConversationSearchHost(host: PaneConversationSearchHostV1 | undefined): boolean {
+  return host !== undefined && sessionListHosts.has(host)
+}
+
+/** Internal complete-snapshot seam; not a public wire or persistence API. */
+export function getSessionListSearchSeam(host: PaneConversationSearchHostV1): SessionListSearchSeamV1 | undefined {
+  return sessionListHosts.get(host)
+}
 
 export interface SessionListRowV1 {
   readonly displayTitle?: string
@@ -63,9 +74,9 @@ function encodeCursor(offset: number): string {
 
 function decodeCursor(cursor: string | undefined): number | undefined {
   if (cursor === undefined || cursor.length === 0) return 0
-  if (!cursor.startsWith(CURSOR_PREFIX)) return undefined
-  const offset = Number.parseInt(cursor.slice(CURSOR_PREFIX.length), 10)
-  return Number.isInteger(offset) && offset >= 0 ? offset : undefined
+  if (!/^s:\d+$/.test(cursor)) return undefined
+  const offset = Number(cursor.slice(CURSOR_PREFIX.length))
+  return Number.isSafeInteger(offset) && offset >= 0 ? offset : undefined
 }
 
 function normalizeNeedle(value: string): string {
@@ -84,12 +95,19 @@ function safeDisplayText(value: string, fallback: string): string {
 }
 
 function isoTimestamp(value: number | string | undefined): string | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    const iso = new Date(value).toISOString()
-    return iso
-  }
-  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value)) return value
+  if (typeof value !== 'number' && (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(value))) return undefined
+  const date = new Date(value)
+  if (Number.isFinite(date.getTime())) return date.toISOString()
   return undefined
+}
+
+export function projectSessionListSnapshot(snapshot: SessionListSnapshotV1): readonly PaneConversationSearchItemV1[] {
+  return readSessionIds(snapshot).map(id => {
+    const row = snapshot.byId?.[id]
+    const title = safeDisplayText(typeof row?.displayTitle === 'string' ? row.displayTitle : id, id)
+    const updatedAt = isoTimestamp(row?.updatedAt)
+    return { sessionRef: id, messageRef: id, title, snippet: title, ...(updatedAt === undefined ? {} : { updatedAt }) }
+  })
 }
 
 function readSessionIds(snapshot: SessionListSnapshotV1): readonly string[] {
@@ -117,10 +135,14 @@ export function createSessionListConversationSearchHost(sessions: unknown): Pane
   const probe = probeSessionListSearchSeam(sessions)
   if (!probe.available) return undefined
   const seam = sessions as SessionListSearchSeamV1
-  return {
+  const host: PaneConversationSearchHostV1 = {
     capability: PANE_CONVERSATION_SEARCH_CAPABILITY,
     search: async (request: PaneConversationSearchRequestV1, signal?: AbortSignal): Promise<PaneConversationSearchPageV1> => {
       if (signal?.aborted) return { items: [], status: 'offline', reason: 'aborted' }
+      // The list snapshot does not carry a trustworthy project-to-session mapping.
+      if (request.workspaceRef !== CURRENT_PROFILE_WORKSPACE_REF) {
+        return { items: [], status: 'contract_mismatch', reason: 'project_scope_unsupported' }
+      }
       const offset = decodeCursor(request.cursor)
       if (offset === undefined) return { items: [], status: 'contract_mismatch', reason: 'invalid_cursor' }
       let snapshot: SessionListSnapshotV1
@@ -131,20 +153,8 @@ export function createSessionListConversationSearchHost(sessions: unknown): Pane
       }
       if (signal?.aborted) return { items: [], status: 'offline', reason: 'aborted' }
       const limit = clampLimit(request.limit)
-      const matched: PaneConversationSearchItemV1[] = []
-      for (const id of readSessionIds(snapshot)) {
-        const row = snapshot.byId?.[id]
-        const title = safeDisplayText(typeof row?.displayTitle === 'string' ? row.displayTitle : id, id)
-        if (!matchSession(id, title, request.query)) continue
-        const updatedAt = isoTimestamp(row?.updatedAt)
-        matched.push({
-          sessionRef: id,
-          messageRef: id,
-          title,
-          snippet: title,
-          ...(updatedAt === undefined ? {} : { updatedAt }),
-        })
-      }
+      const matched = projectSessionListSnapshot(snapshot).filter(item =>
+        (request.sessionRef === undefined || item.sessionRef === request.sessionRef) && matchSession(item.sessionRef, item.title, request.query))
       const page = matched.slice(offset, offset + limit)
       const nextOffset = offset + page.length
       if (signal?.aborted) return { items: [], status: 'offline', reason: 'aborted' }
@@ -154,11 +164,14 @@ export function createSessionListConversationSearchHost(sessions: unknown): Pane
         ...(nextOffset < matched.length ? { nextCursor: encodeCursor(nextOffset) } : {}),
       }
     },
-    open: (item: PaneConversationSearchItemV1): void => {
-      if (typeof seam.open !== 'function') return
-      seam.open(item.sessionRef)
+    open: async (item: PaneConversationSearchItemV1): Promise<void> => {
+      if (typeof seam.open !== 'function') throw new Error('session_open_unavailable')
+      if (!readSessionIds(seam.list!.getSnapshot()).includes(item.sessionRef)) throw new Error('session_unavailable')
+      await seam.open(item.sessionRef)
     },
   }
+  sessionListHosts.set(host, seam)
+  return host
 }
 
 /** Owner-provided host wins; otherwise wrap the official current-profile `sessions.list` snapshot. */

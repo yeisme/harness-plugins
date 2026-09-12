@@ -6,7 +6,9 @@ import { JSDOM } from 'jsdom'
 
 const bundleUrl = new URL('../lib/client.js', import.meta.url)
 const bundleSource = readFileSync(bundleUrl, 'utf8')
-if (/\bprocess\b/u.test(bundleSource)) throw new Error('browser bundle must not reference the Node.js process global')
+// 内联的 zod JSON-Schema 走查器有名为 process 的局部函数，并非 Node 全局引用；
+// 只禁止对全局 process 的成员访问（process.env 等），浏览器下才会真正抛错。
+if (/\bprocess\s*\./u.test(bundleSource)) throw new Error('browser bundle must not reference the Node.js process global')
 
 const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', { url: 'http://localhost/' })
 const { window } = dom
@@ -32,7 +34,7 @@ const clientRequire = createRequire(new URL('../../../client/ui-ai-drama-directo
 const primitiveStub = new Proxy({}, { get: () => () => null })
 const moduleRequire = id => id === '@deepseek-ai/dsh-client-ui-primitives'
   ? primitiveStub
-  : id === 'react' || id.startsWith('react/') ? clientRequire(id) : require_(id)
+  : id === 'react' || id.startsWith('react/') || id === 'react-dom' || id.startsWith('react-dom/') ? clientRequire(id) : require_(id)
 require_(bundleUrl.pathname)
 
 if (entry === null) throw new Error('ModuleLoader.load was not called')
@@ -76,18 +78,18 @@ ctx.provide('remote', {
 })
 
 const firstDispose = await exports_.apply(ctx)
-assert(views.size === 10, 'install must register six Director and four additive show-control views')
+assert(views.size === 11, 'install must register six Director, four additive show-control and one pipeline workbench views')
 assert(commands.size === 14, 'install must register ten legacy and four additive show-control commands')
 const duplicateDispose = await exports_.apply(ctx)
-assert(views.size === 10 && commands.size === 14, 'duplicate install must be a no-op')
+assert(views.size === 11 && commands.size === 14, 'duplicate install must be a no-op')
 duplicateDispose()
-assert(views.size === 10 && commands.size === 14, 'duplicate disposer must not remove the active install')
+assert(views.size === 11 && commands.size === 14, 'duplicate disposer must not remove the active install')
 firstDispose()
 assert(views.size === 0 && commands.size === 0, 'uninstall must remove all registrations')
 assert(ctx.get('dramaDirector') === undefined, 'uninstall must remove the provided client face')
 
 const reinstallDispose = await exports_.apply(ctx)
-assert(views.size === 10 && commands.size === 14, 'reinstall must restore exactly one registration set')
+assert(views.size === 11 && commands.size === 14, 'reinstall must restore exactly one registration set')
 reinstallDispose()
 assert(views.size === 0 && commands.size === 0, 'reinstall disposer must clean the second install')
 

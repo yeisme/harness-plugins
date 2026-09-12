@@ -45,8 +45,12 @@ import { PANE_WORKBENCH_LOCALE_RESOURCES, setActiveLocale } from './i18n/locale.
 import type { PaneViewSpecV1 } from './workspace.js'
 import type { PaneEventEnvelopeV1 } from '@yeisme/dsh-pane-protocol'
 import { createUnifiedHostAdapter, isUnifiedWorkspaceHost, type UnifiedWorkspaceHost } from './unified-host.js'
+import { requestExplorerReveal } from './explorer/reveal-navigation.js'
 import { bindExplorerRuntime, createExplorerRuntimeSource, type ExplorerRuntimeV2 } from './explorer/runtime.js'
 import { openWorkspaceSearchPane, WORKSPACE_SEARCH_COMMAND_ID } from './search-open.js'
+import { searchSourcesFor, type SearchCenterOwnerSource } from './search-source-registry.js'
+export type { SearchCenterOwnerSource, SearchCenterOwnerPage } from './search-source-registry.js'
+export type { SearchCenterSourceDescriptor, SearchCenterSourceRequest, SearchCenterResource, SearchCenterScope } from './search-source.js'
 
 export { PaneRegionChrome } from './region-chrome.js'
 export { bindExplorerRuntime, getExplorerRuntime, subscribeExplorerRuntime } from './explorer/runtime.js'
@@ -181,8 +185,11 @@ export {
 } from './capabilities-view.js'
 
 export interface PaneWorkbenchClientFace {
+  /** Optional additive source registration; old pane clients remain compatible. */
+  registerSearchSource?(source: SearchCenterOwnerSource): () => void
   registerView(input: unknown): () => void
   registerExplorerRuntime(runtime: ExplorerRuntimeV2): () => void
+  revealExplorerResource?(ref: string, version: string, signal?: AbortSignal, pendingSignal?: AbortSignal): Promise<boolean>
   registerPlugin(input: PaneRuntimePluginV1): () => void
   registerCommand(input: unknown): () => void
   executeCommand(id: string): Promise<unknown>
@@ -351,6 +358,19 @@ function createPaneWorkbenchRuntime(tier: ExperienceTierTrackerV1, ctx: Pick<Cli
     return { sessionId, workspaceId: workspace?.workspaceId, workspaceTitle: workspace?.title }
   }, commands)
   const controller = new PaneWorkbenchController({ registry, persistence, managementPersistence, experienceTier: tier, renditionRenderer, ...(unifiedAdapter ? { layoutDelegate: unifiedAdapter.delegate } : {}) })
+  const settingsNavigation = readContextService<{ open?(section: string): void }>(ctx, 'settingsNavigation')
+  const settingsSource: SearchCenterOwnerSource = {
+    descriptor: { id: 'dsh.settings', owner: 'dsh.settings', resourceKinds: ['settings-entry'], coverage: 'catalog', scopes: ['profile'], filters: [], sorts: ['relevance', 'name'], pagination: false, preview: false, open: settingsNavigation?.open !== undefined },
+    async search(request) {
+      if (request.scope.kind !== 'profile' || request.filters && Object.keys(request.filters).length > 0) return { status: 'disabled', resources: [] }
+      const entries = [{ ref: 'settings:plugins', title: 'Plugins and Skills', section: 'plugins' }, { ref: 'settings:workspace', title: 'Workspace settings', section: 'workspace' }]
+      const needle = request.query.trim().toLocaleLowerCase()
+      return { status: 'ready', resources: entries.filter(entry => !needle || `${entry.title} ${entry.ref}`.toLocaleLowerCase().includes(needle)).map(entry => ({ owner: 'dsh.settings', ref: entry.ref, revision: 'settings:v1', kind: 'settings-entry' as const, title: entry.title, description: 'Open the original settings section', availability: settingsNavigation?.open ? 'available' as const : 'unavailable' as const })) }
+    },
+    async open(resource) { const section = resource.ref === 'settings:plugins' ? 'plugins' : resource.ref === 'settings:workspace' ? 'workspace' : undefined; if (!section || !settingsNavigation?.open) return { status: 'unavailable' }; settingsNavigation.open(section); return { status: 'opened' } },
+  }
+  const searchSources = searchSourcesFor(controller)
+  const unregisterSettingsSource = searchSources.register(settingsSource)
   const conversationSearch = resolvePaneConversationSearchHost(ctx)
   const keymap = readContextService<Partial<PaneManagementKeymapV1>>(ctx, PANE_MANAGEMENT_KEYMAP_CONTEXT_KEY)
   const workspaceContext = readContextService<PaneWorkspaceContextProviderV1>(ctx, PANE_WORKSPACE_CONTEXT_KEY)
@@ -398,6 +418,9 @@ function createPaneWorkbenchRuntime(tier: ExperienceTierTrackerV1, ctx: Pick<Cli
     disposeSearchCommand,
     bindPaneWorkbenchLocale(ctx),
     () => controller.dispose(),
+    () => unregisterSettingsSource(),
+    () => searchSources.dispose(),
+    () => explorerRuntime.reveal?.cancel(),
     () => tier.dispose(),
     () => unifiedAdapter?.dispose(),
   ]
@@ -459,8 +482,10 @@ function createPaneWorkbenchRuntime(tier: ExperienceTierTrackerV1, ctx: Pick<Cli
     }
   }
   const face: PaneWorkbenchClientFace = {
+    registerSearchSource: source => searchSources.register(source),
     registerView: input => registry.registerView(input),
     registerExplorerRuntime: runtime => explorerRuntime.bind(runtime),
+    revealExplorerResource: (ref, version, signal, pendingSignal) => requestExplorerReveal(controller, explorerRuntime, ref, version, signal, pendingSignal),
     registerPlugin,
     registerCommand: input => commands.register(input),
     executeCommand: id => commands.execute(id),

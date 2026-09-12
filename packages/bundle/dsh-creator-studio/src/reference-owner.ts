@@ -18,7 +18,7 @@ export function createCreatorReferenceOwner(
   workspaceForSession: (sessionId: string) => string | undefined,
   isCurrent: () => boolean = () => true,
 ): ComposerReferenceOwnerV1 {
-  return {
+  const provider: ComposerReferenceOwnerV1 = {
     async resolve(input, signal) {
       signal.throwIfAborted()
       if (!isCurrent()) return undefined
@@ -98,5 +98,36 @@ export function createCreatorReferenceOwner(
         snapshot: { type: 'text', text, truncated: window !== undefined && (window.start > 0 || window.end < bytes.byteLength) },
       }
     },
+    async refresh(input, signal) {
+      signal.throwIfAborted()
+      if (!isCurrent()) return undefined
+      const reference = { ...input.reference, ...(input.reference.window === undefined ? {} : { window: { ...input.reference.window } }) }
+      if (reference.owner !== owner || reference.intent !== 'content' || reference.scope !== 'artifact/body'
+        || !['file', 'directory', 'selection'].includes(reference.kind) || reference.region !== undefined) return undefined
+      const snapshot = validateCreatorStudioSnapshot(await gateway.snapshot())
+      signal.throwIfAborted()
+      if (!isCurrent() || snapshot?.context?.sessionRef !== input.sessionId
+        || snapshot.context.workspaceRef !== workspaceForSession(input.sessionId)) return undefined
+      const projection = snapshot.owners.find(candidate => candidate.owner === owner)
+      if (projection?.status !== 'ready' || projection.freshness !== 'fresh') return undefined
+      const items = projection.artifactWorkspace?.artifacts ?? []
+      // Only a base projection identifies the current head of this same object.
+      // A selected immutable candidate can be reauthorized at its own version,
+      // but must never redirect to a newer candidate with another opaque ref.
+      const heads = items.filter(item => item.artifact.owner === owner && item.artifact.ref === reference.ref)
+      const matches = heads.length > 0
+        ? heads.map(item => ({ artifact: item.artifact, proof: item.referenceProof }))
+        : items.flatMap(item => item.candidates.map(candidate => ({ artifact: candidate.artifact, proof: candidate.referenceProof })))
+          .filter(item => item.artifact?.owner === owner && item.artifact.ref === reference.ref && item.artifact.version === reference.version)
+      if (matches.length !== 1) return undefined
+      const { artifact, proof } = matches[0]!
+      if (artifact === undefined || proof === undefined || proof.id !== reference.id || proof.kind !== reference.kind
+        || proof.intent !== reference.intent || proof.scope !== reference.scope
+        || (proof.freshness !== 'fresh' && proof.freshness !== 'frozen')) return undefined
+      // Reuse full body/digest/context revalidation rather than trusting this
+      // metadata read or bypassing the bounded selection checks.
+      return provider.resolve({ ...input, reference: { ...reference, version: artifact.version, digest: proof.digest } }, signal)
+    },
   }
+  return provider
 }

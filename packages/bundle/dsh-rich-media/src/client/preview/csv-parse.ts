@@ -24,6 +24,8 @@ export interface CsvParseResult {
   readonly rows: readonly (readonly string[])[]
   readonly truncated: boolean
   readonly reason: CsvTruncateReason | undefined
+  /** First syntax diagnostic; rows retain the existing lenient interpretation. */
+  readonly diagnostic?: { readonly code: 'unclosed_quote' | 'unexpected_quote' | 'trailing_quoted_field'; readonly offset: number }
 }
 
 /** `text/tab-separated-values` uses tabs; every other delimiter is a comma. */
@@ -41,8 +43,22 @@ export function parseDelimitedTable(
   delimiter: ',' | '\t' = ',',
   budget: CsvParseBudget = CSV_PARSE_BUDGET,
 ): CsvParseResult {
-  const text = input.length > budget.maxBytes ? input.slice(0, budget.maxBytes) : input
-  let truncated = input.length > budget.maxBytes
+  for (const limit of [budget.maxBytes, budget.maxRows, budget.maxColumns]) {
+    if (!Number.isSafeInteger(limit) || limit <= 0) throw new RangeError('CSV budgets must be positive safe integers')
+  }
+  // Walk only the admissible prefix instead of allocating UTF-8 for an
+  // arbitrarily large source. Surrogate pairs are never cut in half.
+  let end = 0
+  let byteLength = 0
+  while (end < input.length) {
+    const point = input.codePointAt(end)!
+    const bytes = point <= 0x7f ? 1 : point <= 0x7ff ? 2 : point <= 0xffff ? 3 : 4
+    if (byteLength + bytes > budget.maxBytes) break
+    byteLength += bytes
+    end += point > 0xffff ? 2 : 1
+  }
+  const text = input.slice(0, end)
+  let truncated = end < input.length
   let reason: CsvTruncateReason | undefined = truncated ? 'bytes' : undefined
 
   const rows: string[][] = []
@@ -50,6 +66,9 @@ export function parseDelimitedTable(
   let field = ''
   let inQuotes = false
   let fieldStarted = false
+  let quoteStart = 0
+  let quoteClosed = false
+  let diagnostic: CsvParseResult['diagnostic']
 
   const endField = (): void => {
     if (row.length < budget.maxColumns) {
@@ -60,6 +79,7 @@ export function parseDelimitedTable(
     }
     field = ''
     fieldStarted = false
+    quoteClosed = false
   }
   const endRow = (): void => {
     endField()
@@ -81,6 +101,7 @@ export function parseDelimitedTable(
           index += 1
         } else {
           inQuotes = false
+          quoteClosed = true
         }
       } else {
         field += char
@@ -90,6 +111,7 @@ export function parseDelimitedTable(
     if (char === '"' && !fieldStarted) {
       inQuotes = true
       fieldStarted = true
+      quoteStart = index
       continue
     }
     if (char === delimiter) {
@@ -101,10 +123,12 @@ export function parseDelimitedTable(
       endRow()
       continue
     }
+    if (diagnostic === undefined && (quoteClosed || char === '"')) diagnostic = { code: quoteClosed ? 'trailing_quoted_field' : 'unexpected_quote', offset: index }
     field += char
     fieldStarted = true
   }
   if (fieldStarted || field.length > 0 || row.length > 0) endRow()
 
-  return { rows, truncated, reason }
+  if (inQuotes && !truncated && diagnostic === undefined) diagnostic = { code: 'unclosed_quote', offset: quoteStart }
+  return { rows, truncated, reason, ...(diagnostic === undefined ? {} : { diagnostic }) }
 }

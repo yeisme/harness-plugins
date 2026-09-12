@@ -1,0 +1,8 @@
+{
+  "name": "@yeisme/dsh-template-registry-bundle", "version": "0.1.0", "type": "module", "main": "lib/index.js",
+  "scripts": { "build": "tsc -p tsconfig.json && tsdown", "typecheck": "tsc -p tsconfig.json --noEmit", "test": "pnpm run build" },
+  "exports": { ".": "./lib/index.js", "./client": "./lib/client.js", "./cordis.patch.yml": "./cordis.patch.yml" },
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" }, "client": { "inject": ["@deepseek-ai/dsh-client-locale", "@deepseek-ai/dsh-client-runtime"], "platform": "web", "immediately": true } },
+  "dependencies": { "@yeisme/dsh-template-registry": "workspace:*", "@yeisme/dsh-client-ui-template-registry": "workspace:*" },
+  "devDependencies": { "typescript": "^5.9.3", "tsdown": "^0.22.14" }
+}

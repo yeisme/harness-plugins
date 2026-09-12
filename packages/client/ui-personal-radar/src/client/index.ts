@@ -13,6 +13,7 @@
  */
 
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import { isRadarMarketHost, mountRadarMarket } from './market-runtime.js'
 import {
   RADAR_COMMAND_USAGE,
   createRadarPaneState,
@@ -221,6 +222,11 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   if (existing !== undefined) return () => {}
 
   const { probe, pane, radarHost } = await probeRadarClientCapability(ctx)
+  const marketHost = readContextService<unknown>(ctx, 'radarMarketHost')
+  let market: ReturnType<typeof mountRadarMarket> | undefined
+  if (pane && isRadarMarketHost(marketHost)) {
+    try { market = mountRadarMarket(pane, marketHost) } catch { /* Keep the legacy face usable when market mounting fails. */ }
+  }
 
   if (pane === undefined || radarHost === undefined) {
     // Fail closed: no badge/command/pane registration without the official
@@ -228,7 +234,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
     // visible so the capability matrix explains why the entry is disabled.
     const probeOnlyFace: Pick<RadarClientFaceV1, 'probe'> = { probe }
     const unprovide = provide(ctx, 'personalRadar', probeOnlyFace)
-    return unprovide
+    return () => { unprovide(); market?.dispose() }
   }
 
   const runtime = createRuntime({ ctx, pane, radarHost, probe })
@@ -241,6 +247,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   return () => {
     unprovide()
     runtime.dispose()
+    market?.dispose()
   }
 }
 

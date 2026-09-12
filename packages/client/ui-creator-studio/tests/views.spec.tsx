@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { CreatorStudioController } from '../src/controller.ts'
 import { createCreatorStudioTranslator, en, pseudoLong, pseudoRtl } from '../src/locales.ts'
 import { CREATOR_LIFECYCLE_GROUPS, CreatorStudioView } from '../src/views.tsx'
@@ -24,6 +24,60 @@ async function readyController(): Promise<CreatorStudioController> {
 }
 
 describe('Creator Studio task views', () => {
+  it('keeps Eikona capability status in settings and real images in assets without dispatch', async () => {
+    const base = creatorSnapshot()
+    const snapshot = { ...base, owners: base.owners.map(owner => owner.owner !== 'eikona' ? owner : { ...owner, actions: [], resources: [
+      { ref: 'eikona:capability:generate', version: '1', kind: 'owner-capability', title: 'eikona.generation.submit', status: 'needs_contract', evidenceRefs: [] },
+      { ref: 'eikona:image:retained', version: '7', kind: 'image', title: 'Retained image', status: 'ready', evidenceRefs: [] },
+    ] }) }
+    const dispatch = vi.fn(async () => ({ ok: true as const, value: { status: 'rejected' as const, receiptRef: 'receipt:unexpected' } }))
+    const controller = new CreatorStudioController({ snapshot: async () => ({ ok: true, value: snapshot }), dispatch })
+    await controller.refresh()
+    const view = render(<CreatorStudioView mode="visual" controller={controller} pane={{ openView: vi.fn() }} onOpenMode={vi.fn()} />)
+    try {
+      expect(within(screen.getByRole('tabpanel')).getByText('图像服务状态')).toBeTruthy()
+      expect(within(screen.getByRole('tabpanel')).getByText('生成图像')).toBeTruthy()
+      fireEvent.click(screen.getByRole('tab', { name: '资产与来源' }))
+      expect(within(screen.getByRole('tabpanel')).getByText('Retained image')).toBeTruthy()
+      expect(within(screen.getByRole('tabpanel')).queryByText('eikona.generation.submit')).toBeNull()
+      expect(within(screen.getByRole('tabpanel')).queryByText('图像服务状态')).toBeNull()
+      fireEvent.click(screen.getByRole('tab', { name: '生成配置' }))
+      expect(within(screen.getByRole('tabpanel')).getByText('图像服务状态')).toBeTruthy()
+      expect(dispatch).not.toHaveBeenCalled()
+    } finally { view.unmount(); controller.dispose() }
+  })
+
+  it('opens Eikona independently and preserves generation input across its professional pages', async () => {
+    const controller = await readyController()
+    const onDirty = vi.fn()
+    render(<CreatorStudioView mode="visual" controller={controller} pane={{ openView: vi.fn() }} onOpenMode={vi.fn()} onDirty={onDirty} />)
+    const configure = screen.getByRole('tab', { name: '生成配置' })
+    expect(configure.getAttribute('aria-selected')).toBe('true')
+    fireEvent.change(screen.getByRole('textbox', { name: 'Brief' }), { target: { value: '保留的生成草稿' } })
+    fireEvent.click(screen.getByRole('tab', { name: '候选与修改' }))
+    expect(screen.queryByRole('textbox', { name: 'Brief' })).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: '资产与来源' }))
+    expect(onDirty.mock.calls.at(-1)?.[0]).toBe(true)
+    fireEvent.click(configure)
+    expect((screen.getByRole('textbox', { name: 'Brief' }) as HTMLTextAreaElement).value).toBe('保留的生成草稿')
+    fireEvent.keyDown(configure, { key: 'End' })
+    expect(screen.getByRole('tab', { name: '资产与来源' })).toBe(document.activeElement)
+    fireEvent.keyDown(document.activeElement!, { key: 'Home' })
+    expect(configure).toBe(document.activeElement)
+    expect(configure.getAttribute('aria-selected')).toBe('true')
+  })
+  it('opens the independent Auctra text pane without canvas or other professional panes', async () => {
+    const controller = await readyController()
+    const pane = { openView: vi.fn() }
+    render(<CreatorStudioView mode="text" controller={controller} pane={pane} onOpenMode={vi.fn()} />)
+    expect(document.querySelector('[data-auctra-writing-studio]')).toBeTruthy()
+    expect(document.querySelector('[data-auctra-scope]')).toBeTruthy()
+    expect(screen.getByRole('tab', { name: '结构与正文' }).getAttribute('aria-selected')).toBe('true')
+    expect(document.querySelector('[data-eikona-studio]')).toBeNull()
+    fireEvent.keyDown(screen.getByRole('tab', { name: '结构与正文' }), { key: 'End' })
+    expect(screen.getByRole('tab', { name: '导出与交接' })).toBe(document.activeElement)
+    expect(pane.openView).not.toHaveBeenCalled()
+  })
   it('renders the lifecycle, next action, owner disclosure, Production, and review priority', async () => {
     const controller = await readyController()
     const onOpenMode = vi.fn()

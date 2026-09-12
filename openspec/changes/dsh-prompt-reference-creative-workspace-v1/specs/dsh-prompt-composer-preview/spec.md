@@ -37,6 +37,10 @@
 - **WHEN** 引用展开内容超过发送限制
 - **THEN** 系统定位超限内容并提供缩小范围动作，不显示完整内容却发送截断文本
 
+#### Scenario: Preserve whitespace from preview through model receipt
+- **WHEN** 可编辑引用正文与草稿包含首尾空白、Tab、中文及嵌套代码围栏，用户查看发送预览后提交
+- **THEN** 新模式冻结消息和模型用户正文与预览逐字一致，不在提交边界 trim；旧普通文本和 V1 路径保持既有处理
+
 ### Requirement: PCP-04 Revision-aware acknowledgement and immutable history
 提交 SHALL 冻结正文、实例 revision、附件和请求身份。确认 SHALL 仅消费本次已提交且未被随后修改的草稿范围；失败或未知结果 SHALL 保留草稿。历史 SHALL 使用实际发送快照。
 
@@ -55,6 +59,10 @@
 #### Scenario: Known submission failure
 - **WHEN** 提交返回确定失败
 - **THEN** 保留正文、引用和附件，并显示原因及合法恢复入口
+
+#### Scenario: Consume unchanged references when another occurrence was edited
+- **WHEN** 提交包含可编辑正文与图片引用，等待 ACK 期间用户修改正文引用并追加文字
+- **THEN** 成功 ACK 移除提交后未修改的图片实例，保留改写实例及新文字；引用证明变化或新节点不能被相同文件名／正文误删，失败不消费草稿
 
 ### Requirement: PCP-05 Additive capability negotiation and V1 preservation
 可编辑提示词引用 SHALL 通过新增能力协商启用，显式声明正文投影语义；既有 V1 结构化引用 SHALL 保持原合同，不因发送失败或新 seam 缺失而静默转换。禁用新能力时 SHALL 保留新草稿与历史的可恢复性。

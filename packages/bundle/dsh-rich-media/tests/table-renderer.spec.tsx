@@ -22,6 +22,21 @@ function access(overrides: Partial<PreviewAccessHandleV1>): PreviewAccessHandleV
 }
 
 describe('PreviewTableRenderer', () => {
+  it('disables next at an exactly full last page and permits returning to the first', async () => {
+    const readTablePage = vi.fn(async ({ page }: { page: number }) => ({ columns: [{ id: 'name', label: 'Name' }], rows: Array.from({ length: 200 }, (_, i) => [`row-${page * 200 + i}`]), page, pageSize: 200, loaded: 200, total: 400, truncated: false }))
+    render(<PreviewTableRenderer resource={resource} access={access({ readTablePage })} />)
+    const next = screen.getByRole('button', { name: 'Next page' }) as HTMLButtonElement
+    await waitFor(() => expect(next.disabled).toBe(false))
+    fireEvent.click(next)
+    await waitFor(() => expect(readTablePage).toHaveBeenLastCalledWith({ page: 1, pageSize: 200 }, expect.any(AbortSignal)))
+    await waitFor(() => expect(next.disabled).toBe(true))
+    fireEvent.click(next)
+    expect(readTablePage).toHaveBeenCalledTimes(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Previous page' }))
+    await waitFor(() => expect(next.disabled).toBe(false))
+    expect(readTablePage).toHaveBeenLastCalledWith({ page: 0, pageSize: 200 }, expect.any(AbortSignal))
+  })
+
   it('renders owner schema and routes global sort through queryTable', async () => {
     const queryTable = vi.fn(async () => ({
       columns: [{ id: 'name', label: 'Name' }, { id: 'value', label: 'Value', align: 'end' as const }],

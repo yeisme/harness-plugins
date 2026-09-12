@@ -14,6 +14,11 @@ ${S} .tools-summary span{padding-left:7px;border-left:1px solid var(--vk-border-
 ${S} .tools-summary span[data-tone='critical']{color:var(--vk-state-error)}
 ${S} .tools-summary span[data-tone='info']{color:var(--vk-state-info)}
 ${S} .tools-recheck{white-space:nowrap}
+${S} .tools-toolbar-search{flex:1 1 220px;max-width:420px;min-width:160px}
+${S} .tools-scope-switch{display:flex;align-items:center;gap:6px;min-width:0;color:var(--vk-text-secondary);font-size:var(--vk-font-small)}
+${S} .tools-scope-switch span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+${S} .tools-bound-target{min-width:0;max-width:180px;overflow:hidden;color:var(--vk-text-secondary);font-size:var(--vk-font-small);text-overflow:ellipsis;white-space:nowrap}
+${S} .tools-add-draft{justify-self:start;max-width:100%;white-space:normal}
 ${S} .tools-notice{margin:0;padding:7px 14px;border-bottom:1px solid var(--vk-border-l1);font-size:var(--vk-font-small)}
 ${S} .tools-notice[data-tone='positive']{color:var(--vk-state-positive)}
 ${S} .tools-notice[data-tone='warn']{color:var(--vk-state-warn)}
@@ -36,13 +41,13 @@ ${S} .tools-pane-header>div{min-width:0}
 ${S} .tools-pane-header h2{margin:0;color:var(--vk-text-primary);font-size:var(--vk-font-heading);font-weight:650}
 ${S} .tools-pane-header p{margin:2px 0 0;color:var(--vk-text-tertiary);font-size:var(--vk-font-small);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 ${S} .tools-search{width:min(320px,48%);min-width:180px}
-${S} .tools-filter-row{display:flex;align-items:end;justify-content:space-between;gap:10px}
+${S} .tools-filter-row{display:flex;align-items:end;justify-content:flex-start;gap:8px;flex-wrap:wrap}
 ${S} .tools-family-tabs,${S} .tools-compact-controls,${S} .tools-right-tabs{display:flex;align-items:center;gap:4px;min-width:0}
 ${S} .tools-chip,${S} .tools-mobile-tabs button,${S} .tools-right-tabs button{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:var(--vk-ctrl-button);padding:0 9px;color:var(--vk-text-secondary);background:transparent;border:1px solid transparent;border-radius:var(--vk-radius-md);cursor:pointer;font-size:var(--vk-font-small);white-space:nowrap}
 ${S} .tools-chip span{color:var(--vk-text-quaternary);font-variant-numeric:tabular-nums}
 ${S} .tools-chip:hover,${S} .tools-chip[aria-pressed='true'],${S} .tools-mobile-tabs button[aria-pressed='true'],${S} .tools-right-tabs button[aria-pressed='true']{color:var(--vk-text-primary);background:var(--vk-fill-selected);border-color:var(--vk-border-l1)}
 ${S} .tools-chip:disabled,${S} .tools-mobile-tabs button:disabled,${S} .tools-right-tabs button:disabled{cursor:not-allowed;color:var(--vk-text-quaternary)}
-${S} .tools-state-filter{display:grid;gap:4px;min-width:118px;color:var(--vk-text-tertiary);font-size:var(--vk-font-small)}
+${S} .tools-state-filter{display:grid;gap:4px;min-width:118px;flex:1 1 118px;color:var(--vk-text-tertiary);font-size:var(--vk-font-small)}
 ${S} .tools-state-filter select{min-height:var(--vk-ctrl-input);padding:5px 8px;color:var(--vk-text-primary);background:var(--vk-bg-layer-2);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-md)}
 ${S} .tools-skeleton-list{display:grid;gap:6px}
 ${S} .tools-skeleton-list .vk-skeleton{min-height:58px}
@@ -51,7 +56,7 @@ ${S} .tools-catalog-alert>div{display:flex;align-items:center;gap:10px}
 ${S} .tools-catalog-alert details{color:var(--vk-text-tertiary)}
 ${S} .tools-catalog-alert summary{cursor:pointer}
 ${S} .tools-catalog-alert code{display:block;margin-top:6px;color:var(--vk-text-secondary)}
-${S} .tools-catalog-list{display:grid;border-top:1px solid var(--vk-border-l1)}
+${S} .tools-catalog-list{display:grid;align-content:start;grid-auto-rows:max-content;border-top:1px solid var(--vk-border-l1)}
 ${S} .tools-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:9px;min-width:0;padding:8px 4px;border-bottom:1px solid var(--vk-border-l1)}
 ${S} .tools-row[data-selected='true']{background:var(--vk-fill-selected)}
 ${S} .tools-row-main{display:grid;gap:2px;min-width:0;padding:2px 4px;text-align:left;background:transparent;border:0;border-radius:var(--vk-radius-sm);cursor:pointer}
@@ -146,6 +151,8 @@ ${S} .tools-title .vk-sub{overflow:hidden;text-overflow:ellipsis;white-space:now
 ${S} .tools-title .vk-sub .vk-dot{display:inline-block;margin-right:6px}
 ${S} .tools-summary{flex:1 0 100%;justify-content:flex-start;order:2}
 ${S} .tools-header>.tools-recheck,${S} .tools-context-actions{flex:none}
+${S} .tools-scope-switch{order:1}
+${S} .tools-toolbar-search{order:1;max-width:none}
 ${S} .tools-context-actions{display:flex;gap:4px;flex-wrap:wrap}
 ${S} .tools-mobile-tabs{display:flex;flex:none;margin:0;padding:4px 8px;border:0;border-bottom:1px solid var(--vk-border-l1);border-radius:0;background:transparent}
 ${S} .tools-mobile-tabs button{flex:0;min-height:28px;border-radius:var(--vk-radius-sm)}
@@ -200,10 +207,12 @@ ${S} .tools-call-details{max-height:none;flex:1}
 
 ${S}[data-yeisme-surface]{container-type:size}
 @container (max-height:300px){
-${S} .tools-header{padding:2px 6px;gap:4px;flex-wrap:nowrap;min-height:28px;flex:none}
+${S} .tools-header{padding:2px 6px;gap:4px;flex-wrap:wrap;min-height:28px;flex:none}
 ${S} .tools-summary,${S} .tools-title .vk-sub{display:none}
 ${S} .tools-title{flex:1 1 100px}
 ${S} .tools-context-actions{flex-wrap:nowrap;overflow-x:auto;min-width:0}
+${S} .tools-scope-switch{flex:1 1 150px;max-width:100%;overflow:auto}
+${S} .tools-toolbar-search{display:block;flex:1 1 180px;min-width:0;max-width:none}
 ${S} .tools-context-actions .vk-btn,${S} .tools-recheck{white-space:nowrap;min-height:26px;padding:3px 6px;font-size:11px}
 ${S} .tools-mobile-tabs{padding:0 6px}
 ${S} .tools-mobile-tabs button{min-height:26px;padding:2px 6px}
@@ -233,6 +242,27 @@ ${S} .tools-workspace{overflow:auto}
 ${S} .tools-right-column{min-height:96px}
 ${S} .tools-activity-pane .tools-chip,${S} .tools-activity-pane .tools-record-select{min-height:44px}
 }
+}
+
+/* The workspace owns one scroll surface. Wide panes retain master-detail;
+   compact panes fold to details and return through the selected row. */
+@container (min-width:721px){
+${S} .tools-workspace{display:grid;grid-template-columns:minmax(280px,58fr) minmax(300px,42fr);align-items:stretch;overflow:hidden}
+${S} .tools-catalog-pane{display:flex!important;flex-direction:column;min-height:0}
+${S} .tools-right-column{display:block!important;min-height:0;overflow:auto}
+${S} .tools-workspace[data-right-content='none']{grid-template-columns:minmax(0,1fr)}
+${S} .tools-workspace[data-right-content='none'] .tools-right-column{display:none!important}
+${S} .tools-catalog-list{overflow:auto}
+}
+@container (max-width:720px){
+${S} .tools-workspace{display:block;overflow:hidden}
+${S} .tools-workspace[data-active-section='catalog'] .tools-catalog-pane{display:flex}
+${S} .tools-workspace[data-active-section='details'] .tools-right-column{display:block}
+}
+@container (max-height:420px){
+${S} .tools-workspace{overflow:auto}
+${S} .tools-workspace[data-active-section='catalog'] .tools-catalog-pane{height:auto;min-height:0;overflow:visible}
+${S} .tools-workspace[data-active-section='catalog'] .tools-catalog-list{flex:none;min-height:0;overflow:visible}
 }
 `
 

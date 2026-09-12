@@ -206,7 +206,7 @@ export function PreviewTableRenderer({ resource, access, labels }: PreviewRender
       </div>
     </details>
     <button type="button" className="sc-action" disabled={pageIndex <= 0 || loading} onClick={() => { setPageIndex(value => Math.max(0, value - 1)) }}>{text.previous}</button>
-    <button type="button" className="sc-action" disabled={loading || page === undefined || page.rows.length < page.pageSize || (page.total !== undefined && page.loaded >= page.total)} onClick={() => { setPageIndex(value => value + 1) }}>{text.next}</button>
+    <button type="button" className="sc-action" disabled={loading || page === undefined || page.rows.length < page.pageSize || (page.total !== undefined && (pageIndex + 1) * page.pageSize >= page.total)} onClick={() => { setPageIndex(value => value + 1) }}>{text.next}</button>
   </div>
 
   return <div data-dsh-preview-table>

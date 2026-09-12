@@ -268,24 +268,33 @@ export class OpaqueFileRefRegistry {
     if (request.query.length === 0 || request.query.length > 160) throw new YeismeFilesError('bad-request', 'search query is invalid')
     const workspace = await realpath(requireAbsolute(cwd))
     const matches: FileTreeNodeV2[] = []
+    let incomplete = false
     const visit = async (parentRef?: string, depth = 0): Promise<void> => {
-      if (depth > 32 || matches.length >= 20_000) return
+      if (depth > 32 || matches.length >= 20_000) { incomplete = true; return }
       let cursor: string | undefined
       do {
         const page = await this.listV2(cwd, { ...(parentRef === undefined ? {} : { parentRef }), ...(cursor === undefined ? {} : { cursor }), limit: 500 })
+        if (page.truncated && page.nextCursor === undefined) incomplete = true
         for (const node of page.nodes) {
+          if (matches.length >= 20_000) { incomplete = true; return }
           if (node.name.toLocaleLowerCase().includes(request.query.toLocaleLowerCase())) matches.push(node)
           if (node.kind === 'directory' && node.hasChildren) await visit(node.ref, depth + 1)
         }
         cursor = page.nextCursor
+        if (cursor !== undefined && matches.length >= 20_000) incomplete = true
       } while (cursor !== undefined && matches.length < 20_000)
     }
     await visit()
-    const revision = createHash('sha256').update(JSON.stringify(matches.map(node => node.ref))).digest('hex').slice(0, 16)
+    const revision = createHash('sha256').update(JSON.stringify([request.query.toLocaleLowerCase(), incomplete, matches.map(node => [node.ref, node.version, node.name, node.hidden, node.ignored, node.sensitive])])).digest('hex').slice(0, 16)
     const limit = Math.max(1, Math.min(500, request.limit ?? 100))
-    const offset = request.cursor === undefined ? 0 : Number(/^search:(\d+):/.exec(request.cursor)?.[1] ?? 0)
+    let offset = 0
+    if (request.cursor !== undefined) {
+      const cursor = /^search:(\d+):([a-f0-9]{16})$/.exec(request.cursor)
+      if (!cursor || cursor[2] !== revision || !Number.isSafeInteger(Number(cursor[1])) || Number(cursor[1]) > matches.length) throw new YeismeFilesError('bad-request', 'file search cursor is stale or invalid', 409)
+      offset = Number(cursor[1])
+    }
     const nodes = matches.slice(offset, offset + limit)
-    return { workspaceRef: `workspace:${createHash('sha256').update(workspace).digest('hex').slice(0, 16)}`, generation: 'local', revision, ...(request.cursor === undefined ? {} : { cursor: request.cursor }), ...(offset + nodes.length < matches.length ? { nextCursor: `search:${offset + nodes.length}:${revision}` } : {}), truncated: offset + nodes.length < matches.length, loaded: nodes.length, total: matches.length, nodes }
+    return { workspaceRef: `workspace:${createHash('sha256').update(workspace).digest('hex').slice(0, 16)}`, generation: 'local', revision, ...(request.cursor === undefined ? {} : { cursor: request.cursor }), ...(offset + nodes.length < matches.length ? { nextCursor: `search:${offset + nodes.length}:${revision}` } : {}), truncated: incomplete || offset + nodes.length < matches.length, loaded: nodes.length, ...(incomplete ? {} : { total: matches.length }), nodes }
   }
 
   async revealV2(cwd: string, ref: string): Promise<FileTreeRevealV2> {
@@ -299,8 +308,16 @@ export class OpaqueFileRefRegistry {
       const currentRecord = await this.refForPath(cwd, current)
       breadcrumbs.push({ ref: currentRecord.ref, name: part })
     }
-    const page = await this.listV2(cwd, { parentRef: breadcrumbs.length > 1 ? breadcrumbs[breadcrumbs.length - 2]!.ref : undefined })
-    return { workspaceRef: page.workspaceRef, generation: page.generation, revision: page.revision, breadcrumbs, target: page.nodes.find(node => node.ref === ref) }
+    // The root breadcrumb is a workspace identity, not a file ref. Resolve the
+    // root through the normal roots request, and locate targets beyond page one.
+    const request = { parentRef: breadcrumbs.length > 2 ? breadcrumbs[breadcrumbs.length - 2]!.ref : undefined, limit: 500 }
+    let page = await this.listV2(cwd, request)
+    let target = page.nodes.find(node => node.ref === ref)
+    while (target === undefined && page.nextCursor !== undefined) {
+      page = await this.listV2(cwd, { ...request, cursor: page.nextCursor })
+      target = page.nodes.find(node => node.ref === ref)
+    }
+    return { workspaceRef: page.workspaceRef, generation: page.generation, revision: page.revision, breadcrumbs, target }
   }
 
   private revealAllowed(workspace: string, ref: string, version: string, token?: string): boolean {

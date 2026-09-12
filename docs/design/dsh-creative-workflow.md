@@ -2,6 +2,8 @@
 
 状态：规格设计，未实现真实跨领域编排。任务归 [工作流 change](../../openspec/changes/dsh-creative-workflow-v1/tasks.md)。画布结构与存储由 [画布 change](../../openspec/changes/dsh-project-canvas-continuity-v1/tasks.md) 维护。
 
+可视化流水线页面的增量设计归 [dsh-creative-pipeline-visual-workbench-v1](../../openspec/changes/dsh-creative-pipeline-visual-workbench-v1/)。该页面通过 execution edge 选择进入运行检查器；Agent 只能准备、解释、暂停和恢复已确认运行，不能成为调度器或审批 owner。
+
 ## 编辑入口
 
 支持模板、手动连线与Agent生成草案。模板实例化只产生可检查的草案；引用的模型、动作、资产和版本重新探测，不携带旧授权。Agent只能在指定范围内编辑步骤/参数/连接，并给出可撤销摘要；生成草案不启动任务。
@@ -41,3 +43,9 @@
 原型验证三种创建入口、输入映射、三种范围预览、人工审阅点与部分失败。执行测试覆盖固定版本、环路、缺输入、费用未知、预览后变更、重复确认、断线、跨项目迟到、失败分支重跑、原计划保持不变。
 
 单领域运行与真实跨领域运行分别验收；跨领域记录Ordo计划与每个owner receipt之间的关联。节点显示成功不代表正式采用或交付。所有证据复用既有runner，不新增工作流账本或证据数据库。
+
+## 3D Shot 编排
+
+`dsh-3d-director-gltf-workbench-v1` 将 Shot 作为 3D 预演锚点。节点级和整场景生成均产生可审计 change set，接受后创建新的 scene graph revision；revision 冲突进入只读冻结并要求 owner reconcile。完整 DCC 与电影级渲染一致性不属于首版闭环。
+
+合同落点（2026-09-11 冻结）：change set 与冲突冻结的 zod 合同见 `packages/host/pane-protocol/src/index.ts` 的 `SCENE_3D_SCHEMA` 一族（`GenerationChangeSetV1`、`SceneGraphSaveResult` saved/conflict/not_applied/unavailable + draft 保留），测试在 `packages/host/pane-protocol/tests/scene-3d.spec.ts`。

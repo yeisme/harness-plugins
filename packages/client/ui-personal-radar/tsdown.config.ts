@@ -4,6 +4,9 @@ import { defineConfig } from 'tsdown'
 const clientExternals = [
   '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-client-runtime/client',
+  'react',
+  'react/jsx-runtime',
+  '@deepseek-ai/dsh-client-ui-primitives',
 ] as const
 
 const node = {
@@ -24,6 +27,7 @@ export default defineConfig([
     // bundle 的 client.js 不得残留对 @yeisme/* 包的外部 require。
     alias: {
       '@yeisme/dsh-personal-radar': fileURLToPath(new URL('../../host/dsh-personal-radar/src/index.ts', import.meta.url)),
+      '@yeisme/dsh-client-ui-surface': fileURLToPath(new URL('../ui-surface/src/index.tsx', import.meta.url)),
     },
     entry: { client: './src/client/index.ts' },
     outDir: 'lib',

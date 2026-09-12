@@ -16,6 +16,13 @@ export interface ToolHubHealthV1 {
   readonly observedAt: number
 }
 
+/** Optional safe discovery metadata; absent metadata is never inferred as an owner claim. */
+export interface ToolHubPurposeV1 {
+  readonly zh: string
+  readonly category: string
+  readonly searchTerms: readonly string[]
+}
+
 export interface ToolHubItemV1 {
   readonly id: ToolHubItemId
   readonly family: ToolHubFamily
@@ -32,6 +39,7 @@ export interface ToolHubItemV1 {
   readonly health?: ToolHubHealthV1
   readonly toolCount?: number
   readonly server?: string
+  readonly purpose?: ToolHubPurposeV1
 }
 
 export interface ToolHubCatalogV1 {

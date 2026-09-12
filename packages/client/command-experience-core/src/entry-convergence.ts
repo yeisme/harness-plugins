@@ -1,5 +1,5 @@
 /**
- * Additive command-entry convergence for the 31-bundle inventory.
+ * Additive command-entry convergence for the active bundle inventory.
  *
  * Consumes the frozen command-first directory seam. Does not replace
  * Modal/button surfaces. Old paths stay probe-first fallbacks.
@@ -47,7 +47,6 @@ const LEDGER: readonly BundleEntryLedgerRow[] = [
   { bundleId: 'pane-subagent', disposition: 'exempt', reason: 'Picker view already projected via /pane', commands: [], oldPath: 'workspace.subagent' },
   { bundleId: 'dsh-mermaid-render', disposition: 'no-command-semantics', reason: 'Fence renderer; no discrete command', commands: [], oldPath: null },
   { bundleId: 'dsh-rich-media', disposition: 'no-command-semantics', reason: 'Media preview overlay; no discrete command', commands: [], oldPath: 'desktop.media' },
-  { bundleId: 'dsh-selection-annotation', disposition: 'no-command-semantics', reason: 'Selection overlay; no discrete command', commands: [], oldPath: null },
   { bundleId: 'dsh-next-step-suggestions', disposition: 'no-command-semantics', reason: 'Chips write composer draft only', commands: [], oldPath: 'conversation.input.dock' },
   { bundleId: 'dsh-conversation-rewrite', disposition: 'no-command-semantics', reason: 'In-conversation rewrite control', commands: [], oldPath: null },
   { bundleId: 'dsh-interaction-space', disposition: 'no-command-semantics', reason: 'Space chrome; no discrete command', commands: [], oldPath: null },
@@ -188,7 +187,7 @@ export function ledgerIsClosed(): boolean {
     row.disposition === 'converged' ||
     row.disposition === 'no-command-semantics' ||
     row.disposition === 'exempt',
-  ) && LEDGER.length >= 31
+  ) && LEDGER.length >= 30
 }
 
 export function seedToEntry(seed: ConvergenceCommandSeed): CommandExperienceEntryV1 {

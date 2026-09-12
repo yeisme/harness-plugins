@@ -97,6 +97,12 @@ import {
   DRAMA_VIEW_REGISTRATIONS,
   type DramaClientUiSnapshotV1,
 } from './views.js'
+import {
+  createPipelineWorkbenchView,
+  pipelineWorkbenchViewDescriptor,
+  probePipelineWorkbenchOwner,
+  PIPELINE_WORKBENCH_UNAVAILABLE_REASON,
+} from './pipeline/workbench-pane.js'
 
 export {
   deriveDecisionTokenView,
@@ -188,6 +194,24 @@ export {
   DRAMA_DEFAULT_VISIBLE_TAB_LIMIT,
 } from './preset.js'
 export { DRAMA_VIEW_REGISTRATIONS, dramaViewDescriptor } from './views.js'
+export * as pipeline from './pipeline/index.js'
+export {
+  createPipelineWorkbenchView,
+  pipelineWorkbenchViewDescriptor,
+  probePipelineWorkbenchOwner,
+  PIPELINE_WORKBENCH_PANE_KIND,
+} from './pipeline/workbench-pane.js'
+export { createPipelineFixtureOwner, PIPELINE_FIXTURE_OWNER_SERVICE } from './pipeline/fixture-owner.js'
+export type { PipelineFixtureOwnerV1 } from './pipeline/fixture-owner.js'
+export {
+  PipelineWorkbenchController,
+  PIPELINE_WORKBENCH_NO_CHANNEL_REASON,
+} from './pipeline/workbench-controller.js'
+export type {
+  PipelineWorkbenchOwnerFaceV1,
+  PipelineWorkbenchRunActionRequestV1,
+  PipelineWorkbenchViewStateV1,
+} from './pipeline/workbench-controller.js'
 
 export const name = 'client-ui-ai-drama-director'
 export const inject = [] as const
@@ -740,6 +764,20 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   })
   const unprovide = provide(ctx, 'dramaDirector', runtime.face)
 
+  // Pipeline workbench pane (dsh-creative-pipeline-visual-workbench-v1, D6):
+  // registered whenever the Pane Workbench face exists; the view itself is
+  // probe-first and renders a disabled, reasoned surface until a pipeline
+  // owner projection source (or an explicit fixture owner) is available.
+  const pipelineOwner = probePipelineWorkbenchOwner(ctx)
+  const unregisterPipelineWorkbench = pane.registerView({
+    descriptor: pipelineWorkbenchViewDescriptor(),
+    component: createPipelineWorkbenchView(
+      pipelineOwner === undefined
+        ? { disabledReason: PIPELINE_WORKBENCH_UNAVAILABLE_REASON }
+        : { owner: pipelineOwner },
+    ),
+  })
+
   // Initial context resolution is best-effort; failures degrade to a
   // disabled, reasoned state instead of throwing out of apply().
   void contextStore.refresh().then(context => {
@@ -754,6 +792,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   return () => {
     if (disposed) return
     disposed = true
+    unregisterPipelineWorkbench()
     unprovide()
     runtime.dispose()
     legacyCreatorRuntime?.dispose()

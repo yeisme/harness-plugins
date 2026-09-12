@@ -25,3 +25,8 @@ core.*
 # Vendored upstream bundle: its pinned lib/ build output IS the deliverable
 # (no local build step), so it must be tracked despite the global lib/ rule.
 !packages/bundle/dsh-pentest/lib/
+
+# 本地运行时产物（Scaena CLI 输出 / template-registry 数据库 / playwright 结果）
+.scaena/
+data/
+test-results/

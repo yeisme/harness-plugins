@@ -2,6 +2,33 @@ import { describe, expect, it } from 'vitest'
 import { CSV_PARSE_BUDGET, delimiterOfMediaType, parseDelimitedTable } from '../src/client/preview/csv-parse.ts'
 
 describe('parseDelimitedTable', () => {
+  it.each([
+    ['中文', 5, '中', true],
+    ['中文', 6, '中文', false],
+    ['a😀b', 4, 'a', true],
+    ['a😀b', 5, 'a😀', true],
+    ['a😀b', 6, 'a😀b', false],
+  ])('enforces UTF-8 byte bounds for %s at %i bytes', (source, maxBytes, prefix, truncated) => {
+    const result = parseDelimitedTable(source as string, ',', { ...CSV_PARSE_BUDGET, maxBytes: maxBytes as number })
+    expect(result.rows).toEqual([[prefix]])
+    expect(result.truncated).toBe(truncated)
+    expect(new TextEncoder().encode(result.rows[0]![0]).length).toBeLessThanOrEqual(maxBytes as number)
+  })
+  it.each([0, -1, NaN, Infinity, 1.5])('rejects invalid budget %s', maxBytes => {
+    expect(() => parseDelimitedTable('a', ',', { ...CSV_PARSE_BUDGET, maxBytes })).toThrow(RangeError)
+  })
+
+  it.each([
+    ['a,"unfinished', 'unclosed_quote', 2],
+    ['a,b"c', 'unexpected_quote', 3],
+    ['"a"tail,b', 'trailing_quoted_field', 3],
+  ])('reports a bounded first diagnostic for %s', (source, code, offset) => {
+    expect(parseDelimitedTable(source as string).diagnostic).toEqual({ code, offset })
+  })
+  it('keeps legal multiline and escaped quotes diagnostic-free', () => {
+    expect(parseDelimitedTable('name,note\n"a,b","line1\nline2 ""quoted"""').diagnostic).toBeUndefined()
+  })
+
   it('parses plain rows and columns', () => {
     const result = parseDelimitedTable('a,b,c\n1,2,3')
     expect(result.rows).toEqual([['a', 'b', 'c'], ['1', '2', '3']])

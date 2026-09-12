@@ -36,6 +36,36 @@ export type {
 export { aggregateDshPluginProfileHealthV1, dshPluginHealthRecoveryV1 } from './health.js'
 export type { DshPluginHealthInputV1, DshPluginHealthRecoveryV1, DshPluginProfileHealthV1 } from './health.js'
 export {
+  CREATIVE_PIPELINE_CONTRACT_V1,
+  decodeCreativePipelineEdgeProjectionV1,
+  decodeCreativePipelineNodeProjectionV1,
+  decodeCreativePipelineRunProjectionV1,
+  decodeCreativePipelineRunStateV1,
+  decodeWorkSurfaceCapsuleV1,
+  redactCreativePipelineText,
+} from './creative-pipeline.js'
+export type {
+  CreativePipelineContractVersionV1,
+  CreativePipelineDecodeErrorCodeV1,
+  CreativePipelineDecodeResultV1,
+  CreativePipelineEdgeProjectionV1,
+  CreativePipelineExecutionEdgeV1,
+  CreativePipelineNodeKindV1,
+  CreativePipelineNodeLayoutV1,
+  CreativePipelineNodeProjectionV1,
+  CreativePipelineNodeStatusV1,
+  CreativePipelineReferenceEdgeV1,
+  CreativePipelineRunActionKindV1,
+  CreativePipelineRunActionV1,
+  CreativePipelineRunProgressV1,
+  CreativePipelineRunProjectionV1,
+  CreativePipelineRunStateKindV1,
+  CreativePipelineRunStateV1,
+  CreativeWorkSurfaceKindV1,
+  WorkSurfaceCapsuleMenuV1,
+  WorkSurfaceCapsuleV1,
+} from './creative-pipeline.js'
+export {
   ORDO_RUN_LAUNCH_UNAVAILABLE_REASON_V1,
   PERSONAL_CODING_PARITY_VERSION_V1,
   comparePersonalCodingContractSemanticsV1,

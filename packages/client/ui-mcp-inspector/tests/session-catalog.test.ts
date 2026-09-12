@@ -19,4 +19,14 @@ describe('session catalog owner boundaries', () => {
     expect(await sessionCatalogRemote(ctx as never, 'a').list()).toMatchObject({ ok: true, complete: false, toolsAvailable: true, skillsAvailable: false, items: [] })
     await expect(sessionCatalogRemote({ get: () => undefined } as never, 'b').list()).rejects.toThrow('catalog_unavailable')
   })
+  it('keeps maintained and safe owner purpose metadata searchable in the session catalog', async () => {
+    const ctx = { get: (key: string) => key === 'remote' ? {
+      referenceTools: { list: async () => ({ ok: true, value: { tools: [{ name: 'read', description: 'Read' }, { name: 'owner_tool', description: 'Owner', purposeZh: '查询发布状态', category: 'operations', searchTerms: ['发布', '状态'] }] } }) },
+      skills: { list: async () => ({ ok: true, value: { catalogComplete: true, skills: [] } }) },
+    } : undefined }
+    const result = await sessionCatalogRemote(ctx as never, 'a').list()
+    if (!result.ok) throw new Error('expected catalog')
+    expect(result.items.find(item => item.name === 'read')?.purpose).toMatchObject({ zh: '读取文本文件内容', category: 'files' })
+    expect(result.items.find(item => item.name === 'owner_tool')?.purpose).toEqual({ zh: '查询发布状态', category: 'operations', searchTerms: ['发布', '状态'] })
+  })
 })

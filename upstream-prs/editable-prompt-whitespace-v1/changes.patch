@@ -1,0 +1,37 @@
+--- a/packages/client/ui-conversation/src/client/input/facade.ts
++++ b/packages/client/ui-conversation/src/client/input/facade.ts
+@@ -843,9 +843,11 @@
+           cursor = part.offset + part.length
+         }
+         out += draft.slice(cursor)
++        const preservesEditableBody = occurrences.some(occurrence => occurrence.structured !== undefined && isEditablePromptReference(occurrence.structured))
++        const submittedText = preservesEditableBody ? out : out.trim()
+         this.settleSink(attempt, references.length === 0
+-          ? this.deps.defaultSink(out.trim(), imageIds, mode, attempt.signal)
+-          : this.deps.defaultSink(out.trim(), imageIds, mode, attempt.signal, references))
++          ? this.deps.defaultSink(submittedText, imageIds, mode, attempt.signal)
++          : this.deps.defaultSink(submittedText, imageIds, mode, attempt.signal, references))
+       },
+       (error: unknown) => {
+         if (this.dead(attempt)) return
+--- a/packages/client/ui-conversation/tests/input-reference-submit.client.spec.ts
++++ b/packages/client/ui-conversation/tests/input-reference-submit.client.spec.ts
+@@ -51,15 +51,15 @@
+     const sink = vi.fn(() => Promise.resolve<SubmitOutcome>({ kind: 'success' }))
+     const shell = new SessionInputShell({ actx: {} as Context, defaultSink: sink, commandImages })
+     const source = { id: 'selection-row', owner: 'dsh.local', ref: 'file-opaque', kind: 'selection' as const, intent: 'content' as const, version: 'v1', digest: 'source-proof', scope: 'file/raw', label: 'notes.ts', window: { start: 3, end: 12 }, prompt: { version: 1 as const, body: 'captured body', originalBody: 'captured body', source: { owner: 'dsh.local', ref: 'file-opaque', version: 'v1', scope: 'file/raw', digest: 'source-proof' } } }
+-    const edited = withEditablePromptBody(source, 'edited body\n\n```ts\nconst x = 1\n```')
++    const edited = withEditablePromptBody(source, 'edited body\n\n```ts\nconst x = 1\n```\n\t  ')
+     const projection = projectEditablePromptReference(edited)
+-    expect(projection).toBe('### Reference: notes.ts\n\nedited body\n\n```ts\nconst x = 1\n```')
++    expect(projection).toBe('### Reference: notes.ts\n\nedited body\n\n```ts\nconst x = 1\n```\n\t  ')
+     expect(edited.prompt?.source).toEqual(source.prompt.source)
+     expect(edited.prompt?.originalBody).toBe('captured body')
+     shell.setDraft('@r')
+     expect(shell.insertReference({ source: 'reference', ref: edited.ref, label: edited.label!, clipboardText: edited.prompt!.body, structured: edited }, { start: 0, end: 2, draftRev: shell.snapshot.draftRev })).toBe(true)
+     shell.submit()
+-    await vi.waitFor(() => expect(sink).toHaveBeenCalledWith(projection, [], 'queue', expect.any(AbortSignal), [expect.objectContaining({ id: edited.id })]))
++    await vi.waitFor(() => expect(sink).toHaveBeenCalledWith(`${projection} `, [], 'queue', expect.any(AbortSignal), [expect.objectContaining({ id: edited.id })]))
+     expect((sink.mock.calls[0]?.[4] as readonly Record<string, unknown>[])[0]).not.toHaveProperty('prompt')
+   })
+ 

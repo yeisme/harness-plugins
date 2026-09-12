@@ -18,12 +18,14 @@ const TONE_BY_STATUS: Readonly<Record<string, StatusTone>> = {
   stale: 'warn',
   approval_required: 'warn',
   reconciling: 'warn',
+  needs_contract: 'warn',
   offline: 'critical',
   failed: 'critical',
   error: 'critical',
   contract_mismatch: 'critical',
   reconcile_required: 'critical',
   unknown: 'critical',
+  blocked: 'critical',
 }
 
 /** status/freshness → tone；未知词表返回 neutral。 */

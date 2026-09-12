@@ -12,6 +12,15 @@ import type { Context } from '@deepseek-ai/cordis'
 
 export { WorkbenchRegistry } from './registry.ts'
 export type { WorkbenchRegistrySnapshot } from './registry.ts'
+export { WorkbenchContextController, AGENT_ROLES, WORKBENCH_CONTEXTS } from './context.ts'
+export type {
+  AgentRoleId,
+  WorkbenchContextControllerOptions,
+  WorkbenchContextId,
+  WorkbenchContextStorage,
+  WorkbenchFreshness,
+  WorkbenchProjectContextV1,
+} from './context.ts'
 export {
   isWorkbenchModule,
   validateWorkbenchModule,

@@ -4,7 +4,7 @@ import { Surface, SurfaceContextBar, SurfaceSection, SurfaceState } from '@yeism
 import type { BrowserPerformanceRecordV1, DevtoolsRecordV1 } from '../wire.ts'
 import type { DevtoolsControllerState } from './controller.ts'
 
-export type DevtoolsTab = 'overview' | 'timeline' | 'logs' | 'performance'
+export type DevtoolsTab = 'overview' | 'tools' | 'timeline' | 'logs' | 'performance'
 
 export interface DevtoolsPanelProps {
   readonly state: DevtoolsControllerState
@@ -36,7 +36,7 @@ export function DevtoolsPanel(props: DevtoolsPanelProps): ReactNode {
   const [tab, setTab] = useState<DevtoolsTab>('overview')
   const host = records(props.state)
   const readyState = props.state.status === 'ready' ? props.state : undefined
-  const tabs: DevtoolsTab[] = ['overview', 'timeline', 'logs', 'performance']
+  const tabs: DevtoolsTab[] = ['overview', 'tools', 'timeline', 'logs', 'performance']
   return createElement(Surface, { kind: 'inspector', 'data-dsh-devtools-panel': true },
     createElement('style', null, styles),
     createElement(SurfaceContextBar, {
@@ -60,6 +60,10 @@ function renderTab(tab: DevtoolsTab, state: DevtoolsControllerState, host: reado
     return createElement('div', { className: 'dt-grid' },
       metric('Records', state.snapshot.summary.records), metric('Errors', state.snapshot.summary.errors), metric('Findings', state.snapshot.summary.findings), metric('RSS', metrics === undefined ? '—' : `${(metrics.rssBytes / 1048576).toFixed(1)} MiB`),
       createElement(SurfaceSection, { className: 'dt-findings', title: 'Top findings' }, findings.length === 0 ? createElement('p', null, 'No active findings.') : createElement('ul', null, findings.map(record => createElement('li', { key: record.seq }, `${record.code}: ${record.summary}`)))))
+  }
+  if (tab === 'tools') {
+    const tools = host.filter((record): record is Extract<DevtoolsRecordV1, { type: 'tool' }> => record.type === 'tool')
+    return tools.length === 0 ? createElement(SurfaceState, { phase: 'empty', title: 'No Skills or MCP activity yet.', description: 'Bash and command execution remain available in the official trace.' }) : table(['Kind', 'Name', 'Load', 'Calls', 'Status', 'Duration', 'Error'], tools.map(item => [item.kind.toUpperCase(), item.name, item.loadStatus, item.callCount, item.callStatus, item.durationMs === undefined ? '—' : fmtMs(item.durationMs), item.errorSummary ?? '—']))
   }
   if (tab === 'logs') {
     const logs = host.filter(record => record.type === 'log').slice(-200).reverse()

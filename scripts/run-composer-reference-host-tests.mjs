@@ -39,7 +39,7 @@ const fingerprint = async () => {
   const entries = []
   for (const [label, cwd, paths] of [
     ['host', source, ['packages/api/session-controller', 'packages/api/remotes', 'packages/context/session-reference', 'packages/client/ui-conversation', 'packages/client/ui-reference', 'packages/client/ui-chat', 'apps/web/tests', 'vitest.web.config.ts', 'package.json', 'pnpm-lock.yaml']],
-    ['plugins', root, ['packages/host/dsh-file-host', 'packages/client/ui-pane-workbench', 'packages/client/ui-selection-annotation', 'packages/bundle/dsh-desktop-workbench', 'scripts/run-composer-reference-host-tests.mjs', 'scripts/build-editable-reference-host.mjs', 'package.json', 'pnpm-lock.yaml']],
+    ['plugins', root, ['packages/host/dsh-file-host', 'packages/client/ui-pane-workbench', 'packages/bundle/dsh-desktop-workbench', 'scripts/run-composer-reference-host-tests.mjs', 'scripts/build-editable-reference-host.mjs', 'package.json', 'pnpm-lock.yaml']],
   ]) {
     const listing = await exec('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ...paths], cwd)
     if (listing.code !== 0) throw new Error(`Cannot fingerprint ${label} inputs`)

@@ -1,6 +1,8 @@
+diff --git a/apps/web/tests/creative-workspace.e2e.ts b/apps/web/tests/creative-workspace.e2e.ts
+new file mode 100644
 --- /dev/null
 +++ b/apps/web/tests/creative-workspace.e2e.ts
-@@ -0,0 +1,247 @@
+@@ -0,0 +1,643 @@
 +// Keyless real-Host composition proof for the synthetic Creator/Browser fixture.
 +import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 +import { realpathSync, statSync } from 'node:fs'
@@ -8,7 +10,7 @@
 +import { join } from 'node:path'
 +import { tmpdir } from 'node:os'
 +import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
-+import type { Browser, Page } from 'playwright'
++import type { Browser, BrowserContext, Page, Worker } from 'playwright'
 +import { chromium } from 'playwright'
 +import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 +import { launchWebScaffold, watchConsole, type WebScaffold } from './scaffold.ts'
@@ -24,8 +26,11 @@
 +  join(PLUGIN_ROOT, 'packages/bundle/dsh-desktop-workbench/package.json'),
 +  join(PLUGIN_ROOT, 'packages/bundle/dsh-creator-studio/package.json'),
 +  join(PLUGIN_ROOT, 'packages/bundle/dsh-browser-pane/package.json'),
++  join(PLUGIN_ROOT, 'packages/bundle/dsh-mermaid-render/package.json'),
 +  FIXTURE_ANCHOR,
 +]
++const NATIVE_ZOOM = process.env.DSH_CREATIVE_WORKSPACE_ZOOM === '1'
++const TOUCH = process.env.DSH_CREATIVE_WORKSPACE_TOUCH === '1'
 +const RESPONSE = 'Synthetic creative image received.'
 +const EDITED_BODY = '# Edited in the real Host pane\n\nLIVE_CREATOR_PREVIEW_BODY\n'
 +
@@ -38,6 +43,9 @@
 +
 +describe('web e2e: Creator and Browser workspace bundles', () => {
 +  let scaffold: WebScaffold
++  let zoomContext: BrowserContext | undefined
++  let zoomWorker: Worker | undefined
++  let zoomDir: string | undefined
 +  let browser: Browser
 +  let page: Page
 +  let tripwire: ReturnType<typeof watchConsole>
@@ -45,6 +53,8 @@
 +  let replayDir: string | undefined
 +  let stopObservation: (() => void) | undefined
 +  const requestMessages: unknown[] = []
++  let unsafeHtmlRequests = 0
++  const renderErrors: string[] = []
 +
 +  beforeAll(async () => {
 +    try {
@@ -63,14 +73,28 @@
 +      const modulePaths = {
 +        creator: clientModules?.clientPath('@yeisme/dsh-creator-studio'),
 +        browser: clientModules?.clientPath('@yeisme/dsh-browser-pane'),
++        mermaid: clientModules?.clientPath('@yeisme/dsh-mermaid-render'),
 +        fixture: clientModules?.clientPath('@deepseek-ai/dsh-creative-workspace-fixture'),
 +      }
 +      if (Object.values(modulePaths).some(path => path === undefined)) {
 +        throw new Error(`Creator, Browser, and synthetic fixture client modules were not composed: ${JSON.stringify(modulePaths)}`)
 +      }
-+      browser = await chromium.launch(process.env.DSH_TEST_CHROME_EXECUTABLE === undefined ? {} : { executablePath: process.env.DSH_TEST_CHROME_EXECUTABLE })
-+      page = await newEnglishPage(browser)
++      if (NATIVE_ZOOM) {
++        zoomDir = await mkdtemp(join(tmpdir(), 'dsh-creative-native-zoom-'))
++        const extension = join(zoomDir, 'extension')
++        await mkdir(extension)
++        await writeFile(join(extension, 'manifest.json'), JSON.stringify({ manifest_version: 3, name: 'Synthetic Host zoom verification', version: '1.0', permissions: ['tabs'], background: { service_worker: 'background.js' } }))
++        await writeFile(join(extension, 'background.js'), 'chrome.runtime.onInstalled.addListener(() => {});')
++        zoomContext = await chromium.launchPersistentContext(join(zoomDir, 'profile'), { channel: 'chromium', headless: true, viewport: { width: 1680, height: 1000 }, locale: 'en-US', hasTouch: TOUCH, ignoreDefaultArgs: ['--disable-extensions'], args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] })
++        zoomWorker = zoomContext.serviceWorkers()[0] ?? await zoomContext.waitForEvent('serviceworker', { timeout: 10_000 })
++        page = await zoomContext.newPage()
++      } else {
++        browser = await chromium.launch(process.env.DSH_TEST_CHROME_EXECUTABLE === undefined ? {} : { executablePath: process.env.DSH_TEST_CHROME_EXECUTABLE })
++        page = TOUCH ? await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: 'en-US', hasTouch: true }) : await newEnglishPage(browser)
++      }
 +      tripwire = watchConsole(page)
++      page.on('console', message => { if (message.type() === 'error') renderErrors.push(message.text().slice(0, 1200)) })
++      await page.route('**/unsafe-html-probe', async route => { unsafeHtmlRequests += 1; await route.abort() })
 +      await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
 +      await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
 +      const session = page.locator('[data-workspace-session-id="session:creative-test"]')
@@ -86,13 +110,19 @@
 +
 +  afterAll(async () => {
 +    stopObservation?.()
++    await zoomContext?.close()
++    if (zoomDir !== undefined) await rm(zoomDir, { recursive: true, force: true })
 +    await browser?.close()
 +    await scaffold?.close()
 +    if (replayDir !== undefined) await rm(replayDir, { recursive: true, force: true })
 +  })
 +
 +  it('mounts both bundles, edits the full body, inserts candidate two through Host, and keeps Browser viewport honest', async () => {
-+    onTestFailed(() => saveFailureShot(page, 'web-e2e-creative-workspace'))
++    onTestFailed(async () => {
++      await saveFailureShot(page, 'web-e2e-creative-workspace')
++      const evidenceDir = process.env.DSH_CREATIVE_WORKSPACE_EVIDENCE_DIR
++      if (evidenceDir !== undefined) await writeFile(join(evidenceDir, 'browser-failure.json'), JSON.stringify({ ...tripwire, renderErrors }))
++    })
 +    const input = page.locator('[data-composer-input]').first()
 +
 +    await page.getByRole('button', { name: 'Add pane' }).first().click()
@@ -100,10 +130,11 @@
 +    await picker.getByRole('button', { name: 'Visual', exact: true }).click()
 +    const creator = page.locator('[data-creator-studio][data-mode="visual"]')
 +    await creator.waitFor({ timeout: 30_000 })
++    await creator.getByRole('tab', { name: 'Candidates and edits', exact: true }).click()
 +    const artifactWorkspace = creator.locator('[data-creator-artifact-workspace]')
 +    await artifactWorkspace.waitFor({ timeout: 30_000 })
 +
-+    const primaryContrast = async () => creator.getByRole('tab', { selected: true }).evaluate(element => {
++    const primaryContrast = async () => artifactWorkspace.getByRole('tab', { selected: true }).evaluate(element => {
 +      const style = getComputedStyle(element)
 +      const luminance = (color: string) => {
 +        const rgb = color.match(/[\d.]+/gu)!.slice(0, 3).map(Number).map(value => {
@@ -118,26 +149,73 @@
 +    const lightPrimaryContrast = await primaryContrast()
 +    expect(lightPrimaryContrast).toBeGreaterThanOrEqual(4.5)
 +
-+    const sourceTab = creator.getByRole('tab', { name: 'Source' })
-+    await sourceTab.focus()
++    const sourceTab = artifactWorkspace.getByRole('tab', { name: 'Source', exact: true })
++    const initialPreviewTab = creator.getByRole('tab', { name: 'Preview', exact: true })
++    await initialPreviewTab.focus()
++    await initialPreviewTab.press('ArrowRight')
++    expect(await sourceTab.evaluate(tab => document.activeElement === tab)).toBe(true)
++    expect(await creator.getByRole('tabpanel', { name: 'Source', exact: true }).getAttribute('id')).toBe(await sourceTab.getAttribute('aria-controls'))
 +    await sourceTab.press('Enter')
 +    const editor = creator.locator('[data-creator-artifact-editor] textarea')
 +    await expect.poll(() => editor.inputValue().then(value => value.length), { timeout: 15_000 }).toBeGreaterThan(1_200)
++    if (TOUCH) {
++      expect(await page.evaluate(() => navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches)).toBe(true)
++      await initialPreviewTab.tap()
++      await sourceTab.tap()
++      expect(await sourceTab.getAttribute('aria-selected')).toBe('true')
++      expect((await sourceTab.boundingBox())!.height).toBeGreaterThanOrEqual(44)
++    }
++    await editor.fill(Array.from({ length: 100 }, (_, index) => `Reading line ${index}: 中文 source position`).join('\n'))
++    const readingPosition = await editor.evaluate(async element => {
++      const input = element as HTMLTextAreaElement
++      input.setSelectionRange(9, 24, 'backward')
++      input.scrollTop = 180
++      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
++      return { top: input.scrollTop, start: input.selectionStart, end: input.selectionEnd, direction: input.selectionDirection }
++    })
++    expect(readingPosition.top).toBeGreaterThan(0)
++    await initialPreviewTab.click()
++    await sourceTab.click()
++    expect(await editor.evaluate(element => {
++      const input = element as HTMLTextAreaElement
++      return { top: input.scrollTop, start: input.selectionStart, end: input.selectionEnd, direction: input.selectionDirection }
++    })).toEqual(readingPosition)
++    expect(await sourceTab.evaluate(element => document.activeElement === element)).toBe(true)
 +    await editor.fill(EDITED_BODY)
 +    const unsaved = creator.getByText('This edit exists only in the current Pane; unsaved-close protection remains active.', { exact: true })
 +    await unsaved.waitFor({ timeout: 15_000 })
-+    const previewTab = creator.getByRole('tab', { name: 'Preview' })
-+    await previewTab.focus()
-+    await previewTab.press('Enter')
++    const previewTab = artifactWorkspace.getByRole('tab', { name: 'Preview', exact: true })
++    await sourceTab.focus()
++    await sourceTab.press('ArrowLeft')
++    expect(await previewTab.evaluate(tab => document.activeElement === tab)).toBe(true)
 +    await creator.getByText('LIVE_CREATOR_PREVIEW_BODY', { exact: true }).waitFor({ timeout: 15_000 })
 +
-+    await creator.getByRole('button', { name: 'Save draft' }).click()
-+    await artifactWorkspace.getByRole('button', { name: 'Run action' }).click()
++    const autoSaveToggle = artifactWorkspace.getByRole('checkbox', { name: 'Automatically save this artifact', exact: true })
++    if (TOUCH) {
++      const label = autoSaveToggle.locator('..')
++      expect((await label.boundingBox())!.height).toBeGreaterThanOrEqual(44)
++      await label.tap()
++      expect(await autoSaveToggle.isChecked()).toBe(true)
++    } else await autoSaveToggle.check()
++
++    await artifactWorkspace.getByRole('button', { name: 'Return to unresolved action', exact: true }).click()
++    await artifactWorkspace.getByRole('button', { name: 'Reconcile original action', exact: true }).waitFor()
++    await artifactWorkspace.getByRole('button', { name: 'Synthetic image', exact: true }).click()
++    await artifactWorkspace.getByRole('button', { name: 'Return to unresolved action', exact: true }).click()
++    await artifactWorkspace.getByRole('button', { name: 'Reconcile original action', exact: true }).click()
++    await artifactWorkspace.getByText('Original synthetic save partially settled; continue original lookup.', { exact: true }).waitFor()
++    expect(await unsaved.count()).toBe(1)
++    await artifactWorkspace.getByRole('button', { name: 'Reconcile original action', exact: true }).click()
++    await artifactWorkspace.getByText('Original synthetic save reconciled; save dispatches=1.', { exact: true }).waitFor()
 +    await expect.poll(() => unsaved.count(), { timeout: 15_000 }).toBe(0)
 +
-+    const compareTab = creator.getByRole('tab', { name: 'Compare' })
-+    await compareTab.focus()
-+    await compareTab.press('Enter')
++    const compareTab = artifactWorkspace.getByRole('tab', { name: 'Compare', exact: true })
++    await previewTab.focus()
++    await previewTab.press('End')
++    expect(await compareTab.evaluate(tab => document.activeElement === tab)).toBe(true)
++    await compareTab.press('Home')
++    expect(await previewTab.evaluate(tab => document.activeElement === tab)).toBe(true)
++    await previewTab.press('End')
 +    await creator.getByLabel('Candidate version').selectOption('candidate:two')
 +    await creator.getByText('SYNTHETIC_SELECTED_VERSION_TWO', { exact: false }).waitFor({ timeout: 15_000 })
 +    await creator.getByRole('button', { name: 'Add to main conversation' }).click()
@@ -149,11 +227,61 @@
 +    await input.getByRole('button', { name: /Edit/iu }).click()
 +    const referenceEditor = input.getByRole('textbox', { name: /Edit/iu })
 +    expect(await referenceEditor.inputValue()).toContain('SYNTHETIC_SELECTED_VERSION_TWO')
++    const complexReferenceBody = '  中文 😀\n\n````markdown\n```ts\nconst x = "@工具"\n```\n````\n\t末尾  '
++    await referenceEditor.fill(complexReferenceBody)
 +    await input.getByRole('button', { name: /Done/iu }).click()
++    await input.getByRole('button', { name: /^Edit /u }).click()
++    expect(await referenceEditor.inputValue()).toBe(complexReferenceBody)
++    await input.getByRole('button', { name: /Done/iu }).click()
++
++    const compactReference = await input.locator('[data-composer-editable-reference] [title]').evaluateAll((elements, body) => {
++      const element = elements.find(element => element.getAttribute('title') === body) as HTMLElement | undefined
++      return element === undefined ? undefined : { clamp: getComputedStyle(element).webkitLineClamp, height: element.clientHeight, fullHeight: element.scrollHeight }
++    }, complexReferenceBody)
++    expect(compactReference?.clamp).toBe('3')
++    expect(compactReference!.fullHeight).toBeGreaterThan(compactReference!.height)
++    const contentDisclosure = input.locator('details').filter({ hasText: 'Reference content' })
++    await contentDisclosure.locator('summary').click()
++    expect(await contentDisclosure.locator('pre').textContent()).toContain(complexReferenceBody)
++    await contentDisclosure.locator('summary').click()
++    await input.getByRole('button', { name: /^Remove Candidate two$/u }).click()
++    await expect.poll(() => input.locator('[data-composer-chip]').count()).toBe(0)
++    await input.click()
++    await input.press('Control+z')
++    await expect.poll(() => input.locator('[data-composer-chip]').count()).toBe(1)
++    await input.getByRole('button', { name: /^Edit /u }).click()
++    expect(await referenceEditor.inputValue()).toBe(complexReferenceBody)
++    await referenceEditor.fill('LOCAL_CREATOR_REFERENCE_EDIT')
++    await input.getByRole('button', { name: /Done/iu }).click()
++    await input.getByRole('button', { name: /^Refresh source /u }).click()
++    const sourceComparison = input.getByRole('region', { name: /^Source comparison /u })
++    await sourceComparison.waitFor()
++    expect(await sourceComparison.textContent()).toContain('LOCAL_CREATOR_REFERENCE_EDIT')
++    expect(await sourceComparison.textContent()).toContain('SYNTHETIC_SELECTED_VERSION_TWO')
++    await sourceComparison.getByRole('button', { name: 'Cancel', exact: true }).click()
++    expect(await input.textContent()).toContain('LOCAL_CREATOR_REFERENCE_EDIT')
++    await input.getByRole('button', { name: /^Refresh source /u }).click()
++    await sourceComparison.waitFor()
++    await sourceComparison.getByRole('button', { name: 'Replace', exact: true }).click()
++    await expect.poll(() => sourceComparison.count()).toBe(0)
++    expect(await input.textContent()).toContain('SYNTHETIC_SELECTED_VERSION_TWO')
++    expect(await input.textContent()).not.toContain('LOCAL_CREATOR_REFERENCE_EDIT')
 +
 +    const evidenceDir = process.env.DSH_CREATIVE_WORKSPACE_EVIDENCE_DIR
 +    await page.setViewportSize({ width: 360, height: 900 })
 +    await page.emulateMedia({ colorScheme: 'dark' })
++    await expect.poll(async () => (await creator.boundingBox())?.width ?? 0, { timeout: 10_000 }).toBeGreaterThanOrEqual(280)
++    await expect.poll(async () => {
++      const outer = await creator.boundingBox(), inner = await input.boundingBox()
++      return outer && inner ? inner.width / outer.width : 0
++    }, { timeout: 10_000 }).toBeGreaterThanOrEqual(0.8)
++    const narrowSend = await page.getByRole('button', { name: 'Send message', exact: true }).boundingBox()
++    expect(narrowSend).not.toBeNull()
++    expect(narrowSend!.x).toBeGreaterThanOrEqual(0)
++    expect(narrowSend!.x + narrowSend!.width).toBeLessThanOrEqual(360)
++    expect(narrowSend!.y).toBeGreaterThanOrEqual(0)
++    expect(narrowSend!.y + narrowSend!.height).toBeLessThanOrEqual(900)
++
 +    await expect.poll(primaryContrast).toBeGreaterThanOrEqual(4.5)
 +    const darkPrimaryContrast = await primaryContrast()
 +    expect(await creator.isVisible()).toBe(true)
@@ -171,12 +299,180 @@
 +    expect(await panePicker.getByRole('button', { name: 'Browser', exact: true }).count()).toBe(0)
 +    expect(await page.locator('[data-dsh-browser-pane]').count()).toBe(0)
 +    await panePicker.getByRole('button', { name: 'Close', exact: true }).click()
-+    await page.setViewportSize({ width: 960, height: 900 })
-+    await page.emulateMedia({ colorScheme: 'light' })
++    for (const width of [560, 960]) {
++      await page.setViewportSize({ width, height: 900 })
++      await page.emulateMedia({ colorScheme: 'light' })
++      // The Host keeps a 56px navigation rail below 1024px. Wait for its
++      // grid transition before checking usable content. At 960px the Host
++      // restores parallel panes: a 360px artifact pane has two 1px borders.
++      await expect.poll(async () => (await creator.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(width === 960 ? 358 : width - 80)
++      const autoToggle = artifactWorkspace.getByRole('checkbox', { name: 'Automatically save this artifact', exact: true })
++      const toggleBox = await autoToggle.boundingBox()
++      expect(toggleBox).not.toBeNull()
++      expect(toggleBox!.width).toBeLessThanOrEqual(20)
++      expect(toggleBox!.height).toBeLessThanOrEqual(20)
++      const send = await page.getByRole('button', { name: 'Send message', exact: true }).boundingBox()
++      expect(send).not.toBeNull()
++      expect(send!.x).toBeGreaterThanOrEqual(0)
++      expect(send!.x + send!.width).toBeLessThanOrEqual(width)
++      expect(send!.y).toBeGreaterThanOrEqual(0)
++      expect(send!.y + send!.height).toBeLessThanOrEqual(900)
++      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
++      if (evidenceDir !== undefined) await page.screenshot({ path: join(evidenceDir, `creative-workspace-${width}-light.png`), fullPage: true })
++    }
++
 +    expect(await creator.isVisible()).toBe(true)
 +    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
 +    if (evidenceDir !== undefined) await page.screenshot({ path: join(evidenceDir, 'creative-workspace-960-light.png'), fullPage: true })
 +    await page.setViewportSize({ width: 1680, height: 1000 })
++
++    let nativeZoomMetrics: { before: number; after: number; dpr: number } | undefined
++    if (NATIVE_ZOOM) {
++      const setZoom = async (factor: number) => {
++        if (zoomWorker === undefined) throw new Error('Native zoom worker unavailable')
++        return zoomWorker.evaluate(async ({ url, factor }) => {
++          const api = (globalThis as unknown as { chrome: { tabs: { query(query: object): Promise<{ id?: number; url?: string }[]>; setZoom(id: number, factor: number): Promise<void>; getZoom(id: number): Promise<number> } } }).chrome.tabs
++          const tab = (await api.query({})).find(tab => tab.url === url)
++          if (tab?.id === undefined) throw new Error('Synthetic Host tab unavailable')
++          await api.setZoom(tab.id, factor)
++          return api.getZoom(tab.id)
++        }, { url: page.url(), factor })
++      }
++      await page.setViewportSize({ width: 1680, height: 1200 })
++      const before = await page.evaluate(() => innerWidth)
++      expect(await setZoom(2)).toBe(2)
++      await page.waitForFunction(() => devicePixelRatio === 2)
++      nativeZoomMetrics = await page.evaluate(before => ({ before, after: innerWidth, dpr: devicePixelRatio }), before)
++      expect(nativeZoomMetrics.after).toBeCloseTo(before / 2, 0)
++      await expect.poll(async () => (await creator.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(300)
++      await page.getByRole('button', { name: 'Send preview', exact: true }).click()
++      expect(await page.getByRole('region', { name: 'Send preview', exact: true }).textContent()).toContain('SYNTHETIC_SELECTED_VERSION_TWO')
++      await page.getByRole('button', { name: 'Send preview', exact: true }).click()
++      expect(await page.getByRole('button', { name: 'Send message', exact: true }).evaluate(button => { const rect = button.getBoundingClientRect(); return rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight })).toBe(true)
++      const zoomDraft = '# Zoom draft\n\nNATIVE_ZOOM_ARTIFACT_EDIT 中文 😀\n'
++      await artifactWorkspace.getByRole('tab', { name: 'Source', exact: true }).click()
++      const zoomEditor = artifactWorkspace.locator('[data-creator-artifact-editor] textarea')
++      await zoomEditor.fill(zoomDraft)
++      await artifactWorkspace.getByRole('tab', { name: 'Preview', exact: true }).click()
++      await artifactWorkspace.getByText('NATIVE_ZOOM_ARTIFACT_EDIT 中文 😀', { exact: true }).waitFor()
++      await artifactWorkspace.getByRole('tab', { name: 'Source', exact: true }).click()
++      expect(await zoomEditor.inputValue()).toBe(zoomDraft)
++      if (evidenceDir !== undefined) {
++        // Native browser zoom changes CSS viewport dimensions. Capture the
++        // physical surface without Playwright's full-page CSS clipping box.
++        const capture = await page.context().newCDPSession(page)
++        try {
++          const result = await capture.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false, fromSurface: true })
++          const png = Buffer.from(result.data, 'base64')
++          expect(png.readUInt32BE(16)).toBe(1680)
++          expect(png.readUInt32BE(20)).toBe(1200)
++          await writeFile(join(evidenceDir, 'creative-workspace-native-zoom-200.png'), png)
++        } finally { await capture.detach() }
++      }
++      expect(await setZoom(1)).toBe(1)
++      await page.waitForFunction(() => devicePixelRatio === 1)
++      await page.setViewportSize({ width: 1680, height: 1000 })
++      expect(await zoomEditor.inputValue()).toBe(zoomDraft)
++    }
++
++    await artifactWorkspace.getByRole('button', { name: 'Synthetic table', exact: true }).click()
++    await artifactWorkspace.getByRole('tab', { name: 'Preview', exact: true }).click()
++    await artifactWorkspace.getByRole('button', { name: 'Retry content read', exact: true }).click()
++    await artifactWorkspace.getByText('Alice, B', { exact: true }).waitFor({ timeout: 15_000 })
++    expect(await artifactWorkspace.locator('td').allTextContents()).toContain('line1\nline2')
++    await artifactWorkspace.getByRole('tab', { name: 'Source', exact: true }).click()
++    const tableEditor = artifactWorkspace.locator('[data-creator-artifact-editor] textarea')
++    const malformedTable = 'name,note\nAlice,"unfinished'
++    await tableEditor.fill(malformedTable)
++    await artifactWorkspace.getByRole('tab', { name: 'Preview', exact: true }).click()
++    await artifactWorkspace.getByText(/Invalid table syntax/).waitFor()
++    await artifactWorkspace.getByRole('tab', { name: 'Source', exact: true }).click()
++    expect(await tableEditor.inputValue()).toBe(malformedTable)
++    await tableEditor.fill('name,note\nAlice,' + 'x'.repeat(2_001))
++    await artifactWorkspace.getByRole('tab', { name: 'Preview', exact: true }).click()
++    await artifactWorkspace.getByText('The table preview displays only content within its rendering budget.', { exact: true }).waitFor()
++    await artifactWorkspace.getByRole('tab', { name: 'Source', exact: true }).click()
++    await tableEditor.fill('name,note\nRecovered,complete')
++    await artifactWorkspace.getByRole('tab', { name: 'Preview', exact: true }).click()
++    await artifactWorkspace.getByText('Recovered', { exact: true }).waitFor()
++    expect(await artifactWorkspace.getByText(/Invalid table syntax/).count()).toBe(0)
++
++    await artifactWorkspace.getByRole('button', { name: 'Synthetic TSV', exact: true }).click()
++    await artifactWorkspace.getByRole('tab', { name: 'Preview', exact: true }).click()
++    await artifactWorkspace.getByText('TSV-1', { exact: true }).waitFor()
++    await artifactWorkspace.getByRole('button', { name: 'Next page', exact: true }).click()
++    await artifactWorkspace.getByText('TSV-201', { exact: true }).waitFor()
++    expect(await artifactWorkspace.getByText('第201行', { exact: true }).count()).toBe(1)
++    expect(await artifactWorkspace.getByRole('button', { name: 'Next page', exact: true }).isDisabled()).toBe(true)
++    await artifactWorkspace.getByRole('button', { name: 'Previous page', exact: true }).click()
++    await artifactWorkspace.getByText('TSV-1', { exact: true }).waitFor()
++    await page.setViewportSize({ width: 360, height: 900 })
++    const tableFrame = artifactWorkspace.locator('[data-dsh-local-table]')
++    await expect.poll(async () => { const box = (await tableFrame.boundingBox())!; return box.x >= 0 && box.x + box.width <= 361 }).toBe(true)
++    await artifactWorkspace.getByRole('button', { name: 'Next page', exact: true }).click()
++    await artifactWorkspace.getByText('TSV-201', { exact: true }).waitFor()
++    if (evidenceDir !== undefined) await page.screenshot({ path: join(evidenceDir, 'creative-tsv-360.png'), fullPage: true })
++    await page.setViewportSize({ width: 1680, height: 1000 })
++    await artifactWorkspace.getByRole('button', { name: 'Synthetic diagram', exact: true }).click()
++    await artifactWorkspace.getByRole('tab', { name: 'Preview', exact: true }).click()
++    const diagram = artifactWorkspace.locator('[data-preview-kind="mermaid"] [data-dsh-mermaid-figure] svg').first()
++    await diagram.waitFor({ timeout: 30_000 })
++    expect(await diagram.textContent()).toContain('Draft')
++    expect(await diagram.textContent()).toContain('Review')
++    expect(await diagram.locator('.node rect').first().evaluate(node => getComputedStyle(node).fill)).not.toBe('rgb(0, 0, 0)')
++    expect(await diagram.locator('.flowchart-link').first().evaluate(path => getComputedStyle(path).stroke)).not.toBe('none')
++    expect(await diagram.locator('style,script,foreignObject').count()).toBe(0)
++    await artifactWorkspace.getByRole('tab', { name: 'Source', exact: true }).click()
++    const diagramEditor = artifactWorkspace.locator('[data-creator-artifact-editor] textarea')
++    await diagramEditor.fill('graph LR\nA[EditedDiagram] --> B[AcceptedDiagram]')
++    await artifactWorkspace.getByRole('tab', { name: 'Preview', exact: true }).click()
++    await expect.poll(() => diagram.textContent(), { timeout: 30_000 }).toContain('EditedDiagram')
++    if (evidenceDir !== undefined) await page.screenshot({ path: join(evidenceDir, 'creative-mermaid.png'), fullPage: true })
++    await artifactWorkspace.getByRole('tab', { name: 'Source', exact: true }).click()
++    const invalidDiagram = 'graph TD\n A -->['
++    await diagramEditor.fill(invalidDiagram)
++    await artifactWorkspace.getByRole('tab', { name: 'Preview', exact: true }).click()
++    await artifactWorkspace.locator('[data-dsh-mermaid-figure].is-failed').waitFor({ timeout: 30_000 })
++    await artifactWorkspace.getByRole('tab', { name: 'Source', exact: true }).click()
++    expect(await diagramEditor.inputValue()).toBe(invalidDiagram)
++    await diagramEditor.fill('graph LR\nA[RecoveredDiagram] --> B[ReadyDiagram]')
++    await artifactWorkspace.getByRole('tab', { name: 'Preview', exact: true }).click()
++    await expect.poll(() => diagram.textContent(), { timeout: 30_000 }).toContain('RecoveredDiagram')
++    expect(await artifactWorkspace.locator('[data-dsh-mermaid-figure].is-failed').count()).toBe(0)
++    const lightDiagramFill = await diagram.locator('.node rect').first().evaluate(node => getComputedStyle(node).fill)
++    await page.emulateMedia({ colorScheme: 'dark' })
++    await expect.poll(() => diagram.locator('.node rect').first().evaluate(node => getComputedStyle(node).fill), { timeout: 15_000 }).not.toBe(lightDiagramFill)
++    expect(await diagram.textContent()).toContain('RecoveredDiagram')
++    await page.emulateMedia({ colorScheme: 'light' })
++    await expect.poll(() => diagram.locator('.node rect').first().evaluate(node => getComputedStyle(node).fill), { timeout: 15_000 }).toBe(lightDiagramFill)
++
++
++    await artifactWorkspace.getByRole('button', { name: 'Synthetic HTML', exact: true }).click()
++    await creator.getByRole('tab', { name: 'Preview', exact: true }).click()
++    const staticHtml = creator.locator('[data-static-html-content]')
++    await staticHtml.getByRole('heading', { name: 'Static document' }).waitFor()
++    expect(await staticHtml.locator('td').textContent()).toBe('Static cell')
++    expect(await staticHtml.locator('script,style,img,form,input,iframe,[onclick]').count()).toBe(0)
++    expect(await page.evaluate(() => (globalThis as { __creatorHtmlExecuted?: boolean }).__creatorHtmlExecuted)).toBeUndefined()
++    await creator.getByRole('tab', { name: 'Source', exact: true }).click()
++    const htmlEditor = creator.locator('[data-creator-artifact-editor] textarea')
++    expect(await htmlEditor.inputValue()).toContain('<script>globalThis.__creatorHtmlExecuted=true</script>')
++    await htmlEditor.fill('<h1>Edited HTML heading</h1><ul><li>Edited list</li></ul>')
++    await creator.getByRole('tab', { name: 'Preview', exact: true }).click()
++    await staticHtml.getByRole('heading', { name: 'Edited HTML heading' }).waitFor()
++    expect(await staticHtml.locator('li').textContent()).toBe('Edited list')
++    expect(unsafeHtmlRequests).toBe(0)
++    if (evidenceDir !== undefined) await page.screenshot({ path: join(evidenceDir, 'creative-static-html.png'), fullPage: true })
++    for (const width of [360, 560, 960]) {
++      await page.setViewportSize({ width, height: 900 })
++      await page.emulateMedia({ colorScheme: width === 360 ? 'dark' : 'light' })
++      expect(await staticHtml.isVisible()).toBe(true)
++      await expect.poll(async () => { const box = (await staticHtml.boundingBox())!; return box.x >= 0 && box.x + box.width <= width + 1 }, { timeout: 5_000 }).toBe(true)
++      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
++      if (evidenceDir !== undefined) await page.screenshot({ path: join(evidenceDir, `creative-static-html-${width}.png`), fullPage: true })
++    }
++    await page.setViewportSize({ width: 1680, height: 1000 })
++
 +    await artifactWorkspace.getByRole('button', { name: 'Synthetic image', exact: true }).click()
 +    await creator.getByRole('tab', { name: 'Preview', exact: true }).click()
 +    const stage = creator.locator('[data-dsh-media-image-selection-stage]')
@@ -184,23 +480,89 @@
 +    const sourceImage = stage.locator('img').first()
 +    await expect.poll(() => sourceImage.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
 +    const originalWidth = await sourceImage.evaluate(image => (image as HTMLImageElement).naturalWidth)
++    await creator.getByRole('button', { name: 'Inspect image', exact: true }).click()
++    await creator.getByRole('button', { name: 'Zoom in', exact: true }).click()
++    expect(await creator.locator('[data-dsh-media-image]').getAttribute('data-zoom')).toBe('1.5')
++    await creator.getByRole('button', { name: 'Select region', exact: true }).click()
++    expect(await sourceImage.evaluate(image => (image as HTMLElement).style.transform)).toBe('none')
++
++    await sourceImage.scrollIntoViewIfNeeded()
 +    const box = (await sourceImage.boundingBox())!
-+    await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2)
-+    await page.mouse.down()
-+    await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.8)
-+    await page.mouse.up()
++    if (TOUCH) {
++      const cdp = await page.context().newCDPSession(page)
++      const start = { x: box.x + box.width * 0.2, y: box.y + box.height * 0.2, id: 1 }
++      const end = { x: box.x + box.width * 0.7, y: box.y + box.height * 0.8, id: 1 }
++      try {
++        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [start] })
++        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [end] })
++        await cdp.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] })
++        expect(await creator.locator('[data-dsh-media-image-selection]').getAttribute('data-selection-width')).toBe('1')
++        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [start] })
++        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [end] })
++        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
++      } finally { await cdp.detach() }
++    } else {
++      await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2)
++      await page.mouse.down()
++      await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.8)
++      await page.mouse.up()
++    }
 +    await expect.poll(() => creator.locator('[data-dsh-media-image-selection]').getAttribute('data-selection-width')).not.toBe('1')
 +    await creator.locator('[data-dsh-media-image-crop-preview]').waitFor()
 +    await creator.getByRole('button', { name: 'Add to main conversation' }).click()
 +    await artifactWorkspace.getByRole('button', { name: 'Run action' }).click()
 +    await expect.poll(() => input.locator('[data-composer-chip]').count()).toBe(2)
++    await input.getByRole('button', { name: /^Edit Candidate two$/u }).click()
++    await referenceEditor.fill(complexReferenceBody)
++    await input.getByRole('button', { name: /^Done Candidate two$/u }).click()
 +    await input.click()
 +    await input.press('End')
 +    await page.keyboard.type(' Describe this selected image region.')
-+    await input.press('Enter')
++    await page.getByRole('button', { name: 'Send preview', exact: true }).click()
++    const sentPreview = await page.getByRole('region', { name: 'Send preview', exact: true }).locator('pre').textContent()
++    expect(sentPreview).toContain(complexReferenceBody)
++    await page.getByRole('button', { name: 'Send preview', exact: true }).click()
++    await input.click()
++
++    let releaseAcknowledgement!: () => void
++    const acknowledgementGate = new Promise<void>(resolve => { releaseAcknowledgement = resolve })
++    let hostAccepted = false
++    await page.route('**/api/session/prompt', async route => {
++      const response = await route.fetch()
++      hostAccepted = true
++      await acknowledgementGate
++      await route.fulfill({ response })
++    })
++    const acknowledgementResponse = page.waitForResponse(response => response.url().endsWith('/api/session/prompt') && response.request().method() === 'POST')
++    if (TOUCH) await page.getByRole('button', { name: 'Send message', exact: true }).tap()
++    else await input.press('Enter')
++    await expect.poll(() => hostAccepted, { timeout: 30_000 }).toBe(true)
++    try {
++      await input.getByRole('button', { name: /^Edit Candidate two$/u }).click()
++      await referenceEditor.fill('NEXT_DRAFT_REFERENCE_EDIT')
++      await input.getByRole('button', { name: /^Done Candidate two$/u }).click()
++      await input.click()
++      await input.press('End')
++      await page.keyboard.type(' NEXT_DRAFT_TEXT')
++      await input.press('Enter')
++    } finally { releaseAcknowledgement() }
++    await (await acknowledgementResponse).finished()
++    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
 +    await page.getByText(RESPONSE, { exact: true }).waitFor({ timeout: 30_000 })
++    await expect.poll(() => input.textContent()).toContain('NEXT_DRAFT_REFERENCE_EDIT')
++    expect(await input.textContent()).toContain('NEXT_DRAFT_TEXT')
++    await expect.poll(() => input.locator('[data-composer-chip]').count()).toBe(1)
++    const retainedReferenceCountAfterAck = await input.locator('[data-composer-chip]').count()
++    expect(await input.textContent()).not.toContain('Synthetic image')
++    await page.unroute('**/api/session/prompt')
 +    const agent = scaffold.ctx.agents.list().find(agent => agent.id === 'session:creative-test')!
 +    const sent = agent.session.snapshotEvents().findLast(event => event.type === 'user/message' && (event.data as { source?: { kind?: string } }).source?.kind === 'user')
++    const admittedText = (sent?.data as { content?: Array<{ type: string; text?: string }> }).content?.filter(block => block.type === 'text').map(block => block.text ?? '').join('')
++    expect(admittedText).toBe(sentPreview)
++    expect(admittedText).not.toContain('NEXT_DRAFT_REFERENCE_EDIT')
++    expect(admittedText).not.toContain('NEXT_DRAFT_TEXT')
++    const modelUser = (requestMessages[0] as Array<{ source?: { kind?: string }; content?: Array<{ type: string; text?: string }> }>).find(message => message.source?.kind === 'user')
++    expect(modelUser?.content?.filter(block => block.type === 'text').map(block => block.text ?? '').join('')).toBe(sentPreview)
 +    const refs = (sent?.data as { source?: { references?: Array<{ kind: string; owner: string; snapshot?: { type: string; attachment?: { width: number; height: number; bytes: number } } }> } }).source?.references ?? []
 +    const admittedImage = refs.find(reference => reference.owner === 'eikona' && reference.kind === 'image-region')
 +    expect(admittedImage?.snapshot?.type).toBe('image')
@@ -210,11 +572,15 @@
 +    expect(requestMessages).toHaveLength(1)
 +    const nativeImages = (requestMessages[0] as Array<{ content?: Array<{ type?: string }> }>).flatMap(message => message.content ?? []).filter(block => block.type === 'image')
 +    expect(nativeImages).toHaveLength(1)
++    expect(JSON.stringify(requestMessages)).not.toContain('Edited HTML heading')
++    expect(unsafeHtmlRequests).toBe(0)
 +    if (evidenceDir !== undefined) await page.screenshot({ path: join(evidenceDir, 'creative-image-sent.png'), fullPage: true })
 +    expect(tripwire.pageErrors).toEqual([])
++    expect(renderErrors).toEqual([])
 +    expect(tripwire.warnings).toEqual([])
 +    if (evidenceDir !== undefined) {
 +      await writeFile(join(evidenceDir, 'creative-workspace-browser.json'), JSON.stringify({
++        nativeZoomMetrics,
 +        schema_version: 'dsh.creative_workspace.browser.v1',
 +        synthetic_creator_owner: true,
 +        synthetic_browser_projection: false,
@@ -226,13 +592,45 @@
 +        browser_client_loader_selection: 'normal_manifest',
 +        creator_client_loader_selection: 'normal_manifest',
 +        full_body_over_1200: true,
++        artifact_tabs_keyboard: true,
++        artifact_tabs_aria_linkage: true,
 +        live_preview: true,
 +        selected_candidate: 'candidate:two',
 +        host_reference_receipt: true,
++        unicode_nested_fence_roundtrip: true,
++        retained_reference_count_after_ack: retainedReferenceCountAfterAck,
++        ack_consumes_unchanged_image_reference: true,
++        ack_preserves_same_reference_edit: true,
++        ack_preserves_new_text: true,
++        repeated_submit_while_pending_ignored: true,
++        send_preview_equals_admitted_text: true,
++        send_preview_equals_model_text: true,
++        reference_delete_undo: true,
++        reference_three_line_disclosure: true,
++        creator_source_refresh_cancel_preserves_draft: true,
++        creator_source_refresh_replace_confirmed: true,
 +        missing_provider_entry_withheld: true,
 +        responsive_widths: [360, 960],
 +        themes: ['dark', 'light'],
 +        primary_button_contrast: { light: lightPrimaryContrast, dark: darkPrimaryContrast },
++        static_html_visual_preview: true,
++        static_html_widths: [360, 560, 960],
++        static_html_edit_roundtrip: true,
++        static_html_source_preserved: true,
++        static_html_resource_requests: unsafeHtmlRequests,
++        console_errors: renderErrors.length,
++        explicit_content_read_retry: true,
++        tsv_paging_400_rows: true,
++        tsv_narrow_paging: true,
++        csv_multiline_preview: true,
++        csv_syntax_recovery: true,
++        csv_budget_disclosed: true,
++        mermaid_renderer: 'real_package',
++        mermaid_edit_preview: true,
++        mermaid_syntax_error_recovery: true,
++        mermaid_theme_roundtrip: true,
++        image_inspection_zoom: true,
++        image_selection_transform_restored: true,
 +        creator_image_resource: true,
 +        image_region_attachment: true,
 +        image_cropped_width: admittedImage!.snapshot!.attachment!.width,
@@ -248,9 +646,11 @@
 +    }
 +  }, 120_000)
 +})
+diff --git a/apps/web/tests/creative-workspace-overlay.yml b/apps/web/tests/creative-workspace-overlay.yml
+new file mode 100644
 --- /dev/null
 +++ b/apps/web/tests/creative-workspace-overlay.yml
-@@ -0,0 +1,11 @@
+@@ -0,0 +1,13 @@
 +- insert:
 +    - id: dsh-pane-workbench
 +      name: '@yeisme/dsh-pane-workbench'
@@ -262,23 +662,13 @@
 +      name: '@yeisme/dsh-creator-studio'
 +    - id: dsh-browser-pane
 +      name: '@yeisme/dsh-browser-pane'
---- /dev/null
-+++ b/apps/web/tests/creative-workspace-fixture/client.mjs
-@@ -0,0 +1,7 @@
-+window.__ModuleLoader__.load({ id: '@deepseek-ai/dsh-creative-workspace-fixture', factory: () => {
-+  return {
-+    name: 'creative-workspace-fixture/client',
-+    inject: [],
-+    apply() {},
-+  }
-+} })
---- /dev/null
-+++ b/apps/web/tests/creative-workspace-fixture/cordis.patch.yml
-@@ -0,0 +1,1 @@
-+[]
++    - id: dsh-mermaid-render
++      name: '@yeisme/dsh-mermaid-render'
+diff --git a/apps/web/tests/creative-workspace-fixture/index.mjs b/apps/web/tests/creative-workspace-fixture/index.mjs
+new file mode 100644
 --- /dev/null
 +++ b/apps/web/tests/creative-workspace-fixture/index.mjs
-@@ -0,0 +1,130 @@
+@@ -0,0 +1,152 @@
 +import { mkdir, readFile } from 'node:fs/promises'
 +import { createHash } from 'node:crypto'
 +import { join } from 'node:path'
@@ -302,12 +692,24 @@
 +const IMAGE = Object.freeze({ ...BASE, kind: 'image', ref: 'artifact:creative-image', mediaType: 'image/png', title: 'Synthetic image' })
 +const IMAGE_BYTES = await readFile(new URL('../../../../packages/skill/skill-badge/assets/dsh-badge.png', import.meta.url))
 +let imageUrl
++const HTML = Object.freeze({ ...BASE, kind: 'code', ref: 'artifact:creative-html', mediaType: 'text/html', title: 'Synthetic HTML' })
++const HTML_BODY = '<script>globalThis.__creatorHtmlExecuted=true</script><style>body{display:none}</style><h1 onclick="globalThis.__creatorHtmlExecuted=true">Static document</h1><img src="/unsafe-html-probe"><form action="/unsafe-html-probe"><input autofocus></form><table><tr><td>Static cell</td></tr></table>'
++const DIAGRAM = Object.freeze({ ...BASE, kind: 'diagram', ref: 'artifact:creative-diagram', mediaType: 'text/x-mermaid', title: 'Synthetic diagram' })
++const DIAGRAM_BODY = 'graph TD\nA[Draft] --> B[Review]'
++const TABLE = Object.freeze({ ...BASE, ref: 'artifact:creative-table', mediaType: 'text/csv', title: 'Synthetic table' })
++const TABLE_BODY = 'name,note\n"Alice, B","line1\nline2"'
++const TSV = Object.freeze({ ...BASE, ref: 'artifact:creative-tsv', mediaType: 'text/tab-separated-values', title: 'Synthetic TSV' })
++const TSV_BODY = '编号\t内容\n' + Array.from({ length: 400 }, (_, i) => `TSV-${i + 1}\t第${i + 1}行`).join('\n')
 +const CANDIDATE_ONE = Object.freeze({ ...BASE, ref: 'artifact:creative-candidate-one', version: 'v2', title: 'Candidate one' })
 +const CANDIDATE_TWO = Object.freeze({ ...BASE, ref: 'artifact:creative-candidate-two', version: 'v3', title: 'Candidate two' })
 +const BODY_ONE = '# Candidate one\n\nSynthetic owner version one.\n'
 +const BODY_TWO = '# Candidate two\n\nSYNTHETIC_SELECTED_VERSION_TWO\n'
 +let baseBody = `# Synthetic screenplay\n\n${'A bounded synthetic scene used only by the real Host integration test. '.repeat(30)}\n`
 +let baseRevision = 'content:v1'
++let tableReadAttempts = 0
++let saveDispatchCount = 0
++let saveLookupCount = 0
++let savedOperation
 +
 +const proof = (artifact) => Object.freeze({ id: `reference:${artifact.ref}`, kind: 'file', intent: 'content', scope: 'artifact/body', digest: createHash('sha256').update(artifact.ref === BASE.ref ? baseBody : artifact.ref === CANDIDATE_ONE.ref ? BODY_ONE : BODY_TWO).digest('hex'), freshness: 'fresh', contentRevision: artifact.ref === BASE.ref ? baseRevision : `content:${artifact.version}` })
 +const field = (key, label, kind, extra = {}) => ({ key, label, kind, required: true, ...extra })
@@ -344,7 +746,7 @@
 +        saveDraft: { descriptorRef: SAVE.descriptorRef, contentField: 'body', contentRevisionField: 'content_revision' },
 +        attachContext: { descriptorRef: ATTACH.descriptorRef, contentField: 'body', contentRevisionField: 'content_revision', candidateRefField: 'candidate_ref', candidateVersionField: 'candidate_version' },
 +      },
-+    }, { artifact: IMAGE, acceptedVersion: IMAGE.version, candidates: [], referenceProof: { id: 'reference:creative-image', kind: 'image-region', intent: 'content', scope: 'artifact/media', digest: createHash('sha256').update(IMAGE_BYTES).digest('hex'), contentRevision: 'image:v1', freshness: 'fresh' }, actions: { attachContext: { descriptorRef: IMAGE_ATTACH.descriptorRef, rangeField: 'range' } } }],
++    }, { artifact: IMAGE, acceptedVersion: IMAGE.version, candidates: [], referenceProof: { id: 'reference:creative-image', kind: 'image-region', intent: 'content', scope: 'artifact/media', digest: createHash('sha256').update(IMAGE_BYTES).digest('hex'), contentRevision: 'image:v1', freshness: 'fresh' }, actions: { attachContext: { descriptorRef: IMAGE_ATTACH.descriptorRef, rangeField: 'range' } } }, { artifact: HTML, acceptedVersion: HTML.version, candidates: [] }, { artifact: DIAGRAM, acceptedVersion: DIAGRAM.version, candidates: [] }, { artifact: TABLE, acceptedVersion: TABLE.version, candidates: [] }, { artifact: TSV, acceptedVersion: TSV.version, candidates: [] }],
 +  }
 +}
 +
@@ -356,13 +758,22 @@
 +  },
 +  dispatch(request) {
 +    if (request.actionId === SAVE.actionId) {
++      saveDispatchCount++
 +      if (request.values.content_revision !== baseRevision || typeof request.values.body !== 'string') return { status: 'reconcile_required', receiptRef: 'receipt:creative-save-conflict', owner: 'eikona', actionId: SAVE.actionId, reconcileReason: 'content_revision_changed' }
 +      baseBody = request.values.body
 +      baseRevision = `content:v${Number(baseRevision.slice('content:v'.length)) + 1}`
-+      return { status: 'completed', receiptRef: `receipt:creative-save:${baseRevision}`, owner: 'eikona', actionId: SAVE.actionId, summary: 'Synthetic draft persisted.' }
++      savedOperation = { key: request.idempotencyKey, target: request.expectedTargetRef, receipt: { status: 'completed', receiptRef: `receipt:creative-save:${baseRevision}`, owner: 'eikona', actionId: SAVE.actionId, summary: 'Original synthetic save reconciled; save dispatches=1.' } }
++      return { ...savedOperation.receipt, status: 'unknown', summary: 'Synthetic save response uncertain; reconcile original operation.' }
 +    }
 +    if (request.actionId === ATTACH.actionId || request.actionId === IMAGE_ATTACH.actionId) return { status: 'completed', receiptRef: 'receipt:creative-attach', owner: 'eikona', actionId: request.actionId, summary: 'Synthetic reference authorized.' }
 +    return { status: 'rejected', receiptRef: 'receipt:creative-rejected', owner: 'eikona', actionId: request.actionId, summary: 'Synthetic action unavailable.' }
++  },
++  reconcile(request) {
++    if (saveDispatchCount === 1 && request.actionId === SAVE.actionId && request.idempotencyKey === savedOperation?.key && request.expectedTargetRef === savedOperation.target) {
++      saveLookupCount++
++      return saveLookupCount === 1 ? { ...savedOperation.receipt, status: 'partial', summary: 'Original synthetic save partially settled; continue original lookup.' } : savedOperation.receipt
++    }
++    return { status: 'unknown', receiptRef: 'receipt:creative-lookup-mismatch', owner: 'eikona', actionId: request.actionId, summary: 'Original operation identity mismatch or duplicate dispatch.' }
 +  },
 +  resolveArtifact(artifact) {
 +    return artifact.ref === IMAGE.ref && artifact.version === IMAGE.version ? { url: imageUrl, expiresAt: '2999-01-01T00:00:00.000Z' } : undefined
@@ -371,7 +782,8 @@
 +    return artifact.ref === IMAGE.ref && artifact.version === IMAGE.version ? { artifact: IMAGE, bytes: IMAGE_BYTES, contentRevision: 'image:v1', mediaType: IMAGE.mediaType } : undefined
 +  },
 +  readArtifactContent(artifact) {
-+    const content = artifact.ref === BASE.ref ? baseBody : artifact.ref === CANDIDATE_ONE.ref ? BODY_ONE : artifact.ref === CANDIDATE_TWO.ref ? BODY_TWO : undefined
++    if (artifact.ref === TABLE.ref && tableReadAttempts++ === 0) return undefined
++    const content = artifact.ref === BASE.ref ? baseBody : artifact.ref === CANDIDATE_ONE.ref ? BODY_ONE : artifact.ref === CANDIDATE_TWO.ref ? BODY_TWO : artifact.ref === HTML.ref ? HTML_BODY : artifact.ref === DIAGRAM.ref ? DIAGRAM_BODY : artifact.ref === TABLE.ref ? TABLE_BODY : artifact.ref === TSV.ref ? TSV_BODY : undefined
 +    return content === undefined ? undefined : { artifact, contentRevision: artifact.ref === BASE.ref ? baseRevision : `content:${artifact.version}`, content }
 +  },
 +}
@@ -409,6 +821,20 @@
 +}
 +
 +export default { name, inject, apply }
+diff --git a/apps/web/tests/creative-workspace-fixture/client.mjs b/apps/web/tests/creative-workspace-fixture/client.mjs
+new file mode 100644
+--- /dev/null
++++ b/apps/web/tests/creative-workspace-fixture/client.mjs
+@@ -0,0 +1,7 @@
++window.__ModuleLoader__.load({ id: '@deepseek-ai/dsh-creative-workspace-fixture', factory: () => {
++  return {
++    name: 'creative-workspace-fixture/client',
++    inject: [],
++    apply() {},
++  }
++} })
+diff --git a/apps/web/tests/creative-workspace-fixture/package.json b/apps/web/tests/creative-workspace-fixture/package.json
+new file mode 100644
 --- /dev/null
 +++ b/apps/web/tests/creative-workspace-fixture/package.json
 @@ -0,0 +1,22 @@
@@ -434,3 +860,9 @@
 +    }
 +  }
 +}
+diff --git a/apps/web/tests/creative-workspace-fixture/cordis.patch.yml b/apps/web/tests/creative-workspace-fixture/cordis.patch.yml
+new file mode 100644
+--- /dev/null
++++ b/apps/web/tests/creative-workspace-fixture/cordis.patch.yml
+@@ -0,0 +1,1 @@
++[]

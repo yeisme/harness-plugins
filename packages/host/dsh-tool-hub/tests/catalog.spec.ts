@@ -7,7 +7,7 @@ describe('projectCatalog', () => {
   it('projects skills, native tools, and MCP servers without secrets', () => {
     const projection = projectCatalog({
       skills: [
-        { name: 'writer', description: 'Write docs', source: 'user-dsh', invocation: { modelInvocable: true, userInvocable: true } },
+        { name: 'writer', description: 'Write docs', source: 'user-dsh', purposeZh: '撰写和审阅文档', category: 'writing', searchTerms: ['写作', 'review'], invocation: { modelInvocable: true, userInvocable: true } },
         { name: 'hidden', description: 'secret', invocation: { modelInvocable: false, userInvocable: true } },
       ],
       skillsComplete: true,
@@ -31,6 +31,7 @@ describe('projectCatalog', () => {
     expect(projection.mcpInventoryAvailable).toBe(true)
     const writer = findCatalogItem(projection.items, skillId('writer'))
     expect(writer).toMatchObject({ enabled: false, canToggle: true, family: 'skill', reasonCode: 'disabled_by_user' })
+    expect(writer?.purpose).toEqual({ zh: '撰写和审阅文档', category: 'writing', searchTerms: ['写作', 'review'] })
     const hidden = findCatalogItem(projection.items, skillId('hidden'))
     expect(hidden).toMatchObject({ enabled: false, canToggle: false, reasonCode: 'not_model_invocable' })
     const github = findCatalogItem(projection.items, mcpId('github'))

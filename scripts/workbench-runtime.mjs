@@ -19,6 +19,9 @@ export function checkWorkbenchRuntime(root) {
   const checks = [
     ['packages/client/modules/lib/index.js', text => text.includes('`${loaderName}/package.json`')],
     ['packages/client/ui-conversation/lib/client.js', text => text.includes('ConversationNavigation')],
+    ['packages/client/ui-conversation/lib/client.js', text => /readonly-view[^{]{0,120}widthHandle\{(?=[^}]*display:\s*none)(?=[^}]*pointer-events:\s*none)/.test(text)],
+    ['packages/client/ui-conversation/lib/client.js', text => text.includes('targetFor')],
+    ['packages/client/ui-reference/lib/client.js', text => text.includes('composerReferenceCapabilityResolver')],
     ['packages/client/ui-settings-general/lib/client.js', text => text.includes('settingsNavigation')],
     ['packages/api/session-controller/lib/typert.remote-client.js', text => text.includes('includeModelInvocable')],
     ['apps/cli/lib/bin.js', text => text.length > 0],

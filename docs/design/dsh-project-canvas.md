@@ -2,6 +2,8 @@
 
 状态：设计已确认，功能未实现。任务归 [画布 change](../../openspec/changes/dsh-project-canvas-continuity-v1/tasks.md)，执行语义归 [工作流 change](../../openspec/changes/dsh-creative-workflow-v1/tasks.md)。两者共用一个项目 document；本页不创建另一份 graph。
 
+做剧可视化流水线的增量合同见 [dsh-creative-pipeline-visual-workbench-v1](../../openspec/changes/dsh-creative-pipeline-visual-workbench-v1/)。它把 Agent 降为背景上下文条和按需抽屉，并在同一画布上区分 `reference edge` 与 `execution edge`；不新增第二份图模型或运行 owner。
+
 ## 页面构成
 
 ```text
@@ -18,6 +20,8 @@ Pane 标题 / 项目定位（宿主管理）
 ```
 
 工具条在窄Pane折入菜单，执行动作由工作流能力提供。关闭画布不关闭原会话或取消运行。新增成果提示“查看/定位”，用户选择后才移动相机或打开Pane。
+
+做剧页面首版将节点投影为素材、人物、场次、镜头和候选成果。选中执行边时，右侧详情显示输入版本、owner 状态、freshness、阻塞、证据和已确认运行的暂停/恢复动作；选中引用边时只显示关系，不出现执行按钮。Agent 只在上下文条或按需抽屉中解释引用、生成草案和诊断阻塞。
 
 ## 节点与控件
 
@@ -54,3 +58,9 @@ host经批准的项目级storage保存document revision、相机、节点、分�
 原型覆盖六类素材、五类节点、两类边、三种宽度和至少一个专业Pane并排。真实测试必须验证双栏session/project隔离、迟到结果、关闭重开、版本冲突、unknown零重试和无重复Target底栏。
 
 性能用300个混合节点、包含图片/视频/音频缩略引用的固定样本，连续一小时记录输入p95、切换p95、拖拽帧、订阅/DOM/heap趋势和保存回执。指标与六件套证据见[公共方案](dsh-creative-studio-program.md)与[接口合同](../interfaces/dsh-creative-studio-contracts.md)。不得把fixture原型或未加载媒体的空白节点当真实可用验收。
+
+## 3D 导演台联动（dsh-3d-director-gltf-workbench-v1）
+
+3D 导演台以 Shot 为锚点：画布表达 Shot、资产与生成关系，3D 视口验证相机、时间线、空间变换与可见性。两者共享安全引用、选区、聚焦和 revision；scene graph 编辑保存在工作台版本，导出时按 glTF/GLB capability 校验。未支持的官方扩展必须 opaque 保留或阻止导出，不能静默丢弃。
+
+合同落点（2026-09-11 冻结）：scene graph、Shot、画布绑定、glTF 能力矩阵与生成变更集的 zod 合同在 `packages/host/pane-protocol/src/index.ts` 的 `SCENE_3D_SCHEMA = 'dsh.scene-3d.v1alpha1'` 一族（`SceneDocumentV1`/`ShotV1`/`CanvasBindingV1`/`GenerationChangeSetV1`/`GltfCapabilityReportV1`），revision 冲突沿用画布 conflict+draft 保留模式（`SceneGraphSaveResult`）。

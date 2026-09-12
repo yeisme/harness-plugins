@@ -7,10 +7,14 @@ import { registerDomainPaneViews } from './registry.js'
 import { normalizeDomainSnapshot, type DomainItemV1, type DomainSnapshotV1 } from './snapshot.js'
 import type { DomainOwnerSourceService } from './owner-source.js'
 import { registerProjectCanvasPane } from './project-canvas-pane.js'
+import { createCreatorAssetsSearchSource } from './creator-assets-search-source.js'
+import { createProjectCanvasSearchSource } from './project-canvas-search-source.js'
+import { createOrdoSearchSource } from './ordo-search-source.js'
 
 interface PaneWorkbenchFace {
   registerView(input: unknown): () => void
   openView?(request: unknown): void
+  registerSearchSource?(source: unknown): () => void
 }
 
 export const inject = ['slots']
@@ -91,7 +95,26 @@ export function apply(ctx: Context): () => void {
     },
   })
   const unregisterCanvas = registerProjectCanvasPane(ctx, pane)
-  return () => { unregisterCanvas(); unregisterDomain() }
+  let unregisterCanvasSearch = () => {}
+  let unregisterCreatorAssetsSearch = () => {}
+  let creatorAssetsSearch: ReturnType<typeof createCreatorAssetsSearchSource> | undefined
+  let ordoSearchDisposer = () => {}
+  let canvasSearch: ReturnType<typeof createProjectCanvasSearchSource> | undefined
+  const ordo = ctx.get('ordoAgentOps') as { snapshot?: () => Parameters<typeof ordoSnapshotToDomain>[0] } | undefined
+  if (typeof ordo?.snapshot === 'function' && typeof pane.registerSearchSource === 'function') {
+    const source = createOrdoSearchSource({ snapshot: ordo.snapshot, open: item => { const domain = ordoSnapshotToDomain(ordo.snapshot!()); const found = domain.items.find(candidate => candidate.ref === item.ref); if (found) { const request = ordoSubagentDeepLink(found); if (request) pane.openView?.(request) } } })
+    ordoSearchDisposer = pane.registerSearchSource(source)
+  }
+  const creator = (ctx.get('remote') as Record<string, unknown> | undefined)?.creatorStudio as { snapshot?: unknown; canvasRead?: unknown } | undefined
+  if (typeof creator?.snapshot === 'function' && typeof creator.canvasRead === 'function' && typeof pane.registerSearchSource === 'function') {
+    canvasSearch = createProjectCanvasSearchSource({ service: creator as never, open: request => pane.openView?.(request) })
+    unregisterCanvasSearch = pane.registerSearchSource(canvasSearch.source)
+  }
+  if (typeof creator?.snapshot === 'function' && typeof (creator as { assets?: unknown }).assets === 'function' && typeof pane.registerSearchSource === 'function') {
+    creatorAssetsSearch = createCreatorAssetsSearchSource({ service: creator as never, open: request => pane.openView?.(request) })
+    unregisterCreatorAssetsSearch = pane.registerSearchSource(creatorAssetsSearch.source)
+  }
+  return () => { unregisterCanvasSearch(); canvasSearch?.dispose(); unregisterCreatorAssetsSearch(); creatorAssetsSearch?.dispose(); ordoSearchDisposer(); unregisterCanvas(); unregisterDomain() }
 }
 
 export { DOMAIN_BADGES, DOMAIN_OWNERS, DOMAIN_PANE_KINDS, EIKONA_DEFAULT_MODEL, SUBAGENT_BADGE } from './owners.js'
@@ -219,7 +242,7 @@ export default DomainPanePlugin
 
 export { createProjectCanvasEditor, editProjectCanvas, searchProjectCanvas } from './project-canvas.js'
 export type { ProjectCanvasEditor, ProjectCanvasEdit, ProjectCanvasEditResult } from './project-canvas.js'
-export { inspectCanvasRunScope } from './project-canvas-workflow.js'
+export { inspectCanvasRunScope, inspectCanvasImpact, inspectCanvasChangeImpact } from './project-canvas-workflow.js'
 export type { CanvasRunScope, CanvasScopeInspection } from './project-canvas-workflow.js'
 export { ProjectCanvasView } from './project-canvas-view.js'
 export { ProjectCanvasController } from './project-canvas-controller.js'

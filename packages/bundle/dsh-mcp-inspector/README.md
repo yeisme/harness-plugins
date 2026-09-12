@@ -14,3 +14,8 @@ dsh plugin --profile web add ./packages/bundle/dsh-mcp-inspector
 - 本会话 MCP/native/聚合 Skill 调用活动从 ConversationSnapshot 派生（只读，无调用按钮），支持列表与耗时时间线。
 - Host catalog 不可用时显示安全、本地化 recovery；活动区照常工作，raw transport error 不进入主界面。
 - 可选 `ctx.mcpServers.list()` 不存在时只显示“未提供连接健康”，不得把 enabled 解释为 connected。
+
+
+## 几何隔离
+
+工具检查器仅注册为 `paneWorkbench` view，不再注册 `conversation.view`。因此不会继承官方对话页的 composer、splitter 或 resize handle；会话工具数据通过绑定的 session ref 读取。

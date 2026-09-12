@@ -1,0 +1,189 @@
+--- a/packages/client/ui-conversation/src/client/input/facade.ts
++++ b/packages/client/ui-conversation/src/client/input/facade.ts
+@@ -14,7 +14,7 @@
+ } from '@deepseek-ai/dsh-client-store'
+ import type { LexicalEditor, NodeKey } from 'lexical'
+ import {
+-  $addUpdateTag, $createParagraphNode, $createTextNode, $getNodeByKey, $getRoot, $getSelection, $isRangeSelection, $nodesOfType,
++  $addUpdateTag, $createParagraphNode, $createTextNode, $getNodeByKey, $getRoot, $getSelection, $isRangeSelection, $isTextNode, $nodesOfType,
+   CLEAR_HISTORY_COMMAND, COMMAND_PRIORITY_EDITOR, createEditor, HISTORY_MERGE_TAG, PASTE_TAG,
+ } from 'lexical'
+ import { registerPlainText } from '@lexical/plain-text'
+@@ -152,6 +152,7 @@
+   readonly draft: string
+   readonly occurrences: readonly Occurrence[]
+   readonly imageIds: readonly DraftAttachmentId[]
++  readonly segments?: readonly { readonly key: NodeKey; readonly kind: string; readonly text: string; readonly reference?: string }[]
+ }
+ 
+ /**
+@@ -193,6 +194,7 @@
+   private lexiconOff: (() => void) | undefined
+   /** Default sends retained until admission settles or scope disposal releases their images. */
+   private readonly detachedDrafts = new Map<number, DetachedDraft>()
++  private committingDraft: DetachedDraft | undefined
+   private imageFlightSeq = 0
+   /** Image-only sends retained until admission settles or scope disposal releases their images. */
+   private readonly imageFlights = new Map<number, {
+@@ -763,7 +765,7 @@
+         return
+       }
+       case 'commit-draft': {
+-        this.commitDraft(fx.retainSuffixOf)
++        this.commitDraft(fx.retainSuffixOf, this.committingDraft)
+         return
+       }
+     }
+@@ -774,21 +776,41 @@
+    * a pure typed-during-flight suffix when the snapshot allows) and cut the
+    * undo history so sent content cannot resurrect.
+    */
+-  private commitDraft(retainSuffixOf: string | null): void {
++  private commitDraft(retainSuffixOf: string | null, submitted?: DetachedDraft): void {
+     this.editor.update(() => {
+       const layout = $composerLayout()
+       const clip = layout.clipboardText
+       if (retainSuffixOf !== null) {
+-        if (clip === retainSuffixOf) {
++        const sameReferences = submitted?.segments === undefined || submitted.segments.filter(segment => segment.kind === 'chip').every(before => {
++          const node = $getNodeByKey(before.key)
++          return $isReferenceChipNode(node) && JSON.stringify([node.getSource(), node.getReference(), node.getStructured(), node.getTextContent()]) === before.reference
++        })
++        if (sameReferences && clip === retainSuffixOf) {
+           const root = $getRoot()
+           root.clear()
+           root.selectEnd()
+           return
+         }
+-        if (clip.startsWith(retainSuffixOf)) {
++        if (sameReferences && clip.startsWith(retainSuffixOf)) {
+           $replaceDetectSpanWithText(
+             { start: 0, end: detectOffsetOfClipboardOffset(layout, retainSuffixOf.length) }, '',
+           )
++          return
++        }
++        // An edited occurrence changes the flat clipboard prefix. Consume
++        // unchanged submitted leaves by stable Lexical identity instead of
++        // retaining every already-sent attachment in that revised draft.
++        for (const before of submitted?.segments ?? []) {
++          const node = $getNodeByKey(before.key)
++          if (node === null || !node.isAttached()) continue
++          if ($isReferenceChipNode(node)) {
++            const signature = JSON.stringify([node.getSource(), node.getReference(), node.getStructured(), node.getTextContent()])
++            if (before.kind === 'chip' && signature === before.reference) node.remove()
++          } else if (before.kind === 'text' && $isTextNode(node)) {
++            const current = node.getTextContent()
++            if (current === before.text) node.remove()
++            else if (before.text !== '' && current.startsWith(before.text)) node.setTextContent(current.slice(before.text.length))
++          } else if (before.kind === 'linebreak' && node.getTextContent() === before.text) node.remove()
+         }
+         return
+       }
+@@ -813,7 +835,15 @@
+     const imageIds = [...this.imageIds]
+     const occurrences = this.projection.occurrences
+     const references = occurrences.flatMap(occurrence => occurrence.structured === undefined ? [] : [submissionReference(occurrence.structured)])
+-    const record = { draft, occurrences, imageIds }
++    const hasEditable = occurrences.some(occurrence => occurrence.structured !== undefined && isEditablePromptReference(occurrence.structured))
++    const segments = hasEditable ? this.editor.getEditorState().read(() => $composerLayout().segments.flatMap(segment => {
++      if (segment.node === null) return []
++      const node = segment.node
++      return [{ key: node.getKey(), kind: segment.kind, text: node.getTextContent(),
++        ...($isReferenceChipNode(node) ? { reference: JSON.stringify([node.getSource(), node.getReference(), node.getStructured(), node.getTextContent()]) } : {}),
++      }]
++    })) : undefined
++    const record: DetachedDraft = { draft, occurrences, imageIds, ...(segments === undefined ? {} : { segments }) }
+     this.detachedDrafts.set(attempt.seq, record)
+     if (occurrences.length === 0) {
+       this.settleSink(attempt, references.length === 0
+@@ -872,7 +902,9 @@
+         const record = this.detachedDrafts.get(attempt.seq)
+         this.detachedDrafts.delete(attempt.seq)
+         if (record !== undefined) this.imageIds = this.imageIds.filter(id => !record.imageIds.includes(id))
+-        this.dispatchRun(({ type: 'sink-settled', attempt, ok: true, outcome }))
++        this.committingDraft = record
++        try { this.dispatchRun(({ type: 'sink-settled', attempt, ok: true, outcome })) }
++        finally { this.committingDraft = undefined }
+       },
+       (error: unknown) => {
+         if (this.dead(attempt)) return
+--- a/packages/client/ui-conversation/tests/input-reference-submit.client.spec.ts
++++ b/packages/client/ui-conversation/tests/input-reference-submit.client.spec.ts
+@@ -4,6 +4,8 @@
+  * accepted prompt.
+  */
+ import { describe, expect, it, vi } from 'vitest'
++import { $nodesOfType, $getRoot } from 'lexical'
++import { ReferenceChipNode, $createReferenceChipNode } from '../src/client/input/editor/chip-node.tsx'
+ import type { Context } from '@deepseek-ai/cordis'
+ import type { InputTriggerController, SubmitOutcome } from '../src/client/contract/input.ts'
+ import { SessionInputShell } from '../src/client/input/facade.ts'
+@@ -34,6 +36,68 @@
+ }
+ 
+ describe('reference submission', () => {
++  it.each(['replacement', 'proof-refresh', 'appended-duplicate'] as const)('preserves a same-text %s after the old request is acknowledged', async change => {
++    let settle!: (outcome: SubmitOutcome) => void
++    const sink = vi.fn(() => new Promise<SubmitOutcome>(resolve => { settle = resolve }))
++    const shell = new SessionInputShell({ actx: {} as Context, defaultSink: sink, commandImages })
++    const source = { owner: 'dsh.local', ref: 'file:same', version: 'v1', scope: 'file/full', digest: 'proof1' }
++    const reference = { ...source, id: 'same', kind: 'file' as const, intent: 'content' as const, label: 'Same', prompt: { version: 1 as const, body: 'unchanged text', originalBody: 'unchanged text', source } }
++    const insert = { source: 'reference', ref: reference.ref, label: reference.label, clipboardText: reference.prompt.body, structured: reference }
++    shell.setDraft('@a')
++    shell.insertReference(insert, { start: 0, end: 2, draftRev: shell.snapshot.draftRev })
++    const originalKey = shell.editor.getEditorState().read(() => $nodesOfType(ReferenceChipNode)[0]!.getKey())
++    shell.submit()
++    await vi.waitFor(() => expect(sink).toHaveBeenCalledTimes(1))
++    shell.editor.update(() => {
++      const node = $nodesOfType(ReferenceChipNode)[0]!
++      if (change === 'replacement') node.replace($createReferenceChipNode(insert))
++      else if (change === 'appended-duplicate') node.insertAfter($createReferenceChipNode(insert))
++      else node.setStructuredReference({ ...reference, version: 'v2', digest: 'proof2', prompt: { ...reference.prompt, source: { ...source, version: 'v2', digest: 'proof2' } } })
++    }, { discrete: true })
++    settle({ kind: 'success' })
++    await new Promise(resolve => setTimeout(resolve, 0))
++    expect(shell.snapshot.occurrences).toHaveLength(1)
++    expect(shell.snapshot.draft).toContain('unchanged text')
++    expect(shell.snapshot.occurrences[0]!.structured?.version).toBe(change === 'proof-refresh' ? 'v2' : 'v1')
++    const finalKey = shell.editor.getEditorState().read(() => $nodesOfType(ReferenceChipNode)[0]!.getKey())
++    if (change !== 'proof-refresh') expect(finalKey).not.toBe(originalKey)
++    else expect(finalKey).toBe(originalKey)
++    shell.dispose()
++  })
++
++
++  it.each(['success', 'error'] as const)('consumes submitted chips only on %s and preserves in-flight edits', async kind => {
++    let acknowledge!: (outcome: SubmitOutcome) => void
++    const sink = vi.fn(() => new Promise<SubmitOutcome>(resolve => { acknowledge = resolve }))
++    const shell = new SessionInputShell({ actx: {} as Context, defaultSink: sink, commandImages })
++    const source = { owner: 'dsh.local', ref: 'file:one', version: 'v1', scope: 'file/full', digest: 'proof' }
++    const editable = { ...source, id: 'editable', kind: 'file' as const, intent: 'content' as const, label: 'One', prompt: { version: 1 as const, body: 'old', originalBody: 'old', source } }
++    const image = { id: 'image', owner: 'dsh.local', ref: 'image:one', version: 'v1', scope: 'image/full', digest: 'image-proof', kind: 'image' as const, intent: 'content' as const, label: 'Image' }
++    shell.setDraft('@a @b')
++    shell.insertReference({ source: 'reference', ref: image.ref, label: 'Image', clipboardText: '@Image', structured: image }, { start: 3, end: 5, draftRev: shell.snapshot.draftRev })
++    shell.insertReference({ source: 'reference', ref: editable.ref, label: 'One', clipboardText: 'old', structured: editable }, { start: 0, end: 2, draftRev: shell.snapshot.draftRev })
++    shell.submit()
++    await vi.waitFor(() => expect(sink).toHaveBeenCalledTimes(1))
++    shell.editor.update(() => {
++      $nodesOfType(ReferenceChipNode).find(node => node.getStructured()?.id === 'editable')!.setEditablePromptBody('new edit')
++      $getRoot().selectEnd().insertText(' new text')
++    }, { discrete: true })
++    acknowledge(kind === 'success' ? { kind } : { kind, text: 'synthetic rejection' })
++    if (kind === 'error') {
++      await vi.waitFor(() => expect(shell.notices.getSnapshot()).toMatchObject({ level: 'error', text: 'synthetic rejection' }))
++      expect(shell.snapshot.draft).toContain('new edit')
++      expect(shell.snapshot.occurrences).toHaveLength(2)
++      expect(shell.snapshot.draft).toContain('@Image')
++      shell.dispose()
++      return
++    }
++    await vi.waitFor(() => expect(shell.snapshot.occurrences).toHaveLength(1))
++    expect(shell.snapshot.occurrences[0]!.structured?.id).toBe('editable')
++    expect(shell.snapshot.draft).toContain('new edit')
++    expect(shell.snapshot.draft).toContain('new text')
++    expect(shell.snapshot.draft).not.toContain('@Image')
++    shell.dispose()
++  })
+   it('loads a refresh candidate through the owner seam without mutating the current draft', async () => {
+     const original = { id: 'refreshable', owner: 'dsh.local', ref: 'file-opaque', kind: 'file' as const, intent: 'content' as const, version: 'v1', digest: 'old', scope: 'file/full', label: 'notes.ts', projection: 'editable-prompt' as const, prompt: { version: 1 as const, body: 'current edit', originalBody: 'captured', source: { owner: 'dsh.local', ref: 'file-opaque', version: 'v1', scope: 'file/full', digest: 'old' } } }
+     const refreshed = { ...original, version: 'v2', digest: 'new', prompt: { version: 1 as const, body: 'new source', originalBody: 'new source', source: { owner: 'dsh.local', ref: 'file-opaque', version: 'v2', scope: 'file/full', digest: 'new' } } }

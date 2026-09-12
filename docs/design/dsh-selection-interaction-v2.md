@@ -1,3 +1,5 @@
+> 已退役：用户明确取消选区工具条/批注插件。不要安装或重新启用。bundle apply 保持空操作以兼容旧配置；下文为历史资料，不是继续开发或安装指引。原生文本选中、已有草稿和引用保留。
+
 # DSH Web 统一选区交互 V2
 
 > 状态：设计完成，待按 `openspec/changes/archive/2026-09-03-dsh-selection-interaction-v2/` 实现。

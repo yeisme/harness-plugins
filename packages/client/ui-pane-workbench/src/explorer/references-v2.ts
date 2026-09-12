@@ -100,6 +100,12 @@ export interface ComposerReferenceBridgeSnapshotV1 {
   readonly features?: ComposerReferenceBridgeFeaturesV1
 }
 
+/** An explicitly addressed draft snapshot. Reading it never activates the conversation. */
+export interface ComposerReferenceTargetSnapshotV1 {
+  readonly target: ComposerReferenceTargetV2
+  readonly references: readonly ComposerReferenceV2[]
+}
+
 export interface ComposerReferenceSelectionSourceV1 {
   readonly owner: string
   readonly ref: string
@@ -114,7 +120,7 @@ export type ComposerReferenceChooseTargetResultV1 =
   | { readonly status: 'cancelled' }
   | { readonly status: 'unavailable'; readonly reason: string }
 
-/** Live host bridge consumed structurally by the selection-annotation plugin. */
+/** Live host bridge for structured composer references. */
 export interface ComposerReferenceBridgeV1 {
   snapshot(): ComposerReferenceBridgeSnapshotV1
   subscribe(listener: () => void): () => void
@@ -126,6 +132,11 @@ export interface ComposerReferenceBridgeV1 {
   }): Promise<{ readonly status: 'available'; readonly reference: ComposerReferenceV2 } | { readonly status: 'unavailable'; readonly reason: string }>
   /** Host-owned picker / conversation creation; the plugin never builds a session list. */
   chooseTarget?(signal?: AbortSignal): Promise<ComposerReferenceChooseTargetResultV1>
+  /** Resolve one existing conversation's draft without changing shell focus. */
+  targetFor?(conversationId: string, signal?: AbortSignal): Promise<
+    | { readonly status: 'available'; readonly snapshot: ComposerReferenceTargetSnapshotV1 }
+    | { readonly status: 'unavailable'; readonly reason: string }
+  >
   /** Prepare owner content privately; raw body never crosses a Window event. */
   prepareReference?(input: {
     readonly target: ComposerReferenceTargetV2

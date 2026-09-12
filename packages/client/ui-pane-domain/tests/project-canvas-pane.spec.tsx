@@ -75,6 +75,7 @@ async function mountView(component: () => React.ReactNode, container: HTMLElemen
 
 describe('project canvas pane registration', () => {
   beforeEach(() => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     class TestResizeObserver { observe() {} disconnect() {} unobserve() {} }
     vi.stubGlobal('ResizeObserver', TestResizeObserver)
   })

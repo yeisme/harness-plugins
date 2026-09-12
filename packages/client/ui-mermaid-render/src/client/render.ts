@@ -30,25 +30,30 @@ export function createMermaidRenderer(): MermaidRenderer {
   let mod: typeof import('mermaid') | undefined
   let theme: MermaidTheme = 'default'
   let seq = 0
+  let generation = 0
 
   async function ensure(): Promise<typeof import('mermaid')> {
     if (mod === undefined) {
       mod = await import('mermaid')
-      mod.default.initialize({ startOnLoad: false, securityLevel: 'strict', theme })
+      mod.default.initialize({ startOnLoad: false, securityLevel: 'strict', theme, htmlLabels: false, flowchart: { htmlLabels: false } })
     }
     return mod
   }
 
   async function render(code: string): Promise<string> {
-    const key = hashOf(code)
+    const epoch = generation
+    // Cache identity must include the complete source, not a lossy hash.
+    const key = JSON.stringify([epoch, code])
     const cached = cache.get(key)
     if (cached !== undefined) return cached
     const pending = inflight.get(key)
     if (pending !== undefined) return pending
     const task = (async () => {
       const m = await ensure()
+      if (generation !== epoch) throw new Error('Mermaid render superseded')
       seq += 1
-      const { svg } = await m.default.render(`dsh-mermaid-${key}-${seq}`, code)
+      const { svg } = await m.default.render(`dsh-mermaid-${hashOf(code)}-${seq}`, code)
+      if (generation !== epoch) throw new Error('Mermaid render superseded')
       const clean = sanitizeMermaidSvg(svg)
       cache.set(key, clean)
       if (cache.size > CACHE_LIMIT) {
@@ -61,18 +66,21 @@ export function createMermaidRenderer(): MermaidRenderer {
     try {
       return await task
     } finally {
-      inflight.delete(key)
+      if (inflight.get(key) === task) inflight.delete(key)
     }
   }
 
   function setTheme(next: MermaidTheme): void {
     if (next === theme) return
     theme = next
+    generation += 1
     cache.clear()
-    if (mod !== undefined) mod.default.initialize({ startOnLoad: false, securityLevel: 'strict', theme })
+    inflight.clear()
+    if (mod !== undefined) mod.default.initialize({ startOnLoad: false, securityLevel: 'strict', theme, htmlLabels: false, flowchart: { htmlLabels: false } })
   }
 
   function dispose(): void {
+    generation += 1
     cache.clear()
     inflight.clear()
     mod = undefined

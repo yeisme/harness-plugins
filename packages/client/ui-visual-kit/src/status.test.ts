@@ -12,6 +12,8 @@ describe('statusTone', () => {
     expect(statusTone('contract_mismatch')).toBe('critical')
     expect(statusTone('unknown')).toBe('critical')
     expect(statusTone('offline')).toBe('critical')
+    expect(statusTone('blocked')).toBe('critical')
+    expect(statusTone('needs_contract')).toBe('warn')
   })
 
   it('大小写不敏感', () => {

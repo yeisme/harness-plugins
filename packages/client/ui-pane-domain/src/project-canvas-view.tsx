@@ -2,15 +2,17 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactN
 import { ReactFlow, ReactFlowProvider, Background, Controls, MiniMap, Handle, Position, NodeResizer,
   useReactFlow, type Node, type NodeProps, type NodeChange, type Connection } from '@xyflow/react'
 import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
-import { Surface, SurfaceActionBar, SurfaceState } from '@yeisme/dsh-client-ui-surface'
+import { Surface, SurfaceActionBar, SurfaceContextBar, SurfaceState } from '@yeisme/dsh-client-ui-surface'
 import { buildPanelStyles } from '@yeisme/dsh-client-ui-visual-kit'
-import type { ArtifactRefV1, PaneActionDescriptorV1, ProjectCanvasNode } from '@yeisme/dsh-pane-protocol'
+import type { ArtifactRefV1, PaneActionDescriptorV1, ProjectCanvasDocument, ProjectCanvasNode } from '@yeisme/dsh-pane-protocol'
 import { ProjectCanvasController } from './project-canvas-controller.js'
-import { searchProjectCanvas } from './project-canvas.js'
+import { searchProjectCanvas, orderProjectCanvasPositions } from './project-canvas.js'
 import { inspectCanvasRunScope, type CanvasRunScope } from './project-canvas-workflow.js'
 import flowCss from '@xyflow/react/dist/base.css?inline'
 
 export const canvasZh = {
+  inputReview: '输入已变化，需审阅',
+  externalInputChanged: '上游输入已变化；本次仍引用原选定成果版本，请确认。',
   title: '项目画布', create: '创建画布', draft: '文字草稿', group: '分组框', material: '素材引用', operation: '操作步骤', result: '成果引用',
   save: '保存', clean: '已确认保存', dirty: '未保存', saving: '保存中', unknown: '保存结果待核对', conflict: '版本冲突：草稿已保留', error: '保存失败：草稿已保留',
   reconcile: '核对保存', reload: '重新读取', reapply: '在最新版上重存', discard: '丢弃未保存修改并重新读取？', cancel: '取消', confirm: '确认', close: '关闭',
@@ -25,6 +27,8 @@ export const canvasZh = {
 } as const
 export type CanvasTextKey = keyof typeof canvasZh
 export const canvasEn: Record<CanvasTextKey, string> = {
+  inputReview: 'Inputs changed; review required',
+  externalInputChanged: 'Upstream inputs changed; this scope still references the previously selected output version. Review it before running.',
   title: 'Project canvas', create: 'Create canvas', draft: 'Text draft', group: 'Group', material: 'Material reference', operation: 'Operation', result: 'Result reference',
   save: 'Save', clean: 'Save confirmed', dirty: 'Unsaved', saving: 'Saving', unknown: 'Save outcome unknown', conflict: 'Version conflict: draft retained', error: 'Save failed: draft retained',
   reconcile: 'Reconcile save', reload: 'Reload', reapply: 'Reapply on latest', discard: 'Discard unsaved changes and reload?', cancel: 'Cancel', confirm: 'Confirm', close: 'Close',
@@ -93,10 +97,11 @@ function CanvasNodeView({ data, selected }: NodeProps<CanvasFlowNode>): ReactNod
   const { model, controller, t } = data
   const artifact = model.kind === 'material' || model.kind === 'result' ? model.artifact : model.kind === 'operation' ? model.selectedArtifact : undefined
   return <div className="canvas-node" data-kind={model.kind} data-selected={selected}>
-    <NodeResizer isVisible={selected} minWidth={120} minHeight={80} onResizeStart={() => controller.beginGesture()} onResizeEnd={() => controller.endGesture()} />
+    <NodeResizer isVisible={selected} minWidth={120} minHeight={80} onResizeStart={() => controller.beginGesture()} onResizeEnd={() => setTimeout(() => controller.endGesture(), 50)} />
     {model.kind !== 'group' && <Handle type="target" position={Position.Left} />}
     {model.kind !== 'group' && <Handle type="source" position={Position.Right} />}
     <strong>{model.title}</strong>
+    {model.kind === 'operation' && model.inputReviewRequired && <span className="vk-muted" data-input-review-required>{t('inputReview')}</span>}
     {model.kind === 'draft' && <label className="ys-field vk-field"><textarea className="nodrag nowheel" aria-label={t('draft')} value={model.text} onChange={event => controller.edit({ type: 'text', id: model.id, text: event.target.value })} /></label>}
     {artifact !== undefined && <Media artifact={artifact} resolve={data.resolveMedia} t={t} />}
     {model.kind === 'operation' && <div className="vk-muted">{model.owner}</div>}
@@ -117,9 +122,12 @@ function CanvasContent({ controller, artifacts = [], actions = [], resolveMedia,
   const [purpose, setPurpose] = useState('reference-image')
   const [discard, setDiscard] = useState(false)
   const [runScope, setRunScope] = useState<CanvasRunScope['kind']>('branch')
-  const [inspection, setInspection] = useState<ReturnType<typeof inspectCanvasRunScope>>()
+  const flowGesture = useRef(false)
+  const [preview, setPreview] = useState<{ document: ProjectCanvasDocument; selection: string; scope: CanvasRunScope['kind']; result: ReturnType<typeof inspectCanvasRunScope> }>()
   const editor = state.editor
   const document = editor?.document
+  const selectionKey = JSON.stringify(editor?.selection ?? [])
+  const inspection = preview?.document === document && preview?.selection === selectionKey && preview?.scope === runScope ? preview.result : undefined
   const choose = (ids: string[]) => controller.edit({ type: 'select', ids })
   const id = () => `node-${crypto.randomUUID()}`
   const add = (kind: 'draft' | 'group' | 'material' | 'result' | 'operation', item?: ArtifactRefV1 | PaneActionDescriptorV1) => {
@@ -141,7 +149,13 @@ function CanvasContent({ controller, artifacts = [], actions = [], resolveMedia,
   }), [document, editor?.selection, controller, t, resolveMedia])
   const nodeChanges = (changes: NodeChange<CanvasFlowNode>[]) => {
     const selected = new Set(controller.getSnapshot().editor?.selection ?? [])
-    for (const change of changes) {
+    const currentDocument = controller.getSnapshot().editor?.document
+    const gestureChanges = flowGesture.current ? changes : changes.filter(change => change.type !== 'position' && change.type !== 'dimensions')
+    const ordered = currentDocument === undefined ? gestureChanges : [
+      ...gestureChanges.filter(change => change.type !== 'position'),
+      ...orderProjectCanvasPositions(currentDocument, gestureChanges.filter(change => change.type === 'position')),
+    ]
+    for (const change of ordered) {
       if (!('id' in change)) continue
       const current = controller.getSnapshot().editor?.document.nodes.find(node => node.id === change.id)
       if (change.type === 'select') { if (change.selected) selected.add(change.id); else selected.delete(change.id) }
@@ -162,6 +176,10 @@ function CanvasContent({ controller, artifacts = [], actions = [], resolveMedia,
   const selected = document?.nodes.find(node => node.id === editor?.selection[0])
   const matches = document === undefined ? [] : searchProjectCanvas(document, query)
   const fit = () => void flow.fitView({ nodes: editor?.selection.length ? editor.selection.map(id => ({ id })) : undefined, duration: 0, padding: 0.2 })
+  // React Flow may emit the final position/camera change after its stop
+  // callback. End the history gesture in a microtask so the complete drag is
+  // recorded as one undo step.
+  const finishGesture = () => setTimeout(() => controller.endGesture(), 50)
   if (state.status !== 'ready' || editor === undefined || document === undefined) return <Surface kind="workspace" data-project-canvas="true"><style>{styles}</style><SurfaceState phase={state.status === 'loading' ? 'loading' : state.status === 'missing' ? 'empty' : 'error'} title={t(state.status === 'loading' ? 'loading' : state.status === 'error' || state.status === 'ready' ? 'invalid' : state.status)} />{state.status === 'missing' ? <Button className="vk-btn" onClick={() => controller.createDraft()}>{t('create')}</Button> : <Button className="vk-btn" onClick={() => void controller.load()}>{t('reload')}</Button>}</Surface>
   return <Surface kind="workspace" data-project-canvas="true" onKeyDown={event => {
     if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable=true]')) return
@@ -188,6 +206,11 @@ function CanvasContent({ controller, artifacts = [], actions = [], resolveMedia,
     if (event.key === 'Delete' && editor.selection.length) { event.preventDefault(); controller.edit({ type: 'remove', ids: editor.selection }) }
   }}>
     <style>{flowCss}</style><style>{styles}</style>
+    <SurfaceContextBar
+      title={t('title')}
+      context={document.scope.projectRef}
+      status={<span role="status">{t(state.saveStatus)}</span>}
+    />
     <SurfaceActionBar>
       <Button className="vk-btn" onClick={() => add('draft')}>{t('draft')}</Button><Button className="vk-btn" onClick={() => add('group')}>{t('group')}</Button>
       <Button className="vk-btn" disabled={!artifacts.length} title={!artifacts.length ? t('noArtifacts') : undefined} onClick={() => setPicker('material')}>{t('material')}</Button>
@@ -199,16 +222,15 @@ function CanvasContent({ controller, artifacts = [], actions = [], resolveMedia,
       {state.saveStatus === 'unknown' && <Button className="vk-btn" onClick={() => void controller.reconcile()}>{t('reconcile')}</Button>}
       {state.saveStatus === 'conflict' && <Button className="vk-btn" onClick={() => controller.resolveConflict('reapply')}>{t('reapply')}</Button>}
       <Button className="vk-btn" disabled={state.saveStatus === 'saving' || state.saveStatus === 'unknown'} onClick={() => state.dirty ? setDiscard(true) : void controller.load()}>{t('reload')}</Button>
-      <span role="status">{t(state.saveStatus)}</span>
     </SurfaceActionBar>
     {message && <div role="alert">{message}</div>}
     <div className="canvas-layout"><div className="canvas-stage">
       <ReactFlow<CanvasFlowNode> nodes={nodes} nodeTypes={nodeTypes} edges={document.edges.map(edge => ({ id: edge.id, source: edge.source, target: edge.target, label: edge.kind === 'reference' ? edge.label ?? t('reference') : edge.purpose, className: edge.kind === 'reference' ? 'canvas-reference-edge' : undefined }))}
         onNodesChange={nodeChanges} onEdgesChange={changes => { for (const change of changes) if (change.type === 'remove') controller.edit({ type: 'disconnect', id: change.id }) }}
-        onNodeDragStart={() => controller.beginGesture()} onNodeDragStop={() => controller.endGesture()}
+        onNodeDragStart={() => { flowGesture.current = true; controller.beginGesture() }} onNodeDragStop={() => { finishGesture(); setTimeout(() => { flowGesture.current = false }, 50) }}
         onNodeDoubleClick={(_, node) => { const m = node.data.model; if (m.kind === 'material' || m.kind === 'result') openProfessional?.(m.artifact.owner, m.artifact); else if (m.kind === 'operation') openProfessional?.(m.owner) }}
         onConnect={value => { if (edgeKind === 'reference') controller.edit({ type: 'connect', edge: { id: `edge-${crypto.randomUUID()}`, kind: 'reference', source: value.source, target: value.target } }); else { setConnection(value); setInput('') } }}
-        viewport={document.camera} onViewportChange={camera => controller.edit({ type: 'camera', camera })} onMoveStart={() => controller.beginGesture()} onMoveEnd={() => controller.endGesture()}
+        viewport={document.camera} onViewportChange={camera => controller.edit({ type: 'camera', camera })} onMoveStart={() => controller.beginGesture()} onMoveEnd={finishGesture}
         onlyRenderVisibleElements minZoom={0.05} maxZoom={4} deleteKeyCode={null}>
         <Background /><Controls showInteractive={false} /><MiniMap pannable zoomable />
       </ReactFlow>
@@ -228,8 +250,8 @@ function CanvasContent({ controller, artifacts = [], actions = [], resolveMedia,
         else if (selected.kind === 'operation') openProfessional?.(selected.owner)
       }}>{t('open')}</Button>}
       <label className="ys-field vk-field">{t('inspect')}<select value={runScope} onChange={event => setRunScope(event.target.value as CanvasRunScope['kind'])}><option value="node">{t('one')}</option><option value="branch">{t('branch')}</option><option value="all">{t('all')}</option></select></label>
-      <Button className="vk-btn" onClick={() => setInspection(inspectCanvasRunScope(document, runScope === 'all' ? { kind: 'all' } : runScope === 'node' ? { kind: 'node', nodeId: editor.selection[0] ?? '' } : { kind: 'branch', nodeIds: editor.selection }))}>{t('inspect')}</Button>
-      {inspection && <div role="status"><p>{t('noExecution')}</p><p>{inspection.blockers.length ? t('blockers') : t('noBlockers')}</p><ul>{inspection.blockers.map((item, i) => <li key={i}>{item.code} · {item.nodeId}</li>)}</ul></div>}
+      <Button className="vk-btn" onClick={() => setPreview({ document, selection: selectionKey, scope: runScope, result: inspectCanvasRunScope(document, runScope === 'all' ? { kind: 'all' } : runScope === 'node' ? { kind: 'node', nodeId: editor.selection[0] ?? '' } : { kind: 'branch', nodeIds: editor.selection }) })}>{t('inspect')}</Button>
+      {inspection && <div role="status"><p>{t('noExecution')}</p><p>{inspection.blockers.length ? t('blockers') : t('noBlockers')}</p><ul>{inspection.notices.map(item => <li key={item.edgeId}>{t('externalInputChanged')} · {item.nodeId}</li>)}{inspection.blockers.map((item, i) => <li key={i}>{item.code} · {item.nodeId}</li>)}</ul></div>}
     </aside></div>
     <Modal open={picker !== undefined} onClose={() => setPicker(undefined)} title={picker ? t(picker) : t('title')} closeLabel={t('close')}><ul className="canvas-list">{picker === 'operation' ? actions.map(action => <li key={action.descriptorRef}><Button className="vk-btn" onClick={() => add('operation', action)}>{action.label}</Button></li>) : artifacts.map(artifact => <li key={`${artifact.owner}:${artifact.ref}:${artifact.version}`}><Button className="vk-btn" onClick={() => add(picker === 'result' ? 'result' : 'material', artifact)}>{artifact.title} · {artifact.version}</Button></li>)}</ul></Modal>
     <Modal open={connection !== undefined} onClose={() => setConnection(undefined)} title={t('connect')} closeLabel={t('close')} footer={<Button className="vk-btn" disabled={!input} onClick={() => {

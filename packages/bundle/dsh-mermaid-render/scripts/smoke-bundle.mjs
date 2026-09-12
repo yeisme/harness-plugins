@@ -10,6 +10,8 @@ const zero = () => ({ x: 0, y: 0, width: 10, height: 10 })
 window.SVGElement.prototype.getBBox = zero
 // @ts-expect-error jsdom 缺
 window.SVGElement.prototype.getTotalLength = () => 100
+// Layout-only shim: native SVG text is measured by the real browser gate.
+window.SVGElement.prototype.getComputedTextLength = function () { return (this.textContent?.length ?? 0) * 8 }
 
 let entry = null
 window.__ModuleLoader__ = {
@@ -23,6 +25,7 @@ globalThis.localStorage = window.localStorage
 
 globalThis.DOMParser = window.DOMParser
 globalThis.CSSStyleSheet = window.CSSStyleSheet
+globalThis.CSSStyleRule = window.CSSStyleRule
 globalThis.StyleSheet = window.StyleSheet
 globalThis.Event = window.Event
 globalThis.CustomEvent = window.CustomEvent
@@ -54,7 +57,7 @@ pre.append(code); card.append(head, pre); window.document.body.append(card)
 await new Promise((r) => setTimeout(r, 5000))
 const fig = window.document.querySelector('figure[data-dsh-mermaid-figure]')
 console.log('figure is-failed =', fig?.classList.contains('is-failed'))
-console.log('status text =', fig?.querySelector('.dsh-mermaid-status')?.textContent?.slice(0, 160))
+console.log('status text =', fig?.textContent?.slice(-400))
 process.on('unhandledRejection', (e) => console.log('unhandledRejection:', String(e).slice(0, 200)))
 const svg = fig?.querySelector('svg') ?? null
 console.log('figure =', fig ? 'yes' : 'NO')
@@ -62,5 +65,6 @@ console.log('svg =', svg ? `yes viewBox=${svg.getAttribute('viewBox')}` : 'NO')
 console.log('card hidden =', card.style.display === 'none')
 console.log('buttons =', fig ? fig.querySelectorAll('button').length : 0)
 const pass = styleOk && fig && svg && card.style.display === 'none'
+  && svg.textContent.includes('用户提问') && svg.textContent.includes('DSH 回答')
 console.log(pass ? 'BUNDLE SMOKE: PASS' : 'BUNDLE SMOKE: FAIL')
 process.exit(pass ? 0 : 1)

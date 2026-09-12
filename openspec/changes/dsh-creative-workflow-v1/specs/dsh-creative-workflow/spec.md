@@ -69,3 +69,17 @@ Confirmation SHALL reference the previewed draft revision and fixed plan; editin
 #### Scenario: 预览后变更
 - **WHEN** a draft changes before confirmation
 - **THEN** the client requests a fresh preview and does not submit the previous plan
+### Requirement: 重开界面恢复原查询身份
+Host SHALL 在可恢复操作发送前持久保存原请求键、安全引用及上下文，不保存领域正文、动作参数或执行事实；恢复后 SHALL 只向 owner 查询，不重新执行。
+
+#### Scenario: 存储确认丢失或重复发送
+- **WHEN** 请求身份可能已保存但确认丢失，或新界面尝试同一 owner/action/target
+- **THEN** 系统 SHALL 保留原身份并要求查询，不覆盖原键；没有持久确认时不得调用 owner dispatch
+
+#### Scenario: 会话与身份边界
+- **WHEN** 同一身份跨会话打开同一项目，或不同身份打开相同项目
+- **THEN** 同身份 SHALL 可找到原查询身份，其他身份 SHALL 无法读取；查询时重新核对当前授权，不恢复原执行权限
+
+#### Scenario: 容量与清理
+- **WHEN** 恢复索引达到容量，或清理未收到 owner 确认的记录
+- **THEN** 系统 SHALL 阻止新增而不淘汰旧记录，仅允许可信 Host 在已验证 owner 结果后清理完整匹配的原记录

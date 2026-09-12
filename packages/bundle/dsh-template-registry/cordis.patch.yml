@@ -1,0 +1,3 @@
+- insert:
+    - id: dsh-template-registry
+      name: '@yeisme/dsh-template-registry-bundle'

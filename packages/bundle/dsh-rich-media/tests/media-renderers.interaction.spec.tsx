@@ -10,12 +10,53 @@ const image: MediaRefV1 = { owner: 'eikona', kind: 'image', ref: 'image:one', ve
 const video: MediaRefV1 = { owner: 'eikona', kind: 'video', ref: 'video:one', version: '1', mediaType: 'video/mp4', title: 'Clip', capabilities: ['play'] }
 
 describe('rich media interactions', () => {
+  it('keeps one pointer owner and ignores canceled or foreign gesture completion', () => {
+    const onSelectionChange = vi.fn()
+    render(<MediaImageRenderer media={image} url="https://media.example/frame.png" selection={{ x: 0, y: 0, width: 1, height: 1 }} onSelectionChange={onSelectionChange} />)
+    const stage = document.querySelector('[data-dsh-media-image-selection-stage]') as HTMLElement
+    vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 100, bottom: 100, width: 100, height: 100, toJSON: () => ({}) })
+    fireEvent.pointerDown(stage, { isPrimary: true, pointerId: 1, clientX: 10, clientY: 10 })
+    fireEvent.pointerDown(stage, { isPrimary: false, pointerId: 2, clientX: 40, clientY: 40 })
+    fireEvent.pointerCancel(stage, { pointerId: 2 })
+    fireEvent.pointerUp(stage, { pointerId: 2, clientX: 80, clientY: 80 })
+    expect(onSelectionChange).not.toHaveBeenCalled()
+    fireEvent.pointerUp(stage, { pointerId: 1, clientX: 60, clientY: 70 })
+    expect(onSelectionChange).toHaveBeenCalledExactlyOnceWith({ x: 0.1, y: 0.1, width: 0.5, height: 0.6 })
+    fireEvent.pointerDown(stage, { isPrimary: true, pointerId: 3, clientX: 20, clientY: 20 })
+    fireEvent.pointerCancel(stage, { pointerId: 3 })
+    fireEvent.pointerUp(stage, { pointerId: 3, clientX: 90, clientY: 90 })
+    expect(onSelectionChange).toHaveBeenCalledTimes(1)
+  })
+
+  it('switches from selection to zoom inspection and back without losing the owner region', () => {
+    const onSelectionChange = vi.fn()
+    render(<MediaImageRenderer media={image} url="https://media.example/frame.png" selection={{ x: 0.25, y: 0.25, width: 0.5, height: 0.5 }} onSelectionChange={onSelectionChange} />)
+    const zoom = screen.getByRole('button', { name: 'Zoom in' }) as HTMLButtonElement
+    expect(zoom.disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect image' }))
+    expect(zoom.disabled).toBe(false)
+    fireEvent.click(zoom)
+    expect(document.querySelector('[data-dsh-media-image]')?.getAttribute('data-zoom')).toBe('1.5')
+    expect(document.querySelector('[data-dsh-media-image-selection]')).toBeNull()
+    const stage = document.querySelector('[data-dsh-media-image-selection-stage]') as HTMLElement
+    vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 100, width: 200, height: 100, toJSON: () => ({}) })
+    fireEvent.pointerDown(stage, { isPrimary: true, clientX: 20, clientY: 20 })
+    fireEvent.pointerUp(stage, { clientX: 80, clientY: 80 })
+    expect(onSelectionChange).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Select region' }))
+    expect(document.querySelector('[data-dsh-media-image]')?.getAttribute('data-zoom')).toBe('1')
+    expect(stage.querySelector('img')?.style.transform).toBe('none')
+    expect(document.querySelector('[data-dsh-media-image-selection]')?.getAttribute('data-selection-width')).toBe('0.5')
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect image' }))
+    expect(document.querySelector('[data-dsh-media-image]')?.getAttribute('data-zoom')).toBe('1.5')
+  })
+
   it('maps a drag against the rendered image rectangle and locks transforms while selecting', () => {
     const onSelectionChange = vi.fn()
     render(<MediaImageRenderer media={image} url="https://media.example/frame.png" selection={{ x: 0, y: 0, width: 1, height: 1 }} onSelectionChange={onSelectionChange} />)
     const stage = document.querySelector('[data-dsh-media-image-selection-stage]') as HTMLElement
     vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({ x: 50, y: 25, left: 50, top: 25, right: 450, bottom: 225, width: 400, height: 200, toJSON: () => ({}) })
-    fireEvent.pointerDown(stage, { clientX: 150, clientY: 75, pointerId: 1 })
+    fireEvent.pointerDown(stage, { isPrimary: true, clientX: 150, clientY: 75, pointerId: 1 })
     fireEvent.pointerUp(stage, { clientX: 350, clientY: 175, pointerId: 1 })
     expect(onSelectionChange).toHaveBeenCalledWith({ x: 0.25, y: 0.25, width: 0.5, height: 0.5 })
     expect(stage.dataset.selectionTransformLocked).toBe('true')

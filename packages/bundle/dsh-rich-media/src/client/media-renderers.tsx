@@ -45,6 +45,16 @@ export interface MediaImageRendererLabels {
   metadata?: string
   selection?: string
   cropPreview?: string
+  inspectMode?: string
+  selectMode?: string
+  interactionMode?: string
+  selectionHint?: string
+  panLeft?: string
+  panRight?: string
+  backgroundDark?: string
+  backgroundLight?: string
+  backgroundChecker?: string
+  zoom?: string
 }
 
 const DEFAULT_IMAGE_LABELS: Required<MediaImageRendererLabels> = {
@@ -61,6 +71,16 @@ const DEFAULT_IMAGE_LABELS: Required<MediaImageRendererLabels> = {
   metadata: 'Metadata',
   selection: 'Selected image region',
   cropPreview: 'Crop preview',
+  inspectMode: 'Inspect image',
+  selectMode: 'Select region',
+  interactionMode: 'Image interaction',
+  selectionHint: 'Switch to image inspection to zoom, pan, or rotate.',
+  panLeft: 'Pan left',
+  panRight: 'Pan right',
+  backgroundDark: 'dark',
+  backgroundLight: 'light',
+  backgroundChecker: 'checker',
+  zoom: 'Zoom',
 }
 
 export interface MediaImageSelectionV1 {
@@ -76,17 +96,18 @@ export function MediaImageRenderer({
 }: { media: MediaRefV1; url: string | undefined; labels?: MediaImageRendererLabels | undefined; selection?: MediaImageSelectionV1 | undefined; onSelectionChange?: ((selection: MediaImageSelectionV1) => void) | undefined }) {
   const text = { ...DEFAULT_IMAGE_LABELS, ...labels }
   const [mode, setMode] = useState<ImageFitMode>('fit')
+  const [selectionMode, setSelectionMode] = useState(true)
   const [rotation, setRotation] = useState<ImageRotation>(0)
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [animationAllowed, setAnimationAllowed] = useState(false)
   const [background, setBackground] = useState<'dark' | 'light' | 'checker'>('dark')
-  const dragStart = useRef<{ readonly x: number; readonly y: number } | undefined>(undefined)
+  const dragStart = useRef<{ readonly x: number; readonly y: number; readonly pointerId: number } | undefined>(undefined)
   const pixels = pixelsOf(media)
   const overBudget = pixels !== undefined && pixels > IMAGE_PIXEL_BUDGET
   const animated = media.mediaType === 'image/gif' || media.mediaType === 'image/apng'
   const holdAnimation = animated && prefersReducedMotion() && !animationAllowed
-  const selecting = onSelectionChange !== undefined
+  const selecting = onSelectionChange !== undefined && selectionMode
   const objectFit = selecting ? 'contain' : mode === 'fill' ? 'cover' : mode === 'fit' ? 'contain' : 'none'
   const pointOf = (event: PointerEvent<HTMLDivElement>): { readonly x: number; readonly y: number } | undefined => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -98,9 +119,10 @@ export function MediaImageRenderer({
   }
   const finishSelection = (event: PointerEvent<HTMLDivElement>): void => {
     const start = dragStart.current
+    if (start === undefined || start.pointerId !== event.pointerId) return
     const end = pointOf(event)
     dragStart.current = undefined
-    if (start === undefined || end === undefined || onSelectionChange === undefined) return
+    if (!selecting || start === undefined || end === undefined || onSelectionChange === undefined) return
     const round = (value: number): number => Math.round(value * 1_000_000) / 1_000_000
     const next = {
       x: round(Math.min(start.x, end.x)),
@@ -112,7 +134,11 @@ export function MediaImageRenderer({
     onSelectionChange(next)
   }
   return (
-    <figure data-dsh-media-image data-fit={mode} data-rotation={rotation} data-background={background} style={{ display: 'grid', gap: 6, margin: 0 }}>
+    <figure data-dsh-media-image data-interaction-mode={selecting ? 'select' : 'inspect'} data-zoom={selecting ? 1 : zoom} data-fit={mode} data-rotation={rotation} data-background={background} style={{ display: 'grid', gap: 6, margin: 0 }}>
+      {onSelectionChange !== undefined && <div role="group" aria-label={text.interactionMode} style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <button className="vk-btn" type="button" aria-pressed={!selecting} onClick={() => { dragStart.current = undefined; setSelectionMode(false) }}>{text.inspectMode}</button>
+        <button className="vk-btn" type="button" aria-pressed={selecting} onClick={() => { dragStart.current = undefined; setSelectionMode(true) }}>{text.selectMode}</button>
+      </div>}
       {url !== undefined && !overBudget && (
         <div data-dsh-media-image-canvas style={{ overflow: 'hidden', minHeight: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', background: background === 'light' ? '#f4f4f5' : background === 'checker' ? 'repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50% / 16px 16px' : '#111' }}>
           <div
@@ -120,8 +146,10 @@ export function MediaImageRenderer({
             aria-label={selecting ? text.selection : undefined}
             data-dsh-media-image-selection-stage
             data-selection-transform-locked={selecting || undefined}
-            onPointerDown={event => { const point = pointOf(event); if (point !== undefined) dragStart.current = point }}
+            onPointerDown={event => { if (!selecting || dragStart.current !== undefined || event.button > 0 || event.isPrimary === false) return; const point = pointOf(event); if (point !== undefined) { dragStart.current = { ...point, pointerId: event.pointerId }; event.currentTarget.setPointerCapture?.(event.pointerId) } }}
             onPointerUp={finishSelection}
+            onPointerCancel={event => { if (dragStart.current?.pointerId === event.pointerId) dragStart.current = undefined }}
+            onLostPointerCapture={event => { if (dragStart.current?.pointerId === event.pointerId) dragStart.current = undefined }}
             style={{ position: 'relative', display: selecting ? 'inline-block' : 'block', width: selecting ? 'fit-content' : '100%', maxWidth: '100%', lineHeight: 0, touchAction: selecting ? 'none' : undefined, cursor: selecting ? 'crosshair' : undefined }}
           >
             <img
@@ -129,12 +157,13 @@ export function MediaImageRenderer({
               alt={media.title || text.noDescription}
               loading="lazy"
               decoding="async"
+              draggable={selecting ? false : undefined}
               data-hold-animation={holdAnimation || undefined}
               style={selecting
                 ? { display: 'block', width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: 520, objectFit, transform: 'none' }
                 : { width: '100%', height: '100%', objectFit, transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg)`, transformOrigin: 'center' }}
             />
-            {selection !== undefined && <div
+            {selecting && selection !== undefined && <div
               aria-hidden="true"
               data-dsh-media-image-selection
               data-selection-x={selection.x}
@@ -144,7 +173,7 @@ export function MediaImageRenderer({
               style={{ position: 'absolute', left: `${selection.x * 100}%`, top: `${selection.y * 100}%`, width: `${selection.width * 100}%`, height: `${selection.height * 100}%`, border: '2px solid var(--vk-accent)', background: 'color-mix(in srgb,var(--vk-accent) 14%,transparent)', boxShadow: '0 0 0 9999px rgba(0,0,0,.42)', pointerEvents: 'none' }}
             />}
             {holdAnimation && (
-              <button type="button" onClick={() => { setAnimationAllowed(true) }} style={{ position: 'absolute', inset: 0 }}>
+              <button className="vk-btn" type="button" onClick={() => { setAnimationAllowed(true) }} style={{ position: 'absolute', inset: 0 }}>
                 {text.playAnimation}
               </button>
             )}
@@ -160,19 +189,20 @@ export function MediaImageRenderer({
         </div>
       </figure>}
       {overBudget && <p role="status">{text.tooLarge}</p>}
-      <div role="group" aria-label={text.fit} style={{ display: 'flex', gap: 6 }}>
-        <button type="button" disabled={selecting} title={selecting ? text.selection : undefined} aria-pressed={mode === 'fit' || undefined} onClick={() => { setMode('fit') }}>{text.fit}</button>
-        <button type="button" disabled={selecting} title={selecting ? text.selection : undefined} aria-pressed={mode === 'fill' || undefined} onClick={() => { setMode('fill') }}>{text.fill}</button>
-        <button type="button" disabled={selecting} title={selecting ? text.selection : undefined} aria-pressed={mode === 'actual' || undefined} onClick={() => { setMode('actual') }}>{text.actual}</button>
-        <button type="button" disabled={selecting} title={selecting ? text.selection : undefined} aria-label={text.zoomIn} onClick={() => { setZoom(value => Math.min(8, value * 1.5)) }}>+</button>
-        <button type="button" disabled={selecting} title={selecting ? text.selection : undefined} aria-label={text.zoomOut} onClick={() => { setZoom(value => Math.max(1, value / 1.5)) }}>&#8722;</button>
-        <button type="button" disabled={selecting} title={selecting ? text.selection : undefined} aria-label={text.rotate} onClick={() => { setRotation(value => ((value + 90) % 360) as ImageRotation) }}>&#8635;</button>
-        <button type="button" disabled={selecting} title={selecting ? text.selection : undefined} aria-label="Pan left" onClick={() => { setPan(value => ({ ...value, x: value.x - 24 })) }}>&#8592;</button>
-        <button type="button" disabled={selecting} title={selecting ? text.selection : undefined} aria-label="Pan right" onClick={() => { setPan(value => ({ ...value, x: value.x + 24 })) }}>&#8594;</button>
-        <button type="button" aria-pressed={background === 'dark' || undefined} onClick={() => { setBackground('dark') }}>{text.background} dark</button>
-        <button type="button" aria-pressed={background === 'light' || undefined} onClick={() => { setBackground('light') }}>{text.background} light</button>
-        <button type="button" aria-pressed={background === 'checker' || undefined} onClick={() => { setBackground('checker') }}>{text.background} checker</button>
+      <div role="group" aria-label={text.fit} style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        <button className="vk-btn" type="button" disabled={selecting} title={selecting ? text.selectionHint : undefined} aria-pressed={mode === 'fit' || undefined} onClick={() => { setMode('fit') }}>{text.fit}</button>
+        <button className="vk-btn" type="button" disabled={selecting} title={selecting ? text.selectionHint : undefined} aria-pressed={mode === 'fill' || undefined} onClick={() => { setMode('fill') }}>{text.fill}</button>
+        <button className="vk-btn" type="button" disabled={selecting} title={selecting ? text.selectionHint : undefined} aria-pressed={mode === 'actual' || undefined} onClick={() => { setMode('actual') }}>{text.actual}</button>
+        <button className="vk-btn" type="button" disabled={selecting} title={selecting ? text.selectionHint : undefined} aria-label={text.zoomIn} onClick={() => { setZoom(value => Math.min(8, value * 1.5)) }}>+</button>
+        <button className="vk-btn" type="button" disabled={selecting} title={selecting ? text.selectionHint : undefined} aria-label={text.zoomOut} onClick={() => { setZoom(value => Math.max(1, value / 1.5)) }}>&#8722;</button>
+        <button className="vk-btn" type="button" disabled={selecting} title={selecting ? text.selectionHint : undefined} aria-label={text.rotate} onClick={() => { setRotation(value => ((value + 90) % 360) as ImageRotation) }}>&#8635;</button>
+        <button className="vk-btn" type="button" disabled={selecting} title={selecting ? text.selectionHint : undefined} aria-label={text.panLeft} onClick={() => { setPan(value => ({ ...value, x: value.x - 24 })) }}>&#8592;</button>
+        <button className="vk-btn" type="button" disabled={selecting} title={selecting ? text.selectionHint : undefined} aria-label={text.panRight} onClick={() => { setPan(value => ({ ...value, x: value.x + 24 })) }}>&#8594;</button>
+        <button className="vk-btn" type="button" aria-pressed={background === 'dark' || undefined} onClick={() => { setBackground('dark') }}>{text.background} {text.backgroundDark}</button>
+        <button className="vk-btn" type="button" aria-pressed={background === 'light' || undefined} onClick={() => { setBackground('light') }}>{text.background} {text.backgroundLight}</button>
+        <button className="vk-btn" type="button" aria-pressed={background === 'checker' || undefined} onClick={() => { setBackground('checker') }}>{text.background} {text.backgroundChecker}</button>
       </div>
+      <output aria-label={text.zoom}>{Math.round((selecting ? 1 : zoom) * 100)}%</output>
       <figcaption data-dsh-media-image-meta aria-label={text.metadata}>
         {[media.title, media.mediaType, media.width !== undefined && media.height !== undefined ? `${media.width}\u00d7${media.height}` : undefined, media.version].filter((part): part is string => part !== undefined && part.length > 0).join(' \u00b7 ')}
       </figcaption>
@@ -203,20 +233,22 @@ export function MediaCompareRenderer({
   return (
     <section data-dsh-media-compare data-mode={mode} data-left-version={left.version} data-right-version={right.version} aria-label={text.mode} style={{ display: 'grid', gap: 6 }}>
       <div role="group" aria-label={text.mode} style={{ display: 'flex', gap: 6 }}>
-        <button type="button" aria-pressed={mode === 'side-by-side' || undefined} onClick={() => { setMode('side-by-side') }}>{text.sideBySide}</button>
-        <button type="button" aria-pressed={mode === 'swipe' || undefined} onClick={() => { setMode('swipe') }}>{text.swipe}</button>
-        <button type="button" aria-pressed={mode === 'opacity' || undefined} onClick={() => { setMode('opacity') }}>{text.opacity}</button>
+        <button className="vk-btn" type="button" aria-pressed={mode === 'side-by-side' || undefined} onClick={() => { setMode('side-by-side') }}>{text.sideBySide}</button>
+        <button className="vk-btn" type="button" aria-pressed={mode === 'swipe' || undefined} onClick={() => { setMode('swipe') }}>{text.swipe}</button>
+        <button className="vk-btn" type="button" aria-pressed={mode === 'opacity' || undefined} onClick={() => { setMode('opacity') }}>{text.opacity}</button>
       </div>
       <p data-compare-labels style={{ margin: 0 }}>{left.label} · {left.version} | {right.label} · {right.version}</p>
       <div style={{ position: 'relative', display: mode === 'side-by-side' ? 'flex' : 'block', gap: mode === 'side-by-side' ? 8 : 0 }}>
-        <figure style={{ margin: 0, flex: 1, position: 'relative' }}>
+        <figure style={{ margin: 0, flex: 1, minWidth: 0 }}>
+          <div data-compare-image-area style={{ position: 'relative' }}>
           <img src={left.url} alt={left.label} style={{ width: '100%', display: 'block' }} />
+          {mode === 'swipe' && <div style={{ position: 'absolute', inset: 0, clipPath: `inset(0 ${100 - position}% 0 0)` }}><img src={right.url} alt={right.label} style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>}
+          {mode === 'opacity' && <div style={{ position: 'absolute', inset: 0, opacity: position / 100 }}><img src={right.url} alt={right.label} style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>}
+          </div>
           <figcaption>{left.label} · {left.version}</figcaption>
-          {mode === 'swipe' && <div style={{ position: 'absolute', inset: 0, clipPath: `inset(0 ${100 - position}% 0 0)` }}><img src={right.url} alt={right.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>}
-          {mode === 'opacity' && <div style={{ position: 'absolute', inset: 0, opacity: position / 100 }}><img src={right.url} alt={right.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>}
         </figure>
         {mode === 'side-by-side' && (
-          <figure style={{ margin: 0, flex: 1 }}>
+          <figure style={{ margin: 0, flex: 1, minWidth: 0 }}>
             <img src={right.url} alt={right.label} style={{ width: '100%', display: 'block' }} />
             <figcaption>{right.label} · {right.version}</figcaption>
           </figure>

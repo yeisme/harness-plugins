@@ -11,6 +11,8 @@ beforeAll(() => {
   const zero = () => ({ x: 0, y: 0, width: 10, height: 10 })
   // @ts-expect-error jsdom 缺失布局 API 的最小 stub
   SVGElement.prototype.getBBox = zero
+  // jsdom has no SVG text layout; browser acceptance uses actual metrics.
+  Object.defineProperty(SVGElement.prototype, 'getComputedTextLength', { configurable: true, value() { return (this.textContent?.length ?? 0) * 8 } })
   // @ts-expect-error jsdom 缺失
   SVGElement.prototype.getScreenCTM = () => null
   // @ts-expect-error jsdom 缺失
@@ -27,6 +29,9 @@ describe('real mermaid smoke', () => {
     const svg = await renderer.render('graph TD\n  A[需求] --> B{探查}\n  B -->|slot| C[渲染]\n  B -->|DOM| D[嫁接]\n  C --> E[图]\n  D --> E')
     expect(svg).toMatch(/^<svg/)
     expect(svg).toContain('<path')
+    expect(svg).toContain('需求')
+    expect(svg).toContain('探查')
+    expect(svg).not.toContain('foreignObject')
     expect(svg.toLowerCase()).not.toContain('<script')
     expect(svg).toContain('max-width:100%')
   })

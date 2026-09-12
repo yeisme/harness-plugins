@@ -1,3 +1,4 @@
+import { LocalStudioCLI } from '@yeisme/dsh-creator-studio-host'
 /**
  * Single install surface for the DSH Creator Studio.
  *
@@ -20,6 +21,13 @@ import {
 } from '@yeisme/dsh-creator-studio-host'
 
 export {
+  EikonaDiscoveryClient,
+  createEikonaDiscoveryAdapter,
+  createEikonaReviewAdapter,
+  createSelectableEikonaReviewAdapter,
+  createEikonaStudioAdapter,
+  SonoraSubtitleExportClient,
+  createSonoraSubtitleExportAdapter,
   CREATOR_STUDIO_EXPECTED_CONTEXT,
   CREATOR_STUDIO_OWNER_DIRECTORY,
   CreatorStudioGateway,
@@ -39,6 +47,13 @@ export {
   validateCreatorStudioSnapshot,
 } from '@yeisme/dsh-creator-studio-host'
 export type {
+  EikonaDiscoveryConnection,
+  EikonaReviewSelection,
+  SonoraTranscriptionCatalog,
+  SonoraSubtitleConnection,
+  SonoraSubtitleExportInput,
+  SonoraSubtitleExportResource,
+  SonoraSubtitleExportResult,
   CreatorArtifactActionBindingV1,
   CreatorArtifactCandidateV1,
   CreatorArtifactContentV1,
@@ -89,11 +104,17 @@ const creatorStudioTypertContribution = {
       summary: 'Safe Creator Studio owner projection and action gateway.',
       tags: [],
       members: [
+        { kind: 'method', name: 'snapshotOwner', signature: 'snapshotOwner(owner: CreatorStudioOwner): Promise<CreatorStudioSnapshotV1>' },
+        { kind: 'method', name: 'selectScaenaPackage', signature: 'selectScaenaPackage(input: ScaenaPackageQuery): Promise<ScaenaPackageResult>' },
+        { kind: 'method', name: 'readScaenaTable', signature: 'readScaenaTable(input: ScaenaTableQuery): Promise<ScaenaTableResult>' },
         { kind: 'method', name: 'snapshot', signature: 'snapshot(): Promise<CreatorStudioSnapshotV1>' },
         { kind: 'method', name: 'reconcile', signature: 'reconcile(input: unknown): Promise<PaneActionReceiptV1>' },
+        { kind: 'method', name: 'recallOperationIdentity', signature: 'recallOperationIdentity(input: unknown): Promise<PaneActionReconcileRequestV1 | null>' },
+        { kind: 'method', name: 'listOperationRecoveries', signature: 'listOperationRecoveries(): Promise<CreatorOperationRecoveryPageV1>' },
         { kind: 'method', name: 'dispatch', signature: 'dispatch(input: unknown): Promise<PaneActionReceiptV1>' },
         { kind: 'method', name: 'resolveArtifact', signature: 'resolveArtifact(input: unknown): Promise<CreatorMediaAccessV1 | null>' },
         { kind: 'method', name: 'readArtifactContent', signature: 'readArtifactContent(input: unknown): Promise<CreatorArtifactContentV1 | null>' },
+        { kind: 'method', name: 'readTranscriptionCatalog', signature: 'readTranscriptionCatalog(input?: unknown): Promise<SonoraTranscriptionCatalog | null>' },
         { kind: 'method', name: 'assets', signature: 'assets(input: unknown): Promise<CreatorAssetPageV1>' },
         { kind: 'method', name: 'decideApproval', signature: 'decideApproval(input: unknown): Promise<PaneActionReceiptV1>' },
         { kind: 'method', name: 'canvasRead', signature: 'canvasRead(input: unknown): Promise<ProjectCanvasReadResult>' },
@@ -106,13 +127,69 @@ const creatorStudioTypertContribution = {
     objects: [],
   },
   invocations: [
-    ...(['canvasRead', 'canvasSave', 'canvasReconcile', 'reconcile'] as const).map(method => ({
+    { id: '@yeisme/dsh-creator-studio-host#creatorStudio/selectScaenaPackage', service: 'creatorStudio', namespace: 'creatorStudio', method: 'selectScaenaPackage', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }], result: { mode: 'src-json' } },
+    { id: '@yeisme/dsh-creator-studio-host#creatorStudio/readScaenaTable', service: 'creatorStudio', namespace: 'creatorStudio', method: 'readScaenaTable', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }], result: { mode: 'src-json' } },
+    {
+      id: '@yeisme/dsh-creator-studio-host#creatorStudio/snapshotOwner',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'snapshotOwner', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }], result: { mode: 'src-json' },
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host#creatorStudio/selectEikonaCandidate',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'selectEikonaCandidate', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }], result: { mode: 'src-json' },
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host#creatorStudio/readEikonaCandidateImage',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'readEikonaCandidateImage', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }], result: { mode: 'src-json' },
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host#creatorStudio/readEikonaReview',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'readEikonaReview',
+      invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }],
+      result: { mode: 'src-json' },
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host#creatorStudio/readEikonaAssetPage',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'readEikonaAssetPage',
+      invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }],
+      result: { mode: 'src-json' },
+    },
+    { id: '@yeisme/dsh-creator-studio-host#creatorStudio/readTranscriptionCatalog', service: 'creatorStudio', namespace: 'creatorStudio', method: 'readTranscriptionCatalog',
+      invocation: { kind: 'direct' }, parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }], result: { mode: 'src-json' } },
+    { id: '@yeisme/dsh-creator-studio-host#creatorStudio/listEikonaBatchInputs', service: 'creatorStudio', namespace: 'creatorStudio', method: 'listEikonaBatchInputs',
+      invocation: { kind: 'direct' }, parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }], result: { mode: 'src-json' } },
+    { id: '@yeisme/dsh-creator-studio-host#creatorStudio/readEikonaBatchMembers', service: 'creatorStudio', namespace: 'creatorStudio', method: 'readEikonaBatchMembers',
+      invocation: { kind: 'direct' }, parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }], result: { mode: 'src-json' } },
+    { id: '@yeisme/dsh-creator-studio-host#creatorStudio/readEikonaBatchPlan', service: 'creatorStudio', namespace: 'creatorStudio', method: 'readEikonaBatchPlan',
+      invocation: { kind: 'direct' }, parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }], result: { mode: 'src-json' } },
+    { id: '@yeisme/dsh-creator-studio-host#creatorStudio/readEikonaBatchInput', service: 'creatorStudio', namespace: 'creatorStudio', method: 'readEikonaBatchInput',
+      invocation: { kind: 'direct' }, parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }], result: { mode: 'src-json' } },
+    { id: '@yeisme/dsh-creator-studio-host#creatorStudio/readEikonaApprovalStatus', service: 'creatorStudio', namespace: 'creatorStudio', method: 'readEikonaApprovalStatus',
+      invocation: { kind: 'direct' }, parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }], result: { mode: 'src-json' } },
+    { id: '@yeisme/dsh-creator-studio-host#creatorStudio/revokeEikonaPreparationApproval', service: 'creatorStudio', namespace: 'creatorStudio', method: 'revokeEikonaPreparationApproval',
+      invocation: { kind: 'direct' }, parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }], result: { mode: 'src-json' } },
+    { id: '@yeisme/dsh-creator-studio-host#creatorStudio/approveEikonaPreparation', service: 'creatorStudio', namespace: 'creatorStudio', method: 'approveEikonaPreparation',
+      invocation: { kind: 'direct' }, parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }], result: { mode: 'src-json' } },
+    { id: '@yeisme/dsh-creator-studio-host#creatorStudio/prepareEikonaGeneration', service: 'creatorStudio', namespace: 'creatorStudio', method: 'prepareEikonaGeneration',
+      invocation: { kind: 'direct' }, parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }], result: { mode: 'src-json' } },
+    ...(['readEikonaDraft', 'saveEikonaDraft', 'reconcileEikonaDraft', 'canvasRead', 'canvasSave', 'canvasReconcile', 'reconcile', 'recallOperationIdentity'] as const).map(method => ({
       id: `@yeisme/dsh-creator-studio-host#creatorStudio/${method}`,
       service: 'creatorStudio', namespace: 'creatorStudio', method,
       invocation: { kind: 'direct' },
       parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }],
       result: { mode: 'src-json' },
     })),
+    {
+      id: '@yeisme/dsh-creator-studio-host#creatorStudio/listOperationRecoveries',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'listOperationRecoveries',
+      invocation: { kind: 'direct' }, parameters: [], result: { mode: 'src-json' },
+    },
     {
       id: '@yeisme/dsh-creator-studio-host#creatorStudio/snapshot',
       service: 'creatorStudio', namespace: 'creatorStudio', method: 'snapshot',
@@ -162,6 +239,7 @@ type SharedCreatorStudioMount = {
   references: number
   tail: Promise<void>
   bridge?: FiberHandle | undefined
+  localMount?: FiberHandle | undefined
   directory?: CreatorStudioOwnerDirectory | undefined
   disposeDirectory?: (() => void) | undefined
   unregisterTypert?: (() => void | Promise<void>) | undefined
@@ -221,12 +299,28 @@ async function acquireCreatorStudio(ctx: Context): Promise<() => Promise<void>> 
       }
     }
     if (current.bridge === undefined && root.get('creatorStudio') === undefined) {
-      // A profile may publish its frozen context after this installer starts.
-      // Bind the Gateway lifetime to that context instead of capturing absence
-      // permanently or reading a changing context halfway through an RPC.
-      current.bridge = root.inject([CREATOR_STUDIO_EXPECTED_CONTEXT] as never, async (scope: Context) => {
+      // Keep discovery and context-unavailable responses available before project binding.
+      // Every request obtains its authorized context from the host and rechecks it after I/O.
+      current.bridge = root.inject([], async (scope: Context) => {
         const gateway = await scope.plugin(CreatorStudioGateway)
         return () => gateway.dispose()
+      })
+    }
+    if (current.localMount === undefined) {
+      current.localMount = root.inject(['workspaceRegistry'] as never, async (scope: Context) => {
+        // Explicit service integrations keep their existing authenticated context.
+        if (root.get(CREATOR_STUDIO_EXPECTED_CONTEXT) !== undefined) return
+        let local: LocalStudioCLI
+        try { local = await LocalStudioCLI.open() } catch { return }
+        if (root.get(CREATOR_STUDIO_EXPECTED_CONTEXT) !== undefined) return
+        const releaseContext = scope.provide(CREATOR_STUDIO_EXPECTED_CONTEXT, local.context)
+        const releases: Array<() => void> = []
+        try {
+          for (const owner of ['eikona', 'scaena'] as const) {
+            if (current.directory?.selected(owner) === undefined) releases.push(current.directory!.register(local.adapter(owner)))
+          }
+        } catch (error) { releases.reverse().forEach(release => release()); releaseContext(); throw error }
+        return () => { releases.reverse().forEach(release => release()); releaseContext() }
       })
     }
     if (current.referenceOwnerMount === undefined) {
@@ -288,6 +382,8 @@ async function releaseCreatorStudio(root: Context, mount: SharedCreatorStudioMou
   if (mount.references > 0) mount.references -= 1
   if (mount.references !== 0) return
   const teardown = mount.tail.then(async () => {
+    const localMount = mount.localMount
+    mount.localMount = undefined
     const bridge = mount.bridge
     const disposeDirectory = mount.disposeDirectory
     const unregisterTypert = mount.unregisterTypert
@@ -301,7 +397,7 @@ async function releaseCreatorStudio(root: Context, mount: SharedCreatorStudioMou
     mount.unregisterTypert = undefined
     const errors: unknown[] = []
     // Revoke body access first; still attempt every cleanup if one fails.
-    for (const cleanup of [() => revokeReferenceOwners?.(), () => referenceOwnerMount?.dispose(), () => unregisterTypert?.(), () => bridge?.dispose(), () => disposeDirectory?.()]) {
+    for (const cleanup of [() => revokeReferenceOwners?.(), () => referenceOwnerMount?.dispose(), () => unregisterTypert?.(), () => localMount?.dispose(), () => bridge?.dispose(), () => disposeDirectory?.()]) {
       try { await cleanup() } catch (error) { errors.push(error) }
     }
     const store = mounts()

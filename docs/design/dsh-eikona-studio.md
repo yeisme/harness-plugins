@@ -1,6 +1,6 @@
 # Eikona 生成台页面与控件设计
 
-状态：规格和任务已形成，已开始共享执行入口修复与owner接口核对，见[实施基线](../../openspec/changes/dsh-eikona-studio-v1/implementation-baseline.md)；完整生成台、原型与真实owner验收仍未完成。唯一任务入口：[tasks](../../openspec/changes/dsh-eikona-studio-v1/tasks.md)；规范：[spec](../../openspec/changes/dsh-eikona-studio-v1/specs/dsh-eikona-studio/spec.md)。
+状态：已接入生成配置、候选与修改、资产与来源三页，复用共享执行和成果组件；切页草稿保留及中英导航已有测试，见[实施基线](../../openspec/changes/dsh-eikona-studio-v1/implementation-baseline.md)。完整生成配置、遮罩、lineage与真实owner验收仍未完成。唯一任务入口：[tasks](../../openspec/changes/dsh-eikona-studio-v1/tasks.md)；规范：[spec](../../openspec/changes/dsh-eikona-studio-v1/specs/dsh-eikona-studio/spec.md)。
 
 ## 用户路径
 

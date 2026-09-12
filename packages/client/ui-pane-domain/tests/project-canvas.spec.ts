@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { PROJECT_CANVAS_SCHEMA, ProjectCanvasDocumentSchema, PANE_ARTIFACT_SCHEMA,
   type ProjectCanvasDocument, type ProjectCanvasNode } from '@yeisme/dsh-pane-protocol'
-import { createProjectCanvasEditor, editProjectCanvas, searchProjectCanvas, type ProjectCanvasEdit } from '../src/project-canvas.js'
+import { createProjectCanvasEditor, editProjectCanvas, searchProjectCanvas, orderProjectCanvasPositions, type ProjectCanvasEdit } from '../src/project-canvas.js'
 
 const scope = { workspaceRef: 'workspace:one', projectRef: 'project:one' }
 const target = { ...scope, documentId: 'canvas-one' }
@@ -128,4 +128,40 @@ describe('project canvas draft transitions', () => {
     expect(searchProjectCanvas(document(), '角色')).toEqual(['note'])
     expect(searchProjectCanvas(document(), 'reference')).toEqual(['source'])
   })
+})
+
+it('applies child-first absolute drag events without moving selected children twice', () => {
+  let editor = createProjectCanvasEditor(document())
+  const changes = [{ id: 'source', x: 10, y: 20 }, { id: 'group', x: 10, y: 20 }]
+  for (const change of orderProjectCanvasPositions(editor.document, changes)) {
+    const current = editor.document.nodes.find(node => node.id === change.id)!
+    editor = apply(editor, { type: 'move', ids: [change.id], dx: change.x - current.position.x, dy: change.y - current.position.y })
+  }
+  for (const id of ['group', 'source', 'note']) expect(editor.document.nodes.find(node => node.id === id)!.position).toEqual({ x: 10, y: 20 })
+  expect(changes[0]!.id).toBe('source')
+})
+
+it('preserves redo after unchanged position and viewport echoes', () => {
+  let editor = createProjectCanvasEditor(document())
+  editor = apply(editor, { type: 'move', ids: ['source'], dx: 12, dy: 4 })
+  editor = apply(editor, { type: 'undo' })
+  const undone = editor
+  editor = apply(editor, { type: 'move', ids: ['source'], dx: 0, dy: 0 })
+  editor = apply(editor, { type: 'camera', camera: { ...editor.document.camera } })
+  expect(editor).toBe(undone)
+  expect(editor.future).toHaveLength(1)
+  editor = apply(editor, { type: 'redo' })
+  expect(editor.document.nodes.find(node => node.id === 'source')!.position).toEqual({ x: 12, y: 4 })
+})
+
+it('persists input review markers with the draft and restores them through undo', () => {
+ const original = createProjectCanvasEditor(document())
+ const moved = apply(original, { type: 'move', ids: ['generate'], dx: 4, dy: 5 })
+ expect(moved.document.nodes.find(node => node.id === 'generate')).not.toHaveProperty('inputReviewRequired')
+ const edited = apply(moved, { type: 'controls', id: 'generate', controls: { count: 3 } })
+ expect(edited.document.nodes.find(node => node.id === 'generate')).toMatchObject({ inputReviewRequired: true, selectedArtifact: { version: '7' } })
+ const restored = createProjectCanvasEditor(JSON.parse(JSON.stringify(edited.document)))
+ expect(restored.document.nodes.find(node => node.id === 'generate')).toHaveProperty('inputReviewRequired', true)
+ expect(apply(edited, { type: 'undo' }).document).toEqual(moved.document)
+ expect(original.document.nodes.find(node => node.id === 'generate')).not.toHaveProperty('inputReviewRequired')
 })

@@ -15,6 +15,11 @@ const testFiles = [
   'tests/workspace-search-identity.spec.ts',
   'tests/workspace-search-overlay.spec.tsx',
   'tests/workspace-search-query.spec.ts',
+  'tests/workspace-search-open.spec.ts',
+  'tests/conversation-search-host.spec.ts',
+  'tests/search-center-source.spec.ts',
+  'tests/search-source-registry.spec.ts',
+  'tests/search-center-controls.spec.ts',
 ]
 
 function redact(input) {
@@ -37,7 +42,7 @@ writeFileSync(resolve(evidenceDir, 'env.json'), `${JSON.stringify({
   viewports: [360, 560, 960],
   zoom: '200%',
   catalog_size: 5000,
-  history_owner: 'unavailable',
+  history_owner: 'not_probed',
   history_query_lane: 'adapter_contract_only',
   redacted: true,
 }, null, 2)}\n`)
@@ -75,7 +80,7 @@ writeFileSync(resolve(evidenceDir, 'artifacts/stage-matrix.json'), `${JSON.strin
     live_history_owner: false,
     adapter_contract: 'available/unavailable/contract_mismatch fixtures',
     live_query: 'not_verified',
-    mock_query: 'verified',
+    mock_query: exitCode === 0 ? 'verified' : 'not_verified',
   },
 }, null, 2)}\n`)
 writeFileSync(resolve(evidenceDir, 'summary.json'), `${JSON.stringify({
@@ -101,7 +106,7 @@ writeFileSync(resolve(evidenceDir, 'summary.json'), `${JSON.stringify({
     policy: 'yeisme.integration-test-redaction.v1',
   },
   notes: {
-    live_history_owner: 'unavailable',
+    live_history_owner: 'not_probed',
     live_history_query: 'not_verified',
   },
 }, null, 2)}\n`)

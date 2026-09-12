@@ -4,6 +4,9 @@ import { defineConfig } from 'tsdown'
 const clientExternals = [
   '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-client-runtime/client',
+  // dsh-rich-media is a ModuleLoader CJS surface. Keep its named renderer
+  // imports external so Rolldown does not misread the wrapped export table.
+  '@yeisme/dsh-rich-media/client',
 ] as const
 
 const node = {

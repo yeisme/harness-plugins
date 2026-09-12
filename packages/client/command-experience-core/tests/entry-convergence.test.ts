@@ -28,7 +28,6 @@ const BUNDLE_IDS = [
   'dsh-personal-radar',
   'dsh-plugin-example',
   'dsh-rich-media',
-  'dsh-selection-annotation',
   'dsh-semantic-file-editor',
   'dsh-session-cookie-manager',
   'dsh-session-tags',
@@ -46,9 +45,9 @@ const BUNDLE_IDS = [
 ] as const
 
 describe('entry convergence ledger', () => {
-  it('closes the 31-bundle inventory with converged, no-command-semantics, or exempt', () => {
+  it('closes the active bundle inventory with converged, no-command-semantics, or exempt', () => {
     const ledger = bundleEntryLedger()
-    expect(ledger).toHaveLength(31)
+    expect(ledger).toHaveLength(BUNDLE_IDS.length)
     expect(ledgerIsClosed()).toBe(true)
     expect(ledger.map(row => row.bundleId).sort()).toEqual([...BUNDLE_IDS].sort())
     for (const row of ledger) {

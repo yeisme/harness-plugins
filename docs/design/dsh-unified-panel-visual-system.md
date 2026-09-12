@@ -4,7 +4,7 @@
 
 > 状态：项目级 Web UI 设计事实源，适用于 `packages/client/ui-*` 与 bundle 自有 React/Web surface。
 > 产品分类：APP UI。目标是安静、紧凑、可扫描的工程工作台，不是营销页、品牌展示页或卡片仪表盘。
-> 跨项目语义：根仓库 `docs/architecture/workbench-dsh-ui-governance.md` 定义 Workbench/DSH 联邦状态、action、handoff 与联合验收；本文件仍是 DSH 插件实现的唯一视觉权威。
+> 创作交互：画布与五个专业 Pane 遵循本仓八份创作 OpenSpec；独立 Workbench 的历史联邦设计不再约束 active UI，当前边界见 §17。
 
 ## 0. 权威、范围与规范用语
 
@@ -385,43 +385,32 @@ pnpm run test:visual:update
 
 当前无阻塞性视觉决策。新增 token、Surface kind、官方 primitive 替代或长期例外必须通过新的 OpenSpec change 演进，不能在消费包内先斩后奏。
 
-## 17. Workbench × DSH 联邦视觉对齐
+## 17. DSH 画布与专业 Pane 的视觉对齐
 
-### 17.1 同语义，不同宿主
+2026-09-07 的退役决定取代旧的双宿主方案。独立 `client/yeisme-workbench` 不再是交互目标；历史材料仅供迁移追溯。DSH 自身的 Pane Workbench、预览命令和布局能力继续保留。
 
-DSH 与 Workbench 共享工具型 Agent 产品的语义和阅读顺序，但不共享 React/CSS runtime，也不追求逐像素一致：
+### 17.1 同一对象，多种视图
 
-| 共享概念 | DSH 实现 | Workbench 对应 | 不变量 |
-|---|---|---|---|
-| base/canvas | host base + `--vk-bg-base` fallback | `--wb-canvas` | 最暗稳定底层，不承载状态 |
-| surface layers | `--vk-bg-layer-*` | `--wb-surface*` | 亮度单调递增，不用渐变制造层级 |
-| primary text | `--vk-text-primary` | `--wb-text-primary` | 主内容最高对比；技术 ref 用 mono |
-| accent/focus | host focus + `--vk-accent` | `--wb-accent-*` | 只用于主动作、选择、链接和 focus |
-| positive/info/warn/critical | `statusTone()` | Workbench status tokens | 同一 owner 状态不能跨端改变语义 |
-| authority unknown | 当前 warn/critical tone + 明确 reconcile 文案 | `--wb-status-unknown` | `unknown_accept` 只允许 reconcile，不显示 success/failure/retry |
-| action hierarchy | 官方 Button + SurfaceActionBar | Workbench primitives/composites | 一个 surface 默认一个主动作 |
-| provenance | context/status/details | Agent provenance/Inspector | 标识用于解释来源，不兼任生成/批准按钮 |
+项目画布和 Eikona、Anatomia、Scaena、Auctra、Sonora 专业 Pane 使用本规范的 token、控件与状态语言。同一成果的明确版本、采用事实和来源必须一致；视图切换不得复制领域状态，也不得静默换成更新版本。
 
-颜色、圆角和密度可以因 host 不同而变化；状态、权限、成本、freshness、receipt 和 recovery 不得变化。未来若 DSH 新增独立 `authority-unknown` tone，必须通过 additive OpenSpec 和 visual-kit token 演进，当前消费包不得先发明颜色。
+- 画布承担素材组织、引用关系、执行连接和节点快捷操作。
+- 专业 Pane 承担完整参数、编辑器、播放器、候选比较及领域审阅，可独立打开。
+- 复杂内容通过并排、放大和按需展开组织；空间不足时重排布局，保留核心能力的可访问入口。
+- 新成果默认提示；除用户明确导航外，不抢走当前阅读位置。
 
-### 17.2 DSH 不是 mini Workbench
+### 17.2 直接操作与交接
 
-DSH 插件默认只回答：当前 context 是什么、首要阻塞是什么、下一步能安全做什么。以下复杂度应签发 host-approved Workbench handoff，而不是在 Pane 内继续堆叠：
+多候选图片、镜头时间线、项目画布、文本 Diff 和跨项目引用属于已确认的 DSH 创作体验，不再签发到独立 Workbench。Scaena 负责镜头级编排和交付，不新增通用多轨剪辑器。
 
-- 三列以上长期工作区；
-- 多候选媒体墙、复杂时间线、空间画布和跨集比较；
-- 同时展开 Review、Evidence、Run、Inspector 的多 rail 审阅；
-- 需要 SavedView、跨项目布局或多租户导航的场景。
+专业 Pane 可独立交付；画布或跨领域编排未就绪不能阻塞已具备 owner 合同的直接操作。采用候选、写回源文件、正式版本确认和最终交付分别呈现。跨 Pane 交接显示目标对象、固定版本、目标项目和访问状态，接收方重新核验权限；缓存、URL 参数和当前选中状态不构成执行授权。
 
-Handoff trigger 必须显示目标对象、目标 Pane/Lens、freshness、为什么要转场以及不会自动执行的副作用。Workbench 接收后重新授权 opaque refs；DSH 的展示状态、URL 参数和缓存不构成 authority。
-
-### 17.3 Host ownership
+### 17.3 Host 与 owner 边界
 
 - 官方 DSH host 拥有 AppFrame、主题、slot、Pane geometry、overlay 和 focus primitive。
-- `ui-surface` 拥有插件内部 composition，不改变 host chrome。
-- `ui-visual-kit` 只在 host token 缺失时提供 canonical fallback，不把 fallback 注入宿主根。
-- 插件拥有内容和 scoped extension；不得声明第二套 font stack、全局 reset、portal、z-index 系统或 product rail。
-- Workbench 侧视觉变化不能作为 DSH token 自动升级理由；两端只通过根级语义合同评审一致性。
+- `ui-surface` 拥有插件内部 composition；`ui-visual-kit` 只在 host token 缺失时提供 fallback。
+- 插件拥有内容和 scoped extension，不声明第二套全局样式、主壳或调度器。
+- Host 仅持久化布局、草稿和安全引用；领域正文、媒体、正式版本及执行事实归对应 owner。
+- 单领域执行使用该 owner；跨领域编排使用 Ordo。关闭 Pane 不取消任务，恢复界面不自动恢复执行。
 
 ## 18. DSH 插件 UI archetype
 
@@ -447,13 +436,13 @@ Handoff trigger 必须显示目标对象、目标 Pane/Lens、freshness、为什
 
 ## 19. UI Contract 补充字段
 
-除 §12 模板外，与 Workbench 或多个 DSH surface 共享能力时，所属 `design.md` 还必须记录：
+除 §12 模板外，多个 DSH surface 共享能力时，所属 `design.md` 还必须记录：
 
 ```markdown
 ### Cross-host Semantics
 
 - Canonical data/action/receipt owner:
-- Same capability in Workbench: none | Pane/Lens/route identifier
+- Same capability in other DSH surface: none | Pane/route identifier
 - DSH role: primary | compact companion | handoff-only
 - Shared states and wording:
 - Handoff trigger and target:
@@ -461,7 +450,7 @@ Handoff trigger 必须显示目标对象、目标 Pane/Lens、freshness、为什
 - Pixel differences intentionally ignored:
 ```
 
-如果 `DSH role` 为 `compact companion` 或 `handoff-only`，设计不得把 Workbench 的完整功能矩阵复制进插件。若两端都能提交同一 action，必须消费同一 decision/action identity，并证明只生成一个 owner receipt。
+`DSH role` 描述当前 surface 的职责，不得用它删除已确认的专业 Pane 能力。若两个 surface 都能提交同一 action，必须消费同一 decision/action identity，并证明只生成一个 owner receipt。
 
 ## 20. 插件视觉压力测试矩阵
 
@@ -496,6 +485,6 @@ pnpm run test:visual
 pnpm run check:plugins
 ```
 
-与 Workbench 共享 capability 时，额外核对根级 `docs/architecture/workbench-dsh-ui-governance.md` 的联合状态和 handoff 矩阵。该核对验证语义连续性，不要求两端截图像素一致。
+画布与专业 Pane 共享 capability 时，额外核对对应创作 OpenSpec 的版本、选择、运行范围和 handoff 验收；独立 Workbench 不再是验收端。
 
-多模型后续实施采用根级 `docs/architecture/workbench-dsh-ui-delivery-dag.md`：先分类当前 visual diff，再由设计门批准 snapshot 变化；DSH writer 不得借统一 UI 触碰未租约的 active lane、归档 change 或官方 host chrome。
+后续实施按本仓当前 OpenSpec 和 `AGENTS.md` 执行：先分类 visual diff，确认变化符合设计后再更新 snapshot；不得借统一 UI 修改无关并行工作、归档 change 或官方 host chrome。

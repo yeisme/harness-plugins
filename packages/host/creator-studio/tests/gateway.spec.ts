@@ -11,6 +11,107 @@ import type { CreatorOwnerAdapterV1, CreatorStudioContextV1 } from '../src/types
 
 const contexts: Context[] = []
 
+describe('candidate selection lifetime', () => {
+  it.each(['unchanged', 'project', 'membership', 'adapter'])('checks %s after owner selection returns', async change => {
+    const context = expectedContext(), selection = { artifactRef: 'eikona://artifacts/run/candidate', contentDigest: 'a'.repeat(64) }
+    let finish!: (value: { status: 'selected'; selection: typeof selection }) => void
+    const select = vi.fn(() => new Promise<{ status: 'selected'; selection: typeof selection }>(resolve => { finish = resolve }))
+    const { ctx, gateway } = await harness({ context, adapter: adapter({ selectEikonaCandidate: select }) })
+    const pending = gateway.selectEikonaCandidate({ selection })
+    await vi.waitFor(() => expect(select).toHaveBeenCalledOnce())
+    if (change === 'project') context.projectRef = 'project:other'
+    if (change === 'membership') (context as { membershipRevision: string }).membershipRevision = '2'
+    if (change === 'adapter') (ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory).register(adapter({ transport: 'service', configured: true }))
+    finish({ status: 'selected', selection })
+    expect(await pending).toEqual(change === 'unchanged' ? { status: 'selected', selection } : { status: 'permission_denied' })
+  })
+  it('rejects malformed inputs and mismatched selection acknowledgments', async () => {
+    const selection = { artifactRef: 'eikona://artifacts/run/candidate', contentDigest: 'a'.repeat(64) }
+    const select = vi.fn(async () => ({ status: 'selected' as const, selection: { ...selection, contentDigest: 'b'.repeat(64) } }))
+    const { gateway } = await harness({ context: expectedContext(), adapter: adapter({ selectEikonaCandidate: select }) })
+    expect(await gateway.selectEikonaCandidate({ selection, ownerURL: 'https://invalid.example' })).toEqual({ status: 'invalid_input' })
+    expect(select).not.toHaveBeenCalled()
+    expect(await gateway.selectEikonaCandidate({ selection })).toEqual({ status: 'needs_contract' })
+  })
+})
+
+describe('explicit body read lifetime', () => {
+  it.each(['unchanged', 'project', 'membership', 'adapter'])('checks %s binding after the owner returns', async change => {
+    const context = expectedContext()
+    const artifact = { schema: PANE_ARTIFACT_SCHEMA, owner: 'eikona', kind: 'text', ref: 'artifact:body', version: '1', mediaType: 'text/plain', title: 'Body', evidenceRefs: [], capabilities: [] }
+    const content = { artifact, contentRevision: '1', content: 'Fixture body' }
+    let finish!: (value: typeof content) => void
+    const read = vi.fn(() => new Promise<typeof content>(resolve => { finish = resolve }))
+    const { ctx, gateway } = await harness({ context, adapter: adapter({ readArtifactContent: read }) })
+    const pending = gateway.readArtifactContent(artifact)
+    await vi.waitFor(() => expect(read).toHaveBeenCalledOnce())
+    if (change === 'project') (context as { projectRef: string }).projectRef = 'project:other'
+    if (change === 'membership') (context as { membershipRevision: string }).membershipRevision = '2'
+    if (change === 'adapter') {
+      const directory = ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory
+      directory.register(adapter({ transport: 'service', configured: true }))
+    }
+    finish(content)
+    expect(await pending).toEqual(change === 'unchanged' ? content : null)
+    expect(read.mock.calls[0]?.[1]).toEqual(expectedContext())
+  })
+})
+
+describe('original operation identity persistence', () => {
+  it('does not expose a recalled identity after context changes during storage read', async () => {
+    const rows = new Map<string, unknown>(), context = expectedContext()
+    let switchContext = false
+    const storage = { open: async () => ({ table: () => ({ get: (key: string) => rows.get(key),
+      entries: () => { if (switchContext) context.projectRef = 'project:other'; return rows.entries() },
+      put: async (key: string, value: unknown) => { rows.set(key, value) }, delete: async (key: string) => rows.delete(key),
+    }), close: async () => undefined }) }
+    const { gateway } = await harness({ context, storage, adapter: adapter({ dispatch: vi.fn(async () => { throw Error('lost') }) }) })
+    expect((await gateway.dispatch(request(context))).status).toBe('unknown')
+    switchContext = true
+    expect(await gateway.recallOperationIdentity({ owner: 'eikona', actionId: 'generate.preview', expectedTargetRef: 'project:one' })).toBeNull()
+    expect(rows.size).toBe(1)
+  })
+  it('recalls a stored original key from a new Gateway without action values', async () => {
+    const rows = new Map<string, unknown>()
+    const storage = { open: async () => ({ table: (name: string) => ({
+      get: (key: string) => name === 'requests' ? rows.get(key) : undefined,
+      entries: () => rows.entries(),
+      put: async (key: string, value: unknown) => { if (name === 'requests') rows.set(key, value) },
+      delete: async (key: string) => name === 'requests' ? rows.delete(key) : false,
+    }), close: async () => undefined }) }
+    const context = expectedContext()
+    const send = vi.fn(async () => { expect(rows.size).toBe(1); throw new Error('lost') })
+    const source = adapter({ dispatch: send, reconcile: vi.fn(async () => ({ owner: 'eikona', actionId: 'generate.preview', status: 'completed', receiptRef: 'receipt:original' })) })
+    const first = await harness({ context, adapter: source, storage })
+    const lost = await first.gateway.dispatch(request(context))
+    expect(lost.status).toBe('unknown')
+    const restored = await harness({ context, adapter: source, storage })
+    const recalled = await restored.gateway.recallOperationIdentity({ owner: 'eikona', actionId: 'generate.preview', expectedTargetRef: 'project:one' })
+    expect(recalled).toMatchObject({ owner: 'eikona', actionId: 'generate.preview', idempotencyKey: 'eikona-generate-0001' })
+    expect(JSON.stringify(recalled)).not.toMatch(/values|"body"/)
+    const recoveries = await restored.gateway.listOperationRecoveries()
+    expect(recoveries).toMatchObject({ schemaVersion: 'creator.operation-recovery-page.v1alpha1', status: 'ready', operations: [{ request: { idempotencyKey: 'eikona-generate-0001' }, targetVersion: '1' }] })
+    expect(JSON.stringify(recoveries)).not.toMatch(/"values"|"body"/)
+    expect((await restored.gateway.dispatch({ ...request(context), idempotencyKey: 'replacement-request' })).status).toBe('reconcile_required')
+    expect(send).toHaveBeenCalledOnce()
+    expect((await restored.gateway.reconcile(recalled)).status).toBe('completed')
+    expect(rows.size).toBe(0)
+    expect(await restored.gateway.listOperationRecoveries()).toMatchObject({ status: 'ready', operations: [] })
+  })
+  it.each([false, true])('does not dispatch when durable storage acknowledgment fails (written=%s)', async written => {
+    const rows = new Map<string, unknown>()
+    const storage = { open: async () => ({ table: () => ({ get: (key: string) => rows.get(key), entries: () => rows.entries(),
+      put: async (key: string, value: unknown) => { if (written) rows.set(key, value); throw Error('storage acknowledgment failed') },
+      delete: async (key: string) => rows.delete(key),
+    }), close: async () => undefined }) }
+    const send = vi.fn(async () => ({ owner: 'eikona', actionId: 'generate.preview', status: 'accepted' as const, receiptRef: 'receipt:accepted' }))
+    const { gateway } = await harness({ context: expectedContext(), adapter: adapter({ dispatch: send }), storage })
+    expect((await gateway.dispatch(request())).status).toBe('reconcile_required')
+    expect(send).not.toHaveBeenCalled()
+    expect(rows.size).toBe(Number(written))
+  })
+})
+
 describe('original operation reconciliation', () => {
   const request = () => ({ schema: 'pane.action-reconcile-request.v1alpha1', owner: 'eikona', actionId: 'generate.preview',
     expectedTargetRef: 'project:one', context: expectedContext(), idempotencyKey: 'creator-original-key' })
@@ -110,7 +211,7 @@ function adapter(overrides: Partial<CreatorOwnerAdapterV1> = {}): CreatorOwnerAd
   }
 }
 
-async function harness(input?: { context?: CreatorStudioContextV1; adapter?: CreatorOwnerAdapterV1; ordo?: { snapshot(): unknown; decide?(decisionRef: string): Promise<unknown> } }): Promise<{ ctx: Context; gateway: CreatorStudioGateway }> {
+async function harness(input?: { context?: CreatorStudioContextV1; adapter?: CreatorOwnerAdapterV1; ordo?: { snapshot(): unknown; decide?(decisionRef: string): Promise<unknown> }; storage?: unknown }): Promise<{ ctx: Context; gateway: CreatorStudioGateway }> {
   const ctx = new Context()
   contexts.push(ctx)
   if (input?.context !== undefined) ctx.provide(CREATOR_STUDIO_EXPECTED_CONTEXT, input.context)
@@ -118,6 +219,7 @@ async function harness(input?: { context?: CreatorStudioContextV1; adapter?: Cre
   if (input?.adapter !== undefined) directory.register(input.adapter)
   ctx.provide(CREATOR_STUDIO_OWNER_DIRECTORY, directory)
   if (input?.ordo !== undefined) ctx.provide('ordoAgentOps', input.ordo)
+  if (input?.storage !== undefined) ctx.provide('storageDomain', input.storage)
   await ctx.plugin(CreatorStudioGateway)
   return { ctx, gateway: ctx.get('creatorStudio') as CreatorStudioGateway }
 }
@@ -168,6 +270,22 @@ function request(context = expectedContext()) {
 }
 
 describe('CreatorStudioGateway', () => {
+  it.each(['absent', 'too-small', 'allowed'])('rechecks %s text-body admission against the current descriptor', async mode => {
+    const base = adapter()
+    const dispatch = vi.fn(async () => ({ status: 'completed' as const, owner: 'eikona', actionId: 'generate.preview', receiptRef: 'receipt:body' }))
+    const scoped = adapter({ dispatch, snapshot: async context => {
+      const snapshot = await base.snapshot(context)
+      return { ...snapshot, actions: snapshot.actions.map(action => ({ ...action,
+        fields: [{ key: 'body', kind: 'textarea' as const, label: 'Text', required: true, maxLength: 16384 }],
+        ...(mode === 'absent' ? {} : { textBody: { field: 'body', maxBytes: mode === 'allowed' ? 20000 : 100 } }),
+      })) }
+    } })
+    const { gateway } = await harness({ context: expectedContext(), adapter: scoped })
+    const result = await gateway.dispatch({ ...request(), textBody: { field: 'body', content: 'a'.repeat(17000) } })
+    expect(dispatch).toHaveBeenCalledTimes(mode === 'allowed' ? 1 : 0)
+    expect(result.status === 'completed').toBe(mode === 'allowed')
+  })
+
   it('fails closed without a complete server-injected context', async () => {
     const { gateway } = await harness({ adapter: adapter() })
     const snapshot = await gateway.snapshot()
@@ -256,5 +374,60 @@ describe('CreatorStudioGateway', () => {
     expect(receipt).toMatchObject({ status: 'unknown', reconcileReason: 'settlement_unknown' })
     expect(decide).toHaveBeenCalledOnce()
     expect(decide).toHaveBeenCalledWith('decision:one')
+  })
+})
+
+describe('fixed batch input gateway', () => {
+  it.each(['unchanged', 'project', 'membership', 'adapter', 'digest'])('rejects stale or substituted %s observations', async change => {
+    const context = expectedContext(), input = { batchRef: 'batch:one', digest: `sha256:${'a'.repeat(64)}` }
+    let finish!: (value: unknown) => void
+    const read = vi.fn(() => new Promise(resolve => { finish = resolve }))
+    const { ctx, gateway } = await harness({ context, adapter: adapter({ readEikonaBatchInput: read }) })
+    const pending = gateway.readEikonaBatchInput(input)
+    await vi.waitFor(() => expect(read).toHaveBeenCalledOnce())
+    if (change === 'project') context.projectRef = 'project:other'
+    if (change === 'membership') (context as { membershipRevision: string }).membershipRevision = '2'
+    if (change === 'adapter') (ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory).register(adapter({ transport: 'service', configured: true }))
+    const value = { status: 'ready', projectRef: 'project:owner', ...input, ...(change === 'digest' ? { digest: `sha256:${'b'.repeat(64)}` } : {}), requestCount: 1, candidateCount: 2, executionAuthorized: false }
+    finish(value)
+    expect(await pending).toEqual(change === 'unchanged' ? value : { status: 'unconfirmed' })
+  })
+})
+it('rejects oversized batch pages and non-advancing cursors', async () => {
+  const item = { batchRef: 'batch:one', digest: `sha256:${'a'.repeat(64)}`, requestCount: 1, candidateCount: 1 }
+  const cursor = `${'a'.repeat(64)}-${'b'.repeat(64)}-${'c'.repeat(64)}.json`
+  let page: unknown = { status: 'ready', projectRef: 'project:owner', items: [item], nextCursor: cursor }
+  const { gateway } = await harness({ context: expectedContext(), adapter: adapter({ listEikonaBatchInputs: async () => page }) })
+  expect(await gateway.listEikonaBatchInputs({ limit: 1, cursor })).toEqual({ status: 'unconfirmed' })
+  page = { status: 'ready', projectRef: 'project:owner', items: [item, { ...item, batchRef: 'batch:two' }] }
+  expect(await gateway.listEikonaBatchInputs({ limit: 1 })).toEqual({ status: 'unconfirmed' })
+  page = { status: 'ready', projectRef: 'project:owner', items: [item] }
+  expect(await gateway.listEikonaBatchInputs({ limit: 1 })).toEqual(page)
+})
+it('keeps batch planning distinct from execution authorization and rejects mismatched costs', async () => {
+ const input = { batchRef: 'batch:one', digest: `sha256:${'a'.repeat(64)}` }
+ const fixed = { status: 'ready', projectRef: 'project:owner', ...input, planDigest: `sha256:${'b'.repeat(64)}`, planStatus: 'blocked', requestCount: 1, estimatedCalls: 1, maxParallelRequests: 1, maxProviderCalls: 1, costEstimateKnown: false, blockers: [{ requestId: 'request:one', code: 'COST_ESTIMATE_UNKNOWN' }], executionAuthorized: false }
+ let result: unknown = fixed
+ const { gateway } = await harness({ context: expectedContext(), adapter: adapter({ readEikonaBatchPlan: async () => result }) })
+ expect(await gateway.readEikonaBatchPlan(input)).toEqual(fixed)
+ for (const value of [{ ...fixed, executionAuthorized: true }, { ...fixed, estimatedUSDUpper: 0 }, { ...fixed, digest: `sha256:${'c'.repeat(64)}` }]) {
+  result = value
+  expect(await gateway.readEikonaBatchPlan(input)).toEqual({ status: 'unconfirmed' })
+ }
+})
+
+
+describe('owner snapshot isolation', () => {
+  it('reads only the requested adapter while retaining the old six-owner snapshot contract', async () => {
+    const read = vi.fn(adapter().snapshot)
+    const { ctx, gateway } = await harness({ context: expectedContext(), adapter: adapter({ snapshot: read }) })
+    const blocked = vi.fn(() => new Promise<never>(() => {}))
+    ;(ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory).register(adapter({ owner: 'scaena', snapshot: blocked }))
+    const snapshot = await gateway.snapshotOwner('eikona')
+    expect(snapshot.owners.map(owner => owner.owner)).toEqual(['eikona'])
+    expect(snapshot.status).toBe('ready')
+    expect(read).toHaveBeenCalledOnce()
+    expect(blocked).not.toHaveBeenCalled()
+    await expect(gateway.snapshotOwner('unknown')).rejects.toThrow()
   })
 })

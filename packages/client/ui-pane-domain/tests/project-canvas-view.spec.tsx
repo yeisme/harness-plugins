@@ -42,6 +42,7 @@ async function key(element: Element, init: KeyboardEventInit): Promise<void> {
 
 describe('project canvas keyboard equivalents', () => {
   beforeEach(() => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     class TestResizeObserver { observe() {} disconnect() {} unobserve() {} }
     vi.stubGlobal('ResizeObserver', TestResizeObserver)
   })
@@ -55,6 +56,9 @@ describe('project canvas keyboard equivalents', () => {
     const root = await mount(controller, container)
     const surface = container.querySelector('[data-project-canvas="true"]')!
     expect(surface).not.toBeNull()
+    expect(surface.querySelector('.ys-context-bar')).not.toBeNull()
+    expect(surface.querySelector('.ys-context-title')?.textContent).toBe(canvasZh.title)
+    expect(surface.querySelector('.ys-context-value')?.textContent).toBe(scope.projectRef)
 
     await key(surface, { key: 'Tab' })
     expect(controller.getSnapshot().editor!.selection).toEqual(['a'])
@@ -94,4 +98,22 @@ describe('project canvas keyboard equivalents', () => {
     expect(node).toMatchObject({ position: { x: 0, y: 0 } })
     await act(async () => root.unmount())
   })
+  it('hides a stale run preview when document inputs change', async () => {
+    const { controller } = setup()
+    await controller.load()
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = await mount(controller, container)
+    const inspect = [...container.querySelectorAll('button')].find(button => button.textContent === canvasZh.inspect)!
+    await act(async () => inspect.click())
+    expect(container.textContent).toContain(canvasZh.noExecution)
+    await act(async () => { controller.edit({ type: 'text', id: 'a', text: 'new prompt' }) })
+    expect(container.textContent).not.toContain(canvasZh.noExecution)
+    await act(async () => inspect.click())
+    expect(container.textContent).toContain(canvasZh.noExecution)
+    await act(async () => { controller.edit({ type: 'select', ids: ['b'] }) })
+    expect(container.textContent).not.toContain(canvasZh.noExecution)
+    await act(async () => root.unmount())
+  })
+
 })

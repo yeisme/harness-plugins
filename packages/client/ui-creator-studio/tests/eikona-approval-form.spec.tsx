@@ -1,0 +1,101 @@
+// @vitest-environment jsdom
+import { afterEach, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, waitFor, render, screen } from '@testing-library/react'
+import { EikonaApprovalForm } from '../src/eikona-approval-form.tsx'
+import { EikonaPreparationForm } from '../src/eikona-preparation-form.tsx'
+import { defaultCreatorStudioTranslator as t } from '../src/locales.ts'
+afterEach(cleanup)
+it('shows an unknown revocation instead of a current approval and keeps the receipt', async () => {
+  const approval = { status: 'approved' as const, approvalRef: `ega_${'e'.repeat(64)}`, preparationRef: preparation.preparationRef, digest: preparation.digest, projectId: 'project', maxCostUSD: 0.5, maxImages: 1 as const, allowUnknownCost: true as const, expiresAt: new Date(Date.now() + 60000).toISOString() }
+  const revoke = vi.fn(async () => ({ status: 'unconfirmed' as const }))
+  const readStatus = vi.fn(async () => ({ status: 'observed' as const, approvalRef: approval.approvalRef, preparationRef: preparation.preparationRef, digest: preparation.digest, projectId: preparation.projectId, revoked: true, expired: false, consumedOperation: `own_${'f'.repeat(24)}`, expiresAt: approval.expiresAt, observedAt: new Date().toISOString() }))
+  render(<EikonaApprovalForm preparation={preparation} approve={async () => approval} revoke={revoke} readStatus={readStatus} available t={t} />)
+  fireEvent.change(screen.getByLabelText('最高费用（USD）'), { target: { value: '0.5' } })
+  fireEvent.change(screen.getByLabelText('允许未知费用'), { target: { value: 'yes' } })
+  fireEvent.click(screen.getByRole('button', { name: '确认预算批准' }))
+  await screen.findByText('预算已批准，尚未执行生成。')
+  fireEvent.click(screen.getByRole('button', { name: '确认撤销此批准' }))
+  await screen.findByText(/撤销结果未确认/u)
+  expect(screen.queryByText('预算已批准，尚未执行生成。')).toBeNull()
+  expect(screen.getByText(approval.approvalRef)).toBeTruthy()
+  expect((screen.getByRole('button', { name: '确认撤销此批准' }) as HTMLButtonElement).disabled).toBe(true)
+  expect(revoke).toHaveBeenCalledOnce()
+  fireEvent.click(screen.getByRole('button', { name: '核对批准状态' }))
+  await screen.findByText('批准已撤销，回执保留供核对。')
+  expect(screen.getByText(`own_${'f'.repeat(24)}`)).toBeTruthy()
+  expect(screen.getByText(/撤销不会取消该操作/u)).toBeTruthy()
+  expect(readStatus).toHaveBeenCalledWith({ approvalRef: approval.approvalRef })
+  const previous = await readStatus.mock.results[0]!.value
+  readStatus.mockResolvedValueOnce({ ...previous, revoked: false, observedAt: new Date(Date.parse(previous.observedAt) - 1000).toISOString() })
+  fireEvent.click(screen.getByRole('button', { name: '核对批准状态' }))
+  await screen.findByText('以下为上次成功核对的记录')
+  expect(screen.getByText('批准已撤销，回执保留供核对。')).toBeTruthy()
+
+  expect(revoke).toHaveBeenCalledOnce()
+})
+it('marks expiry without discarding the receipt or requesting another approval', async () => {
+  vi.useFakeTimers()
+  try {
+    const approve = vi.fn(async () => ({ status: 'approved' as const, approvalRef: `ega_${'e'.repeat(64)}`, preparationRef: preparation.preparationRef, digest: preparation.digest, projectId: 'project', maxCostUSD: 0.5, maxImages: 1 as const, allowUnknownCost: true as const, expiresAt: new Date(Date.now() + 1000).toISOString() }))
+    const view = render(<EikonaApprovalForm preparation={preparation} approve={approve} available t={t} />)
+    fireEvent.change(screen.getByLabelText('最高费用（USD）'), { target: { value: '0.5' } })
+    fireEvent.change(screen.getByLabelText('允许未知费用'), { target: { value: 'yes' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认预算批准' })) })
+    await act(async () => { vi.advanceTimersByTime(1001) })
+    expect(screen.getByRole('status').textContent).toContain('已到期')
+    expect(screen.getByText(`ega_${'e'.repeat(64)}`)).toBeTruthy()
+    expect(approve).toHaveBeenCalledOnce()
+    view.unmount()
+    expect(vi.getTimerCount()).toBe(0)
+  } finally { vi.useRealTimers() }
+})
+const preparation = { status: 'ready' as const, preparationRef: `egp_${'a'.repeat(64)}`, projectId: 'project', promptRef: 'eikona://prompts/prompt/versions/1', promptDigest: 'b'.repeat(64), digest: 'c'.repeat(64), summaryDigest: 'd'.repeat(64), modelRef: 'openai/gpt-5.4-image-2', candidateCount: 1 as const, costState: 'unknown' as const, executionAuthorized: false as const, createdAt: '2026-09-09T00:00:00Z', controls: { model_ref: 'openai/gpt-5.4-image-2', candidate_count: 1 as const } }
+it('mounts approval only for a preparation and discards consent after editing it', async () => {
+  render(<EikonaPreparationForm prepare={async () => preparation} approve={vi.fn()} available approvalAvailable t={t} />)
+  expect(screen.queryByLabelText('最高费用（USD）')).toBeNull()
+  fireEvent.change(screen.getByLabelText('提示词 ID'), { target: { value: 'prompt' } })
+  fireEvent.click(screen.getByRole('button', { name: '创建准备' }))
+  await screen.findByLabelText('最高费用（USD）')
+  fireEvent.change(screen.getByLabelText('最高费用（USD）'), { target: { value: '0.5' } })
+  fireEvent.change(screen.getByLabelText('允许未知费用'), { target: { value: 'yes' } })
+  fireEvent.change(screen.getByLabelText('固定版本'), { target: { value: '2' } })
+  expect(screen.queryByLabelText('最高费用（USD）')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '创建准备' }))
+  await screen.findByLabelText('最高费用（USD）')
+  expect((screen.getByLabelText('允许未知费用') as HTMLSelectElement).value).toBe('no')
+})
+it('keeps preparation locked while an approval is pending and after an unknown result', async () => {
+  let finish!: (value: { status: 'unconfirmed' }) => void
+  const approve = vi.fn(() => new Promise<{ status: 'unconfirmed' }>(resolve => { finish = resolve }))
+  render(<EikonaPreparationForm prepare={async () => preparation} approve={approve} available approvalAvailable t={t} />)
+  fireEvent.change(screen.getByLabelText('提示词 ID'), { target: { value: 'prompt' } })
+  fireEvent.click(screen.getByRole('button', { name: '创建准备' }))
+  await screen.findByLabelText('最高费用（USD）')
+  fireEvent.change(screen.getByLabelText('最高费用（USD）'), { target: { value: '0.5' } })
+  fireEvent.change(screen.getByLabelText('允许未知费用'), { target: { value: 'yes' } })
+  fireEvent.click(screen.getByRole('button', { name: '确认预算批准' }))
+  expect((screen.getByLabelText('提示词 ID') as HTMLInputElement).disabled).toBe(true)
+  expect((screen.getByRole('button', { name: '创建准备' }) as HTMLButtonElement).disabled).toBe(true)
+  await waitFor(() => expect(approve).toHaveBeenCalledOnce())
+  finish({ status: 'unconfirmed' })
+  await screen.findByText(/批准结果未确认/u)
+  expect((screen.getByLabelText('固定版本') as HTMLInputElement).disabled).toBe(true)
+  expect(approve).toHaveBeenCalledOnce()
+})
+it('requires explicit consent after budget edits and stops after unknown approval', async () => {
+  const approve = vi.fn(async () => ({ status: 'unconfirmed' as const }))
+  render(<EikonaApprovalForm preparation={preparation} approve={approve} available t={t} />)
+  const button = screen.getByRole('button', { name: '确认预算批准' }) as HTMLButtonElement
+  expect(button.disabled).toBe(true)
+  fireEvent.change(screen.getByLabelText('最高费用（USD）'), { target: { value: '0.5' } })
+  expect(button.disabled).toBe(true)
+  fireEvent.change(screen.getByLabelText('允许未知费用'), { target: { value: 'yes' } })
+  fireEvent.change(screen.getByLabelText('最高费用（USD）'), { target: { value: '0.75' } })
+  expect(button.disabled).toBe(true)
+  fireEvent.change(screen.getByLabelText('允许未知费用'), { target: { value: 'yes' } })
+  fireEvent.click(button)
+  await screen.findByText(/批准结果未确认/u)
+  expect(approve).toHaveBeenCalledOnce()
+  expect(approve).toHaveBeenCalledWith({ preparation_ref: preparation.preparationRef, expected_digest: preparation.digest, max_cost_usd: 0.75, max_images: 1, allow_unknown_cost: true, confirmed: true, expires_in_seconds: 3600 })
+  expect(button.disabled).toBe(true)
+})

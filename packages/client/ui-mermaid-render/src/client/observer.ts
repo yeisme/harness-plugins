@@ -51,6 +51,7 @@ interface GraftRecord {
   svg?: string
   error?: string
   failed: boolean
+  renderRevision: number
 }
 
 /**
@@ -160,10 +161,12 @@ export class MermaidGraftController {
   private scan(): void {
     if (this.root === undefined) return
     for (const [codeEl, record] of this.records) {
-      if (!codeEl.isConnected || !record.host.isConnected) {
+      if (!codeEl.isConnected || !record.host.isConnected || codeEl.textContent !== record.source) {
+        this.records.delete(codeEl)
         record.reactRoot.unmount()
         record.figure.remove()
-        this.records.delete(codeEl)
+        codeEl.classList.remove(ON_CLASS)
+        record.host.style.display = ''
       }
     }
     for (const el of findMermaidFenceCodes(this.root)) {
@@ -196,11 +199,12 @@ export class MermaidGraftController {
     }
     const { figure, reactRoot } = this.buildFigure()
     host.insertAdjacentElement('afterend', figure)
-    const record: GraftRecord = { host, figure, reactRoot, source, failed: false }
+    const record: GraftRecord = { host, figure, reactRoot, source, failed: false, renderRevision: 0 }
     this.records.set(codeEl, record)
     this.renderRecord(record)
     try {
       const svg = await this.renderer.render(source)
+      if (this.records.get(codeEl) !== record || record.renderRevision !== 0) return
       if (!codeEl.isConnected) {
         reactRoot.unmount()
         figure.remove()
@@ -212,6 +216,7 @@ export class MermaidGraftController {
       host.style.display = 'none'
       this.renderRecord(record)
     } catch (error) {
+      if (this.records.get(codeEl) !== record || record.renderRevision !== 0) return
       record.failed = true
       figure.classList.add('is-failed')
       record.error = `${this.labels.failed}: ${error instanceof Error ? error.message : String(error)}`
@@ -255,10 +260,13 @@ export class MermaidGraftController {
   private async rerenderAll(): Promise<void> {
     for (const [codeEl, record] of this.records) {
       if (record.failed) continue
+      const revision = ++record.renderRevision
       try {
         const svg = await this.renderer.render(record.source)
-        if (codeEl.isConnected) {
+        if (codeEl.isConnected && this.records.get(codeEl) === record && record.renderRevision === revision) {
           record.svg = svg
+          codeEl.classList.add(ON_CLASS)
+          record.host.style.display = 'none'
           this.renderRecord(record)
         }
       } catch { /* 主题重渲染失败保留现图 */ }

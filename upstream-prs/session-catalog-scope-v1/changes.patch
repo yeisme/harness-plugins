@@ -1,0 +1,118 @@
+--- a/packages/api/session-controller/src/types.ts
++++ b/packages/api/session-controller/src/types.ts
+@@ -247,6 +247,8 @@
+ 
+ /** Session-addressed request for the human-invocable skill catalog. */
+ export interface SkillListRequest {
++  /** Opt-in search callers require resolved Session composition instead of global fallback. */
++  readonly requireResolvedScope?: boolean
+   readonly sessionId: SessionId
+   /** Tools inspectors may include model-only skills; composer defaults remain unchanged. */
+   readonly includeModelInvocable?: boolean
+@@ -266,6 +268,8 @@
+ 
+ /** Human-invocable skills visible through one Session's composition. */
+ export interface SkillListValue {
++  /** Present only after an opt-in strict scope lookup succeeds. */
++  readonly scopeResolved?: boolean
+   readonly skills: readonly SkillEntry[]
+   /** Present only for the opt-in complete user/model capability listing. */
+   readonly catalogComplete?: boolean
+@@ -273,11 +277,15 @@
+ 
+ /** Session-addressed request for the currently available Tool schemas. */
+ export interface ToolListRequest {
++  /** Opt-in search callers require resolved Session composition instead of global fallback. */
++  readonly requireResolvedScope?: boolean
+   readonly sessionId: SessionId
+ }
+ 
+ /** Host-owned, description-only Tool catalog used by reference discovery. */
+ export interface ToolListValue {
++  /** Present only after an opt-in strict scope lookup succeeds. */
++  readonly scopeResolved?: boolean
+   readonly tools: readonly { readonly name: string; readonly description?: string }[]
+ }
+ 
+--- a/packages/api/session-controller/src/tool-catalog.ts
++++ b/packages/api/session-controller/src/tool-catalog.ts
+@@ -35,8 +35,9 @@
+       }
+       throw new RemoteError('gateway/internal', `session "${request.sessionId}" could not be inspected: ${String(error)}`, {})
+     }
+-    const scope = await this.scopeFor(request.sessionId, agentPreset)
++    const scope = await this.scopeFor(request.sessionId, agentPreset, request.requireResolvedScope === true)
+     return {
++      ...(request.requireResolvedScope === true ? { scopeResolved: true } : {}),
+       tools: this.ctx.tools.schemas(scope).map(tool => ({
+         name: tool.name,
+         ...(tool.description === undefined ? {} : { description: tool.description }),
+@@ -44,14 +45,20 @@
+     }
+   }
+ 
+-  private async scopeFor(sessionId: SessionId, agentPreset: string | undefined): Promise<ScopeKey | undefined> {
++  private async scopeFor(sessionId: SessionId, agentPreset: string | undefined, requireResolvedScope = false): Promise<ScopeKey | undefined> {
+     const live = this.ctx.agents.get(sessionId)
+     if (live !== undefined) return live
+     const presets = this.ctx.get('agentPresets')
+-    if (presets === undefined) return undefined
++    if (presets === undefined) {
++      if (requireResolvedScope && agentPreset !== undefined) throw new RemoteError('gateway/internal', 'Session catalog scope is unavailable', { reason: 'session_scope_unavailable' })
++      return undefined
++    }
+     try {
+-      return await presets.standingKeyFor(agentPreset)
++      const scope = await presets.standingKeyFor(agentPreset)
++      if (requireResolvedScope && scope === undefined) throw new RemoteError('gateway/internal', 'Session catalog scope is unavailable', { reason: 'session_scope_unavailable' })
++      return scope
+     } catch {
++      if (requireResolvedScope) throw new RemoteError('gateway/internal', 'Session catalog scope is unavailable', { reason: 'session_scope_unavailable' })
+       return undefined
+     }
+   }
+--- a/packages/api/session-controller/src/skill-catalog.ts
++++ b/packages/api/session-controller/src/skill-catalog.ts
+@@ -72,11 +72,13 @@
+       )
+     }
+ 
+-    const scope = await this.scopeFor(sessionId, agentPreset)
++    const scope = await this.scopeFor(sessionId, agentPreset, request.requireResolvedScope === true)
+     try {
+-      const skills = (await skillRegistry.list({ cwd, scope })).filter(skill => isUserInvocable(skill) || request.includeModelInvocable === true && skill.invocation.modelInvocable)
++      const observation = request.requireResolvedScope === true ? await skillRegistry.snapshot({ cwd, scope }) : undefined
++      const skills = (observation?.skills ?? await skillRegistry.list({ cwd, scope })).filter(skill => isUserInvocable(skill) || request.includeModelInvocable === true && skill.invocation.modelInvocable)
+       return {
+-        ...(request.includeModelInvocable ? { catalogComplete: true } : {}),
++        ...(request.requireResolvedScope === true ? { scopeResolved: true } : {}),
++        ...(request.includeModelInvocable ? { catalogComplete: observation?.complete ?? true } : {}),
+         skills: skills.map(skill => ({
+           name: skill.name,
+           description: skill.description,
+@@ -93,15 +95,22 @@
+   private async scopeFor(
+     sessionId: SessionId,
+     agentPreset: string | undefined,
++    requireResolvedScope = false,
+   ): Promise<ScopeKey | undefined> {
+     const live = this.ctx.agents.get(sessionId)
+     if (live !== undefined) return live
+     const presets = this.ctx.get('agentPresets')
+-    if (presets === undefined) return undefined
++    if (presets === undefined) {
++      if (requireResolvedScope && agentPreset !== undefined) throw new RemoteError('gateway/internal', 'Session catalog scope is unavailable', { reason: 'session_scope_unavailable' })
++      return undefined
++    }
+     try {
+-      return await presets.standingKeyFor(agentPreset)
++      const scope = await presets.standingKeyFor(agentPreset)
++      if (requireResolvedScope && scope === undefined) throw new RemoteError('gateway/internal', 'Session catalog scope is unavailable', { reason: 'session_scope_unavailable' })
++      return scope
+     } catch {
+-      // An unknown or unusable recorded preset falls back to the global registry.
++      if (requireResolvedScope) throw new RemoteError('gateway/internal', 'Session catalog scope is unavailable', { reason: 'session_scope_unavailable' })
++      // Legacy callers retain the global fallback.
+       return undefined
+     }
+   }

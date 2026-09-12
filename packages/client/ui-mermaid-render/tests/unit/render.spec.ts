@@ -40,6 +40,21 @@ describe('createMermaidRenderer', () => {
     expect(renderMock).toHaveBeenCalledTimes(2)
   })
 
+  it('does not reuse or cache a pending render across a theme change', async () => {
+    let resolveOld!: (value: { svg: string }) => void
+    renderMock.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve }))
+    const renderer = createMermaidRenderer()
+    const old = renderer.render('A-->B').catch(error => error)
+    await vi.waitFor(() => expect(renderMock).toHaveBeenCalledTimes(1))
+    renderer.setTheme('dark')
+    renderMock.mockResolvedValueOnce({ svg: '<svg><text>dark</text></svg>' })
+    expect(await renderer.render('A-->B')).toContain('dark')
+    resolveOld({ svg: '<svg><text>old</text></svg>' })
+    expect(await old).toBeInstanceOf(Error)
+    expect(await renderer.render('A-->B')).toContain('dark')
+    expect(renderMock).toHaveBeenCalledTimes(2)
+  })
+
   it('sanitize drops svg-hostile payload', async () => {
     renderMock.mockResolvedValue({ svg: '<svg><script>x</script><path d="M1 1"/></svg>' })
     const renderer = createMermaidRenderer()

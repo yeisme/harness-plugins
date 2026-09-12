@@ -48,6 +48,21 @@ const added = [
 
 const chunks = []
 const baselineHashes = []
+// A previous reviewed packet is authoritative. Never silently replace its
+// prerequisite hashes with a subsequently modified temporary checkout.
+const expectedBaselines = new Map((await readFile(resolve(delivery, 'baseline.sha256'), 'utf8'))
+  .trim().split('\n').map(line => {
+    const separator = line.indexOf('  ')
+    if (separator !== 64) throw new Error('Invalid reviewed baseline manifest')
+    return [line.slice(separator + 2), line.slice(0, separator)]
+  }))
+for (const [source, saved, relative] of files) {
+  const before = resolve(source === 'captured' ? captured : prerequisite, saved)
+  const actual = createHash('sha256').update(await readFile(before)).digest('hex')
+  if (expectedBaselines.get(relative) !== actual) {
+    throw new Error(`Reviewed baseline mismatch: ${relative}; restore the exact prerequisite before exporting`)
+  }
+}
 for (const [source, saved, relative] of files) {
   const before = resolve(source === 'captured' ? captured : prerequisite, saved)
   const after = resolve(host, relative)

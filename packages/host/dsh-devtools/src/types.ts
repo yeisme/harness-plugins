@@ -63,12 +63,15 @@ export interface DevtoolsLifecycleRecordV1 extends RecordBase {
   readonly sessionRef?: string
 }
 
+export interface DevtoolsToolRecordV1 extends RecordBase { readonly type: 'tool'; readonly kind: 'skill' | 'mcp'; readonly name: string; readonly loadStatus: 'loaded' | 'unavailable' | 'stale' | 'unknown'; readonly callStatus: 'idle' | 'success' | 'error' | 'partial'; readonly callCount: number; readonly durationMs?: number; readonly source?: string; readonly version?: string; readonly schemaSummary?: string; readonly errorSummary?: string; readonly traceRef?: string }
+
 export type DevtoolsRecordV1 =
   | DevtoolsLogRecordV1
   | DevtoolsSpanRecordV1
   | DevtoolsSampleRecordV1
   | DevtoolsFindingRecordV1
   | DevtoolsLifecycleRecordV1
+  | DevtoolsToolRecordV1
 
 export type DevtoolsRecordInputV1 =
   | Omit<DevtoolsLogRecordV1, 'seq'>
@@ -76,6 +79,7 @@ export type DevtoolsRecordInputV1 =
   | Omit<DevtoolsSampleRecordV1, 'seq'>
   | Omit<DevtoolsFindingRecordV1, 'seq'>
   | Omit<DevtoolsLifecycleRecordV1, 'seq'>
+  | Omit<DevtoolsToolRecordV1, 'seq'>
 
 export interface DevtoolsCapabilitiesV1 {
   readonly logger: boolean

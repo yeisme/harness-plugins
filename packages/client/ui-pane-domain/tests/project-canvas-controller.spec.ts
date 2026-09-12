@@ -11,6 +11,19 @@ function setup() {
   return { controller, remote }
 }
 describe('canvas save and recovery controller', () => {
+  it('keeps the conflict revision across undo after reapplying a local draft', async () => {
+    const { controller, remote } = setup()
+    await controller.load(); controller.createDraft()
+    controller.edit({ type: 'camera', camera: { x: 25, y: 0, zoom: 1 } })
+    vi.mocked(remote.canvasSave).mockResolvedValueOnce({ status: 'conflict', revision: 7 })
+    await controller.save()
+    controller.resolveConflict('reapply')
+    controller.edit({ type: 'undo' })
+    expect(controller.getSnapshot().editor?.document.revision).toBe(7)
+    await controller.save()
+    expect(vi.mocked(remote.canvasSave).mock.calls.at(-1)?.[0].document.revision).toBe(7)
+  })
+
   it('restores an unresolved journal as the original pending save and reconciles it without resubmitting', async () => {
     const { controller, remote } = setup()
     const document = { schema: 'dsh.project-canvas.v1alpha1', id: 'main', revision: 0,

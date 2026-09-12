@@ -17,6 +17,7 @@ import type {
   SessionMutationReceiptV1,
   SessionSummaryV1,
 } from '@yeisme/dsh-session-manager'
+import { sessionUrl } from '@yeisme/dsh-client-ui-url-session/codec'
 
 export interface SessionLineageBadge {
   readonly origin: 'edit' | 'retry' | 'fork' | 'unknown'
@@ -32,6 +33,11 @@ export interface SessionSidebarProps {
   onMutation?: ((receipt: SessionMutationReceiptV1) => void) | undefined
   /** Optional rewrite/fork lineage badge. Unknown origins stay unlabeled. */
   lineageOf?: ((session: SessionSummaryV1) => SessionLineageBadge) | undefined
+  /** Optional URL navigation hooks; absent keeps the sidebar compatible. */
+  onCopySessionUrl?: ((sessionId: string) => Promise<void> | void) | undefined
+  onOpenSessionInNewTab?: ((sessionId: string) => void) | undefined
+  sessionUrlOrigin?: string | undefined
+  hasHistoryFallback?: boolean | undefined
 }
 
 interface SessionGroup {
@@ -65,9 +71,10 @@ function filterSessions(sessions: readonly SessionSummaryV1[], query: string): r
   )
 }
 
-export function SessionSidebar({ host, onOpenSession, onMutation, lineageOf }: SessionSidebarProps) {
+export function SessionSidebar({ host, onOpenSession, onMutation, lineageOf, onCopySessionUrl, onOpenSessionInNewTab, sessionUrlOrigin, hasHistoryFallback }: SessionSidebarProps) {
   const [sessions, setSessions] = useState<readonly SessionSummaryV1[]>([])
   const [query, setQuery] = useState('')
+  const [linkFeedback, setLinkFeedback] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -125,6 +132,25 @@ export function SessionSidebar({ host, onOpenSession, onMutation, lineageOf }: S
         <span data-dsh-session-title>{session.title ?? session.sessionId}</span>
         <span data-dsh-session-state={statusState(session)}>{statusLabel(session)}</span>
       </button>
+      {(onCopySessionUrl !== undefined || sessionUrlOrigin !== undefined) && <div data-dsh-session-url-actions>
+        <button type="button" onClick={() => { onOpenSession?.(session.sessionId) }} disabled={onOpenSession === undefined} title={onOpenSession === undefined ? '会话导航不可用' : undefined}>检查渲染</button>
+        <button type="button" onClick={() => {
+          void (async () => {
+            try {
+              if (onCopySessionUrl !== undefined) await onCopySessionUrl(session.sessionId)
+              else {
+                if (sessionUrlOrigin === undefined || navigator.clipboard === undefined) throw new Error('unavailable')
+                await navigator.clipboard.writeText(sessionUrl({ origin: sessionUrlOrigin, sessionId: session.sessionId, form: hasHistoryFallback === true ? 'canonical' : 'alias' }))
+              }
+              setLinkFeedback('已复制会话链接')
+            } catch { setLinkFeedback('无法复制会话链接，请检查剪贴板权限') }
+          })()
+        }}>复制会话链接</button>
+        <button type="button" onClick={() => {
+          if (onOpenSessionInNewTab !== undefined) onOpenSessionInNewTab(session.sessionId)
+          else if (sessionUrlOrigin !== undefined) window.open(sessionUrl({ origin: sessionUrlOrigin, sessionId: session.sessionId, form: hasHistoryFallback === true ? 'canonical' : 'alias' }), '_blank', 'noopener,noreferrer')
+        }}>在新标签页打开</button>
+      </div>}
       {lineage !== undefined && lineage.origin !== 'unknown' && (
         <span data-dsh-session-lineage={lineage.origin} title={lineage.text}>{lineage.text}</span>
       )}
@@ -172,6 +198,7 @@ export function SessionSidebar({ host, onOpenSession, onMutation, lineageOf }: S
           onChange={event => { setQuery(event.currentTarget.value) }}
         />
       </label>
+      {linkFeedback !== '' && <p role="status">{linkFeedback}</p>}
       <div data-dsh-session-scroll>
         {loading && <SurfaceState phase="loading" title="正在加载会话" description="请稍候…" data-dsh-panel-empty />}
         {error !== null && <SurfaceState phase="error" title="会话加载失败" description={error} data-dsh-panel-empty />}

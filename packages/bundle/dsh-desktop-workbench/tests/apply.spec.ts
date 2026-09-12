@@ -1,10 +1,16 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createElement, type ReactNode } from 'react'
 import { apply as applyDesktopWorkbench, DesktopWorkbenchOverlay, inject } from '../src/client/apply.ts'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type { FileHostV1 } from '@yeisme/dsh-file-host'
+import { createExplorerRuntimeSource } from '../../../client/ui-pane-workbench/src/explorer/runtime.ts'
+import { registerExplorerProvider } from '../../../client/ui-pane-workbench/src/explorer/provider.ts'
+import { requestExplorerReveal } from '../../../client/ui-pane-workbench/src/explorer/reveal-navigation.ts'
+import { PaneWorkbenchController } from '../../../client/ui-pane-workbench/src/controller.ts'
+import { PaneViewRegistry } from '../../../client/ui-pane-workbench/src/view-registry.ts'
+import { searchSourcesFor, type SearchCenterOwnerSource } from '../../../client/ui-pane-workbench/src/search-source-registry.ts'
+import type { FileHostV1, FileTreeNodeV2 } from '@yeisme/dsh-file-host'
 import type { TerminalHostV2 } from '@yeisme/dsh-terminal-host'
 import type { MediaHostV1 } from '@yeisme/dsh-rich-media'
 import { getComposerReferenceController, getComposerReferenceDraftControllerV2, getExplorerRuntime } from '@yeisme/dsh-client-ui-pane-workbench/client'
@@ -96,6 +102,58 @@ function fileHost(): FileHostV1 {
     async listEntries() { return [] },
   }
 }
+
+it('registers the file source and confirms opening through the original desktop file view', async () => {
+  const views = new PaneViewRegistry({ capabilities: new Set(['pane.workbench.v1']) })
+  const controller = new PaneWorkbenchController({ registry: views })
+  const sources = searchSourcesFor(controller)
+  const node: FileTreeNodeV2 = { ref: 'file-report', name: 'report.txt', kind: 'file', version: 'stat:1', hasChildren: false, hidden: false, ignored: false, sensitive: false, freshness: 'fresh',
+    availability: { inspect: { state: 'available' }, preview: { state: 'available' }, download: { state: 'available' }, mutate: { state: 'disabled' } } }
+  const page = { workspaceRef: 'workspace:test', generation: 'g1', revision: 'query:1', truncated: false, loaded: 1, nodes: [node] }
+  const inspect = vi.fn(async (ref: string) => ({ owner: 'dsh.local', ref, version: 'content:1', usable: true, sensitive: false, state: 'ready' as const, resource: { name: 'report.txt', kind: 'text' } }))
+  const owner: FileHostV1 = { ...fileHost(), treeV2: { capability: 'FileTreeProjectionCapabilityV2', roots: async () => page, listChildren: async () => page, search: async () => page,
+    reveal: async () => ({ workspaceRef: page.workspaceRef, generation: page.generation, revision: 'parent:1', breadcrumbs: [], target: node }) }, inspect: { capability: 'FileInspectCapabilityV1', inspect } }
+  const pane = { controller, registerView: (input: unknown) => views.registerView(input), openView: controller.openView.bind(controller), registerSearchSource: (source: SearchCenterOwnerSource) => sources.register(source) }
+  const ctx = fakeClientContext({ fileHost: owner, provided: new Map([['paneWorkbench', pane]]) })
+  const dispose = apply(ctx)
+  const result = await sources.query('dsh.files', { query: 'report', scope: { kind: 'profile' }, kinds: ['file'], filters: {}, sort: 'relevance' }, new AbortController().signal)
+  expect(result.results).toHaveLength(1)
+  expect(inspect).not.toHaveBeenCalled()
+  expect(await sources.open(result.results[0]!)).toEqual({ status: 'opened' })
+  expect(inspect).toHaveBeenCalledTimes(1)
+  expect(Object.values(controller.getSnapshot().views)).toContainEqual(expect.objectContaining({ kind: 'desktop.file', resourceKey: 'file-report' }))
+  dispose()
+  expect(sources.getSnapshot()).toEqual([])
+  controller.dispose()
+})
+
+it('opens a directory through the registered source and the original Explorer receiver without body inspection', async () => {
+  const views = new PaneViewRegistry({ capabilities: new Set(['pane.workbench.v1']) })
+  const controller = new PaneWorkbenchController({ registry: views })
+  const sources = searchSourcesFor(controller), runtimeSource = createExplorerRuntimeSource()
+  registerExplorerProvider(views, runtimeSource)
+  const target: FileTreeNodeV2 = { ref: 'folder-reports', name: 'Reports', kind: 'directory', version: 'stat:1', hasChildren: false, hidden: false, ignored: false, sensitive: false, freshness: 'fresh',
+    availability: { inspect: { state: 'disabled' }, preview: { state: 'disabled' }, download: { state: 'disabled' }, mutate: { state: 'disabled' } } }
+  const page = { workspaceRef: 'workspace:test', generation: 'g1', revision: 'query:1', truncated: false, loaded: 1, nodes: [target] }
+  const reveal = vi.fn(async () => ({ workspaceRef: page.workspaceRef, generation: page.generation, revision: 'parent:1', breadcrumbs: [], target }))
+  const inspect = vi.fn()
+  const owner: FileHostV1 = { ...fileHost(), treeV2: { capability: 'FileTreeProjectionCapabilityV2', roots: async () => page, listChildren: async () => page, search: async () => page, reveal }, inspect: { capability: 'FileInspectCapabilityV1', inspect } }
+  const pane = { controller, registerView: (input: unknown) => views.registerView(input), openView: controller.openView.bind(controller), registerSearchSource: (source: SearchCenterOwnerSource) => sources.register(source),
+    registerExplorerRuntime: runtimeSource.bind, revealExplorerResource: (ref: string, version: string, signal?: AbortSignal) => requestExplorerReveal(controller, runtimeSource, ref, version, signal) }
+  const dispose = apply(fakeClientContext({ fileHost: owner, provided: new Map([['paneWorkbench', pane]]) }))
+  const results = await sources.query('dsh.files', { query: 'Reports', scope: { kind: 'profile' }, kinds: ['folder'], filters: {}, sort: 'relevance' }, new AbortController().signal)
+  expect(results.results).toHaveLength(1)
+  const opening = sources.open(results.results[0]!)
+  await waitFor(() => expect(Object.values(controller.getSnapshot().views).some(view => view.kind === 'dsh.explorer')).toBe(true))
+  const view = Object.values(controller.getSnapshot().views).find(view => view.kind === 'dsh.explorer')!
+  const component = views.get('dsh.explorer')!.component as (props: { view: typeof view; retry: () => void }) => ReactNode
+  const mounted = render(createElement(component, { view, retry: () => {} }))
+  await expect(opening).resolves.toEqual({ status: 'opened' })
+  expect(mounted.container.querySelector('[data-explorer-ref="folder-reports"]')?.getAttribute('aria-selected')).toBe('true')
+  expect(reveal).toHaveBeenCalledTimes(2)
+  expect(inspect).not.toHaveBeenCalled()
+  mounted.unmount(); act(() => dispose()); controller.dispose()
+})
 
 it('waits for the canonical pane registry on unified hosts before registering desktop views', () => {
   const unified = { version: 'workspace.unified.v1', registerView: vi.fn(), openPane: vi.fn() }

@@ -6,6 +6,7 @@
 > （仓内三包组合，process 级 token ledger 面板）。文中 API 均摘自两仓实际代码。
 > 适用范围：`agent/harness-plugins`。视觉合同真源是
 > [dsh-unified-panel-visual-system.md](./design/dsh-unified-panel-visual-system.md)。
+> 实施前的设计压力测试见 [cookbook/dsh-plugin-grill-me.md](./cookbook/dsh-plugin-grill-me.md)（显式质询入口 `dsh-plugin-grill-me`）。
 
 ## 1. 先选对 seam：tab、pane 还是 overlay
 

@@ -10,7 +10,7 @@ const runId = `project-canvas-storage-${startedAt.toISOString().replace(/[-:.TZ]
 const evidenceDir = resolve(projectRoot, 'temp/integration-test-runs', runId)
 const relativeEvidenceDir = relative(projectRoot, evidenceDir)
 const commands = [
-  ['pnpm', ['--filter', '@yeisme/dsh-creator-studio-host', 'exec', 'vitest', 'run', 'tests/project-canvas-storage.integration.spec.ts']],
+  ['pnpm', ['--filter', '@yeisme/dsh-creator-studio-host', 'exec', 'vitest', 'run', 'tests/project-canvas-storage.integration.spec.ts', 'tests/eikona-draft-storage.integration.spec.ts']],
 ]
 
 

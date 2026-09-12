@@ -248,3 +248,267 @@ visual-kit 构建及 17 tests 通过；Creator bundle 定向构建通过。首�
 随后新增更严格的模型 content 数组 image block 计数断言，`creative-workspace-host-2026-09-08T02-56-55-024Z-3740985` 在启动阶段因并发全仓 build 清理 session-manager 产物失败；确认 PID 3736443 的 pnpm build 当时仍活跃，未重启或清理对方构建。收紧断言需在产物恢复后复跑。当前领域真实服务、音视频附件与开发环境仍未验收。
 
 并发 build PID 已终止且依赖产物恢复后，重跑 `creative-workspace-host-2026-09-08T02-59-27-559Z-3853678` 为 exit 0、source_inputs_unchanged=true；更严格的 model content 数组验证确认恰有 1 个原生 image block，图片附件实际为 364px（原图 726px）。Host 验收补丁六文件 apply、逐字节比对、reverse-check 通过。`openspec validate --all` 160/160，通过严格 change 校验和 git diff --check。
+
+
+### HTML 静态结构预览增量
+
+核查 CAW-02 发现原 HTML Preview 仅为 CodeBlock 源码高亮。新增 Rich Media `StaticHtmlPreview`，使用已存在的 DOMPurify 依赖创建独立净化实例，只允许语义结构和少量表格属性；完整编辑正文独立保留，不以净化结果回写。无脚本、CSS、网络资源、表单、命名 DOM 或用户 class；无新 iframe、bridge 或依赖安装。128 Ki UTF-16 码元的预览预算只限制渲染，失败／超限不截断源码；异步结果须与当前源码一致。
+
+Rich Media typecheck 与 static-html 4 tests、Creator UI typecheck 与 artifact-workspace／styles 26 tests 通过；Rich Media 和 Creator bundle 构建通过。测试 alias 初次遗漏新增组件导出导致 1 项失败，已改为转发真实 renderer，未用 mock 替代净化逻辑。surface 检查 29 client／7 bundle 通过，bundle 合同 27/27，通过 git diff --check。
+
+`creative-workspace-host-2026-09-08T03-13-46-830Z-643008` 为 exit 0、source_inputs_unchanged=true。真实 Host 显示标题／表格并支持源码编辑后更新预览，原始 script 字符串保留于源码而不执行；资源请求计数为 0，页面错误／警告为 0。候选引用和图片真实裁剪／原生模型图片块仍通过。该证据使用合成 owner、keyless replay，未宣称实际环境运行。随后扩展 360/560/960px 的 HTML 几何验证。
+
+HTML 窄屏增量首跑 `creative-workspace-host-2026-09-08T03-16-42-425Z-747441` 在 ResizeObserver 更新前读取旧几何而失败；保留该失败包，并改为有界等待布局收敛，没有修改 Host 布局代码。最新 `creative-workspace-host-2026-09-08T03-19-37-803Z-851013` exit 0、source_inputs_unchanged=true：360/560/960px、亮暗、HTML 编辑与静态渲染通过；资源请求为 0、page_errors／warnings=0，真实裁剪图片与 1 个原生模型 image block 仍通过。验收补丁六文件 apply／字节比对／reverse-check 通过。
+
+最终 Rich Media 发布包重新构建成功，`vitest run tests/bundle-runtime-smoke.spec.ts tests/static-html.spec.tsx` 为 5/5、exit 0，确保独立净化器修复进入实际 bundle；未安装依赖或更新现有视觉基线。
+
+当前逐 Requirement／Task 的完成审计和剩余动作见 [completion-audit.md](completion-audit.md)。该表保留完整原目标，不以已有局部测试缩减验收范围。
+
+
+### 成果页签键盘、空列表恢复及 Creator 来源刷新
+
+新增回归用例先确认两项实际失败：空列表转可用触发 `Rendered more hooks than during the previous render`；未选中页签仍为 tabindex=0。现将空状态返回移到全部 Hook 之后，保留同上下文草稿；页签加入唯一 ID、tabpanel 关联、roving tabindex、Arrow/Home/End、RTL、IME 与修饰键保护。Creator UI typecheck 和 artifact-workspace／styles 28 tests 通过，覆盖空→有→空→有后草稿保留。
+
+Creator reference owner 增加既有 refresh 回调：只解析同一 opaque ref 的当前 base，或重新授权原版本的不可变候选；不跳到不同候选，不重写旧 claim，proof id 变化、撤权、歧义 head 或失效选区拒绝。实际读取复用完整 resolve 校验。Creator bundle typecheck、11 tests 和构建通过；Gateway 测试覆盖原 v1 失效而显式刷新取得 v2 正文。
+
+实际 Host 首跑受并行 Eikona 页面改版影响，旧测试直接寻找成果区失败（`creative-workspace-host-2026-09-08T03-37-09-813Z-1850034`）。随后按当前“Candidates and edits”入口进入，区分外层“Assets and sources”与内层 Source 页签，并按真实引用标题匹配 aria-label；旧失败包保留，未回滚他人页面改版。
+
+`creative-workspace-host-2026-09-08T03-50-10-432Z-2399645` exit 0、source_inputs_unchanged=true。真实键盘切换及 ARIA 关联通过；Creator 引用编辑后 Refresh source 获取来源比较，Cancel 保留本地改写，再次刷新并 Replace 后恢复 owner 原文，随后发送成功。HTML 窄屏／图片原生附件链路仍通过。该包是合成 owner，不能关闭真实领域版本更新验收。
+
+最终重新构建 Creator bundle 后，`creative-workspace-host-2026-09-08T03-58-44-011Z-2755828` exit 0、source_inputs_unchanged=true；页签键盘／ARIA、Creator 刷新取消／替换、HTML 窄屏及原生图片接收均通过。验收补丁六文件 apply／字节比对／reverse-check 通过；surface 检查 29 client／7 bundle，通过严格 OpenSpec 与 git diff --check。
+
+
+### 图片查看模式与真实 Mermaid 渲染
+
+图片 renderer 原先只要有 selection 回调就锁定所有变换，无法满足 Creator 缩放要求。现增加查看／框选双模式：查看可缩放平移旋转，框选恢复无变换坐标并保留原区域；查看拖动不调用选区 mutation。新增可选 labels，Creator 补齐图像工具 zh/en/pseudo，工具条用 vk-btn 和换行；Rich Media typecheck 与 renderer 14 tests、Creator UI 28 tests 通过并构建。
+
+真实验收 overlay 按正常 ModuleLoader 加入已有 dsh-mermaid-render bundle，没有在 Creator 复制 parser。首次故障 `creative-workspace-host-2026-09-08T04-14-55-579Z-3451543` 使 Visual Pane 进入错误边界；进一步保留 console error 后定位到当前 Host MarkdownText 必填 labels 缺失（Cannot read properties of undefined reading code）。Creator 已显式传递复制／已复制／脚注文案给 MarkdownText 和 CodeBlock，兼容旧接口仍可接受的增量 props。
+
+随后 `creative-workspace-host-2026-09-08T04-22-21-566Z-3708534` 发现 SVG 有路径但没有节点名称：Mermaid 默认 HTML labels 被既有净化器移除。改为 htmlLabels=false 并增加真实 parser 对中文标签的断言。jsdom 为缺失的 SVG getComputedTextLength 提供几何 stub；真实 Host 使用浏览器度量，不用 stub 充当实际渲染证据。
+
+`creative-workspace-host-2026-09-08T04-24-38-273Z-3791739` 虽自动断言通过，截图仍见黑色节点与缺失连线样式，故不能计为视觉完成。净化器现从隔离 CSSStyleSheet 中只投影受限 SVG 呈现属性，不把生成样式挂到 Host；保留局部且实际指向 marker 的箭头引用，禁止外部 URL、脚本、foreignObject 和布局样式。`creative-workspace-host-2026-09-08T04-28-13-704Z-3896018` 图形节点／文字／箭头截图复核可读。进一步收紧 inline style 允许项并将 console errors 纳入最终浏览器门禁。
+
+Mermaid typecheck 与 unit/render、unit/sanitize、real-mermaid smoke 9 tests 通过，Mermaid bundle 构建通过。全部失败包保留，图片模型接收仍使用 keyless replay 和合成 owner；真实领域／开发环境未验收。
+
+最终 `creative-workspace-host-2026-09-08T04-29-57-727Z-3959604` exit 0、source_inputs_unchanged=true；实际 Mermaid parser 及源码更新、节点填充／文字／边线、图片查看 zoom=1.5→框选无变换→364px 附件接收全部通过；console_errors／page_errors／warnings=0，model_image_blocks=1。Host 六文件补丁 apply／逐字节比对／reverse-check 通过。
+
+
+### Mermaid 语法失败恢复与原位节点更新
+
+源码审计发现观察器对已记录的 code 节点直接跳过：同节点源码修正后，旧成功／失败图形不会更新。现检测 source 变化，拆除旧投影并恢复源码，重新经过稳定门渲染；旧异步成功／失败和主题结果只可更新仍为当前记录的对象。卸载后的迟到请求不重新渲染。
+
+`vitest run tests/unit/graft.spec.ts` 11/11 通过，包含同节点解析失败→修正恢复、旧请求迟到不覆盖新图。Mermaid typecheck 与 bundle 构建通过。真实 Host `creative-workspace-host-2026-09-08T04-36-19-414Z-4147706` exit 0、source_inputs_unchanged=true：实际 parser 处理非法源码后显示失败，源码仍完整保留，修正后 SVG 展示 RecoveredDiagram；console_errors／page_errors／warnings=0，原有图片裁剪与 1 个原生图片 block 接收保持通过。测试补丁六文件 apply／字节比对／reverse-check 通过。
+
+
+### CSV／TSV 格式恢复和实际 grid 接入
+
+Creator 原先直接取 parseDelimitedTable.rows，丢弃截断标记且未提示错误引号。现 parser 增量返回首个 diagnostic，旧宽容 rows 保持不变；Creator 显示字符位置、源码恢复说明以及公共 LOCAL_TABLE_BUDGET 的行／cell 预算提示，完整草稿不变。CSV parser 15 tests、Creator UI typecheck 与 25 tests 通过，Rich Media／Creator bundle 构建通过。
+
+实际 Host `creative-workspace-host-2026-09-08T04-42-27-433Z-122595` 暴露此前表格预览根本未传 columns，真实 renderer 显示无 schema；测试替身曾直接输出 rows，未覆盖该合同。现 Creator 沿用 columnsFromHeaderRow 首行列定义并将其余行传给现有 grid；测试替身缺 columns 时失败，真实 Host 仍为主要显示证据。`creative-workspace-host-2026-09-08T04-44-43-809Z-182246` exit 0，通过逗号引号数据、格式错误→源码保留→修正恢复、超长 cell 预算说明。随后增加实际 cell 的嵌入换行断言复跑。
+
+表格最终证据：`temp/integration-test-runs/creative-workspace-host-2026-09-08T04-45-37-662Z-220134/`，exit 0、source_inputs_unchanged=true；实际 grid 单元格保留嵌入换行、错误源码修正恢复、预算提示通过，console_errors=0。完整 Host 其他路径仍通过；六文件验收补丁 apply／字节比对／reverse 检查通过。
+
+
+### 表格 UTF-8 预算修正
+
+源码复核发现 maxBytes 实际按 UTF-16 length 截断，中文可超出声明字节预算且 emoji 可能被切半。现按码点扫描可容纳前缀，计算 UTF-8 长度，不为任意大输入先分配完整编码数组；截断保持完整码点、原始源码不变。maxBytes／maxRows／maxColumns 必须为正 safe integer；正常旧调用行为不变，非法预算明确抛 RangeError。
+
+Rich Media typecheck、`vitest run tests/csv-parse.spec.ts tests/file-preview-formats.spec.tsx` 为 50/50、exit 0，涵盖中文、emoji 边界、原有 ASCII／引号／换行和预览功能；Rich Media 发布包构建通过。本次为字节边界修复，实际 Host 图表／图片／表格的前次证据不被重新声明为本次运行。
+
+
+### 最终门禁复跑与 Host 补丁独立核查
+
+`full-plugins-2026-09-08T04-50-40-111Z-373751` 完成七门：typecheck、build、check:bundles、check:surfaces、test:visual、check:plugins 均 exit 0；test exit 1，明确失败在 dsh-mermaid-render 的 jsdom 发布包 smoke。修补 smoke 环境的 getComputedTextLength 后继续定位到 CSSStyleRule 未暴露；已补对应 jsdom window 全局，真实产物 smoke PASS，且额外要求 SVG 包含中文节点文字，不以空 SVG 算通过。未修改 parser 行为或放宽真实浏览器断言。完整 test 门已单独复跑，需等终态。
+
+独立核查发现临时 `editable-prompt-references-v1-upstream-baseline` 已有后续修改，五个文件与正式 baseline.sha256 不符，不能直接据此重新导出。现对临时副本中的当前 staging 反向应用正式 patch，23 个哈希全部与已审 baseline 相符，再运行原 apply.sh，29 文件与当前 staging 逐字节一致；正式 patch SHA-256 仍为 75f567fdc133e6ccfadb72a50f86da3b5671f9ae036613af496ed0fb4e2f6a3c。未修改共享临时基线目录。
+
+导出脚本增加写入前的全部已审基线校验，遇到临时目录漂移拒绝导出，防止覆盖正式 packet。已实际运行拒绝分支并比较整个 packet 前后哈希，全部文件未变，脚本语法与 git diff --check 通过。此修复不将临时目录的 WIP 当作新基线，也不代表可以跳过正式前置补丁应用。
+
+
+### 测试门恢复与正文显式重读
+
+完整测试门重跑 `full-plugins-2026-09-08T05-01-33-057Z-999301` 为 exit 0。结合上一包的其他六门，本轮七项命令均已有通过结果；旧 Mermaid smoke 失败包保留，不改写为通过。后续重读正文 UI 是新增变化，仍须以其专项测试／Host 证据单独说明。
+
+正文读取 error／unavailable 先前永久保留在本地 cache，无法在原 Pane 恢复。新增“重新读取正文”显式入口，仅针对当前正文／候选的失败缓存；删除失败读取状态以重新走 owner read，不清除其他草稿，不调用保存，不自动重试。加载中无重试入口且去重表继续生效；图片／音视频没有可编辑正文时不显示误导性的正文重读按钮。Creator UI typecheck、artifact-workspace／styles 31 tests、bundle build 通过，包含临时异常和暂不可用两类恢复反例。
+
+正文重读真实 Host 最终证据 `creative-workspace-host-2026-09-08T05-09-26-605Z-1436193` exit 0、source_inputs_unchanged=true，首次 owner 暂不可用后显式重读恢复实际表格，其余完整链路通过。此前两次测试自身 exit 0，但一次 Creator 入口源码并发改动、一次 README 并发改动导致 source fence 拒绝，失败记录保留。核对固定 fixture 不消费 README 后，仅从 fingerprint 排除包 README 文档，继续覆盖代码／fixture／manifest／配置；未排除生产代码。六文件验收补丁 apply／逐字节比对／reverse-check 通过。
+
+
+### 图表主题与异步结果隔离
+
+核查发现 renderer 在主题切换后仍可复用旧 in-flight promise，旧图完成还会回填新 cache；observer 主题重绘没有请求代次。现 cache 以完整源码／主题代次为 key（消除 hash 碰撞身份），setTheme／dispose 撤销旧代次，迟到结果拒绝；图形记录用 renderRevision 防止旧首次渲染或主题请求覆盖当前 SVG。
+
+Mermaid typecheck、render／graft 17 tests 和 bundle 构建通过，覆盖切换主题时旧结果最后返回、当前图和 cache 不变。真实 Host `creative-workspace-host-2026-09-08T05-13-53-621Z-1561251` exit 0、source_inputs_unchanged=true：实际 SVG 节点颜色亮→暗→亮往返符合预期，节点文本与错误恢复、图片／HTML／表格／引用重读等既有场景保持通过。六文件测试补丁 apply／字节比对／reverse-check 通过。
+
+
+### TSV 大表分页与窄屏
+
+当前 owner 合同复核仍无真实开发环境目录／启动接口及音视频原生发送路径；已向用户请求测试配置位置，未调用外部或生产服务。本地继续验证 TSV 实际表格。
+
+真实 Host `creative-workspace-host-2026-09-08T05-18-27-605Z-1678524` 验证 205 行 TSV 首／末页往返与 360px 翻页。进一步源码审计发现 Next page 用当前 page.loaded 对比总数，若最后一页恰好满页可进入额外空页。改为当前页偏移加 pageSize 与 total 比较，不改变 owner 数据。Rich Media typecheck 和 table-renderer 4 tests 通过，覆盖 400 行、200 行分页的满末页禁用／返回首页。实际 fixture 扩为 400 行继续 Host 验收。
+
+TSV 最终证据：`temp/integration-test-runs/creative-workspace-host-2026-09-08T05-20-48-162Z-1754756/`，exit 0、source_inputs_unchanged=true，400 行满末页禁用下一页、上一页恢复、360px 翻页和中文内容通过，CSV／Mermaid 错误恢复仍通过。六文件 patch apply／逐字节比对／reverse-check 通过。该证据关闭 task 4.3，不代表真实领域或环境验收完成。
+
+引用无损编辑及撤销证据：`temp/integration-test-runs/creative-workspace-host-2026-09-08T05-25-58-875Z-1941308/`，exit 0、source_inputs_unchanged=true。中文／emoji／空行／Tab／嵌套围栏原位往返精确相等，三行 clamp 与实际溢出已测量，展开保留完整正文；删除引用后原生 Ctrl+Z 恢复，后续来源刷新和发送不受影响。Task 2.2 已按该证据完成。六文件 patch apply／字节比对／reverse-check 通过，未改写其他任务完成状态。
+
+
+### 发送预览与模型正文空白一致性
+
+新真实断言 `creative-workspace-host-2026-09-08T05-29-01-148Z-2052148` 发现预览与冻结消息不一致：sinkSerialized 最后 trim 删除首尾空白。现仅当草稿包含合法 editable prompt 时保留完整 out，普通文本和 V1 仍走原 trim。引用正文、首尾草稿空白及插入分隔符与预览共同保留，不以修改测试去掉空白冒充通过。
+
+正确 Host cwd 下 `vitest run packages/client/ui-conversation/tests/input-reference-submit.client.spec.ts` 为 15/15，通过精确尾部空白与旧提交行为；首次误在插件根运行匹配到 temp 多份测试的失败不算有效 Host 验收，已改用准确 cwd。`node scripts/build-editable-reference-host.mjs` 通过。真实 Host `creative-workspace-host-2026-09-08T05-33-39-059Z-2227495` exit 0、source_inputs_unchanged=true：保留中文／emoji／嵌套围栏到实际提交，发送预览、冻结 user/message 的 text、模型 user content 的 text 三者逐字相同；原生图片 block 仍由附件路径处理。
+
+新增独立 `upstream-prs/editable-prompt-whitespace-v1`，按原 editable-prompt-references-v1 之后的两个精确文件基线生成；apply／字节比对／reverse-check 通过。原引用 patch 不重写，新的实际 Host 验收包 README 已注明新增先决补丁。Task 2.4 的预览一致性有直接证据，其他预算／超限验收尚待收口，不提前勾选整个任务。
+
+全仓 git diff --check 当前被并行 credentialctl skill 四个 EOF 空行阻断（.agents 与 .claude），不修改该范围。后续仅将本任务 scoped diff 结果与全仓失败分开记录。
+
+
+### 发送期间同引用改写与历史冻结
+
+真实 Host 测试在真实 API 已接受提交后仅延迟浏览器 ACK 响应；期间修改同一引用正文、追加普通文字、再按 Enter，然后放行 ACK。测试明确等待完整 response finished 和浏览器帧更新后检查，不在 ACK 前过早断言。`creative-workspace-host-2026-09-08T05-43-18-301Z-2522042` exit 0、source_inputs_unchanged=true：新的引用正文与文字均保留，原冻结消息与模型正文仍等于提交前预览，未混入新编辑，model_requests=1。六文件验收 patch apply／字节比对／reverse-check 通过。
+
+但这不是 task 2.5 完整通过：观测 retained_reference_count_after_ack=2，说明同引用改写后，原已提交且未编辑的图片引用也保留在草稿。源码 commitDraft 当前仅能删除精确提交前缀，否则保守保留整稿；需进一步实现按提交实例／正文 revision 精确消费，避免下一次用户提交重复带入旧图片。该剩余问题已登记，不能用“不丢草稿”代替“精确清理已提交内容”。
+
+
+### ACK 后已发送图片残留修复
+
+修复前 Host 对修改了中间引用的草稿只做整体保留，已发送图片仍留在下次草稿。新模式现捕获提交节点 key／叶类型／正文／引用快照，成功 ACK 先判断引用快照能否安全使用原前缀清理；否则按提交节点身份消费未修改引用和文本叶、保留修改内容／新增后缀。引用证明变化也阻止整稿清空，失败不消费。未修改 V1 旧路径。
+
+准确 Host cwd 的提交与生命周期 20 tests 通过，包含 success 删除未改动图片、error 保留全部引用与新编辑。`node scripts/build-editable-reference-host.mjs` 通过。真实 Host `creative-workspace-host-2026-09-08T05-50-54-774Z-2777600` exit 0、source_inputs_unchanged=true，等待实际 ACK 响应结束后引用数从 2 降为 1，旧图片不再留在草稿，修改引用及新文字保留，原冻结消息与模型内容未变，重复 Enter 未多发。
+
+独立 `upstream-prs/editable-prompt-ack-consumption-v1` 以 whitespace 补丁之后的两个文件为精确基线；baseline、apply、逐字节比对、reverse-check 通过。实际 Host 验收六文件补丁同步且独立 apply／字节比对／reverse-check 通过，README 明确前置顺序。之前“引用数 2”的失败缺口记录保留为修复前事实。Task 2.5 仍需对 unknown、其他内容编辑组合与最终候选门禁收口，不因此整体勾选。
+
+
+### ACK 同文替换与证明更新回归
+
+在准确 Host cwd 执行 `node node_modules/vitest/vitest.mjs run packages/client/ui-conversation/tests/input-reference-submit.client.spec.ts packages/client/ui-conversation/tests/reference-input-lifecycle.client.spec.tsx`，2 files / 22 tests 通过。新增两种提交期间变更：替换为同文新节点，或原节点仅更新版本／摘要／来源证明；ACK 后均保留引用，并分别检查节点身份变化与证明版本。该证据为 Host 客户端测试，不替代真实 Web 中的全部未知提交组合。独立 ACK 补丁已重新导出，精确基线、apply、与当前两个源文件逐字节一致及 reverse-check 通过。Task 2.5 继续保持未勾选。
+
+补充：发送期间追加同对象同文的新实例，ACK 后原实例被消费、新实例仍在；失败测试改为等待实际错误通知，确保断言发生在结算后。同一准确 Host 命令最终为 2 files / 23 tests 通过。最新 ACK 补丁再次通过 baseline／apply／源文件逐字节一致／reverse-check。`openspec validate dsh-prompt-reference-creative-workspace-v1 --strict --no-interactive` 通过，`openspec validate --all` 为 161 passed / 0 failed。本轮增加客户端回归证据，不增加真实 Web 或真实 owner 验收声明。
+
+
+### 媒体预览切换和比较失败的异步资源清理
+
+修复 Creator 预览离开后迟到 Blob 不释放，以及图片比较一侧失败后另一侧资源泄漏。每个视图拥有临时 URL lease：错误／卸载只释放一次，迟到资源立即释放，普通 HTTPS 地址不撤销。没有改变领域候选或媒体授权协议。新增四项卸载／失败与返回先后顺序反例；最初测试 mock 未返回 Promise 的失败已修正。
+
+证据：`temp/integration-test-runs/creative-preview-resource-lifecycle-2026-09-08T06-08-57Z/`，包含六类标准文件。包级 `node node_modules/vitest/vitest.mjs run tests/artifact-workspace.spec.tsx` 为 31 tests 通过，`node node_modules/typescript/bin/tsc --noEmit` 通过，两个变更源文件前后指纹相同。仅为客户端组件证据；4.1 阅读位置、4.8 真实媒体 owner 比较和其他服务验收保持待完成。
+
+
+### 成果视图阅读位置恢复
+
+新增视图局部 reading-position hook，按完整上下文／成果版本／视图和比较候选分别记录滚动位置、源码文字选区及方向。异步正文加载后恢复，上下文变化清空；不调用 focus，不保存正文或接管领域状态。32 项 artifact-workspace 组件测试通过，覆盖独立成果位置、选区和页签焦点；ui-creator-studio 与 dsh-creator-studio 两个包构建通过。
+
+首次真实 Host `creative-workspace-host-2026-09-08T06-12-23-290Z-3493629` 失败：只构建了 UI 包，Host 分发 bundle 未包含新 hook。重新构建实际分发包后，`temp/integration-test-runs/creative-workspace-host-2026-09-08T06-13-44-304Z-3544876/` exit 0、source_inputs_unchanged=true，使用实际溢出的 100 行源码，切换预览再回源码后 scrollTop=180、selection=9..24/backward 精确恢复，焦点仍在 Source 页签；后续创作、再次引用、真实发送与 ACK 场景通过。六文件 Host 验收 patch apply／字节比对／reverse-check 通过。
+
+此实现保留同一已挂载工作台内的源码／预览／成果切换位置。完整 Pane 卸载重建、媒体播放位置与窄屏宿主切换的状态所有权仍待补齐，不据此勾选整个 task 4.1 或 5.5。
+
+
+### 近期引用与阅读状态增量的七门验证
+
+`temp/integration-test-runs/full-plugins-2026-09-08T06-16-46-764Z-3633936/` 七项命令全部 exit 0：`pnpm run typecheck`、`pnpm run test`、`pnpm run build`、`pnpm run check:bundles`、`pnpm run check:surfaces`、`pnpm run test:visual`、`pnpm run check:plugins`。视觉使用本项目已安装 Chromium 路径；运行期间本任务仅做只读核对及审计文档记录，没有修改待验收代码。runner 不提供完整源输入冻结，因此不扩大为共享工作区无并发变化的证明。
+
+此前新增版本／工作区身份切换的阅读隔离测试，artifact-workspace 单独运行 34 tests 通过：同上下文返回旧版本恢复位置；身份切换清空旧状态，异步正文返回后不串选区。全仓测试随后通过。当前门禁结果不覆盖下一步尚未修复的 unknown 对账 UI 连接缺口，也不代替真实领域服务和开发环境验收，最终候选任务继续保持待收口。
+
+
+### unknown 保存的原操作查询与草稿结算
+
+CreatorArtifactWorkspace 透传现有 reconcileAction，操作面板查询回执返回 onReceipt；unknown／pending 不提前标记生命周期 handled，权威完成后才释放锁并读取正文确认。查询在途重复点击不重复请求，卸载或上下文变化后迟到回执不回调；不提交表单值、不再次 dispatch。44 项组件测试覆盖 unknown→completed、查询期间新编辑保留、重复点击、卸载和身份切换。最初旧测试同步检查调用次数的失败已改为等待异步查询。
+
+证据：`temp/integration-test-runs/creative-save-reconcile-2026-09-08T06-29-23Z/`，测试及 `tsc --noEmit` 均 exit 0，四个变更输入指纹不变。类型检查首次因并行 Sonora 合同源码新增导出而旧 lib 声明未更新失败；重建既有 Creator Host 包后通过，未改动 Sonora 业务实现。此为客户端证据，尚需真实 Host／owner unknown 回执验收；切到其他成果后恢复入口可达性、partial 结算及自动保存仍待收口。上轮七门结果早于此增量，不冒充新候选七门。
+
+
+### unknown 跨成果返回原操作的真实 Host 恢复
+
+待结算动作记录原成果版本、候选版本和上下文；切换成果后显示“返回待核对操作”，恢复原选择及动作，只查询既有 controller 的操作身份。版本／候选／上下文变化时禁用并提示通过 owner 核对，不改投新版本。已编辑正文超限也不会遮掉原操作查询面板。新增 zh/en 文案，pseudo 沿统一字典派生。45 项相关组件测试通过，含跨成果恢复和原版本改变禁用；Creator 分发包构建通过。
+
+真实 Host `temp/integration-test-runs/creative-workspace-host-2026-09-08T06-34-05-180Z-348538/` exit 0、source_inputs_unchanged=true：合成 owner 已保存但返回 unknown，用户切到图片→返回待核对操作→查询，owner 校验原 idempotencyKey 和 target，只在 saveDispatchCount=1 时返回 completed；界面实际显示该回执后草稿确认清理，后续创作／引用／图片发送／ACK 场景继续通过。六文件 Host 验收补丁 apply／逐字节比对／reverse-check 通过。此证据是实际 Host＋合成 owner，不证明真实成果服务恢复；partial、自动保存和环境验收仍待收口。
+
+
+### partial 保留原操作身份
+
+Controller 不再把 partial 当作可删除原幂等身份的终态，dispatch 和 reconcile 均保留原 flight；界面 partial 回执继续显示原操作查询，后续 completed 才结束对应记录。56 项 controller／action-composer／artifact-workspace 测试通过，验证多次 partial 查询始终沿原 idempotencyKey、不携带 values、不重复 dispatch；客户端 tsc --noEmit 与分发 bundle 构建通过。
+
+真实 Host fixture 扩展 unknown→partial→completed，partial 时未保存提示保留，最终保存次数必须为 1。两次浏览器 test_exit_code 都为 0，但整体 gate 均 exit 1/source_inputs_unchanged=false：creative-workspace-host-2026-09-08T06-37-32-611Z-455250 的并发变化为 views.tsx、transcription-capabilities.tsx、styles.ts；重建后 creative-workspace-host-2026-09-08T06-39-36-744Z-505932 的并发变化为 locales.ts。两次记录完整保留，不能记为稳定候选实际 Host 验收通过。停止同状态下重复运行，待源码稳定或独立候选后再验。六文件测试补丁 apply／字节比对／reverse-check 通过。真实领域 owner、自动保存及环境任务仍未完成。
+
+
+### partial 稳定源码复验通过
+
+在确认此前变化文件两分钟未再更新后，重新构建 Creator 分发包，执行 `node scripts/run-creative-workspace-host-tests.mjs`。`temp/integration-test-runs/creative-workspace-host-2026-09-08T06-42-28-925Z-578246/` 为 test_exit_code=0、exit_code=0、source_inputs_unchanged=true；实际 Host 完成 unknown→跨成果返回原操作→partial 保留未保存状态→继续按原幂等键查询 completed，owner 仅接受一次保存 dispatch；后续图片、预览、引用发送和 ACK 场景全部通过。此前两次因并发变化而失败的记录继续保留，不改写为成功。此结果关闭本次 partial 的合成 owner Host 验收缺口，不关闭真实领域 owner 或自动保存。
+
+
+### owner 正文自动保存实现与 Host 验收
+
+新增当前成果显式自动保存开关及 800ms 合并调度，复用 saveDraft descriptor、正文与 contentRevision CAS、生命周期锁和原操作查询。完成后必须读回新版本的相同正文才确认；新编辑保留，关闭／卸载取消未触发调度，在途仍结算。无需确认的低风险有效完整参数动作才可自动保存；失败／unknown／partial／读回无法确认暂停，不自动重发。49 项 artifact-auto-save／artifact-workspace／action-composer 测试、客户端 tsc --noEmit 和分发 bundle 构建通过。
+
+实际 Host `temp/integration-test-runs/creative-workspace-host-2026-09-08T06-50-00-538Z-787497/` exit 0、source_inputs_unchanged=true：以自动保存开关替代手动 Save draft／Run action，停顿触发保存后沿 unknown→partial→completed 恢复，保存 dispatch=1；完整后续引用和发送通过。六文件验收 patch apply／字节比对／reverse-check 通过。真实领域 owner、媒体批注自动保存及最终视觉门禁仍未验收，不勾选完整 4.7。
+
+截图复查发现 5.5 的具体未完成项：本 run 的 artifacts/creative-workspace-360-dark.png 中 Host 左侧栏仍占约 272px，主内容只剩约 80px，引用和成果面板被挤压。虽然测试流程 exit 0，该图不能证明整站 360px 可用；需补充宿主窄屏布局修复及可操作宽度断言，不能以局部 HTML／表格几何断言替代全工作台验收。
+
+
+### 360px 截图过渡时机核对与宽度断言
+
+纠正上一条截图推断：Host 源码及实际 lib 已有 <1024px 自动折叠和覆盖式导航，不是缺少折叠实现。旧截图截在 resize 后 grid 过渡未完成时。首次新断言 run creative-workspace-host-2026-09-08T06-54-43-210Z-902471 已确认 creator 宽度恢复，却因把外容器 280px 门槛误用于带边距的输入内部而失败（内部实测 258px）。失败截图显示 56px rail 与约 304px 主区域，证实边距并非挤压。
+
+现验收先等待主内容至少 280px、输入宽度占主内容至少 80%，再验证 Send message 按钮完整位于 360×900 视口内，随后截图。`temp/integration-test-runs/creative-workspace-host-2026-09-08T06-57-24-757Z-983053/` exit 0、source_inputs_unchanged=true；人工查看 360-dark 截图确认侧栏折叠、引用可读、发送完整。未改动或复制 Host 已有布局实现；六文件测试补丁 apply／字节比对／reverse-check 通过。该修正不代表 200% zoom、触屏或全部窄屏成果操作已经完成，5.5 仍保留未勾选。
+
+
+### 自动保存期间新增编辑的连续 CAS 验证
+
+新增集成组件场景：首次使用 owner revision=1 提交 first edit；等待回执期间输入 second edit；读回确认 revision=2 后，第二次仅提交 second edit/revision=2，最终读回 revision=3、草稿干净且继续等待也不产生第三次提交。准确包目录下 50 项 autosave／workspace／composer 测试通过。首次根目录命令误匹配 temp 历史副本导致整体失败，不计作有效 gate。
+
+新增 `node scripts/run-creative-workspace-client-tests.mjs`，固定包 cwd 和四个测试文件，不调用安装／构建，记录标准日志及本包 src/tests/config 前后指纹，源变化使 gate 失败。`temp/integration-test-runs/creative-workspace-client-2026-09-08T07-02-20-836Z-1156740/` exit 0、source_inputs_unchanged=true，包含上述三组和 controller 测试。此指纹仅覆盖本包，不能宣称整个依赖树冻结；证据为客户端层，不代替实际 Host、真实 owner 或最终七门。
+
+
+### 560／960px 工作台断言与自动保存开关样式
+
+新增 560px 单栏和 960px 并排工作台的实际宽度、发送按钮四边视口范围与无页面横向溢出断言，等待布局过渡后保存截图。首次 run creative-workspace-host-2026-09-08T07-04-19-754Z-1217640 的失败来自将 960px 的合法并排成果面板也按全宽要求：该面板为 360px，内容扣除两条 1px 边框后 358px。断言现按单栏／并排合同分别判断，没有修改 Host 原布局。
+
+同一截图发现自动保存 checkbox 继承 cs-field 普通输入样式而放大、与标签分行。已去掉该祖先样式，改用独立 cs-auto-save 布局、已有 cs-confirm 标签排布和 16px 原生复选框，保留语义标签与 accent token。Creator bundle 构建通过。`temp/integration-test-runs/creative-workspace-host-2026-09-08T07-07-36-278Z-1313040/` exit 0、source_inputs_unchanged=true，实际 checkbox 宽高不大于 20px；人工查看 960-light 截图确认 16px 控件与标签同行，完整自动保存／对账／发送流程通过。六文件验收 patch apply／字节比对／reverse-check 通过；200% 缩放、触屏与真实领域验收仍未替代。
+
+
+### Chromium 触摸模拟及点击区域
+
+自有 Creator 按钮和自动保存标签在 pointer:coarse 时复用 --vk-ctrl-touch（44px）点击区域，复选框视觉仍为 16px。runner 新增 --touch，使用 hasTouch=true，实际断言 maxTouchPoints>0 和 pointer:coarse；通过 Playwright tap 切换 Preview／Source、点击自动保存标签和 Send message。明确为 Chromium 触摸模拟，不冒充物理设备或完整触摸手势覆盖。
+
+`node scripts/run-creative-workspace-host-tests.mjs --touch` 的 `temp/integration-test-runs/creative-workspace-host-2026-09-08T07-12-43-054Z-1453117/` exit 0、source_inputs_unchanged=true、touch_emulation=true。页签及自动保存标签实际高度至少 44px，标签 tap 正确选中开关，自动保存 unknown→partial→completed 及最终原生图片发送、ACK 新草稿保留流程通过。Creator bundle 构建和六文件 patch apply／逐字节比对／reverse-check 通过。200% browser zoom、图片触摸拖动框选和完整 IME／触摸矩阵仍未证明，5.5 继续保留未勾选。
+
+
+### 图片触摸取消、指针身份与实际附件
+
+图片框选现在绑定启动 pointerId，只接受主触点／主按钮，其他触点不能覆盖起点或结束／取消该手势；pointercancel 和 lostpointercapture 丢弃尚未完成的范围，既有选区不变。4 项 rich-media 交互测试通过；旧 jsdom 指针 fixture 补充 isPrimary=true，新增第二触点干扰及取消后 pointerup 不提交反例。`creative-workspace-client-2026-09-08T07-19-18-389Z-1639329` 60 项客户端回归 exit 0/source_inputs_unchanged=true。Creator bundle 构建通过。
+
+--touch 浏览器 fixture 使用 Chromium Input.dispatchTouchEvent 执行 start→move→cancel，断言范围仍为完整原图，再执行 start→move→end 并发送实际裁剪附件。`creative-workspace-host-2026-09-08T07-18-37-367Z-1616488` test_exit_code=0，但 source_inputs_unchanged=false 导致 gate exit 1：运行期间新增／修改 packages/host/creator-studio/src/auctra-working-copy.ts 与 tests/auctra-working-copy.spec.ts。该记录不算稳定 Host 验收通过，后续待稳定候选复验。六文件测试补丁 apply／字节比对／reverse-check 通过。
+
+
+### 图片触摸手势稳定源码复验
+
+重新构建当前 Creator Host 与分发包后，`node scripts/run-creative-workspace-host-tests.mjs --touch` 的 `temp/integration-test-runs/creative-workspace-host-2026-09-08T07-24-20-885Z-1785672/` exit 0、test_exit_code=0、source_inputs_unchanged=true、touch_emulation=true。Chromium 触摸取消保持原范围、重新框选、原生裁剪附件发送、自动保存及 ACK 新草稿保留均通过。本证据补足此前因 Auctra 并发源变更失败的稳定候选缺口，不重写原失败记录。
+
+新增 Auctra 依赖只读盘点：packages/host/creator-studio/src/auctra-working-copy.ts 当前提供 normalizeAuctraWorkingCopyOpen，校验已经授权的 working-copy envelope、项目、版本、摘要和正文长度，并投影 CreatorArtifactContentV1。其函数明确不承担授权，当前不包含真实服务连接、保存、采纳或写回动作。因此不能将这个新增规范化工具当作 task 6.6 真实成果服务已完成。
+
+
+### 原生浏览器 200% 缩放
+
+新增 --zoom 验收模式：仅在独立临时 Chromium profile 加载测试生成的缩放扩展，通过 chrome.tabs.setZoom/getZoom 设置并核对 2，再验证 innerWidth 减半和 DPR=2；不以 CSS zoom 或 pinch scale 冒充浏览器缩放。普通 headless shell 的扩展 worker 探测超时后改用已安装完整 Chromium headless，探测由 1280/DPR1→640/DPR2 证明控制机制。临时扩展和 profile 随测试关闭删除。
+
+首次 Host run creative-workspace-host-2026-09-08T07-30-58-128Z-1984477 功能通过，但默认 fullPage 截图按 CSS 尺寸裁切原生放大后的物理画面。现使用 Page.captureScreenshot 捕获未裁切物理视口，并断言 PNG IHDR 为 1680×1200。`node scripts/run-creative-workspace-host-tests.mjs --zoom` 的 `temp/integration-test-runs/creative-workspace-host-2026-09-08T07-33-07-448Z-2050227/` exit 0/source_inputs_unchanged=true/native_zoom=true，记录 before=1680、after=840、dpr=2；发送预览打开／关闭及原正文保持、发送按钮完整可见、恢复 100% 后后续创作与发送通过。完整截图已人工查看。
+
+六文件 patch apply／字节比对／reverse-check 通过。此证据补足原生缩放的输入／发送预览链路，不能代替完整成果滚动／所有操作和双栏最小宽度合同核对，5.5 仍未整体勾选；真实领域与开发环境不受替代。
+
+
+### 原生 200% 成果源码／预览及恢复
+
+`node scripts/run-creative-workspace-host-tests.mjs --zoom` 的 `temp/integration-test-runs/creative-workspace-host-2026-09-08T07-37-38-230Z-2165769/` exit 0、source_inputs_unchanged=true。在已证明原生 browser zoom=2 的阶段，实际点击成果 Source、输入中文／emoji 草稿、切到 Preview 看到对应正文、返回 Source 精确相等；恢复 zoom=1 及桌面视口后源码仍一致，后续全部发送流程通过。完整物理视口截图继续保留，六文件验收补丁 apply／字节比对／reverse-check 通过。这补充了放大后的基本成果编辑，不代替所有模态、所有媒体或真实 owner 验收。
+
+
+### 当前候选七门复验
+
+`temp/integration-test-runs/full-plugins-2026-09-08T07-39-37-143Z-2229703/` 七项项目门禁全部 exit 0：typecheck、test、build、check:bundles、check:surfaces、test:visual、check:plugins。该 run 在原生缩放／触摸／自动保存／partial 对账增量之后执行，仍不含真实领域 owner 和开发环境服务；视觉基线未盲目更新。
+
+
+### 200% 成果编辑复验与当前全量门禁
+
+真实 Host zoom run `creative-workspace-host-2026-09-08T07-37-38-230Z-2165769` 在原生 browser zoom=2 阶段编辑成果源码 `# Zoom draft`，含中文／emoji，切换 Preview 后返回 Source 内容精确保持；恢复 zoom=1 后继续完成既有发送流程。此前稳定 zoom run 的完整物理截图与 1680×1200 校验继续有效，六文件补丁 apply／逐字节比对／reverse-check 已同步。
+
+当前候选全量门禁 `full-plugins-2026-09-08T07-39-37-143Z-2229703` 的七项 typecheck、test、build、check:bundles、check:surfaces、test:visual、check:plugins 全部 exit 0；OpenSpec `validate --all` 161 passed / 0 failed，本 change strict validation 通过，scoped `git diff --check` 通过。
+
+审计仍显示 35 项任务未勾选：真实领域 owner／开发环境、音视频领域服务、跨 owner 写回、完整 Pane 卸载恢复、200% 下全部媒体和触摸矩阵、最终证据冻结等未完成。合成 Host、客户端测试和项目门禁不能替代这些外部能力，故不调用 goal complete。

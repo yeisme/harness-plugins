@@ -148,7 +148,7 @@ describe('drama client apply', () => {
     expect(typeof window).toBe('undefined')
     const { ctx, pane } = setup()
     const dispose = await apply(ctx as never)
-    expect(pane.views.size).toBe(10)
+    expect(pane.views.size).toBe(11)
     dispose()
     expect(pane.views.size).toBe(0)
   })
@@ -158,6 +158,7 @@ describe('drama client apply', () => {
     const dispose = await apply(ctx as never)
 
     expect([...pane.views.keys()].sort()).toEqual([
+      'creator.pipeline',
       'drama.asset-wall',
       'drama.audio',
       'drama.context',
@@ -196,7 +197,7 @@ describe('drama client apply', () => {
     const { ctx, pane } = setup()
 
     const first = await apply(ctx as never)
-    expect(pane.views.size).toBe(10)
+    expect(pane.views.size).toBe(11)
     expect(pane.commands.size).toBe(14)
     first()
     expect(pane.views.size).toBe(0)
@@ -204,10 +205,10 @@ describe('drama client apply', () => {
     expect(ctx.get('dramaDirector')).toBeUndefined()
 
     const second = await apply(ctx as never)
-    expect(pane.views.size).toBe(10)
+    expect(pane.views.size).toBe(11)
     second()
     const third = await apply(ctx as never)
-    expect(pane.views.size).toBe(10)
+    expect(pane.views.size).toBe(11)
     expect(pane.commands.size).toBe(14)
     third()
     expect(pane.views.size).toBe(0)
@@ -217,9 +218,9 @@ describe('drama client apply', () => {
     const { ctx, pane } = setup()
     const first = await apply(ctx as never)
     const second = await apply(ctx as never)
-    expect(pane.views.size).toBe(10)
+    expect(pane.views.size).toBe(11)
     second()
-    expect(pane.views.size).toBe(10)
+    expect(pane.views.size).toBe(11)
     first()
     expect(pane.views.size).toBe(0)
   })
@@ -240,7 +241,7 @@ describe('drama client apply', () => {
     expect(face().probe.commandExperience.available).toBe(false)
     expect(face().probe.commandExperience.reason).toContain('slash directory')
     // Pane views and pane-internal commands are unaffected.
-    expect(pane.views.size).toBe(10)
+    expect(pane.views.size).toBe(11)
     expect(pane.commands.size).toBe(14)
     dispose()
   })

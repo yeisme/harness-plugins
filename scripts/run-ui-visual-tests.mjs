@@ -1,41 +1,8 @@
 import { spawn } from 'node:child_process'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { readdirSync, readFileSync, readlinkSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
 import process from 'node:process'
 import { collectVisualProvenance, serializeProvenance } from './visual-provenance.mjs'
-
-// Playwright 经 `pnpm exec` 间接拉起 webServer 时信号无法穿透 pnpm 垫片，
-// server.mjs 会被遗留在 4178 端口并毒化下一次运行（"already used"）。
-// Linux 环境经 /proc 按监听端口反查 pid 清理；其它平台无泄漏场景则跳过。
-function killPortListeners(port) {
-  if (process.platform !== 'linux') return
-  const hex = port.toString(16).toUpperCase().padStart(4, '0')
-  const inodes = new Set()
-  for (const table of ['/proc/net/tcp', '/proc/net/tcp6']) {
-    let rows
-    try { rows = readFileSync(table, 'utf8').split('\n').slice(1) } catch { continue }
-    for (const row of rows) {
-      const cols = row.trim().split(/\s+/)
-      if (cols[3] !== '0A') continue // LISTEN
-      if (cols[1]?.endsWith(`:${hex}`)) inodes.add(cols[9])
-    }
-  }
-  if (inodes.size === 0) return
-  for (const pid of readdirSync('/proc')) {
-    if (!/^\d+$/.test(pid)) continue
-    let fds
-    try { fds = readdirSync(`/proc/${pid}/fd`) } catch { continue }
-    for (const fd of fds) {
-      let link
-      try { link = readlinkSync(`/proc/${pid}/fd/${fd}`) } catch { continue }
-      if (inodes.has(link.match(/^socket:\[(\d+)\]$/)?.[1])) {
-        try { process.kill(Number(pid), 'SIGKILL') } catch { /* 已退出 */ }
-        break
-      }
-    }
-  }
-}
 
 const projectRoot = resolve(import.meta.dirname, '..')
 const startedAt = new Date()
@@ -61,7 +28,6 @@ function redact(value) {
 }
 
 await mkdir(artifacts, { recursive: true })
-killPortListeners(4178)
 const provenance = await collectVisualProvenance({ projectRoot })
 await writeFile(resolve(artifacts, 'visual-provenance.json'), `${JSON.stringify(serializeProvenance(provenance), null, 2)}\n`, 'utf8')
 await writeFile(resolve(runRoot, 'command.txt'), `${publicCommand}\n`, 'utf8')
@@ -93,6 +59,7 @@ if (provenance.browser.status !== 'available' || provenance.browser.executable_p
     // absent, this pins the exact headless-shell revision from browsers.json.
     env: { ...process.env, UI_VISUAL_EVIDENCE_DIR: artifacts, DSH_TEST_CHROME_EXECUTABLE: provenance.browser.executable_path },
     stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
   })
   child.stdout.on('data', chunk => { stdout += String(chunk) })
   child.stderr.on('data', chunk => { stderr += String(chunk) })
@@ -100,8 +67,9 @@ if (provenance.browser.status !== 'available' || provenance.browser.executable_p
     child.once('error', reject)
     child.once('close', code => resolveExit(code ?? 1))
   })
-  killPortListeners(4178)
-}
+  // Only clean up this runner's own process group; never kill an unrelated preview on the shared port.
+  if (process.platform !== 'win32' && child.pid) { try { process.kill(-child.pid, 'SIGTERM') } catch { /* Group already exited. */ } }
+  }
 const finishedAt = new Date()
 stdout = redact(stdout)
 stderr = redact(stderr)

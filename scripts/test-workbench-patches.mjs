@@ -37,6 +37,14 @@ try {
     const [hash,path] = row.split('  ')
     assert.equal(createHash('sha256').update(await readFile(resolve(checkout,path))).digest('hex'),hash,`Reconstructed owned source differs: ${path}`)
   }
+  run('bash', ['upstream-prs/tools-pane-layout-v1/apply.sh', checkout])
+  run('bash', ['upstream-prs/tools-pane-layout-v1/apply.sh', checkout])
+  const toolsLayout = await readFile(resolve(checkout, 'packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css'), 'utf8')
+  assert(toolsLayout.includes('.body:has([data-conversation-readonly-view]) > .widthHandle'), 'Tools must isolate transcript width handles')
+  run('bash', ['upstream-prs/tools-draft-target-v1/apply.sh', checkout])
+  run('bash', ['upstream-prs/tools-draft-target-v1/apply.sh', checkout])
+  const toolsDraft = await readFile(resolve(checkout, 'packages/client/ui-conversation/src/client/apply.ts'), 'utf8')
+  assert(toolsDraft.includes('targetFor'), 'Fresh reconstruction must retain explicit Tools draft targets')
 } catch (error) { failure = error.message }
 if (!failure) run('git', ['worktree', 'remove', '--force', checkout], source)
 const redact = value => value.replaceAll(root, '[PROJECT_ROOT]')

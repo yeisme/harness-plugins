@@ -1,0 +1,35 @@
+--- a/packages/skill/skill/src/index.ts
++++ b/packages/skill/skill/src/index.ts
+@@ -491,6 +491,32 @@
+   }
+ 
+   /**
++   * Read a filesystem-backed document, excluding runtime registrations even
++   * when their public metadata resembles an installed file contribution.
++   * Generic get() keeps its existing invocation semantics.
++   */
++  async getDocument(name: string, options: SkillViewOptions = {}): Promise<SkillDefinition | undefined> {
++    if (!isSkillName(name)) return undefined
++    const match = (await this.collect(options)).entries.get(name)
++    throwIfAborted(options.signal)
++    const base = match?.candidate.resourceBase
++    if (match === undefined || match.provider === RUNTIME_SKILL_PROVIDER
++      || match.provider.name !== 'filesystem' || base?.kind !== 'directory') return undefined
++    const definition = await waitWithAbort(match.provider.get(match.candidate, options), options.signal)
++    throwIfAborted(options.signal)
++    if (definition === undefined) return undefined
++    validateDefinition(definition)
++    if (definition.name !== name || definition.provider !== match.candidate.provider
++      || definition.source !== match.candidate.source || definition.resourceBase?.kind !== 'directory'
++      || definition.resourceBase.path !== base.path) return undefined
++    const current = (await this.collect(options)).entries.get(name)
++    throwIfAborted(options.signal)
++    if (current?.provider !== match.provider || current.candidate.source !== match.candidate.source
++      || current.candidate.resourceBase?.kind !== 'directory' || current.candidate.resourceBase.path !== base.path) return undefined
++    return definition
++  }
++
++  /**
+    * Load and validate the winning candidate, passing its opaque discovery locator back to the
+    * provider. Cancellation is rechecked after selection, including cache hits, and raced against
+    * loading so an uncooperative provider cannot hang the caller.

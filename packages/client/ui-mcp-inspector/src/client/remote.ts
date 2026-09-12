@@ -25,7 +25,7 @@ export type ToolHubClientErrorCode =
 export class ToolHubClientError extends Error {
   readonly code: ToolHubClientErrorCode
 
-  constructor(code: ToolHubClientErrorCode) {
+  constructor(code: ToolHubClientErrorCode, readonly accessDenied = false) {
     super(code)
     this.name = 'ToolHubClientError'
     this.code = code
@@ -42,6 +42,7 @@ function transportText(error: unknown): string {
 export function normalizeToolHubClientError(error: unknown): ToolHubClientError {
   if (error instanceof ToolHubClientError) return error
   const text = transportText(error).toLowerCase()
+  if (/\b(?:401|403)\b|permission[ _-]?denied|forbidden|unauthorized/.test(text)) return new ToolHubClientError('unknown', true)
   if (/\b404\b|not[ _-]?found/.test(text)) return new ToolHubClientError('endpoint_not_found')
   if (/contract|schema|codec|specversion|incompatible/.test(text)) return new ToolHubClientError('contract_mismatch')
   if (/storage/.test(text)) return new ToolHubClientError('storage_unavailable')
@@ -61,10 +62,11 @@ function optionalLookup(ctx: ClientContext, name: string): Record<string, unknow
   }
 }
 
-function isRemoteFace(candidate: unknown): candidate is ToolHubRemoteFace {
+type ReadableToolHubFace = Pick<ToolHubRemoteFace, 'list'> & Partial<Pick<ToolHubRemoteFace, 'setEnabled'>>
+
+function isRemoteFace(candidate: unknown): candidate is ReadableToolHubFace {
   return typeof candidate === 'object' && candidate !== null
     && typeof (candidate as ToolHubRemoteFace).list === 'function'
-    && typeof (candidate as ToolHubRemoteFace).setEnabled === 'function'
 }
 
 function unwrapNamespace(namespace: Record<string, unknown>): ToolHubRemoteFace {
@@ -83,8 +85,15 @@ function unwrapNamespace(namespace: Record<string, unknown>): ToolHubRemoteFace 
   }
   const codec = (method: 'list' | 'setEnabled') => toolHubRemoteContribution.descriptors.find(item => item.method === method)!.result.schema
   return {
-    async list() { return codec('list').parse(await invoke('list')) as ToolHubCatalogAnswerV1 },
-    async setEnabled(input) { return codec('setEnabled').parse(await invoke('setEnabled', input)) as ToolHubSetEnabledAnswerV1 },
+    async list() {
+      const answer = codec('list').parse(await invoke('list')) as ToolHubCatalogAnswerV1
+      return answer.ok && typeof namespace.setEnabled !== 'function'
+        ? { ...answer, items: answer.items.map(item => ({ ...item, canToggle: false })) } : answer
+    },
+    async setEnabled(input) {
+      if (typeof namespace.setEnabled !== 'function') return { ok: false, code: 'toggle-unsupported', message: 'Enablement is not exposed by this owner' }
+      return codec('setEnabled').parse(await invoke('setEnabled', input)) as ToolHubSetEnabledAnswerV1
+    },
   }
 }
 

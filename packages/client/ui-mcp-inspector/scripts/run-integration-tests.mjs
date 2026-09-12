@@ -11,7 +11,7 @@ const evidenceDir = resolve(projectRoot, 'temp/integration-test-runs', runId)
 const relativeEvidenceDir = relative(projectRoot, evidenceDir)
 const host = process.argv.includes('--host')
 const testPackage = host ? '@yeisme/dsh-tool-hub-host' : '@yeisme/dsh-client-ui-mcp-inspector'
-const testFiles = host ? ['tests/loader-composition.spec.ts', 'tests/gateway.spec.ts', 'tests/service.spec.ts'] : ['tests/pane.test.tsx', 'tests/remote.test.ts', 'tests/session-catalog.test.ts']
+const testFiles = host ? ['tests/loader-composition.spec.ts', 'tests/gateway.spec.ts', 'tests/service.spec.ts', 'tests/reference-reader.spec.ts', 'tests/reference-reader.owner.spec.ts', 'tests/session-catalog-scope.owner.spec.ts'] : ['tests/pane.test.tsx', 'tests/remote.test.ts', 'tests/session-catalog.test.ts', 'tests/apply.test.ts', 'tests/installed-search-source.test.ts', 'tests/search-owner-integration.test.ts', 'tests/skill-document-reader.test.tsx', 'tests/session-search-source.test.ts']
 const command = `pnpm --filter ${testPackage} exec vitest run ${testFiles.join(' ')}`
 
 function redact(input) {
@@ -37,7 +37,7 @@ const result = spawnSync('pnpm', [
 ], {
   cwd: projectRoot,
   encoding: 'utf8',
-  env: process.env,
+  env: { ...process.env, ...(host ? { DSH_REFERENCE_READER_ARTIFACTS: resolve(evidenceDir, 'artifacts/skill-reader') } : {}) },
 })
 
 const stdout = redact(result.stdout ?? '')

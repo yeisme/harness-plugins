@@ -25,9 +25,15 @@ export interface WorkspaceSearchCachePageV1 {
 }
 
 export function serializeWorkspaceSearchCacheKey(key: WorkspaceSearchCacheKeyV1): string {
-  return [
+  return [key.profileRef, key.permissionGeneration ?? 'open-cycle', key.projectScope,
+    key.query, key.category, key.filters, key.sort, key.locale, key.cursor].join('\u001f')
+}
+
+/** Collision-free opt-in; the exported legacy serializer retains its original format. */
+export function serializeWorkspaceSearchCacheKeyV2(key: WorkspaceSearchCacheKeyV1): string {
+  return JSON.stringify([
     key.profileRef,
-    key.permissionGeneration ?? 'open-cycle',
+    key.permissionGeneration ?? null,
     key.projectScope,
     key.query,
     key.category,
@@ -35,7 +41,7 @@ export function serializeWorkspaceSearchCacheKey(key: WorkspaceSearchCacheKeyV1)
     key.sort,
     key.locale,
     key.cursor,
-  ].join('\u001f')
+  ])
 }
 
 export class WorkspaceSearchResultCache {
@@ -43,8 +49,10 @@ export class WorkspaceSearchResultCache {
   private readonly order: string[] = []
   private itemCount = 0
 
+  constructor(private readonly serializeKey = serializeWorkspaceSearchCacheKey) {}
+
   get(key: WorkspaceSearchCacheKeyV1, now: number): WorkspaceSearchCachePageV1 | undefined {
-    const serialized = serializeWorkspaceSearchCacheKey(key)
+    const serialized = this.serializeKey(key)
     const page = this.pages.get(serialized)
     if (page === undefined) return undefined
     if (now - page.storedAt > WORKSPACE_SEARCH_CACHE_STALE_MS) {
@@ -60,11 +68,13 @@ export class WorkspaceSearchResultCache {
   }
 
   set(key: WorkspaceSearchCacheKeyV1, items: readonly WorkspaceSearchCandidateV1[], now: number, nextCursor?: string): void {
-    const serialized = serializeWorkspaceSearchCacheKey(key)
+    const serialized = this.serializeKey(key)
+    // A truncated page cannot safely keep the owner's continuation cursor.
+    if (items.length > WORKSPACE_SEARCH_CACHE_ITEM_LIMIT) { this.delete(serialized); return }
     const previous = this.pages.get(serialized)
     if (previous !== undefined) this.itemCount -= previous.items.length
     const page: WorkspaceSearchCachePageV1 = {
-      items: items.slice(0, WORKSPACE_SEARCH_CACHE_ITEM_LIMIT),
+      items: [...items],
       storedAt: now,
       key: serialized,
       ...(nextCursor === undefined ? {} : { nextCursor }),

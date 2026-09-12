@@ -1,3 +1,19 @@
+import { scaenaTableQuerySchema, scaenaTableResultSchema } from '@yeisme/dsh-creator-studio-host/contracts'
+import { scaenaPackageQuerySchema, scaenaPackageResultSchema } from '@yeisme/dsh-creator-studio-host/contracts'
+import { eikonaBatchMembersQuerySchema, eikonaBatchMembersResultSchema } from '@yeisme/dsh-creator-studio-host/contracts'
+import { eikonaBatchPlanResultSchema } from '@yeisme/dsh-creator-studio-host/contracts'
+import { eikonaBatchPageQuerySchema, eikonaBatchPageResultSchema } from '@yeisme/dsh-creator-studio-host/contracts'
+import { eikonaBatchInputQuerySchema, eikonaBatchInputResultSchema } from '@yeisme/dsh-creator-studio-host/contracts'
+import { eikonaDraftQuerySchema, eikonaDraftSaveSchema, eikonaDraftReconcileSchema, eikonaDraftReadResultSchema, eikonaDraftSaveResultSchema } from '@yeisme/dsh-creator-studio-host/contracts'
+import { eikonaStatusInputSchema, eikonaStatusResultSchema } from '@yeisme/dsh-creator-studio-host/contracts'
+import { eikonaRevokeInputSchema, eikonaRevokeResultSchema } from '@yeisme/dsh-creator-studio-host/contracts'
+import { eikonaApprovalInputSchema, eikonaApprovalResultSchema } from '@yeisme/dsh-creator-studio-host/contracts'
+import { eikonaPreparationInputSchema, eikonaPreparationResultSchema } from '@yeisme/dsh-creator-studio-host/contracts'
+import { eikonaReviewQuerySchema, eikonaReviewResultSchema } from '@yeisme/dsh-creator-studio-host/contracts'
+import { eikonaSelectionQuerySchema, eikonaSelectionResultSchema } from '@yeisme/dsh-creator-studio-host/contracts'
+import { eikonaImageQuerySchema, eikonaImageResultSchema } from '@yeisme/dsh-creator-studio-host/contracts'
+import { eikonaAssetQuerySchema, eikonaAssetPageSchema } from '@yeisme/dsh-creator-studio-host/contracts'
+import { editorRecoverySaveQuerySchema, editorRecoverySavedSchema, editorRecoveryQuerySchema, editorRecoverySummarySchema, editorRecoveryPageSchema, editorRecoveryReadSchema } from '@yeisme/dsh-creator-studio-host/contracts'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import {
   ArtifactRefSchema,
@@ -12,8 +28,13 @@ import {
   validateCreatorAssetPage,
   validateCreatorAssetQuery,
   validateCreatorStudioSnapshot,
+  validateCreatorOwnerViewSnapshot,
+  validateSonoraTranscriptionCatalog,
+  validateCreatorStudioContext,
 } from '@yeisme/dsh-creator-studio-host/contracts'
 import type { CreatorStudioRemote } from './controller.ts'
+import { creatorOperationRecoveryPageSchema } from '@yeisme/dsh-creator-studio-host/contracts'
+import { creatorCandidatePageSchema, creatorCandidateQuerySchema } from '@yeisme/dsh-creator-studio-host/contracts'
 
 interface StrictSchema {
   parse(value: unknown): unknown
@@ -75,11 +96,178 @@ export const creatorStudioRemoteContribution = {
   package: '@yeisme/dsh-creator-studio-host',
   descriptors: [
     {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.saveAuctraRecoveryDraft@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'saveAuctraRecoveryDraft', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('EditorRecoverySaveQueryV1', editorRecoverySaveQuerySchema) }],
+      result: strict('EditorRecoverySavedV1', editorRecoverySavedSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.readEikonaCandidateImage@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'readEikonaCandidateImage', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('EikonaImageQueryV1', eikonaImageQuerySchema) }],
+      result: strict('EikonaImageResultV1', eikonaImageResultSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.readEikonaReview@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'readEikonaReview', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('EikonaReviewQueryV1', eikonaReviewQuerySchema) }],
+      result: strict('EikonaReviewResultV1', eikonaReviewResultSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.selectEikonaCandidate@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'selectEikonaCandidate', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('EikonaSelectionQueryV1', eikonaSelectionQuerySchema) }],
+      result: strict('EikonaSelectionResultV1', eikonaSelectionResultSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.readEikonaDraft@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'readEikonaDraft', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('readEikonaDraftInputV1', eikonaDraftQuerySchema) }],
+      result: strict('readEikonaDraftResultV1', eikonaDraftReadResultSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.saveEikonaDraft@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'saveEikonaDraft', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('saveEikonaDraftInputV1', eikonaDraftSaveSchema) }],
+      result: strict('saveEikonaDraftResultV1', eikonaDraftSaveResultSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.reconcileEikonaDraft@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'reconcileEikonaDraft', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('reconcileEikonaDraftInputV1', eikonaDraftReconcileSchema) }],
+      result: strict('reconcileEikonaDraftResultV1', eikonaDraftSaveResultSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.listEikonaBatchInputs@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'listEikonaBatchInputs', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('EikonaBatchPageQueryV1', eikonaBatchPageQuerySchema) }],
+      result: strict('EikonaBatchPageResultV1', eikonaBatchPageResultSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.readEikonaBatchMembers@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'readEikonaBatchMembers', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('EikonaBatchMembersQueryV1', eikonaBatchMembersQuerySchema) }],
+      result: strict('EikonaBatchMembersResultV1', eikonaBatchMembersResultSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.readEikonaBatchPlan@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'readEikonaBatchPlan', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('EikonaBatchInputQueryV1', eikonaBatchInputQuerySchema) }],
+      result: strict('EikonaBatchPlanResultV1', eikonaBatchPlanResultSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.readEikonaBatchInput@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'readEikonaBatchInput', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('EikonaBatchInputQueryV1', eikonaBatchInputQuerySchema) }],
+      result: strict('EikonaBatchInputResultV1', eikonaBatchInputResultSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.readEikonaApprovalStatus@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'readEikonaApprovalStatus', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('EikonaStatusInputV1', eikonaStatusInputSchema) }],
+      result: strict('EikonaStatusResultV1', eikonaStatusResultSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.revokeEikonaPreparationApproval@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'revokeEikonaPreparationApproval', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('EikonaRevokeInputV1', eikonaRevokeInputSchema) }],
+      result: strict('EikonaRevokeResultV1', eikonaRevokeResultSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.approveEikonaPreparation@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'approveEikonaPreparation', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('EikonaApprovalInputV1', eikonaApprovalInputSchema) }],
+      result: strict('EikonaApprovalResultV1', eikonaApprovalResultSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.prepareEikonaGeneration@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'prepareEikonaGeneration', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('EikonaPreparationInputV1', eikonaPreparationInputSchema) }],
+      result: strict('EikonaPreparationResultV1', eikonaPreparationResultSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.readEikonaAssetPage@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'readEikonaAssetPage', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('EikonaAssetQueryV1', eikonaAssetQuerySchema) }],
+      result: strict('EikonaAssetPageV1', eikonaAssetPageSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.listAuctraRecoveryDrafts@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'listAuctraRecoveryDrafts', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('EditorRecoveryQueryV1', editorRecoveryQuerySchema) }],
+      result: strict('EditorRecoveryPageV1', editorRecoveryPageSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.readAuctraRecoveryDraft@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'readAuctraRecoveryDraft', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('EditorRecoverySummaryV1', editorRecoverySummarySchema) }],
+      result: strict('EditorRecoveryReadV1', editorRecoveryReadSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.readTranscriptionCatalog@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'readTranscriptionCatalog', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('CreatorStudioContextV1', { parse(value) {
+        const context = validateCreatorStudioContext(value)
+        if (context === undefined) throw new TypeError('creatorStudio.readTranscriptionCatalog context mismatch')
+        return context
+      } }) }],
+      result: strict('SonoraTranscriptionCatalog | null', { parse(value) {
+        if (value === null) return null
+        const catalog = validateSonoraTranscriptionCatalog(value)
+        if (catalog === undefined) throw new TypeError('creatorStudio.readTranscriptionCatalog contract mismatch')
+        return catalog
+      } }),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.recallOperationIdentity@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'recallOperationIdentity',
+      invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('CreatorOperationIdentityQueryV1', { parse(value) {
+        if (typeof value !== 'object' || value === null) throw new TypeError('creatorStudio.recallOperationIdentity query mismatch')
+        const query = value as { owner?: unknown; actionId?: unknown; expectedTargetRef?: unknown }
+        if (typeof query.owner !== 'string' || query.owner.length === 0 || query.owner.length > 64
+          || typeof query.actionId !== 'string' || query.actionId.length === 0 || query.actionId.length > 160
+          || typeof query.expectedTargetRef !== 'string' || query.expectedTargetRef.length === 0 || query.expectedTargetRef.length > 512
+          || Object.keys(query).length !== 3) throw new TypeError('creatorStudio.recallOperationIdentity query mismatch')
+        return { owner: query.owner, actionId: query.actionId, expectedTargetRef: query.expectedTargetRef }
+      } }) }],
+      result: strict('PaneActionReconcileRequestV1 | null', { parse(value) {
+        if (value === null) return null
+        return PaneActionReconcileRequestSchema.parse(value)
+      } }),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.listOperationRecoveries@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'listOperationRecoveries', invocation: { kind: 'direct' }, parameters: [],
+      result: strict('CreatorOperationRecoveryPageV1', creatorOperationRecoveryPageSchema),
+    },
+    {
       id: '@yeisme/dsh-creator-studio-host/creatorStudio.reconcile@1',
       service: 'creatorStudio', namespace: 'creatorStudio', method: 'reconcile',
       invocation: { kind: 'direct' },
       parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('PaneActionReconcileRequestV1', PaneActionReconcileRequestSchema) }],
       result: strict('PaneActionReceiptV1', PaneActionReceiptSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.selectScaenaPackage@1', service: 'creatorStudio', namespace: 'creatorStudio', method: 'selectScaenaPackage', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('ScaenaPackageQuery', scaenaPackageQuerySchema) }], result: strict('ScaenaPackageResult', scaenaPackageResultSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.readScaenaTable@1', service: 'creatorStudio', namespace: 'creatorStudio', method: 'readScaenaTable', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('ScaenaTableQuery', scaenaTableQuerySchema) }], result: strict('ScaenaTableResult', scaenaTableResultSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.snapshotOwner@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'snapshotOwner', invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('CreatorStudioOwner', { parse(value) {
+        if (typeof value !== 'string' || !['eikona', 'scaena', 'auctra', 'sonora', 'pinax', 'anatomia'].includes(value)) throw new TypeError('Invalid Creator Studio owner')
+        return value
+      } }) }],
+      result: strict('CreatorOwnerViewSnapshotV1', { parse(value) {
+        const snapshot = validateCreatorOwnerViewSnapshot(value)
+        if (snapshot === undefined) throw new TypeError('Owner snapshot contract mismatch')
+        return snapshot
+      } }),
     },
     {
       id: '@yeisme/dsh-creator-studio-host/creatorStudio.snapshot@1',
@@ -107,6 +295,13 @@ export const creatorStudioRemoteContribution = {
       invocation: { kind: 'direct' },
       parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('ArtifactRefV1', ArtifactRefSchema) }],
       result: strict('CreatorArtifactContentV1 | null', contentSchema),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.readCandidatePage@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'readCandidatePage',
+      invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: strict('CreatorCandidateQueryV1', creatorCandidateQuerySchema) }],
+      result: strict('CreatorCandidatePageV1', creatorCandidatePageSchema),
     },
     {
       id: '@yeisme/dsh-creator-studio-host/creatorStudio.assets@1',

@@ -77,6 +77,49 @@ describe('session-list conversation search host', () => {
     expect(byId.items.map(item => item.sessionRef)).toEqual(['session:gamma'])
   })
 
+  it('rejects a project scope that the current-profile snapshot cannot establish', async () => {
+    const getSnapshot = vi.fn(() => ({ ids: Object.keys(rows), byId: rows }))
+    const host = createSessionListConversationSearchHost({ list: { getSnapshot } })!
+    await expect(host.search({ workspaceRef: 'workspace:project-a', query: '', limit: 20 })).resolves.toEqual({
+      items: [], status: 'contract_mismatch', reason: 'project_scope_unsupported',
+    })
+    expect(getSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('restricts a session-addressed request to that session', async () => {
+    const host = createSessionListConversationSearchHost(sessionsFace({ byId: rows }))!
+    const page = await host.search({ workspaceRef: CURRENT_PROFILE_WORKSPACE_REF, sessionRef: 'session:beta', query: '', limit: 20 })
+    expect(page.items.map(item => item.sessionRef)).toEqual(['session:beta'])
+  })
+
+  it('rejects malformed legacy cursors without interpreting a numeric prefix', async () => {
+    const host = createSessionListConversationSearchHost(sessionsFace({ byId: rows }))!
+    for (const cursor of ['s:2junk', 's:1.5', 's:-1', 's:9007199254740993']) {
+      await expect(host.search({ workspaceRef: CURRENT_PROFILE_WORKSPACE_REF, query: '', limit: 2, cursor })).resolves.toMatchObject({ status: 'contract_mismatch', reason: 'invalid_cursor' })
+    }
+  })
+
+  it('does not report a missing open seam or a removed session as a successful navigation', async () => {
+    const host = createSessionListConversationSearchHost(sessionsFace({ byId: rows }))!
+    const page = await host.search({ workspaceRef: CURRENT_PROFILE_WORKSPACE_REF, query: 'beta', limit: 20 })
+    await expect(Promise.resolve().then(() => host.open(page.items[0]!))).rejects.toThrow('session_open_unavailable')
+    const open = vi.fn()
+    const liveRows = { ...rows }
+    const live = createSessionListConversationSearchHost({ list: { getSnapshot: () => ({ byId: liveRows }) }, open })!
+    delete (liveRows as Record<string, unknown>)['session:beta']
+    await expect(Promise.resolve().then(() => live.open(page.items[0]!))).rejects.toThrow('session_unavailable')
+    expect(open).not.toHaveBeenCalled()
+  })
+
+  it('propagates an asynchronous owner open failure', async () => {
+    const host = createSessionListConversationSearchHost({
+      list: { getSnapshot: () => ({ byId: rows }) },
+      open: vi.fn(async () => { throw new Error('navigation_failed') }),
+    })!
+    const page = await host.search({ workspaceRef: CURRENT_PROFILE_WORKSPACE_REF, query: 'beta', limit: 20 })
+    await expect(host.open(page.items[0]!)).rejects.toThrow('navigation_failed')
+  })
+
   it('paginates with an opaque cursor', async () => {
     const host = createSessionListConversationSearchHost(sessionsFace({ ids: Object.keys(rows), byId: rows }))!
     const first = await host.search({ workspaceRef: CURRENT_PROFILE_WORKSPACE_REF, query: '', limit: 2 })
@@ -135,6 +178,29 @@ describe('session-list conversation search host', () => {
 })
 
 describe('workspace search history adapter over session-list host', () => {
+  it('keeps metadata-only hits free of invented project and message anchors', async () => {
+    const host = createSessionListConversationSearchHost(sessionsFace({ byId: { s1: { displayTitle: 'Planning' } } }))!
+    const adapter = createWorkspaceSearchHistoryAdapter({ conversationSearch: host })
+    const page = await adapter.search({ query: 'Planning', allAccessibleProjects: true, limit: 20, locale: 'en' }, new AbortController().signal)
+    expect(page.items).toHaveLength(1)
+    expect(page.items[0]?.projectRef).toBeUndefined()
+    expect(page.items[0]?.messageRef).toBeUndefined()
+    expect(page.items[0]?.openTarget.messageRef).toBeUndefined()
+  })
+
+  it('does not silently truncate an authorized aggregate workspace request to three projects', async () => {
+    const refs = ['w1', 'w2', 'w3', 'w4', 'w5']
+    const search = vi.fn(async () => ({ items: [], status: 'ready' as const }))
+    const adapter = createWorkspaceSearchHistoryAdapter({ workspaceContext: {
+      getSnapshot: () => ({ workspaceRef: 'w1', revision: '1' }),
+      listWorkspaces: () => refs.map(workspaceRef => ({ workspaceRef, label: workspaceRef })),
+      search,
+    } })
+    await adapter.search({ query: 'test', allAccessibleProjects: true, limit: 20, locale: 'en' }, new AbortController().signal)
+    expect(search).toHaveBeenCalledOnce()
+    expect(search).toHaveBeenCalledWith(expect.objectContaining({ workspaceRefs: refs }), expect.any(AbortSignal))
+  })
+
   it('maps an empty current-profile snapshot as available, not unavailable', async () => {
     const host = createSessionListConversationSearchHost(sessionsFace({ ids: [], byId: {} }))!
     const adapter = createWorkspaceSearchHistoryAdapter({ conversationSearch: host })

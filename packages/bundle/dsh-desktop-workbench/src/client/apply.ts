@@ -24,7 +24,7 @@ import {
 } from '@yeisme/dsh-client-ui-session-tags/client'
 import type { FileEntryV1 } from '@yeisme/dsh-file-document'
 import { classifyFileEntry, MEDIA_HOST_CONTEXT_KEY, isMediaHostV1, listSeededMedia, MediaPreviewPane, subscribeSeededMedia, type MediaHostV1, type MediaRefV1 } from '@yeisme/dsh-rich-media/client'
-import { createExplorerFileHost, createExplorerGitHost, createFileHostFromWorkspaces, FILE_HOST_CONTEXT_KEY, FILE_WATCH_CAPABILITY, isFileHostV1, type FileHostV1, type FileResourceMutationIntentV1, type FileTreeNodeV2, type FileTreePageV2 } from '@yeisme/dsh-file-host'
+import { createExplorerFileHost, createExplorerGitHost, createFileHostFromWorkspaces, FILE_HOST_CONTEXT_KEY, FILE_WATCH_CAPABILITY, isFileHostV1, type FileHostV1, type FileResourceMutationIntentV1, type FileTreeNodeV2, type FileTreePageV2, type FileInspectProofV1 } from '@yeisme/dsh-file-host'
 import { isTerminalHostV2, TERMINAL_HOST_CONTEXT_KEY, type TerminalHostV2 } from '@yeisme/dsh-terminal-host'
 import { resolveTerminalPaneRemote } from '@yeisme/dsh-terminal'
 import {
@@ -59,6 +59,7 @@ import {
   type ExplorerRuntimeV2,
 } from '@yeisme/dsh-client-ui-pane-workbench/client'
 import { apply as applySubagentMonitor } from '@yeisme/dsh-client-ui-pane-subagent/client'
+import { createFileSearchSource } from './file-search-source.ts'
 import { ComposedDesktopWorkbench } from './composed-workbench.tsx'
 
 export const inject = ['slots', 'workspaces']
@@ -68,8 +69,11 @@ const LEGACY_WINDOW_REFERENCE_OWNERS = new Set([
 ])
 
 interface PaneWorkbenchFace {
+  registerSearchSource?(source: ReturnType<typeof createFileSearchSource>['source']): () => void
+  controller?: { getSnapshot(): { views: Record<string, { id: string; kind: string; resourceKey: string; groupId: string }>; activeGroupId?: string; groups?: Record<string, { activeTabId?: string }> } }
   registerView(input: unknown): () => void
   registerExplorerRuntime?(runtime: ExplorerRuntimeV2): () => void
+  revealExplorerResource?(ref: string, version: string, signal?: AbortSignal, pendingSignal?: AbortSignal): Promise<boolean>
   openView(request: unknown): void
 }
 
@@ -934,11 +938,12 @@ export function apply(ctx: ClientContext): () => void {
       rootRef = page.rootRef ?? rootRef
       return page.nodes.map(mapExplorerNode)
     }
-    const openExplorerFile = async (node: import('@yeisme/dsh-client-ui-pane-workbench/client').ExplorerTreeNodeV1, mode: 'preview' | 'pin'): Promise<{ readonly ok: boolean; readonly reason?: string }> => {
+    const openExplorerFile = async (node: import('@yeisme/dsh-client-ui-pane-workbench/client').ExplorerTreeNodeV1, mode: 'preview' | 'pin', searchProof?: FileInspectProofV1): Promise<{ readonly ok: boolean; readonly reason?: string }> => {
       if (node.kind === 'directory') return { ok: false, reason: 'directory is not a preview resource' }
       if (node.availability?.preview !== undefined && node.availability.preview !== 'available') return { ok: false, reason: node.availability.reason ?? 'owner preview is unavailable' }
       if (fileHost.inspect === undefined) return { ok: false, reason: 'owner inspect capability is unavailable' }
-      const proof = await fileHost.inspect.inspect(node.ref)
+      const proof = searchProof ?? await fileHost.inspect.inspect(node.ref)
+      if (searchProof && (proof.ref !== node.ref || proof.sensitive)) return { ok: false, reason: 'search resource proof is no longer current' }
       if (!proof.usable || (proof.state !== 'ready' && proof.state !== 'partial')) return { ok: false, reason: proof.reason ?? 'owner preview proof is not usable' }
       const proofKind = proof.resource?.kind
       const entry: FileEntryV1 = {
@@ -960,7 +965,27 @@ export function apply(ctx: ClientContext): () => void {
       openFile(entry, mode === 'preview')
       return { ok: true }
     }
+    const fileSearch = createFileSearchSource({ host: fileHost, context: () => JSON.stringify([currentSessionId(ctx), currentWorkspacePath(ctx)]), canOpen: workbench.controller !== undefined,
+      ...(workbench.revealExplorerResource ? { openFolder: (node: FileTreeNodeV2, pendingSignal?: AbortSignal) => workbench.revealExplorerResource!(node.ref, node.version, ownerSignal(), pendingSignal) } : {}),
+      open: async (node, proof) => {
+        if (!workbench.controller || !(await openExplorerFile(mapExplorerNode(node), 'pin', proof)).ok) return false
+        const snapshot = workbench.controller.getSnapshot()
+        const view = Object.values(snapshot.views).find(view => ['desktop.file', 'desktop.preview'].includes(view.kind) && view.resourceKey === node.ref)
+        return view !== undefined && snapshot.activeGroupId === view.groupId && snapshot.groups?.[view.groupId]?.activeTabId === view.id
+      },
+    })
+    if (workbench.registerSearchSource) disposers.push(workbench.registerSearchSource(fileSearch.source))
+    disposers.push(() => fileSearch.dispose())
     const runtime: ExplorerRuntimeV2 = {
+      revealResource: async (ref, version, signal) => {
+        const context = JSON.stringify([currentSessionId(ctx), currentWorkspacePath(ctx)])
+        const result = await fileHost.treeV2!.reveal(ref)
+        if (signal.aborted || context !== JSON.stringify([currentSessionId(ctx), currentWorkspacePath(ctx)])) return undefined
+        const node = result.target
+        if (!node || node.ref !== ref || node.version !== version || node.kind !== 'directory' || node.freshness !== 'fresh' || node.sensitive || node.hidden || node.ignored) return undefined
+        if (result.breadcrumbs.some(crumb => !crumb.name || crumb.name.length > 512 || /[\\/\r\n]/.test(crumb.name) || /^(?:\/|[A-Za-z]:[\\/]|https?:\/\/|file:\/\/)/.test(crumb.ref))) return undefined
+        return { node: mapExplorerNode(node), breadcrumb: result.breadcrumbs }
+      },
       getRootRef: () => rootRef,
       // dsh-explorer-live-watch：host 具备 watch 能力即作为 owner source 注入，
       // ExplorerWatchController 随即绑定（缺位保持显式读取，不伪造事件）。
@@ -1058,7 +1083,8 @@ export function apply(ctx: ClientContext): () => void {
         download: async (ref, version) => { const ticket = await fileHost.transfer!.issueDownloadTicket(ref, version, 'attachment'); if (fileHost.transfer!.download === undefined) throw new Error('download stream is unavailable'); return fileHost.transfer!.download(ticket.ticket) },
       } }),
     }
-    disposers.push(workbench.registerExplorerRuntime?.(runtime) ?? bindExplorerRuntime(runtime))
+    let disposeExplorerRuntime = workbench.registerExplorerRuntime?.(runtime) ?? bindExplorerRuntime(runtime)
+    disposers.push(() => disposeExplorerRuntime())
     try {
       const sessions = ctx.get('sessions' as never) as SessionListFace | undefined
       let ownerSession = currentSessionId(ctx)
@@ -1071,6 +1097,10 @@ export function apply(ctx: ClientContext): () => void {
         ownerRequests = new AbortController()
         ownerFence = undefined
         rootRef = undefined
+        disposeExplorerRuntime()
+        const rebound = { ...runtime }
+        disposeExplorerRuntime = workbench.registerExplorerRuntime?.(rebound) ?? bindExplorerRuntime(rebound)
+        fileSearch.notify()
         getComposerReferenceController().dispatch({ type: 'mark_all_stale' })
       })
       if (unsubscribe !== undefined) disposers.push(unsubscribe)
@@ -1191,6 +1221,8 @@ export function apply(ctx: ClientContext): () => void {
         ?? Promise.resolve({ status: 'unavailable' as const, reason: 'structured conversation reference bridge is unavailable' }),
       chooseTarget: signal => underlyingReferenceBridge?.chooseTarget?.(signal)
         ?? Promise.resolve({ status: 'unavailable' as const, reason: 'conversation target chooser is unavailable' }),
+      targetFor: (conversationId, signal) => underlyingReferenceBridge?.targetFor?.(conversationId, signal)
+        ?? Promise.resolve({ status: 'unavailable' as const, reason: 'bound conversation target resolution is unavailable' }),
       prepareReference: (input, signal) => underlyingReferenceBridge?.prepareReference?.(input, signal)
         ?? Promise.resolve({ status: 'unavailable' as const, reason: 'editable reference preparation is unavailable' }),
       insertReference: (detail, signal) => underlyingReferenceBridge?.insertReference?.(detail, signal)
@@ -1423,18 +1455,6 @@ export function apply(ctx: ClientContext): () => void {
     disposers.push(() => window.removeEventListener(COMPOSER_REFERENCE_HOST_REMOVE_RESULT_EVENT, onReferenceHostRemovalResult))
     disposers.push(() => referenceDrafts.setHostAvailability(false, 'structured conversation insert capability is unavailable'))
     disposers.push(() => { hostInsertSeamAvailable = false; hostActivationAvailable = false; notifyDecorated() })
-    const onSelectionReference = (event: Event): void => {
-      if (getComposerReferenceDraftControllerV2().snapshot().hostAvailable) return
-      const detail = (event as CustomEvent<{ readonly anchor?: { readonly artifactRef?: string; readonly artifactVersion?: string; readonly quotePreview?: string; readonly quoteDigest?: string } }>).detail
-      const anchor = detail?.anchor
-      if (anchor?.artifactRef === undefined || anchor.artifactVersion === undefined || anchor.quoteDigest === undefined) return
-      getComposerReferenceController().dispatch({ type: 'replace_active', reference: {
-        id: referenceId('selection', anchor.artifactRef, anchor.artifactVersion), kind: 'selection-anchor', owner: 'dsh.selection', ref: anchor.artifactRef, version: anchor.artifactVersion,
-        label: '选区引用', scope: 'selection', digest: anchor.quoteDigest, freshness: 'fresh', quote: (anchor.quotePreview ?? '').slice(0, 500), anchor,
-      } })
-    }
-    window.addEventListener('dsh-selection-annotation:submit', onSelectionReference)
-    disposers.push(() => window.removeEventListener('dsh-selection-annotation:submit', onSelectionReference))
     const emitImageRegionResult = (requestId: string, ok: boolean, reason?: string): void => {
       window.dispatchEvent(new CustomEvent(FILE_IMAGE_REGION_REFERENCE_RESULT_EVENT, { detail: { version: 1, requestId, ok, ...(reason === undefined ? {} : { reason }) } }))
     }

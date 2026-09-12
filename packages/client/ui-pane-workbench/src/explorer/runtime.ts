@@ -1,3 +1,4 @@
+import { createExplorerRevealChannel } from './reveal-channel.js'
 import type { ExplorerWatchSourceV1 } from './explorer-watch.js'
 import type { ExplorerTreeNodeV1 } from './tree-state.js'
 
@@ -13,6 +14,7 @@ export interface ExplorerMetadataV1 {
 export interface ExplorerRuntimeV2 {
   readonly workspaceRef?: string
   getRootRef?(): string | undefined
+  revealResource?(ref: string, version: string, signal: AbortSignal): Promise<{ readonly node: ExplorerTreeNodeV1; readonly breadcrumb: readonly { readonly ref: string; readonly name: string }[] } | undefined>
   roots(): Promise<readonly ExplorerTreeNodeV1[]>
   listChildren(ref: string): Promise<readonly ExplorerTreeNodeV1[]>
   search?(query: string): Promise<readonly ExplorerTreeNodeV1[]>
@@ -55,25 +57,30 @@ export interface ExplorerTransferRuntimeV1 {
 }
 
 export interface ExplorerRuntimeSourceV1 {
+  readonly reveal?: ReturnType<typeof createExplorerRevealChannel>
   getSnapshot(): ExplorerRuntimeV2 | undefined
   subscribe(listener: () => void): () => void
   bind(runtime: ExplorerRuntimeV2): () => void
 }
 
 export function createExplorerRuntimeSource(): ExplorerRuntimeSourceV1 {
+  const reveal = createExplorerRevealChannel()
   let activeRuntime: ExplorerRuntimeV2 | undefined
   const listeners = new Set<() => void>()
   return {
+    reveal,
     getSnapshot: () => activeRuntime,
     subscribe(listener) {
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },
     bind(runtime) {
+      reveal.cancel()
       activeRuntime = runtime
       for (const listener of listeners) listener()
       return () => {
         if (activeRuntime !== runtime) return
+        reveal.cancel()
         activeRuntime = undefined
         for (const listener of listeners) listener()
       }

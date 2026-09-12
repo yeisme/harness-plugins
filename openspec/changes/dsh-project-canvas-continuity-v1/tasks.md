@@ -4,9 +4,9 @@
 
 - [ ] 1.1 核对当前 DSH Pane、项目 storage、引用 prepare/ack 和成果能力；交付真实 seam/缺口列表；不重复已有成果工作区 tasks。
 - [ ] 1.2 冻结最小项目画布合同与 UI Contract；复用 host/client/bundle 脚手架；验收 session/project 分离与兼容。
-- [ ] 2.1 实现五类节点及图片/视频/音频/文件/领域引用、相机、选择、移动、尺寸、分组、撤销；由5.1/5.2补全交互；focused reducer测试。
+- [ ] 2.1 实现五类节点及图片/视频/音频/文件/领域引用、相机、选择、移动、尺寸、分组、撤销；由5.1/5.2补全交互；focused reducer测试。 | evidence: 进行中：此前修复父组/子节点拖动顺序；本轮修复零位移及未变化viewport回声仍创建历史、清空redo的问题。相同值返回原editor，保持editVersion、历史与重做。reducer/controller两文件26项测试通过，含undo→零位移/相同camera→redo恢复原位置。完整真实交互验收仍开放。
 - [x] 2.1a 完成共享文档schema与确定性Draft编辑内核：五类节点/两类边、选择/移动/尺寸/分组/复制/撤销，workspace/project/document/editVersion隔离；不含renderer/host持久化，父2.1保持未完成。 | evidence: implementation-baseline.md；17 focused unit tests / 11 existing protocol tests / package typecheck passed；非UI或真实owner验收。
-- [ ] 2.2 实现 host 项目 Draft/layout 持久化与 revision 冲突恢复；关闭重开/存储失败不丢已确认数据。 | evidence: implementation-baseline.md：恢复journal继续绑定原pending；unknown禁重存，晚到saved应用新revision。controller14项/typecheck/build通过；真实JSON+controller恢复重存证据 project-canvas-storage-20260908035158Z-3697558。完整Host/多会话/stale journal验收未完成。
+- [ ] 2.2 实现 host 项目 Draft/layout 持久化与 revision 冲突恢复；关闭重开/存储失败不丢已确认数据。 | evidence: 进行中：此前Host存储/未知回执恢复证据保留于implementation-baseline；本轮先复现conflict reapply后undo退回旧存储revision，修复为同步重置当前文档、past/future和手势基线revision，非前进revision保持冲突。新增回归验证undo后再次保存使用owner revision7；reducer/controller27项测试及typecheck通过。完整Host/多会话与真实关闭重开验收仍未完成。
 - [x] 2.2a 实现Host画布保存与只读对账、revision冲突、保存期间编辑保护；真实JSON存储销毁重挂载恢复；父2.2保留刷新草稿/unknown恢复与完整Host验收。
 - [x] 2.2b 实现写前日志与确定性对账：save先落journal再commit；跨重挂载read返回journaled draft；reconcile对已记账未提交返回not_applied并可把草稿恢复为dirty重存；conflict提供reapply（重存到owner确认revision）/discard显式路径。父2.2保留真实Host生命周期与多会话冲突验收。 | evidence: implementation-baseline.md；13 Host store + 10 controller unit全绿；真实storage journal恢复证据 project-canvas-storage-20260908033330Z-3349834
 - [ ] 2.3 注册 Pane，复用 DSH tokens/控件/locale，补对象列表和键盘等价操作；dispose 与 HMR 无残留。
@@ -15,7 +15,7 @@
 - [ ] 3.1 对接既有选择引用 prepare/ack；明确目标会话，切换/迟到/重复提交测试不串数据。
 - [ ] 3.2 复用既有 Creator Studio 成果预览/比较/receipt，将选定成果回填原画布；禁止复制保存/版本状态机。
 - [ ] 3.3 实现项目续接摘要与显式继续；Pinax 缺席诚实降级，关闭不取消、unknown 只对账。
-- [ ] 4.1 依赖2/3组与5.1–5.5稳定；完成协议 focused 测试及稳定后 typecheck/test/build/check:bundles/check:plugins/check:surfaces/test:visual。
+- [ ] 4.1 依赖2/3组与5.1–5.5稳定；完成协议 focused 测试及稳定后 typecheck/test/build/check:bundles/check:plugins/check:surfaces/test:visual。 | evidence: 进行中：现有画布reducer/workflow/controller/view/pane五文件36项定向测试及typecheck通过。UI测试曾产生大量React act环境未配置警告；两份画布UI测试beforeEach显式设置IS_REACT_ACT_ENVIRONMENT，afterEach沿用unstubAllGlobals恢复。修复后两文件5项UI测试通过且无act环境/未包裹警告。完整稳定门、视觉与真实画布验收仍未完成。
 - [ ] 4.2 真实 DSH staging/profile 验证 Agent→成果→重开续接、双栏隔离、拖拽与无重复 Target 底栏；协议 pass 不替代本项。
 - [ ] 4.3 三个项目两类工作、10次续接至少8次30秒内、60分钟零已确认丢稿/零重复提交；保存脱敏证据并更新实际 readiness。 300混合节点，输入p95≤100ms、缓存切换p95≤200ms，记录订阅/DOM/heap/帧趋势与机器/样本。
 - [ ] 5.1 依赖1.2/2.1；实现完整素材/草稿/操作/成果/分组节点及六类引用，固定@xyflow/react@12.11.6；执行边只由workflow消费同一document；无第二状态owner。

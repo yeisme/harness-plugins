@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, writeFile, mkdir, readFile, rename, symlink } from 'node:fs/promises'
+import { mkdtemp, writeFile, mkdir, readFile, rename, symlink, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -7,6 +7,34 @@ import { createFileWorkspaceEditHost, createGitCompareSession, createOpaqueFileR
 import { SECURE_FILE_TRAVERSAL_UNSUPPORTED_CODE } from '../src/index.ts'
 
 describe('@yeisme/dsh-file-host/node', () => {
+  it('rejects malformed, cross-query and metadata-stale file search cursors', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-search-cursor-'))
+    try {
+      await Promise.all(['a-report.txt', 'b-report.txt', 'a-other.txt', 'b-other.txt'].map(name => writeFile(join(root, name), 'fixture')))
+      const refs = createOpaqueFileRefRegistry()
+      const first = await refs.searchV2(root, { query: 'report', limit: 1 })
+      expect(first.nextCursor).toBeTruthy()
+      expect((await refs.searchV2(root, { query: 'report', limit: 1, cursor: first.nextCursor })).nodes).toHaveLength(1)
+      await expect(refs.searchV2(root, { query: 'other', limit: 1, cursor: first.nextCursor })).rejects.toThrow('cursor')
+      await expect(refs.searchV2(root, { query: 'report', cursor: 'invalid' })).rejects.toThrow('cursor')
+      await writeFile(join(root, 'b-report.txt'), 'different metadata and file size')
+      await expect(refs.searchV2(root, { query: 'report', limit: 1, cursor: first.nextCursor })).rejects.toThrow('cursor')
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
+
+  it('reports unknown completeness when the existing traversal depth limit hides matches', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-search-depth-'))
+    try {
+      let current = root
+      for (let depth = 0; depth < 35; depth++) { current = join(current, `level-${depth}`); await mkdir(current) }
+      await writeFile(join(current, 'report.txt'), 'beyond the existing owner traversal limit')
+      const result = await createOpaqueFileRefRegistry().searchV2(root, { query: 'report' })
+      expect(result.nodes).toEqual([])
+      expect(result.truncated).toBe(true)
+      expect(result.total).toBeUndefined()
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
+
   it('lists files and directories in one workspace level', async () => {
     const root = await mkdtemp(join(tmpdir(), 'yeisme-files-'))
     await mkdir(join(root, 'src'))

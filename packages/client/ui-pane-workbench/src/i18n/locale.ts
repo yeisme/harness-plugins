@@ -11,6 +11,8 @@
  */
 
 // Locale type definitions
+import { SEARCH_CENTER_EN, SEARCH_CENTER_ZH } from './search-center.js'
+
 export type Locale = 'zh' | 'en' | 'pseudo-long' | 'pseudo-rtl'
 
 // Locale base mapping (for fallback chains)
@@ -53,7 +55,9 @@ export interface LocaleBundle {
 const EN_BUNDLE: LocaleBundle = {
   locale: 'en',
   resources: {
+    ...SEARCH_CENTER_EN,
     // Activity Rail
+    'explorer.returnFromLocation': 'Back to previous Explorer view',
     'rail.explorer': 'Explorer',
     'rail.sourceControl': 'Source Control',
     'rail.terminal': 'Terminal',
@@ -438,7 +442,7 @@ const EN_BUNDLE: LocaleBundle = {
     'search.placeholder': 'Search sessions, panes, and commands',
     'search.filters': 'Search filters',
     'search.results': 'Search results',
-    'search.hint': '↑↓ select · Enter open · → actions · Esc close',
+    'search.hint': '↑↓ select · Enter open · Esc close',
     'search.pin': 'Pin search as a pane',
     'search.category.all': 'All',
     'search.category.session': 'Sessions',
@@ -485,7 +489,9 @@ const EN_BUNDLE: LocaleBundle = {
 const ZH_BUNDLE: LocaleBundle = {
   locale: 'zh',
   resources: {
+    ...SEARCH_CENTER_ZH,
     // Activity Rail
+    'explorer.returnFromLocation': '返回原文件导航',
     'rail.explorer': '资源管理器',
     'rail.sourceControl': '源代码管理',
     'rail.terminal': '终端',
@@ -870,7 +876,7 @@ const ZH_BUNDLE: LocaleBundle = {
     'search.placeholder': '搜索会话、窗格和命令',
     'search.filters': '搜索筛选',
     'search.results': '搜索结果',
-    'search.hint': '↑↓ 选择 · Enter 打开 · → 操作 · Esc 关闭',
+    'search.hint': '↑↓ 选择 · Enter 打开 · Esc 关闭',
     'search.pin': '将搜索固定为窗格',
     'search.category.all': '全部',
     'search.category.session': '会话',

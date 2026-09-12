@@ -1,3 +1,4 @@
+import './primitives.js'
 import { describe, expect, it } from 'vitest'
 import {
   RADAR_COMMAND_SPECS,
@@ -65,6 +66,26 @@ function fakeCtx(services: Record<string, unknown>) {
 }
 
 describe('personal radar client apply', () => {
+  it('registers the market Web face without the legacy personal host and disposes subscriptions', async () => {
+    const pane = fakePane()
+    let subscriptions = 0
+    const market = { schema: 'dsh.radar.market-host.v1', contextRef: () => 'session-a',
+      load: async () => ({ ok: false, reason: 'brief_absent', recovery: 'No brief' }),
+      subscribeContext: () => { subscriptions++; return () => { subscriptions-- } },
+      subscribePolicy: () => { subscriptions++; return () => { subscriptions-- } },
+    }
+    const ctx = fakeCtx({ paneWorkbench: pane.face, radarMarketHost: market })
+    const dispose = await apply(ctx as never)
+    expect(pane.views.has('drama-radar.market')).toBe(true)
+    expect(pane.views.has(RADAR_VIEW_KINDS.pane)).toBe(false)
+    expect(subscriptions).toBe(2)
+    const duplicate = await apply(ctx as never)
+    expect(pane.views.size).toBe(1)
+    duplicate()
+    dispose()
+    expect(pane.views.size).toBe(0)
+    expect(subscriptions).toBe(0)
+  })
   it('registers badge + pane views and the /drama radar command entries when seams probe', async () => {
     const pane = fakePane()
     const ctx = fakeCtx({ paneWorkbench: pane.face, radarHost: fakeHost() })

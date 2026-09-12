@@ -8,6 +8,7 @@ import { windowVirtualRows } from '../virtual-window.js'
 import { EXPLORER_STYLES } from './styles.js'
 import type { ExplorerOpenAdapterV1 } from './open-adapter.js'
 import { getExplorerRuntime, subscribeExplorerRuntime, type ExplorerMetadataV1, type ExplorerMutationProposalV1, type ExplorerRuntimeSourceV1, type ExplorerRuntimeV2 } from './runtime.js'
+import type { ExplorerRevealRequest } from './reveal-channel.js'
 import { createExplorerWatchController } from './explorer-watch.js'
 import {
   createExplorerTreeState,
@@ -49,6 +50,7 @@ export interface ExplorerTreeUiProps {
   readonly gitMutationDisabled?: boolean
   readonly gitMutationReason?: string
   readonly onIntent?: (state: ExplorerTreeStateV1) => void
+  readonly onNavigationSafetyChange?: (safe: boolean) => void
   readonly runtime?: ExplorerRuntimeV2
 }
 
@@ -245,9 +247,12 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
     hoverTimers.current.delete(ref)
   }
   useEffect(() => {
-    if (focused !== undefined) inspect(focused)
+    if (focused !== undefined && treeRef.current?.contains(document.activeElement)) inspect(focused)
     return () => { if (focused !== undefined) cancelInspect(focused.ref) }
   }, [focused?.ref, props.runtime])
+  useEffect(() => {
+    props.onNavigationSafetyChange?.(draftAction === undefined && proposal === undefined && !proposalPending)
+  }, [draftAction, proposal, proposalPending, props.onNavigationSafetyChange])
   const selectedNode = props.state.selectedRef === undefined ? undefined : props.state.nodes[props.state.selectedRef]
   const targetRefs = props.state.checkedRefs.length > 0 ? props.state.checkedRefs : props.state.selectedRef === undefined ? [] : [props.state.selectedRef]
   const beginProposal = (action: ExplorerMutationProposalV1['action'], importRef?: string, importName?: string, destinationOverride?: string): void => {
@@ -429,6 +434,7 @@ export function ExplorerTree(props: ExplorerTreeUiProps): ReactNode {
       role: 'tree',
       tabIndex: 0,
       'aria-label': t('rail.explorer'),
+      onFocus: (event: { target: EventTarget; currentTarget: EventTarget }) => { if (event.target === event.currentTarget && focused) inspect(focused) },
       'aria-activedescendant': focused === undefined ? undefined : `explorer-row-${focused.ref}`,
       ref: treeRef,
       hidden: props.narrow === true && props.state.narrowReturnRef !== undefined,
@@ -548,16 +554,81 @@ export function ExplorerTreeView(props: PaneLocalViewProps & { readonly runtimeS
     props.runtimeSource?.getSnapshot ?? getExplorerRuntime,
     props.runtimeSource?.getSnapshot ?? getExplorerRuntime,
   )
+  const stateRuntime = useRef(runtime)
   const narrow = useNarrowViewport()
+  const channel = props.runtimeSource?.reveal
+  const request = useSyncExternalStore(channel?.subscribe ?? (() => () => {}), channel?.getSnapshot ?? (() => undefined), () => undefined)
+  const locationRoot = useRef<HTMLDivElement>(null)
+  const receiverEpoch = useRef(0)
+  const acknowledged = useRef<ExplorerRevealRequest>()
+  const [navigationSafe, setNavigationSafe] = useState(true)
+  const navigationSafeRef = useRef(true)
+  navigationSafeRef.current = navigationSafe
+  const previousScroll = useRef<{ top: number; runtime: ExplorerRuntimeV2 }>()
+  const hadLocation = useRef(false)
+  useEffect(() => channel?.setNavigationGuard(() => navigationSafeRef.current), [channel])
+  const [location, setLocation] = useState<{ request: ExplorerRevealRequest; state: ExplorerTreeStateV1; breadcrumb: readonly { ref: string; name: string }[] }>()
+  useEffect(() => {
+    const epoch = ++receiverEpoch.current
+    if (!request || request.runtime !== runtime || !channel?.isCurrent(request)) { setLocation(undefined); if (request) channel?.acknowledge(request, false); return }
+    if (!navigationSafeRef.current) { channel.acknowledge(request, false); return }
+    previousScroll.current ??= { top: locationRoot.current?.querySelector('[role=tree]')?.scrollTop ?? 0, runtime }
+    let live = true
+    void runtime?.revealResource?.(request.ref, request.version, request.signal).then(result => {
+      if (!live) return
+      if (!channel.isCurrent(request)) { if (channel.getSnapshot() === request) channel.acknowledge(request, false); return }
+      if (!navigationSafeRef.current || !result || result.node.ref !== request.ref || result.node.version !== request.version || result.node.kind !== 'directory') { channel.acknowledge(request, false); return }
+      const roots = reduceExplorerTree(createExplorerTreeState(), { type: 'hydrate_roots', nodes: [result.node] })
+      setLocation({ request, state: reduceExplorerTree(roots, { type: 'select', ref: result.node.ref }), breadcrumb: result.breadcrumb })
+    }).catch(() => { if (live) channel.acknowledge(request, false) })
+    return () => {
+      live = false
+      queueMicrotask(() => { if (receiverEpoch.current === epoch && channel.getSnapshot() === request) channel.cancel() })
+    }
+  }, [request, runtime, channel])
+  useEffect(() => {
+    if (!location || acknowledged.current === location.request || location.request !== request || !channel?.isCurrent(location.request)) return
+    let frame: number
+    const confirm = () => {
+      if (!channel.isCurrent(location.request)) { if (channel.getSnapshot() === location.request) channel.acknowledge(location.request, false); return }
+      const row = [...(locationRoot.current?.querySelectorAll<HTMLElement>('[data-explorer-ref]') ?? [])].find(element => element.dataset.explorerRef === location.request.ref)
+      const tree = locationRoot.current?.querySelector<HTMLElement>('[role=tree]')
+      // Virtual rows need a committed scroll update before the selected row exists.
+      // The channel's deadline bounds this wait, including a missing receiver row.
+      if (!row?.isConnected || row.getAttribute('aria-selected') !== 'true' || !tree) { frame = requestAnimationFrame(confirm); return }
+      tree.focus()
+      if (!channel.acknowledge(location.request, document.activeElement === tree)) return
+      acknowledged.current = location.request
+      frame = requestAnimationFrame(() => { if (channel.isCurrent(location.request)) tree.focus() })
+    }
+    frame = requestAnimationFrame(confirm)
+    return () => cancelAnimationFrame(frame)
+  }, [location, request, channel])
+
+  useEffect(() => {
+    if (location) { hadLocation.current = true; return }
+    if (request) return
+    const saved = previousScroll.current; previousScroll.current = undefined
+    const restore = hadLocation.current; hadLocation.current = false
+    if (!restore || !saved || saved.runtime !== runtime) return
+    const tree = locationRoot.current?.querySelector<HTMLElement>('[role=tree]')
+    if (tree) { tree.scrollTop = saved.top; tree.dispatchEvent(new Event('scroll', { bubbles: true })) }
+  }, [location, request, runtime])
   // followups 1.1：同步镜像最新树状态，watch 事件折叠与 reconcile 都基于最新值，
   // 不覆盖用户在事件间隙做出的选择/焦点/滚动锚点。
   const explorerViewState = useRef(state)
   explorerViewState.current = state
   const applyState = (next: ExplorerTreeStateV1): void => {
+    stateRuntime.current = runtime
     explorerViewState.current = next
     setState(next)
   }
   useEffect(() => {
+    if (stateRuntime.current !== runtime) {
+      stateRuntime.current = runtime
+      const empty = createExplorerTreeState()
+      explorerViewState.current = empty; setState(empty)
+    }
     if (runtime === undefined) return
     let live = true
     void runtime.roots().then(nodes => { if (live) applyState(reduceExplorerTree(explorerViewState.current, { type: 'hydrate_roots', nodes })) }).catch(error => { if (live) applyState({ ...explorerViewState.current, freshness: 'offline', errors: { ...explorerViewState.current.errors, root: error instanceof Error ? error.message : 'failed to load roots' } }) })
@@ -592,15 +663,24 @@ export function ExplorerTreeView(props: PaneLocalViewProps & { readonly runtimeS
     }, 150)
     return () => { live = false; clearTimeout(timer) }
   }, [runtime, state.filter])
+  const displayedLocation = location?.request.runtime === runtime ? location : undefined
+  const displayedState = stateRuntime.current === runtime ? state : createExplorerTreeState()
   if (runtime === undefined) {
     return createElement(Surface, { kind: 'navigator', className: 'pwr-explorer', 'data-explorer-tree': 'true' },
       createElement(SurfaceState, { phase: 'disabled', title: t('state.offline') }),
     )
   }
-  if (state.freshness === 'offline' && state.errors.root !== undefined) {
+  if (!displayedLocation && displayedState.freshness === 'offline' && displayedState.errors.root !== undefined) {
     return createElement(Surface, { kind: 'navigator', className: 'pwr-explorer', 'data-explorer-tree': 'true' },
-      createElement(SurfaceState, { phase: 'error', title: state.errors.root }),
+      createElement(SurfaceState, { phase: 'error', title: displayedState.errors.root }),
     )
   }
-  return createElement(ExplorerTree, { state, runtime, narrow, onIntent: applyState })
+  return createElement('div', { ref: locationRoot, style: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 } },
+    displayedLocation ? createElement(Button, { variant: 'toolbar', size: 'sm', disabled: !navigationSafe, onClick: () => channel?.cancel() }, t('explorer.returnFromLocation')) : null,
+    createElement('div', { style: { flex: 1, minHeight: 0 } }, createElement(ExplorerTree, {
+      onNavigationSafetyChange: setNavigationSafe, state: displayedLocation?.state ?? displayedState, runtime, narrow,
+      ...(displayedLocation ? { breadcrumb: displayedLocation.breadcrumb } : {}),
+      onIntent: next => { if (displayedLocation) setLocation({ ...displayedLocation, state: next }); else applyState(next) },
+    })),
+  )
 }

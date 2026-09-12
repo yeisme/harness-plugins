@@ -57,6 +57,16 @@ delivery receipt-history scenarios with focused cross-package tests.
 - **Safe Handoff**: Optional Open in Workbench with refs-only payload for professional bulk management
 - **Fail-Closed**: Commands disabled without creator-studio projection; panes hidden without capability
 
+## Pipeline Workbench pane
+
+- **Pipeline Workbench** (`componentKey` `drama.pipeline.workbench`, pane kind `creator.pipeline`): vertical-slice pipeline canvas — capsule Agent ⇄ Workbench switching, edge selection → inspector with run status/actions, bottom run strip, and media drop → canvas asset-node draft intents.
+
+The pane is probe-first: without a projection owner it renders the honest
+disabled state with a reason, no dead buttons. The `creativePipelineFixture`
+context service key provides a fixture-tier owner for local/fixture evidence
+only — it is not a real owner: no mutations, canvas saves reconcile to
+`unavailable`, and media resolution never grants access.
+
 ## Experience Tiers and Client Wiring
 
 Real client wiring — view registration into the Pane Workbench runtime, `/drama`

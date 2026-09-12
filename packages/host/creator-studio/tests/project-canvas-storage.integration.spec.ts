@@ -1,3 +1,4 @@
+import { createProjectCanvasEditor, editProjectCanvas } from '../../../client/ui-pane-domain/src/project-canvas.js'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -7,6 +8,7 @@ import { expect, it } from 'vitest'
 import { PROJECT_CANVAS_SCHEMA, type ProjectCanvasDocument } from '@yeisme/dsh-pane-protocol'
 import { ProjectCanvasStore, type ProjectCanvasStorage } from '../src/project-canvas-store.ts'
 import type { CreatorStudioContextV1 } from '../src/types.ts'
+import { ProjectCanvasController } from '../../../client/ui-pane-domain/src/project-canvas-controller.js'
 
 // Same real storage modules as the DSH preview; this is not a domain-owner acceptance test.
 it('recovers a journaled save that never committed after disposing and remounting real JSON storage', async () => {
@@ -60,10 +62,19 @@ it('recovers a journaled save that never committed after disposing and remountin
     // A later session on untouched real storage sees only the journaled intent and settles it definitively.
     await mount()
     expect(await store!.read(read)).toEqual({ status: 'missing', draft: { requestId: commitRequestId, baseRevision: 0, document } })
-    expect(await store!.reconcile({ ...read, requestId: commitRequestId })).toEqual({ status: 'not_applied', requestId: commitRequestId })
+    const controller = new ProjectCanvasController({
+      canvasRead: input => store!.read(input),
+      canvasSave: input => store!.save(input),
+      canvasReconcile: input => store!.reconcile(input),
+    }, read, () => 'save:recovered')
+    await controller.load()
+    expect(controller.getSnapshot()).toMatchObject({ status: 'ready', dirty: true, saveStatus: 'dirty', editor: { document } })
     expect(await store!.read(read)).toEqual({ status: 'missing' })
     // The recovered draft re-saves under a fresh request id.
-    expect(await store!.save({ requestId: 'save:recovered', document })).toEqual({ status: 'saved', requestId: 'save:recovered', revision: 1 })
+    await controller.save()
+    expect(controller.getSnapshot()).toMatchObject({ dirty: false, saveStatus: 'clean', editor: { document: { ...document, revision: 1 } } })
+    expect(await store!.reconcile({ ...read, requestId: 'save:recovered' })).toEqual({ status: 'saved', requestId: 'save:recovered', revision: 1 })
+    controller.dispose()
     expect(await readFile(join(directory, 'yeisme_project_canvas_v1.json'), 'utf8')).toContain('Unsettled canvas content')
   } finally {
     await store?.close(); await root?.fiber.dispose(); await rm(directory, { recursive: true, force: true })
@@ -85,6 +96,13 @@ it('recovers the saved canvas and receipt after disposing and remounting real JS
   const document: ProjectCanvasDocument = { schema: PROJECT_CANVAS_SCHEMA, id: 'main', revision: 0,
     scope: { workspaceRef: context.workspaceRef, projectRef: context.projectRef }, camera: { x: 12, y: 34, zoom: 1.5 },
     nodes: [{ id: 'draft:one', kind: 'draft', title: 'Fixture draft', text: 'Synthetic canvas content', position: { x: 20, y: 30 }, size: { width: 240, height: 180 } }], edges: [] }
+  document.nodes.push({ id: 'operation:one', kind: 'operation', title: 'Retained selected result', owner: 'eikona', actionRef: 'action:generate', controls: { count: 1 },
+    position: { x: 300, y: 30 }, size: { width: 240, height: 180 }, selectedArtifact: { schema: 'pane.artifact.v1alpha1', owner: 'eikona', kind: 'image', ref: 'eikona:asset:fixture', version: '7', mediaType: 'image/png', title: 'Selected image', evidenceRefs: [], capabilities: [] } })
+  const edited = editProjectCanvas(createProjectCanvasEditor(document), { ...document.scope, documentId: document.id }, 0, { type: 'controls', id: 'operation:one', controls: { count: 2 } })
+  expect(edited.ok).toBe(true)
+  if (!edited.ok) throw Error('input edit rejected')
+  document.nodes = [...edited.editor.document.nodes]
+  expect(document.nodes.find(node => node.id === 'operation:one')).toMatchObject({ inputReviewRequired: true, selectedArtifact: { version: '7' } })
   const read = { scope: document.scope, documentId: document.id }
   let root: Context | undefined
   let store: ProjectCanvasStore | undefined
@@ -103,6 +121,10 @@ it('recovers the saved canvas and receipt after disposing and remounting real JS
     await store!.close(); await root!.fiber.dispose()
     await mount()
     expect(await store!.read(read)).toEqual({ status: 'ready', document: { ...document, revision: 1 } })
+    const reopened = await store!.read(read)
+    expect(reopened.status).toBe('ready')
+    if (reopened.status !== 'ready') throw Error('saved canvas missing')
+    expect(reopened.document.nodes.find(node => node.id === 'operation:one')).toMatchObject({ inputReviewRequired: true, controls: { count: 2 }, selectedArtifact: { version: '7' } })
     expect(await store!.reconcile({ ...read, requestId: 'save:one' })).toEqual({ status: 'saved', requestId: 'save:one', revision: 1 })
     expect(await store!.save({ requestId: 'save:stale', document })).toEqual({ status: 'conflict', revision: 1 })
   } finally {

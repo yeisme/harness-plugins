@@ -38,6 +38,10 @@
 - **WHEN** 原来源已删除或权限已撤销
 - **THEN** 系统显示真实来源状态，仅在旧快照仍可授权使用时允许继续发送；不自动复制成普通文本绕过限制
 
+#### Scenario: Explicitly refresh a Creator object without changing its target
+- **WHEN** 用户刷新已插入的 Creator 正文，owner 发布了同一 ref／proof id 的当前版本，或仍授权读取所选不可变候选
+- **THEN** 通过现有比较与确认流程重新授权正文；不跳转到不同 ref 的最新候选，范围保持一致，权限或 proof identity 变化时拒绝且保留草稿
+
 ### Requirement: EPR-03 Explicit targets across insertion entrypoints
 @、选区、拖入和成果再次引用 SHALL 使用同一目标与插入合同，绑定工作区、对话及有效光标，光标失效时追加末尾。批量确认 SHALL 冻结目标，跨面板添加 SHALL 保留来源焦点并给出回执与跳转入口。
 

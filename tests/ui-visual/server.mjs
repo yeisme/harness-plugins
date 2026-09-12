@@ -1,9 +1,15 @@
+import { domainStudioPage } from './domain-studio-page.mjs'
+import { marketPage } from './market-page.mjs'
+import { toolsDiscoveryPage } from './tools-discovery-page.mjs'
+import { searchCenterPage } from './search-center-page.mjs'
 import '../../scripts/build-ui-visual-native-menu.mjs'
 import { createServer } from 'node:http'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { projectCanvasPage } from './project-canvas-page.mjs'
+import { ownerSavePage } from './owner-save-page.mjs'
+import { pipelineWorkbenchPage } from './pipeline-workbench-page.mjs'
 import {
   Surface,
   SurfaceActionBar,
@@ -43,17 +49,25 @@ function esmShimFromGlobal(globalName) {
 }
 
 const statusFlowVendor = {
+  '/market-client.js': () => readFileSync(new URL('../../packages/client/ui-personal-radar/lib/client.js', import.meta.url), 'utf8'),
   '/canvas-client.js': () => readFileSync(new URL('../../packages/bundle/pane-domain/lib/client.js', import.meta.url), 'utf8'),
+  // Pipeline workbench fixture (dsh-creative-pipeline-visual-workbench-v1, task 5.5):
+  // real built drama-director client + its declared browser externals.
+  '/drama-client.js': () => readFileSync(new URL('../../packages/client/ui-ai-drama-director/lib/client.js', import.meta.url), 'utf8'),
+  '/vendor/rich-media-client.js': () => readFileSync(new URL('../../packages/client/ui-creator-studio/node_modules/@yeisme/dsh-rich-media/lib/client.js', import.meta.url), 'utf8'),
+  '/vendor/xyflow-umd.js': () => readFileSync(new URL('../../packages/client/ui-ai-drama-director/node_modules/@xyflow/react/dist/umd/index.js', import.meta.url), 'utf8'),
+  '/vendor/xyflow-base.css': () => readFileSync(new URL('../../packages/client/ui-ai-drama-director/node_modules/@xyflow/react/dist/base.css', import.meta.url), 'utf8'),
   '/vendor/react.global.js': () => wrapCjsGlobal(join(reactDir, 'cjs/react.production.min.js'), 'React'),
   '/vendor/scheduler.global.js': () => wrapCjsGlobal(join(schedulerDir, 'cjs/scheduler.production.min.js'), 'Scheduler'),
   '/vendor/react-dom.global.js': () => `${wrapCjsGlobal(join(reactDomDir, 'cjs/react-dom.production.min.js'), 'ReactDOM', { react: 'React', scheduler: 'Scheduler' })}window.ReactDOMClient = { createRoot: window.ReactDOM.createRoot, hydrateRoot: window.ReactDOM.hydrateRoot };\n`,
   '/vendor/react-jsx-runtime.global.js': () => wrapCjsGlobal(join(reactDir, 'cjs/react-jsx-runtime.production.min.js'), 'ReactJsxRuntime', { react: 'React' }),
   '/vendor/native-menu.mjs': () => readFileSync(new URL('../../temp/ui-visual-native-menu/native-menu.js', import.meta.url), 'utf8'),
-  '/vendor/react-dom.mjs': () => 'export const createPortal=window.ReactDOM.createPortal;',
+  '/vendor/react-dom.mjs': () => 'export const createPortal=window.ReactDOM.createPortal;export const flushSync=window.ReactDOM.flushSync;',
   '/vendor/react.mjs': () => esmShimFromGlobal('React'),
   '/vendor/react-jsx-runtime.mjs': () => esmShimFromGlobal('ReactJsxRuntime'),
   '/vendor/fixture-primitives.mjs': () => readFileSync(new URL('./fixture-primitives.mjs', import.meta.url), 'utf8'),
   '/vendor/status-flow-host.mjs': () => readFileSync(new URL('./status-flow-host.mjs', import.meta.url), 'utf8'),
+  '/vendor/ui-structured-content.mjs': () => readFileSync(new URL('../../packages/client/ui-structured-content/lib/index.mjs', import.meta.url), 'utf8'),
   '/vendor/ui-surface.mjs': () => readFileSync(new URL('../../packages/client/ui-surface/lib/index.mjs', import.meta.url), 'utf8'),
   '/vendor/ui-visual-kit.mjs': () => readFileSync(new URL('../../packages/client/ui-visual-kit/lib/index.mjs', import.meta.url), 'utf8'),
   '/vendor/command-experience-core.mjs': () => readFileSync(new URL('../../packages/client/command-experience-core/lib/index.js', import.meta.url), 'utf8'),
@@ -71,6 +85,7 @@ const statusFlowImportMap = {
     'react-dom': '/vendor/react-dom.mjs',
     'react/jsx-runtime': '/vendor/react-jsx-runtime.mjs',
     '@deepseek-ai/dsh-client-ui-primitives': '/vendor/fixture-primitives.mjs',
+    '@yeisme/dsh-client-ui-structured-content': '/vendor/ui-structured-content.mjs',
     '@yeisme/dsh-client-ui-surface': '/vendor/ui-surface.mjs',
     '@yeisme/dsh-client-ui-visual-kit': '/vendor/ui-visual-kit.mjs',
     '@yeisme/dsh-client-ui-command-experience-core': '/vendor/command-experience-core.mjs',
@@ -288,22 +303,145 @@ function page(kind, width, name, theme) {
   </style></head><body><main class="fixture-frame" data-fixture-kind="${name ?? kind}" data-fixture-width="${width}">${markup}</main></body></html>`
 }
 
-createServer((request, response) => {
+const visualServer = createServer((request, response) => {
   const url = new URL(request.url ?? '/', `http://127.0.0.1:${port}`)
+  if (url.pathname === '/market') {
+    response.setHeader('Content-Type', 'text/html; charset=utf-8')
+    response.end(marketPage(url.searchParams))
+    return
+  }
+  if (url.pathname === '/search-center') {
+    response.setHeader('Content-Type', 'text/html; charset=utf-8')
+    response.end(searchCenterPage(statusFlowImportMap, url.searchParams))
+    return
+  }
   if (url.pathname === '/health') {
     response.writeHead(200, { 'content-type': 'text/plain' })
     response.end('ok')
-    return
-  }
-  if (url.pathname === '/selection-client.js') {
-    response.writeHead(200, { 'content-type': 'text/javascript' })
-    response.end(readFileSync(new URL('../../packages/client/ui-selection-annotation/lib/client.js', import.meta.url)))
     return
   }
   const vendorAsset = statusFlowVendor[url.pathname]
   if (vendorAsset !== undefined) {
     response.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' })
     response.end(vendorAsset())
+    return
+  }
+  if (url.pathname === '/transcription-capabilities') {
+    const width = [360, 560, 960].includes(Number(url.searchParams.get('width'))) ? Number(url.searchParams.get('width')) : 960
+    const lang = url.searchParams.get('lang') === 'en' ? 'en' : 'zh'
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+    response.end(`<!doctype html><html><head><meta charset="utf-8"><script type="importmap">${JSON.stringify(statusFlowImportMap)}</script>
+<style>body{margin:0;font:13px Arial}#fixture{width:${width}px;min-height:400px}</style></head><body><p>Fixture: real capability view; synthetic provider metadata, no ASR execution.</p><main id="fixture"></main>
+<script src="/vendor/react.global.js"></script><script src="/vendor/scheduler.global.js"></script><script src="/vendor/react-dom.global.js"></script><script src="/vendor/react-jsx-runtime.global.js"></script>
+<script type="module">
+import { CreatorTranscriptionCapabilities, creatorStudioStyles, createCreatorStudioTranslator } from '/vendor/native-menu.mjs';
+import { Surface } from '/vendor/ui-surface.mjs';
+const h=React.createElement,t=createCreatorStudioTranslator(${JSON.stringify(lang)});
+const scenario=new URLSearchParams(location.search).get('case');
+window.failCatalog=scenario==='error';window.catalogReads=0;
+const catalog={validation_level:'capability_probe',profiles:[{provider_id:'fixture',model_ref:'sonora://asr-model/fixture-model-with-a-long-reference-for-narrow-pane-verification',revision:'fixture.v1',readiness:'first-support',fixture:true,supported_locales:['zh-CN','en-US'],supported_formats:['wav'],timestamp_modes:['segment'],supports_speaker_labels:false,requires_network:false,requires_credentials:false,cost_model:'external_runtime',max_duration_ms:3000,max_segments:10}],unavailable:[{provider_id:'command-asr',code:'transcription_capability_unavailable',fixture:false}],diagnostics_available:true};
+const runtime={readTranscriptionCatalog:async()=>{window.catalogReads++;if(window.failCatalog)return undefined;if(scenario==='empty')return {...catalog,profiles:[],unavailable:[]};if(scenario==='unknown')return {validation_level:'capability_probe',profiles:[]};return catalog}};
+ReactDOM.createRoot(document.getElementById('fixture')).render(h(Surface,{kind:'workspace','data-creator-studio':true},h('style',null,creatorStudioStyles),h(CreatorTranscriptionCapabilities,{runtime,t})));
+</script></body></html>`)
+    return
+  }
+  if (url.pathname === '/subtitle-results') {
+    const width = [360, 560, 960].includes(Number(url.searchParams.get('width'))) ? Number(url.searchParams.get('width')) : 960
+    const lang = url.searchParams.get('lang') === 'en' ? 'en' : 'zh'
+    const format = url.searchParams.get('format') === 'srt' ? 'srt' : 'vtt'
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+    response.end(`<!doctype html><html><head><meta charset="utf-8"><script type="importmap">${JSON.stringify(statusFlowImportMap)}</script>
+<style>body{margin:0}#fixture{width:${width}px;min-height:400px}</style></head><body><p>Fixture: subtitle result UI with synthetic authorized text; no provider execution.</p><main id="fixture"></main>
+<script src="/vendor/react.global.js"></script><script src="/vendor/scheduler.global.js"></script><script src="/vendor/react-dom.global.js"></script><script src="/vendor/react-jsx-runtime.global.js"></script>
+<script type="module">
+import { CreatorSubtitleResults, creatorStudioStyles, createCreatorStudioTranslator } from '/vendor/native-menu.mjs';
+import { Surface } from '/vendor/ui-surface.mjs';
+const h=React.createElement,t=createCreatorStudioTranslator(${JSON.stringify(lang)}),format=${JSON.stringify(format)};
+const artifact={schema:'pane.artifact.v1alpha1',owner:'sonora',kind:'subtitle',ref:'sonora://subtitle-export/fixture',version:'a'.repeat(64),mediaType:format==='srt'?'application/x-subrip':'text/vtt',title:'Fixture subtitle',evidenceRefs:[],capabilities:[]};
+window.subtitleReadCount=0;
+window.subtitleFixtureContent=format==='vtt'?'WEBVTT\\n\\n00:00:00.000 --> 00:00:02.000\\n完整字幕内容\\n':'1\\n00:00:00,000 --> 00:00:02,000\\n完整字幕内容\\n';
+ReactDOM.createRoot(document.getElementById('fixture')).render(h(Surface,{kind:'workspace','data-creator-studio':true},h('style',null,creatorStudioStyles),h(CreatorSubtitleResults,{t,receipt:{owner:'sonora',status:'completed',receiptRef:artifact.ref,outputArtifacts:[artifact]},read:async artifact=>{window.subtitleReadCount++;return {artifact,contentRevision:artifact.version,content:window.subtitleFixtureContent}}})));
+</script></body></html>`)
+    return
+  }
+  if (url.pathname === '/owner-save') {
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+    response.end(ownerSavePage(statusFlowImportMap))
+    return
+  }
+  if (url.pathname === '/fixed-save') {
+    const width = [360, 560, 960].includes(Number(url.searchParams.get('width'))) ? Number(url.searchParams.get('width')) : 960
+    const lang = url.searchParams.get('lang') === 'en' ? 'en' : 'zh'
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+    response.end(`<!doctype html><html><head><meta charset="utf-8"><script type="importmap">${JSON.stringify(statusFlowImportMap)}</script>
+<style>body{margin:0;background:#171719;color:#eee;font:13px Arial}#fixture{width:${width}px;min-height:500px}</style></head><body><p>Fixture: real editor; synthetic owner receipts.</p><main id="fixture"></main>
+<script src="/vendor/react.global.js"></script><script src="/vendor/scheduler.global.js"></script><script src="/vendor/react-dom.global.js"></script><script src="/vendor/react-jsx-runtime.global.js"></script>
+<script type="module">
+import { CreatorArtifactWorkspace, creatorSnapshot, creatorStudioStyles, createCreatorStudioTranslator } from '/vendor/native-menu.mjs';
+import { Surface } from '/vendor/ui-surface.mjs';
+const h=React.createElement,t=createCreatorStudioTranslator(${JSON.stringify(lang)}),snapshot=creatorSnapshot();
+const artifact={schema:'pane.artifact.v1alpha1',owner:'eikona',kind:'text',ref:'artifact:fixed-fixture',version:'1',mediaType:'text/plain',title:'Fixed version',evidenceRefs:[],capabilities:[]};
+const saved={...artifact,version:'2'};
+const descriptor={schema:'pane.action-descriptor.v1alpha1',owner:'eikona',actionId:'artifact.save',descriptorRef:'action:fixed-fixture:1',targetRef:artifact.ref,targetVersion:'1',context:snapshot.context,label:'Fixture save',risk:'low',confirmation:'confirm',expiresAt:'2999-01-01T00:00:00Z',preview:{summary:'Fixture Working Copy save'},fields:[{key:'body',kind:'textarea',label:'Text',required:true},{key:'revision',kind:'text',label:'Revision',required:true}]};
+function ownerFor(artifact,action){return {...snapshot.owners.find(x=>x.owner==='eikona'),actions:[action],artifactWorkspace:{status:'ready',safeMessage:'Fixture',artifacts:[{artifact,acceptedVersion:artifact.version,candidates:[],actions:{saveDraft:{descriptorRef:action.descriptorRef,contentField:'body',contentRevisionField:'revision'}}}]}}}
+window.fixedSaveReads=[];window.fixedSaveDirty=false;let submitted='';
+const runtime={resolveArtifact:async()=>undefined,readArtifactContent:async claim=>{window.fixedSaveReads.push(claim.version);return {artifact:claim,contentRevision:'revision:'+claim.version,content:claim.version==='1'?'Original fixture':submitted}},dispatchAction:async(action,values)=>{submitted=values.body;return new Promise(resolve=>{window.finishFixedSave=()=>resolve({owner:'eikona',actionId:action.actionId,status:'completed',receiptRef:'receipt:fixed-fixture',outputArtifacts:[saved]})})}};
+function Fixture(){const [owner,setOwner]=React.useState(ownerFor(artifact,descriptor));window.ackFixedSave=()=>setOwner(ownerFor(saved,{...descriptor,descriptorRef:'action:fixed-fixture:2',targetVersion:'2'}));return h(Surface,{kind:'workspace','data-creator-studio':true},h('style',null,creatorStudioStyles),h(CreatorArtifactWorkspace,{owner,snapshot,state:{phase:'ready',snapshot,pendingDescriptorRef:null,lastReceipt:null},runtime,t,onDirty:value=>{window.fixedSaveDirty=value}}))}
+ReactDOM.createRoot(document.getElementById('fixture')).render(h(Fixture));
+</script></body></html>`)
+    return
+  }
+  if (url.pathname === '/eikona-adoption') {
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+    response.end(`<!doctype html><html><head><meta charset="utf-8"><script type="importmap">${JSON.stringify(statusFlowImportMap)}</script>
+<style>body{margin:0;background:#171719;color:#eee;font:13px Arial}#fixture{width:100%;min-height:500px}</style></head><body><p>Fixture: local owner adoption via test bridge; no paid generation.</p><main id="fixture"></main>
+<script src="/vendor/react.global.js"></script><script src="/vendor/scheduler.global.js"></script><script src="/vendor/react-dom.global.js"></script><script src="/vendor/react-jsx-runtime.global.js"></script>
+<script type="module">
+import { EikonaBatchBrowser, EikonaPreparationForm, OperationRecoveryNotice, EikonaAssetBrowser, CreatorActionComposer, CreatorStudioController, creatorStudioStyles, createCreatorStudioTranslator } from '/vendor/native-menu.mjs';
+import { Surface } from '/vendor/ui-surface.mjs';
+const h=React.createElement;
+const native=new URLSearchParams(location.search).has('native')?await (await import('/vendor/native-menu.mjs')).mountNativeCreatorRemote():undefined;
+const controller=new CreatorStudioController(native?.remote??{snapshot:()=>window.ownerStudioSnapshot(),dispatch:request=>window.ownerStudioDispatch(request),readEikonaAssetPage:input=>window.ownerStudioAssetPage(input),selectEikonaCandidate:input=>window.ownerStudioSelect(input)});
+window.readNativeReceipt=()=>controller.store.getSnapshot().lastReceipt;
+window.disposeNativeRemote=()=>native?.dispose();
+window.nativeConnectionReady=()=>native?.ready()===true;
+window.readNativeBatchInput=input=>controller.readEikonaBatchInput(input);
+function Fixture(){const state=React.useSyncExternalStore(controller.store.subscribe,controller.store.getSnapshot);const snapshot=state.snapshot;const [locale,setLocale]=React.useState('zh');window.setAdoptionLocale=setLocale;
+return h(Surface,{kind:'workspace','data-creator-studio':true},h('style',null,creatorStudioStyles),snapshot?h(React.Fragment,null,h(EikonaBatchBrowser,{key:'batches:'+JSON.stringify(snapshot.context),list:input=>controller.listEikonaBatchInputs(input),plan:input=>controller.readEikonaBatchPlan(input),read:input=>controller.readEikonaBatchInput(input),t:createCreatorStudioTranslator(locale)}),h(EikonaPreparationForm,{...(native&&snapshot.context?.projectRef?{draftStorage:{runtime:controller,scope:{tenantRef:snapshot.context.tenantRef,workspaceRef:snapshot.context.workspaceRef,projectRef:snapshot.context.projectRef}}}:{}),prepare:input=>controller.prepareEikonaGeneration(input),readStatus:input=>controller.readEikonaApprovalStatus(input),revoke:input=>controller.revokeEikonaPreparationApproval(input),approve:input=>controller.approveEikonaPreparation(input),approvalAvailable:!!native,available:!!native,t:createCreatorStudioTranslator(locale)}),h(OperationRecoveryNotice,{key:JSON.stringify(snapshot.context),owner:snapshot.owners.find(owner=>owner.owner==='eikona'),runtime:controller,receiptRevision:JSON.stringify([state.lastReceipt?.receiptRef,state.lastReceipt?.status]),t:createCreatorStudioTranslator(locale)}),h(EikonaAssetBrowser,{scopeKey:JSON.stringify(snapshot.context),read:input=>controller.readEikonaAssetPage(input),readImage:input=>controller.readEikonaCandidateImage(input),readReview:input=>controller.readEikonaReview(input),selectCandidate:async input=>{const result=await controller.selectEikonaCandidate(input);await controller.refresh();return result},t:createCreatorStudioTranslator(locale)}),h(CreatorActionComposer,{owner:snapshot.owners.find(owner=>owner.owner==='eikona'),task:'image',snapshot,state,controller,t:createCreatorStudioTranslator(locale)})):h('p',null,'Loading owner'))}
+ReactDOM.createRoot(document.getElementById('fixture')).render(h(Fixture));
+await controller.refresh();
+</script></body></html>`)
+    return
+  }
+  if (url.pathname === '/domain-studio') {
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+    response.end(domainStudioPage(statusFlowImportMap, url.searchParams))
+    return
+  }
+  if (url.pathname === '/domain-studio-image') {
+    const image = readFileSync(new URL('../../../../cli/eikona/prompts/generic/precision-candid/french-vintage-editorial/french-vintage-editorial.png', import.meta.url))
+    response.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-store' })
+    response.end(image)
+    return
+  }
+  if (url.pathname === '/eikona-pages') {
+    const width = [360, 560, 960].includes(Number(url.searchParams.get('width'))) ? Number(url.searchParams.get('width')) : 960
+    const lang = url.searchParams.get('lang') === 'en' ? 'en' : 'zh'
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+    response.end(`<!doctype html><html><head><meta charset="utf-8"><script type="importmap">${JSON.stringify(statusFlowImportMap)}</script>
+<style>body{margin:0;background:#171719;color:#eee;font:13px Arial}#fixture{width:${width}px;min-height:500px}</style></head><body><p>Fixture: real Eikona page navigation; synthetic content, no owner execution.</p><main id="fixture"></main>
+<script src="/vendor/react.global.js"></script><script src="/vendor/scheduler.global.js"></script><script src="/vendor/react-dom.global.js"></script><script src="/vendor/react-jsx-runtime.global.js"></script>
+<script type="module">
+import { EikonaPreparationForm, EikonaAssetBrowser, EikonaStudioPages, EikonaCapabilityNotice, creatorStudioStyles, createCreatorStudioTranslator, zh, en } from '/vendor/native-menu.mjs';
+import { Surface } from '/vendor/ui-surface.mjs';
+const h=React.createElement,t=createCreatorStudioTranslator(${JSON.stringify(lang)});
+// Visual-only draft service; real persistence is covered by the native owner integration suite.
+window.draftWrites=[];let visualDraft;const draftStorage={scope:{tenantRef:'fixture',workspaceRef:'fixture',projectRef:'fixture'},runtime:{readEikonaDraft:async()=>visualDraft?{status:'ready',draft:visualDraft}:{status:'missing'},saveEikonaDraft:async input=>{window.draftWrites.push(input);visualDraft={...input.draft,revision:input.draft.revision+1};return {status:'saved',requestId:input.requestId,revision:visualDraft.revision}},reconcileEikonaDraft:async()=>({status:'unknown'})}};
+window.preparationCalls=[];async function prepare(input){window.preparationCalls.push(input);return {status:'ready',preparationRef:'egp_'+'a'.repeat(64),promptRef:'eikona://prompts/'+input.prompt_id+'/versions/'+input.prompt_version,modelRef:input.controls.model_ref,controls:input.controls,digest:'b'.repeat(64)}}
+window.assetReads=[];async function readAssets(query){window.assetReads.push(query);if(window.ownerAssetPage)return window.ownerAssetPage(query);return {status:'ready',items:[{ref:'eikona://artifacts/run/'+(query.cursor?'two':'one'),title:query.cursor?'Second fixture asset':'First fixture asset',versionStatus:'unverified'}],...(query.cursor?{}:{nextCursor:'fixture-next'})}}
+function Configure(){const [value,setValue]=React.useState('');return h('label',{className:'cs-field ys-field'},'Fixture prompt',h('textarea',{'aria-label':'Fixture prompt',value,onChange:event=>setValue(event.target.value)}))}
+ReactDOM.createRoot(document.getElementById('fixture')).render(h(Surface,{kind:'workspace','data-creator-studio':true},h('style',null,creatorStudioStyles),h(EikonaStudioPages,{t,configure:h(React.Fragment,null,h(EikonaCapabilityNotice,{t,resources:[{ref:'eikona:capability:generate',version:'1',kind:'owner-capability',title:'eikona.generation.submit',status:'needs_contract',evidenceRefs:[]}]}),h(Configure),h(EikonaPreparationForm,{prepare,available:true,t,draftStorage})),candidates:h('p',null,'Fixture candidates'),assets:h(React.Fragment,null,h('p',null,'Fixture assets'),h(EikonaAssetBrowser,{scopeKey:'fixture-project',read:readAssets,...(window.ownerImageRead?{readImage:query=>window.ownerImageRead(query)}:{}),...(window.ownerReviewRead?{readReview:query=>window.ownerReviewRead(query)}:{}),t}))})));
+</script></body></html>`)
     return
   }
   if (url.pathname === '/project-canvas') {
@@ -337,6 +475,14 @@ if(mode==='explorer'){
 </script></body></html>`)
     return
   }
+  if (url.pathname === '/tools-discovery') {
+    const width = [360, 560, 960].includes(Number(url.searchParams.get('width'))) ? Number(url.searchParams.get('width')) : 960
+    const height = url.searchParams.get('short') === 'true' ? 300 : 700
+    const lang = url.searchParams.get('lang') === 'zh' ? 'zh' : 'en'
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+    response.end(toolsDiscoveryPage(width, height, lang, statusFlowImportMap, url.searchParams.get('twins') === 'true'))
+    return
+  }
   if (url.pathname === '/session-tools') {
     const width = [360,560,960].includes(Number(url.searchParams.get('width'))) ? Number(url.searchParams.get('width')) : 560
     const height = url.searchParams.get('short') === 'true' ? 150 : 650
@@ -356,91 +502,21 @@ ReactDOM.createRoot(document.getElementById('tools')).render(React.createElement
 </script></body></html>`)
     return
   }
+  if (url.pathname === '/pipeline-workbench') {
+    const requestedWidth = Math.trunc(Number(url.searchParams.get('width') ?? 1152) || 1152)
+    const width = [400, 720, 1152].includes(requestedWidth) ? requestedWidth : 1152
+    const scenarios = new Set(['desktop', 'narrow', 'capsule', 'running', 'blocked', 'loading', 'stale', 'unknown', 'needs_contract'])
+    const requestedScenario = url.searchParams.get('case') ?? 'desktop'
+    const scenario = scenarios.has(requestedScenario) ? requestedScenario : 'desktop'
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+    response.end(pipelineWorkbenchPage(width, scenario, statusFlowImportMap))
+    return
+  }
   if (url.pathname === '/status-flow') {
     const requestedWidth = Math.trunc(Number(url.searchParams.get('width') ?? 560) || 560)
     const width = [360, 560, 960].includes(requestedWidth) ? requestedWidth : 560
     response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
     response.end(statusFlowPage(width))
-    return
-  }
-  if (url.pathname === '/selection') {
-    const theme = url.searchParams.get('theme') ?? 'fallback'
-    const referenceEnabled = url.searchParams.get('reference') === 'true'
-    // Additive S-scenario gates; absent params keep the original fixture behavior.
-    const act = url.searchParams.get('act') === '1'
-    const choose = url.searchParams.get('choose') === '1'
-    const chooseResult = url.searchParams.get('chooseResult') ?? 'selected'
-    const fail = url.searchParams.get('fail') === '1'
-    const delay = Math.max(0, Math.trunc(Number(url.searchParams.get('delay') ?? '0') || 0))
-    const noSource = url.searchParams.get('nosource') === '1'
-    const tall = url.searchParams.get('tall') === '1'
-    const longTitle = url.searchParams.get('longtitle') === '1'
-    const fixtureTitle = longTitle
-      ? 'Northern Lights production review session — autumn window 47 chars'
-      : 'Visual fixture chat'
-    const sourceAttributes = `sample.setAttribute('data-dsh-reference-source', '');
-      sample.setAttribute('data-dsh-reference-source-owner', source.owner);
-      sample.setAttribute('data-dsh-reference-source-ref', source.ref);
-      sample.setAttribute('data-dsh-reference-source-version', source.version);
-      sample.setAttribute('data-dsh-reference-source-scope', source.scope);
-      sample.setAttribute('data-dsh-reference-source-range-start', '0');
-      sample.setAttribute('data-dsh-reference-source-range-end', String(new TextEncoder().encode(sample.textContent).byteLength));`
-    const chooseTargetMethod = `async chooseTarget() {
-        window.__chooseCalls = (window.__chooseCalls ?? 0) + 1;
-        const mode = ${JSON.stringify(chooseResult)};
-        if (mode === 'cancelled') return { status: 'cancelled' };
-        if (mode === 'unavailable') return { status: 'unavailable', reason: 'fixture chooser unavailable' };
-        target = { workspaceId: 'visual-workspace', conversationId: 'visual-conversation-2', title: 'Second fixture chat', draftRevision: 1 };
-        for (const listener of listeners) listener();
-        return { status: 'selected', target };
-      },`
-    const referenceBridgeScript = referenceEnabled ? `(() => {
-      let target = { workspaceId: 'visual-workspace', conversationId: 'visual-conversation', draftRevision: 3, title: ${JSON.stringify(fixtureTitle)} };
-      const sample = document.getElementById('sample');
-      const source = { owner: 'visual-fixture', ref: 'fixture:selection-sample', version: 'fixture-v1', scope: 'raw-text' };
-      ${noSource ? '' : sourceAttributes}
-      const listeners = new Set();
-      const features = ${act || choose ? `{ activation: ${act}, chooseTarget: ${choose} }` : 'undefined'};
-      return {
-        snapshot() { return features === undefined ? { available: true, target } : { available: true, target, features }; },
-        subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
-        async resolveSelection({ anchor, source: selectedSource }) {
-          window.__resolutions = (window.__resolutions ?? 0) + 1;
-          if (selectedSource.owner !== source.owner || selectedSource.ref !== source.ref || selectedSource.version !== source.version || selectedSource.scope !== source.scope) {
-            return { status: 'unavailable', reason: 'fixture source proof mismatch' };
-          }
-          return { status: 'available', reference: {
-            id: 'fixture-selection-reference', kind: 'selection', intent: 'content',
-            owner: source.owner, ref: source.ref, version: source.version,
-            label: 'Selected diagnostic text', scope: source.scope,
-            digest: anchor.quoteDigest, freshness: 'fixture-current',
-            preview: anchor.quotePreview, window: selectedSource.window,
-          } };
-        },
-        ${choose ? chooseTargetMethod : ''}
-      };
-    })()` : 'undefined'
-    const echoScript = `
-    window.__referenceAdds = [];
-    window.__submits = [];
-    window.addEventListener('dsh-composer-reference:add-to-main', event => {
-      window.__referenceAdds.push(event.detail);
-      const receipt = { version: 1, requestId: event.detail.requestId, ok: ${fail ? 'false' : 'true'}, ${fail ? `reason: 'fixture rejection',` : ''} target: event.detail.target };
-      if (event.detail.activation !== undefined && ${act}) receipt.activated = true;
-      const respond = () => window.dispatchEvent(new CustomEvent('dsh-composer-reference:add-to-main-result', { detail: receipt }));
-      ${delay > 0 ? `setTimeout(respond, ${delay});` : 'respond();'}
-    });
-    window.addEventListener('dsh-selection-annotation:submit', event => { window.__submits.push(event.detail); });`
-    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-    response.end(`<!doctype html><html><head><meta charset="utf-8"><style>${hostThemeDeclarations(theme)}body{font-family:Arial,sans-serif;background:var(--dsw-alias-bg-base,#171719);color:var(--dsw-alias-label-primary,#ececf1);padding:24px}#sample{margin-top:80px}${tall ? 'body{min-height:2400px}#sample{margin-top:320px}' : ''}</style></head><body><p id="sample">Failed to load plugins — selected diagnostic text with a long reference for annotation.</p><script>
-    window.__ModuleLoader__ = { load(entry) { window.selectionClient = entry.factory(name => { if (name === 'react' || name === 'react/jsx-runtime') return {}; throw new Error('Unexpected module: ' + name) }) } };
-    </script><script src="/selection-client.js"></script><script>
-    // Component-fixture proof only: the source range is owner-backed raw text,
-    // and the bridge returns a fixed fixture record instead of deriving authority
-    // from arbitrary page content.
-    const referenceBridge = ${referenceBridgeScript};${echoScript}
-    selectionClient.apply({effect() {}, locale:{getLocale(){return {active:new URLSearchParams(location.search).get('locale') || 'en'}}}}, {referenceBridge}).then(()=>{document.body.dataset.ready='true'});
-    </script></body></html>`)
     return
   }
   const kind = kinds.has(url.searchParams.get('kind') ?? '') ? url.searchParams.get('kind') : 'navigator'
@@ -449,4 +525,4 @@ ReactDOM.createRoot(document.getElementById('tools')).render(React.createElement
   const width = [360, 560, 960].includes(requestedWidth) ? requestedWidth : 560
   response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
   response.end(page(kind, width, name, url.searchParams.get('theme') ?? 'fallback'))
-}).listen(port, '127.0.0.1', () => process.stdout.write(`UI_VISUAL_READY http://127.0.0.1:${port}\n`))
+}).listen(port, '127.0.0.1', () => process.stdout.write(`UI_VISUAL_READY http://127.0.0.1:${visualServer.address().port}\n`))

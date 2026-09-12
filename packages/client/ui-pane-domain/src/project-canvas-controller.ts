@@ -94,6 +94,11 @@ export class ProjectCanvasController {
   edit(edit: ProjectCanvasEdit): boolean {
     const editor = this.state.editor
     if (editor === undefined || this.state.status !== 'ready' || this.disposed) return false
+    // History navigation must never be folded into an in-flight React Flow
+    // drag/resize gesture. React Flow can deliver its final position event
+    // asynchronously after the stop callback; clearing here makes undo/redo
+    // deterministic even when the user clicks immediately.
+    if (edit.type === 'undo' || edit.type === 'redo') this.gesture = undefined
     const result = editProjectCanvas(editor, { ...this.target.scope, documentId: this.target.documentId }, editor.editVersion, edit)
     if (!result.ok) return false
     const changed = result.editor.document !== editor.document
@@ -160,8 +165,9 @@ export class ProjectCanvasController {
     if (action === 'discard') { void this.load(true); return }
     const editor = this.state.editor
     const base = this.state.conflictRevision
-    if (editor === undefined || base === undefined) return
-    this.publish({ ...this.state, editor: { ...editor, document: { ...editor.document, revision: base } },
+    if (editor === undefined || base === undefined || base <= editor.document.revision) return
+    if (this.gesture !== undefined) this.gesture = acknowledgeProjectCanvasSave(this.gesture, base)
+    this.publish({ ...this.state, editor: acknowledgeProjectCanvasSave(editor, base),
       dirty: true, saveStatus: 'dirty', conflictRevision: undefined })
   }
 

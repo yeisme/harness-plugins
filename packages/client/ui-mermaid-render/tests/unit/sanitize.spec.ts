@@ -20,6 +20,15 @@ describe('sanitizeMermaidSvg', () => {
     expect(clean).toContain('max-width:100%')
   })
 
+  it('keeps only local marker references and inert presentation styles', () => {
+    const clean = sanitizeMermaidSvg('<svg xmlns="http://www.w3.org/2000/svg"><defs><marker id="arrow"><path d="M0 0"/></marker></defs><path d="M0 0 L10 10" marker-end="url(#arrow)" marker-start="url(https://example.invalid/arrow)" style="position:fixed;inset:0;z-index:9999;fill:blue"/></svg>')
+    expect(clean).toContain('marker-end="url(#arrow)"')
+    expect(clean).not.toContain('marker-start')
+    expect(clean).not.toContain('position:')
+    expect(clean).not.toContain('z-index')
+    expect(clean).toContain('fill:blue')
+  })
+
   it('throws when the output is not an svg document', () => {
     expect(() => sanitizeMermaidSvg('<p>not svg</p>')).toThrow()
   })

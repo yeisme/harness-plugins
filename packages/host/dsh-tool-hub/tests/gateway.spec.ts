@@ -42,5 +42,15 @@ describe('toolHub Gateway registration', () => {
     expect(claims?.('toolHub/list')).toBe(true)
     const result = await dispatch?.('toolHub/list', { args: {} }, new AbortController().signal)
     expect(result).toMatchObject({ ok: true, value: { ok: false, code: 'catalog-unavailable' } })
+    expect(claims?.('toolReferences/readSkill')).toBe(true)
+    const summary = { name: 'review', source: 'user-agents', provider: 'filesystem', resourceBase: { kind: 'directory', path: 'owner-package-root' } }
+    const removeSkills = root.provide('skills' as never, { list: async () => [summary], getDocument: async (_name: string, options: { signal: AbortSignal }) => {
+      expect(options.signal).toBeInstanceOf(AbortSignal)
+      return { ...summary, content: '# Readable guide' }
+    } } as never)
+    disposers.push(removeSkills)
+    const document = await dispatch?.('toolReferences/readSkill', { args: { input: { itemId: 'skill:review', source: 'user-agents', scope: 'profile' } } }, new AbortController().signal)
+    expect(document).toMatchObject({ ok: true, value: { specVersion: '1.0', status: 'ready', content: '# Readable guide' } })
+    expect(JSON.stringify(document)).not.toContain('owner-package-root')
   })
 })

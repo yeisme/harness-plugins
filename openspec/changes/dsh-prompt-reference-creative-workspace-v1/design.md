@@ -186,3 +186,50 @@ Host Pane slot
 `CreatorOwnerAdapterV1.readArtifactImage` 为可选 Host 内部能力，返回 ArtifactRef、contentRevision、固定 image MIME 和 Uint8Array；旧 adapter 无此方法时图片发送保持不可用。`CreatorStudioGateway.readArtifactImage` 仅供同进程授权解析，不能带 Remote 装饰器或加入 Typert invocation。共享 snapshot、浏览器 preview 和日志不得承载二进制正文。
 
 图片 proof 延用 contentRevision；artifact/media 的 digest 表达完整原始资源的 lowercase SHA-256。resolver 先验证完整上下文与所选版本的 proof，再读取并复制字节、核对版本／类型／revision／摘要，最后重新核对 owner generation 和权限。接入层最多接收 16 MiB，拒绝共享内存与空资源；最终 Host attachment owner 继续执行自身大小、像素、MIME 和解码门禁。框选坐标只作为明确的 image-region 范围传给现有 deriveImageRegion，普通 image 不接收隐藏区域，任一失败不降级。此增量不宣称音视频附件能力存在；音视频仍需 Host 与模型接收端单独能力协商。
+
+
+### HTML 静态结构视图
+
+HTML 的 Preview 不再等同于源码高亮：复用 Rich Media 的 `StaticHtmlPreview`，通过项目现有 DOMPurify 依赖创建独立净化实例，仅允许标题、段落、列表、表格等语义标签及受限表格属性。禁用脚本、CSS、外部资源、表单控件、导航 URL、id／name／class，避免执行、网络访问、DOM 命名冲突或宿主样式侵入。不增加 iframe 或权限 bridge。
+
+Source 始终编辑 owner 授权读取的完整正文；静态投影不得回写草稿。每次投影与源码字符串绑定，异步返回过期结果不得覆盖新源码；净化失败、空内容、加载和超过 128 Ki UTF-16 码元的预览预算分别显示状态，超限不截断正文。界面明确这是结构预览，样式、交互与实际应用运行继续依赖开发环境接口。使用宿主主题及既有 Pane 滚动；文案覆盖 zh／en／pseudo。
+
+
+### 成果页签与空状态稳定性
+
+预览／源码／比较采用单一 roving tab stop，左右方向键自动切换并移动焦点，Home／End 到首尾；RTL 反转左右方向，IME composition 不处理导航。使用实例唯一 ID 关联 tab 与 tabpanel，焦点样式沿用统一 token，切换只改变显示投影、不丢失本地草稿。
+
+所有 Hook 在空成果与可用成果状态下保持相同调用顺序；空列表返回放在派生 action values 的 useMemo 之后。原上下文的成果暂时消失不清除本地草稿，授权上下文变化仍触发既有缓存隔离。
+
+### Creator 正文显式刷新
+
+Creator 引用 owner 通过既有 refresh 方法重新授权同一 opaque ref，保留 id、kind、scope 与选区范围。当前 base projection 可提供该对象新版本；不可变候选仅可重新授权原 ref／version，不跳转到另一个“最新候选”。proof id 或权限变化、当前 head 不唯一、范围失效时拒绝。实际正文与摘要校验复用 resolve 链路，Host 继续负责刷新比较、取消保留和 revision CAS 替换。
+
+
+### 图片查看与框选模式
+
+图片 renderer 在支持框选时提供“查看图像／框选区域”两个明确按钮。查看模式启用缩放、平移、旋转，显示当前缩放比例；框选模式使用无变换的图像坐标，防止视觉变换与发送区域不一致。两种模式分开保存查看变换与 owner 归一化选区；切换不修改引用 proof、批注或候选，查看模式拖动不触发 selection 回调。保留已有默认框选行为以兼容旧调用方；不支持 selection 的调用方仍仅展示查看控件。图像工具条复用 visual-kit vk-btn 和换行布局，Creator 文案覆盖 zh/en/pseudo。
+
+Mermaid 的生产验收 profile 加载已有独立 `dsh-mermaid-render` bundle，由正常 ModuleLoader 选择实际 parser。Creator 只输出 Mermaid 源码，禁止复制第二套 parser；缺 renderer 的 profile 不能宣称图形预览完成。测试 overlay 与安装文档显式列出该依赖。
+
+
+Mermaid renderer 使用原生 SVG labels，避免净化器移除 foreignObject 后留下无字节点。生成 CSS 仅在隔离 stylesheet 解析，允许的 fill／stroke／font／text-anchor 等呈现属性投影到 SVG 元素，再删除 style/script/foreignObject；不把样式表应用到宿主，不允许布局／URL 属性。marker 引用仅允许指向同文档实际 marker 的 fragment。Creator 调用 Host Markdown 原子组件时明确传入代码复制与脚注文案，避免版本接口差异导致代码围栏崩溃。
+
+
+### 表格格式与预算诊断
+
+CSV／TSV parser 保留既有宽容解析输出，增量提供可选首个 diagnostic（未闭合引号、裸引号、引号结束后意外字符及 UTF-16 offset）。Creator 创作预览在发现语法错误时展示位置和源码恢复说明，避免显示可能误解的行列；不改变解析器旧消费者的默认行数据。正常预览必须消费 parser 截断标记，并按公共 LOCAL_TABLE_BUDGET 核对本地 grid 的行／cell 预算，明确提示受限范围。完整编辑正文独立保存，任何格式诊断或预览裁切不得覆盖草稿。
+
+表格 maxBytes 明确按 UTF-8 字节，而非 JS 字符数；按码点扫描预算内前缀，避免切开 surrogate pair。所有预算必须为正 safe integer，非法配置显式拒绝；原始完整草稿不被 parser 修改。
+
+正文首次读取失败或暂不可用时，当前内容区提供显式重读按钮；只移除失败读取 cache，不清除 drafts，不重发 mutation，加载中继续按对象／context 去重。实际授权和版本读取仍由 owner 处理，不通过任意 fetch 或回退摘要恢复。
+
+Mermaid cache 使用完整源码加主题代次作为身份，hash 仅用于 SVG ID；主题切换与 dispose 使旧代次在途结果失效，不允许旧结果填充新缓存。图形记录另有 renderRevision，避免首次渲染或旧主题重绘最后返回时覆盖当前 SVG。
+
+新模式包含 editable prompt 时，默认 sink 保留完整发送投影（包括正文和草稿首尾空白、引用插入分隔符），不得在共同预览之后再 trim；旧普通文本与 V1 的 trim 行为保留。Host 修复按 editable-prompt-whitespace-v1 独立增量交付。
+
+ACK 精确消费增量：新模式提交保存节点 key、叶类型、正文和引用完整快照。成功 ACK 仅在引用快照仍一致时使用前缀清理；否则按节点 key 删除未变化的已提交叶，并保留修改引用及文本新增后缀。引用证明改动也会阻止整稿清空。失败／unknown 不进入成功消费路径。通过独立 editable-prompt-ack-consumption-v1 补丁交付，前置为 whitespace 补丁。
+
+### 自动保存实施合同
+
+当前成果显式开启、切换成果／上下文后重新选择，编辑停顿 800ms 合并提交。沿既有 saveDraft binding 和 descriptor 的正文／content revision 字段发送，仅接受当前 fresh owner、未过期 low risk / confirmation=none 且无需额外必填参数的动作；不猜测参数或绕过审批。保存与手动动作共用生命周期锁和原操作对账，完成后必须读回不同 contentRevision 且正文相等才确认；新增编辑保留，下一次使用更新版本。unknown／partial／失败／无法确认读回均暂停，恢复需显式操作。未开启、无法接入、等待、保存中、暂停与无待保存编辑有 zh/en/pseudo 状态；开关不承担候选、采纳、写回或领域库持久化。媒体批注的自动保存仍需对应 owner 合同，不因此宣称完整 CAW-03 已验收。

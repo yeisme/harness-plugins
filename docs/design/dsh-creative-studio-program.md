@@ -2,6 +2,8 @@
 
 本方案依据 2026-09-07 已确认的产品访谈。已进入实施：画布编辑内核、Host保存与首个React Flow Pane切片已有分层测试证据，详见[实现基线](../../openspec/changes/dsh-project-canvas-continuity-v1/implementation-baseline.md)。五个专业闭环和跨领域执行尚未验收；八份 tasks 均独立验收，不继承旧 Workbench 完成证据。独立 Workbench 已退役，本项目不恢复其主壳、BFF、TaskService 或托管平台。
 
+新增的做剧可视化流水线设计由 [dsh-creative-pipeline-visual-workbench-v1](../../openspec/changes/dsh-creative-pipeline-visual-workbench-v1/) 承接：它复用本方案的项目画布和专业 Pane，把 Agent 定位为背景上下文与已确认流水线的控制辅助。
+
 ## 1. 产品结构与能力保留
 
 用户在同一 DSH 项目中组织素材、配置操作、运行选定范围、比较并采用成果，再完成跨领域制作。用户可以直接操作，Agent 可以辅助编辑授权范围内的草稿；执行需独立确认。
@@ -71,3 +73,7 @@ Agent 可在用户指定范围内整理节点、添加建议步骤、修改流�
 统一质量与证据入口见 [接口、owner 与测试合同](../interfaces/dsh-creative-studio-contracts.md)。未验证的小云雀/LibTV 登录后交互由可丢弃原型走查补证，不照搬其私有页面或代码。
 
 参考：[小云雀公开页](https://xiaoyunque.jianying.com/)、[LibTV 公开页](https://www.liblib.tv/)、[LibTV CLI](https://www.liblib.tv/zh/cli)。以上仅作为产品组织参考，不构成 DSH 技术实现或市场效果证据。
+
+## ComfyUI 风格工作台与工作面切换
+
+做剧工作台采用 ComfyUI 参考图的空间组织：顶部项目下拉与工作区入口，左侧资产/Productions，中部节点画布，右侧 Inspector/Versions/Comments，底部只读运行观察。顶部常驻 `[ ✦ Agent ] ⇄ [ ▦ 工作台 ]` 胶囊切换同级工作面；切换不改变项目、选区、运行或权限。参考图只冻结信息层级、空间关系和密度，真实组件、状态文本、无障碍与运行证据仍以 DSH 视觉系统和 OpenSpec 合同为准。

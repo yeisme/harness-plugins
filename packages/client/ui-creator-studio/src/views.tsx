@@ -1,4 +1,9 @@
-import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { EikonaBatchBrowser } from './eikona-batch-browser.tsx'
+import { EikonaBatchPreview } from './eikona-batch-preview.tsx'
+import { EikonaPreparationForm } from './eikona-preparation-form.tsx'
+import { OperationRecoveryNotice } from './operation-recovery-notice.tsx'
+import { EikonaAssetBrowser } from './eikona-asset-browser.tsx'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   ArtifactIntentV1,
@@ -36,8 +41,13 @@ import {
   type CreatorStudioKey,
   type CreatorStudioTranslator,
 } from './locales.ts'
+import { EikonaStudioPages, EikonaCapabilityNotice } from './eikona-studio.tsx'
+import { AuctraWritingStudioPages } from './auctra-writing-studio.tsx'
+import { auctraStudioScopeKey } from './auctra-studio-scope.ts'
 import { creatorStudioStyles } from './styles.ts'
 import { CreatorArtifactWorkspace, type CreatorComposerBridge } from './artifact-workspace.tsx'
+import { CreatorSubtitleResults } from './subtitle-results.tsx'
+import { CreatorTranscriptionCapabilities } from './transcription-capabilities.tsx'
 
 export type CreatorStudioViewMode = 'home' | 'text' | 'visual' | 'audio' | 'production' | 'context' | 'assets' | 'analysis' | 'generation' | 'approvals' | 'review' | 'jobs'
 
@@ -256,22 +266,44 @@ function ApprovalsView({ snapshot, state, controller, legacyKind = false, t }: {
   </SurfaceSection></div>
 }
 
-function WorkspaceView({ meta, owner, snapshot, state, controller, pane, composerBridge, onDirty, t }: { meta: (typeof MODE_META)[CreatorStudioViewMode]; owner: CreatorOwnerProjectionV1; snapshot: CreatorStudioSnapshotV1; state: CreatorStudioViewState; controller: CreatorStudioController; pane: CreatorPaneFace; composerBridge?: CreatorComposerBridge; onDirty?(dirty: boolean): void; t: CreatorStudioTranslator }): ReactNode {
+export function WorkspaceView({ meta, owner, snapshot, state, controller, pane, composerBridge, onDirty, recovery, t, professional = false }: { meta: (typeof MODE_META)[CreatorStudioViewMode]; owner: CreatorOwnerProjectionV1; snapshot: CreatorStudioSnapshotV1; state: CreatorStudioViewState; controller: CreatorStudioController; pane: CreatorPaneFace; composerBridge?: CreatorComposerBridge; onDirty?(dirty: boolean): void; recovery?: ReactNode; t: CreatorStudioTranslator; professional?: boolean }): ReactNode {
+  const dirtyParts = useRef({ configure: false, candidates: false, preparation: false })
+  const configDirty = useCallback((dirty: boolean) => { dirtyParts.current.configure = dirty; onDirty?.(dirtyParts.current.configure || dirtyParts.current.candidates || dirtyParts.current.preparation) }, [onDirty])
+  const candidateDirty = useCallback((dirty: boolean) => { dirtyParts.current.candidates = dirty; onDirty?.(dirtyParts.current.configure || dirtyParts.current.candidates || dirtyParts.current.preparation) }, [onDirty])
+  const preparationDirty = useCallback((dirty: boolean) => { dirtyParts.current.preparation = dirty; onDirty?.(dirtyParts.current.configure || dirtyParts.current.candidates || dirtyParts.current.preparation) }, [onDirty])
   const [intentReceipt, setIntentReceipt] = useState<PaneActionReceiptV1 | undefined>()
   const onIntent = async (intent: ArtifactIntentV1): Promise<void> => {
     if (pane.dispatchIntent === undefined) return
     setIntentReceipt(await pane.dispatchIntent({ ...intent, context: snapshot.context ?? intent.context }))
   }
-  return <div className="cs-body ys-body" data-owner-workspace={owner.owner}>
-    {owner.status !== 'ready' && <SurfaceState phase={owner.freshness === 'stale' ? 'stale' : 'partial'} title={owner.summary} description={owner.status} />}
-    <div className="cs-workspace-grid">
-      <SurfaceSection className="cs-section" title={t(meta.titleKey)} description={t(meta.descriptionKey)} meta={<div className="cs-badges"><span className="cs-badge">{owner.transport}</span><span className="cs-badge">{owner.freshness}</span></div>}>
-        {owner.resources.length === 0 ? <SurfaceState phase="empty" title={t('owner.resources.empty')} description={t('owner.resources.empty.description', { owner: owner.owner })} /> : <div className="cs-resource-grid ys-grid">{owner.resources.map(resource => <SharedCreatorResourceCard key={resource.ref} resource={resource} owner={owner.owner} t={t} onIntent={intent => void onIntent(intent)} />)}</div>}
+  const capabilityResources = owner.owner === 'eikona' ? owner.resources.filter(resource => resource.kind === 'owner-capability' || resource.kind === 'preparation-capability' || resource.kind === 'approval-capability') : []
+  const assetResources = owner.resources.filter(resource => !capabilityResources.includes(resource))
+  const resources = professional && assetResources.length === 0 ? null : (<SurfaceSection className="cs-section" title={t(meta.titleKey)} description={t(meta.descriptionKey)} meta={<div className="cs-badges"><span className="cs-badge">{owner.transport}</span><span className="cs-badge">{owner.freshness}</span></div>}>
+        {assetResources.length === 0 ? <SurfaceState phase="empty" title={t('owner.resources.empty')} description={t('owner.resources.empty.description', { owner: owner.owner })} /> : <div className="cs-resource-grid ys-grid">{assetResources.map(resource => <SharedCreatorResourceCard key={resource.ref} resource={resource} owner={owner.owner} t={t} onIntent={intent => void onIntent(intent)} />)}</div>}
         {intentReceipt !== undefined && <div className="cs-receipt" data-status={intentReceipt.status}>{intentReceipt.summary ?? intentReceipt.reconcileReason ?? intentReceipt.receiptRef}</div>}
-      </SurfaceSection>
-      <CreatorArtifactWorkspace owner={owner} snapshot={snapshot} state={state} runtime={controller} t={t} {...(composerBridge === undefined ? {} : { composerBridge })} {...(onDirty === undefined ? {} : { onDirty })} />
-      {meta.task === undefined ? null : <SharedCreatorActionComposer owner={owner} task={meta.task} snapshot={snapshot} state={state} controller={controller} t={t} {...onDirty === undefined ? {} : { onDirty }} />}
-    </div>
+      </SurfaceSection>)
+  const artifactVersion = owner.artifactWorkspace?.artifacts[0]?.artifact.version ?? owner.resources[0]?.version
+  const scopeKey = auctraStudioScopeKey({
+    ...(snapshot.context?.projectRef === undefined ? {} : { projectRef: snapshot.context.projectRef }),
+    ...(snapshot.context?.sessionRef === undefined ? {} : { sessionRef: snapshot.context.sessionRef }),
+    ...(artifactVersion === undefined ? {} : { artifactVersion }),
+  })
+  const candidates = professional && !owner.artifactWorkspace ? null : (<CreatorArtifactWorkspace key={scopeKey} owner={owner} snapshot={snapshot} state={state} runtime={controller} t={t} {...(composerBridge === undefined ? {} : { composerBridge })} onDirty={candidateDirty} />)
+  const configure = meta.task === undefined ? null : (<SharedCreatorActionComposer owner={owner.owner === 'eikona' ? { ...owner, actions: owner.actions.filter(action => action.actionId !== 'candidate.adopt') } : owner} task={meta.task} snapshot={snapshot} state={state} controller={controller} t={t} onDirty={configDirty} />)
+  const versions = meta.task === undefined ? null : (<SharedCreatorActionComposer owner={owner} task={meta.task} snapshot={snapshot} state={state} controller={controller} t={t} onDirty={configDirty} presentationGroup="versions" />)
+  const exportPage = meta.task === undefined ? null : (<SharedCreatorActionComposer owner={owner} task={meta.task} snapshot={snapshot} state={state} controller={controller} t={t} onDirty={configDirty} presentationGroup="export" />)
+  return <div className="cs-body ys-body" data-owner-workspace={owner.owner} data-auctra-scope={owner.owner === 'auctra' ? scopeKey : undefined}>
+    {owner.status !== 'ready' && <SurfaceState phase={owner.freshness === 'stale' ? 'stale' : 'partial'} title={owner.summary} description={owner.status} />}
+    {owner.owner === 'eikona' && meta.task === 'image'
+      ? <EikonaStudioPages t={t} professional={professional} configure={<><details><summary>{t('eikona.batch.listTitle')}</summary><EikonaBatchBrowser key={`batches:${JSON.stringify(snapshot.context)}`} list={input => controller.listEikonaBatchInputs(input)} plan={input => controller.readEikonaBatchPlan(input)} read={input => controller.readEikonaBatchInput(input)} t={t} />{owner.resources.filter(resource => resource.kind === 'batch-input').map(resource => <EikonaBatchPreview key={`${JSON.stringify(snapshot.context)}:${resource.ref}:${resource.version}`} resource={resource} read={input => controller.readEikonaBatchInput(input)} t={t} />)}</details><EikonaCapabilityNotice resources={capabilityResources.filter(resource => resource.kind === 'owner-capability')} t={t} /><EikonaPreparationForm {...(snapshot.context?.projectRef ? { draftStorage: { runtime: controller, scope: { tenantRef: snapshot.context.tenantRef, workspaceRef: snapshot.context.workspaceRef, projectRef: snapshot.context.projectRef } } } : {})} readStatus={input => controller.readEikonaApprovalStatus(input)} revoke={input => controller.revokeEikonaPreparationApproval(input)} approve={input => controller.approveEikonaPreparation(input)} approvalAvailable={owner.freshness === 'fresh' && capabilityResources.some(resource => resource.kind === 'approval-capability' && resource.status === 'available')} onDirty={preparationDirty} key={JSON.stringify(snapshot.context)} prepare={input => controller.prepareEikonaGeneration(input)} available={owner.freshness === 'fresh' && capabilityResources.some(resource => resource.kind === 'preparation-capability' && resource.status === 'available')} t={t} />{configure}</>} candidates={candidates} assets={<><details><summary>{t('workspace.recovery.title')}</summary><OperationRecoveryNotice key={JSON.stringify(snapshot.context)} owner={owner} runtime={controller} receiptRevision={JSON.stringify([state.lastReceipt?.receiptRef, state.lastReceipt?.status])} t={t} /></details><EikonaAssetBrowser scopeKey={JSON.stringify(snapshot.context)} read={input => controller.readEikonaAssetPage(input)} readImage={input => controller.readEikonaCandidateImage(input)} readReview={input => controller.readEikonaReview(input)} selectCandidate={async input => {
+        const scope = JSON.stringify(controller.store.getSnapshot().snapshot?.context)
+        const result = await controller.selectEikonaCandidate(input)
+        if (result.status !== 'superseded' && scope === JSON.stringify(controller.store.getSnapshot().snapshot?.context)) await controller.refresh()
+        return result
+      }} t={t} />{(!professional || owner.actions.some(action => action.actionId === 'candidate.adopt')) && <SharedCreatorActionComposer owner={{ ...owner, actions: owner.actions.filter(action => action.actionId === 'candidate.adopt') }} task="image" snapshot={snapshot} state={state} controller={controller} t={t} />}{resources}</>} />
+      : owner.owner === 'auctra' && meta.task === 'text'
+        ? <AuctraWritingStudioPages t={t} structure={resources} candidates={candidates} versions={versions} exportPage={exportPage} recovery={recovery} />
+        : <div className="cs-workspace-grid">{resources}{candidates}{configure}{owner.owner === 'sonora' && <><CreatorSubtitleResults key={`results:${JSON.stringify(snapshot.context)}`} receipt={state.lastReceipt} read={artifact => controller.readArtifactContent(artifact)} t={t} /><CreatorTranscriptionCapabilities key={`capabilities:${JSON.stringify(snapshot.context)}`} runtime={controller} t={t} /></>}</div>}
   </div>
 }
 
@@ -284,6 +316,7 @@ export interface CreatorStudioViewProps {
   readonly onOpenShowControl?: () => void
   readonly onDirty?: (dirty: boolean) => void
   readonly composerBridge?: CreatorComposerBridge
+  readonly recovery?: ReactNode
   readonly t?: CreatorStudioTranslator
 }
 
@@ -301,7 +334,7 @@ function LifecycleNav({ mode, onOpenMode, onOpenDrama, t }: { mode: CreatorStudi
   </div>
 }
 
-export function CreatorStudioView({ mode, controller, pane, onOpenMode, onOpenDrama, onOpenShowControl, onDirty, composerBridge, t = defaultCreatorStudioTranslator }: CreatorStudioViewProps): ReactNode {
+export function CreatorStudioView({ mode, controller, pane, onOpenMode, onOpenDrama, onOpenShowControl, onDirty, composerBridge, recovery, t = defaultCreatorStudioTranslator }: CreatorStudioViewProps): ReactNode {
   const state = useSyncExternalStore(controller.store.subscribe, controller.store.getSnapshot, controller.store.getSnapshot)
   const meta = MODE_META[mode]
   const snapshot = state.snapshot
@@ -330,7 +363,7 @@ export function CreatorStudioView({ mode, controller, pane, onOpenMode, onOpenDr
                   : mode === 'approvals' ? <ApprovalsView snapshot={snapshot} state={state} controller={controller} t={t} />
                     : mode === 'review' ? <ApprovalsView snapshot={snapshot} state={state} controller={controller} legacyKind t={t} />
                       : owner === undefined ? <div className="cs-body ys-body"><SurfaceState phase="partial" title={t('state.ownerUnavailable')} /></div>
-                        : <WorkspaceView meta={meta} owner={owner} snapshot={snapshot} state={state} controller={controller} pane={pane} t={t} {...(composerBridge === undefined ? {} : { composerBridge })} {...onDirty === undefined ? {} : { onDirty }} />}
+                        : <WorkspaceView meta={meta} owner={owner} snapshot={snapshot} state={state} controller={controller} pane={pane} t={t} {...(recovery === undefined ? {} : { recovery })} {...(composerBridge === undefined ? {} : { composerBridge })} {...onDirty === undefined ? {} : { onDirty }} />}
   </Surface>
 }
 

@@ -1,3 +1,4 @@
+import { inspectCanvasChangeImpact } from './project-canvas-workflow.js'
 import {
   ProjectCanvasDocumentSchema,
   type ProjectCanvasDocument,
@@ -94,6 +95,7 @@ export function editProjectCanvas(
       case 'add': document = { ...current, nodes: [...current.nodes, ...edit.nodes] }; break
       case 'move': {
         const ids = withDescendants(edit.ids)
+        if (edit.dx === 0 && edit.dy === 0) return { ok: true, editor }
         document = { ...current, nodes: current.nodes.map(node => ids.has(node.id)
           ? { ...node, position: { x: node.position.x + edit.dx, y: node.position.y + edit.dy } } : node) }
         break
@@ -116,7 +118,10 @@ export function editProjectCanvas(
           ? { ...node, controls: edit.controls } : node) }
         break
       }
-      case 'camera': document = { ...current, camera: edit.camera }; break
+      case 'camera': {
+        if (edit.camera.x === current.camera.x && edit.camera.y === current.camera.y && edit.camera.zoom === current.camera.zoom) return { ok: true, editor }
+        document = { ...current, camera: edit.camera }; break
+      }
       case 'collapse': {
         if (nodes.get(edit.id)?.kind !== 'group') return fail('invalid_edit')
         document = { ...current, nodes: current.nodes.map(node => node.id === edit.id && node.kind === 'group'
@@ -188,6 +193,13 @@ export function editProjectCanvas(
     }
     if (document !== current) {
       document = ProjectCanvasDocumentSchema.parse(document)
+      if (edit.type !== 'undo' && edit.type !== 'redo') {
+        const impact = inspectCanvasChangeImpact(current, document)
+        const affected = new Set(impact.affectedOperationIds)
+        if (affected.size) document = ProjectCanvasDocumentSchema.parse({ ...document, nodes: document.nodes.map(node =>
+          node.kind === 'operation' && affected.has(node.id) ? { ...node, inputReviewRequired: true } : node) })
+      }
+
       if (edit.type !== 'undo' && edit.type !== 'redo') { past = [...editor.past, current].slice(-50); future = [] }
     }
     const existing = new Set(document.nodes.map(node => node.id))
@@ -202,4 +214,15 @@ export function searchProjectCanvas(document: ProjectCanvasDocument, query: stri
   const needle = query.trim().toLocaleLowerCase()
   return document.nodes.filter(node => node.title.toLocaleLowerCase().includes(needle)
     || (node.kind === 'draft' && node.text.toLocaleLowerCase().includes(needle))).map(node => node.id)
+}
+
+/** Apply absolute drag positions parent-first: group movement already moves descendants. */
+export function orderProjectCanvasPositions<T extends { readonly id: string }>(document: ProjectCanvasDocument, changes: readonly T[]): T[] {
+  const nodes = new Map(document.nodes.map(node => [node.id, node]))
+  const depth = (id: string) => {
+    let level = 0, parent = nodes.get(id)?.groupId
+    while (parent !== undefined) { level++; parent = nodes.get(parent)?.groupId }
+    return level
+  }
+  return [...changes].sort((a, b) => depth(a.id) - depth(b.id))
 }

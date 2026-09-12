@@ -9,7 +9,13 @@ const startedAt = new Date()
 const runId = `dsh-explorer-file-manager-${startedAt.toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}Z-${process.pid}`
 const evidenceDir = resolve(projectRoot, 'temp/integration-test-runs', runId)
 const relativeEvidenceDir = relative(projectRoot, evidenceDir)
-const commands = [
+const searchCenter = process.argv.includes('--search-center')
+const commands = searchCenter ? [
+  ['pnpm', ['--filter', '@yeisme/dsh-client-ui-pane-domain', 'exec', 'vitest', 'run', 'tests/apply.spec.ts', 'tests/project-canvas-search-source.spec.ts', 'tests/creator-assets-search-source.spec.ts', 'tests/ordo-search-source.spec.ts']],
+  ['pnpm', ['--filter', '@yeisme/dsh-client-ui-pane-workbench', 'exec', 'vitest', 'run', 'tests/explorer-v4.spec.tsx']],
+  ['pnpm', ['--filter', '@yeisme/dsh-file-host', 'exec', 'vitest', 'run', 'tests/node.spec.ts', 'tests/file-host.spec.ts']],
+  ['pnpm', ['--filter', '@yeisme/dsh-desktop-workbench', 'exec', 'vitest', 'run', 'tests/file-search-source.spec.ts', 'tests/file-preview-mapping.spec.ts', 'tests/apply.spec.ts']],
+] : [
   ['pnpm', ['--filter', '@yeisme/dsh-file-host', 'run', 'typecheck']],
   ['pnpm', ['--filter', '@yeisme/dsh-file-host', 'run', 'test']],
   ['pnpm', ['--filter', '@yeisme/dsh-client-ui-pane-workbench', 'run', 'typecheck']],

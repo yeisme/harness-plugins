@@ -1,0 +1,9 @@
+{
+  "name": "@yeisme/dsh-template-registry",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": { ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" } },
+  "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc -p tsconfig.json --noEmit", "test": "vitest run" },
+  "dependencies": { "zod": "^4.0.0" },
+  "devDependencies": { "typescript": "^5.9.3", "vitest": "^3.2.7" }
+}

@@ -89,6 +89,12 @@ minimumReleaseAgeExclude:
 # the override only lifts the transitive copy and keeps one version in the tree.
 overrides:
   dompurify: 3.4.14
+  # Lock this consumer's dsh-llm peer to the 0.1.0-rc.6 generation; rc.1's CallId → ToolCallId rename breaks type/runtime interop if a second copy resolves.
+  '@deepseek-ai/dsh-session@0.1.0-rc.6>@deepseek-ai/dsh-llm': 0.1.0-rc.6
+  # Lock this consumer's dsh-llm peer to the 0.1.0-rc.6 generation; rc.1's CallId → ToolCallId rename breaks type/runtime interop if a second copy resolves.
+  '@deepseek-ai/dsh-agent@0.1.0-rc.6>@deepseek-ai/dsh-llm': 0.1.0-rc.6
+  # Lock this consumer's dsh-llm peer to the 0.1.0-rc.6 generation; rc.1's CallId → ToolCallId rename breaks type/runtime interop if a second copy resolves.
+  '@deepseek-ai/dsh-system-prompt@0.1.0-rc.6>@deepseek-ai/dsh-llm': 0.1.0-rc.6
 
 patchedDependencies:
   jszip: patches/jszip.patch

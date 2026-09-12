@@ -1,0 +1,114 @@
+diff --git a/packages/client/ui-conversation/src/client/apply.ts b/packages/client/ui-conversation/src/client/apply.ts
+--- a/packages/client/ui-conversation/src/client/apply.ts
++++ b/packages/client/ui-conversation/src/client/apply.ts
+@@ -502,6 +502,24 @@
+   }
+   const referenceBridge = {
+     snapshot: referenceTarget,
++    async targetFor(conversationId: string, signal?: AbortSignal) {
++      if (signal?.aborted === true) return { status: 'unavailable' as const, reason: 'reference target resolution was cancelled' }
++      const sessionId = conversationId as SessionId
++      const list = sessions.list.getSnapshot()
++      const scope = list.byId[sessionId] === undefined ? undefined : sessions.scope(sessionId)
++      const workspaces = ctx.get('workspaces' as never) as ReferenceWorkspaceSource | undefined
++      const workspace = workspaces?.list.getSnapshot().items.find(item => item.sessionIds.includes(sessionId))
++      if (scope === undefined || workspace === undefined) return { status: 'unavailable' as const, reason: 'target conversation is unavailable' }
++      const shell = inputHub.for(scope)
++      const draft = shell.state.getSnapshot()
++      return {
++        status: 'available' as const,
++        snapshot: {
++          target: { workspaceId: workspace.workspaceId, conversationId, draftRevision: draft.draftRev, title: list.byId[sessionId]?.displayTitle ?? conversationId, caret: shell.caretSpan() },
++          references: structuredClone(draft.occurrences.flatMap(occurrence => occurrence.structured === undefined ? [] : [occurrence.structured])),
++        },
++      }
++    },
+     subscribe(listener: () => void): () => void {
+       let offInput = () => {}
+       const bindInput = (): void => {
+diff --git a/packages/client/ui-reference/src/client/index.ts b/packages/client/ui-reference/src/client/index.ts
+--- a/packages/client/ui-reference/src/client/index.ts
++++ b/packages/client/ui-reference/src/client/index.ts
+@@ -34,6 +34,18 @@
+   'remote.sessionReferenceResolver',
+ ]
+ 
++/** Owner-backed capability proof for adjacent panes; no catalog summary is accepted as proof. */
++export interface ComposerReferenceCapabilityResolver {
++  resolve(input: {
++    readonly sessionId: string
++    readonly family: 'skill' | 'native' | 'mcp'
++    readonly name: string
++  }, signal?: AbortSignal): Promise<
++    | { readonly status: 'available'; readonly reference: StructuredReference }
++    | { readonly status: 'unavailable'; readonly reason: string }
++  >
++}
++
+ /**
+  * Register the combined `@file` / `@session` source.
+  * @param ctx - client root context.
+@@ -64,6 +76,33 @@
+       return () => { if (toolCatalogContext === sub) toolCatalogContext = ctx }
+     })
+   }
++  const capabilityResolver: ComposerReferenceCapabilityResolver = {
++    async resolve(input, signal) {
++      if (signal?.aborted === true) return { status: 'unavailable', reason: 'capability proof resolution was cancelled' }
++      if (input.family === 'skill') {
++        try {
++          const remote = (skillCatalogContext as ClientContext & { readonly remote: { readonly skills?: { list(input: { readonly sessionId: string; readonly includeModelInvocable?: boolean }, signal: AbortSignal): Promise<{ readonly ok: boolean; readonly value?: { readonly skills: readonly { readonly name: string; readonly description: string; readonly whenToUse?: string; readonly modelInvocable?: boolean }[] } }> } } }).remote.skills
++          const result = await remote?.list({ sessionId: input.sessionId, includeModelInvocable: true }, signal ?? new AbortController().signal)
++          const row = result?.ok === true ? result.value?.skills.find(candidate => candidate.name === input.name) : undefined
++          if (row === undefined || row.modelInvocable === false) return { status: 'unavailable', reason: 'the Skill is not available to this conversation' }
++          return { status: 'available', reference: await skillReference(row) }
++        } catch {
++          return { status: 'unavailable', reason: 'the Skill catalog is unavailable for this conversation' }
++        }
++      }
++      try {
++        const remote = (toolCatalogContext as ClientContext & { readonly remote: { readonly referenceTools?: { list(input: { readonly sessionId: string }, signal: AbortSignal): Promise<{ readonly ok: boolean; readonly value?: { readonly tools: readonly { readonly name: string; readonly description?: string }[] } }> } } }).remote.referenceTools
++        const result = await remote?.list({ sessionId: input.sessionId }, signal ?? new AbortController().signal)
++        const row = result?.ok === true ? result.value?.tools.find(candidate => candidate.name === input.name) : undefined
++        return row === undefined
++          ? { status: 'unavailable', reason: 'the tool is not available to this conversation' }
++          : { status: 'available', reference: await toolReference(row) }
++      } catch {
++        return { status: 'unavailable', reason: 'the tool catalog is unavailable for this conversation' }
++      }
++    },
++  }
++  ctx.effect(() => ctx.provide('composerReferenceCapabilityResolver' as never, capabilityResolver), 'ui-reference: capability proof resolver')
+   const source: InputTriggerSource = {
+     trigger: '@',
+     name: 'reference',
+@@ -302,7 +341,7 @@
+     if (!result.ok || result.value === undefined) return []
+     const needle = query.toLocaleLowerCase()
+     return await Promise.all(result.value.skills.filter(row => needle === '' || row.name.toLocaleLowerCase().includes(needle) || row.description.toLocaleLowerCase().includes(needle)).slice(0, 12).map(async row => {
+-      const reference: StructuredReference = { id: `skill:${row.name}`, kind: 'skill', intent: 'guidance', owner: 'dsh.skills', ref: row.name, version: '1', label: row.name, scope: 'skill/catalog', digest: await digestText(JSON.stringify(row)), preview: row.description }
++      const reference = await skillReference(row)
+       return { name: row.name, description: row.description, section: t('section.skills'), value: structuredValue(row.name, reference) }
+     }))
+   } catch {
+@@ -336,11 +375,19 @@
+   if (catalogFailed) return [{ name: t('section.tools'), section: t('section.tools'), disabledReason: t('candidate.toolsUnavailable') }]
+   const needle = query.toLocaleLowerCase()
+   return Promise.all(tools.filter(row => needle === '' || row.name.toLocaleLowerCase().includes(needle) || row.description?.toLocaleLowerCase().includes(needle) === true).slice(0, 16).map(async row => {
+-    const reference: StructuredReference = { id: `tool:${row.name}`, kind: 'tool', intent: 'capability', owner: 'dsh.tools', ref: row.name, version: '1', label: row.name, scope: 'tool/available', digest: await digestText(JSON.stringify(row)), ...(row.description === undefined ? {} : { preview: row.description }) }
++    const reference = await toolReference(row)
+     return { name: row.name, ...(row.description === undefined ? {} : { description: row.description }), section: t('section.tools'), value: structuredValue(row.name, reference) }
+   }))
+ }
+ 
++async function skillReference(row: { readonly name: string; readonly description: string; readonly whenToUse?: string; readonly modelInvocable?: boolean }): Promise<StructuredReference> {
++  return { id: `skill:${row.name}`, kind: 'skill', intent: 'guidance', owner: 'dsh.skills', ref: row.name, version: '1', label: row.name, scope: 'skill/catalog', digest: await digestText(JSON.stringify(row)), preview: row.description }
++}
++
++async function toolReference(row: { readonly name: string; readonly description?: string }): Promise<StructuredReference> {
++  return { id: `tool:${row.name}`, kind: 'tool', intent: 'capability', owner: 'dsh.tools', ref: row.name, version: '1', label: row.name, scope: 'tool/available', digest: await digestText(JSON.stringify(row)), ...(row.description === undefined ? {} : { preview: row.description }) }
++}
++
+ /**
+  * The breadcrumb of a drilled directory listing, from the workspace root down
+  * to the directory being listed.

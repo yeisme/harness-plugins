@@ -3,9 +3,12 @@ import type {
   PaneActionDescriptorV1,
   PaneActionReceiptV1,
   PaneActionValueV1,
+  PaneActionReconcileRequestV1,
 } from '@yeisme/dsh-pane-protocol'
 import type { CreatorAssetQueryV1 } from '@yeisme/dsh-creator-studio-host/contracts'
 import type { CreatorArtifactContentV1 } from '@yeisme/dsh-creator-studio-host/contracts'
+import type { CreatorCandidateQueryV1, CreatorCandidatePageV1 } from '@yeisme/dsh-creator-studio-host/contracts'
+import type { CreatorOperationRecoveryPageV1 } from '@yeisme/dsh-creator-studio-host/contracts'
 import { CreatorStudioController, type CreatorStudioViewState } from './controller.ts'
 
 export type { CreatorStudioViewState } from './controller.ts'
@@ -30,6 +33,13 @@ export interface CreatorStudioRuntimeV1 {
   loadAssets(query: CreatorAssetQueryV1, append?: boolean): Promise<void>
   resolveArtifact(artifact: ArtifactRefV1): Promise<string | undefined>
   readArtifactContent(artifact: ArtifactRefV1): Promise<CreatorArtifactContentV1 | undefined>
+  readCandidatePage?(query: CreatorCandidateQueryV1): Promise<CreatorCandidatePageV1>
+  saveAuctraRecoveryDraft?(input: import('@yeisme/dsh-creator-studio-host/contracts').EditorRecoverySaveQueryV1): Promise<import('@yeisme/dsh-creator-studio-host/contracts').EditorRecoverySavedV1>
+  listAuctraRecoveryDrafts?(input?: { readonly artifact?: ArtifactRefV1; readonly cursor?: string; readonly limit?: number }): Promise<import('@yeisme/dsh-creator-studio-host/contracts').EditorRecoveryPageV1>
+  readAuctraRecoveryDraft?(claim: unknown): Promise<import('@yeisme/dsh-creator-studio-host/contracts').EditorRecoveryReadV1>
+  listOperationRecoveries?(): Promise<CreatorOperationRecoveryPageV1>
+  hasUnresolvedAction?(descriptor: PaneActionDescriptorV1): boolean
+  reconcileStoredOperation?(request: PaneActionReconcileRequestV1): Promise<PaneActionReceiptV1>
   dispatchAction(
     descriptor: PaneActionDescriptorV1,
     values: Readonly<Record<string, PaneActionValueV1>>,
@@ -50,6 +60,13 @@ export function createCreatorStudioRuntime(controller: CreatorStudioController):
     loadAssets: (query: CreatorAssetQueryV1, append = false) => controller.loadAssets(query, append),
     resolveArtifact: (artifact: ArtifactRefV1) => controller.resolveArtifact(artifact),
     readArtifactContent: (artifact: ArtifactRefV1) => controller.readArtifactContent(artifact),
+    readCandidatePage: (query: CreatorCandidateQueryV1) => controller.readCandidatePage(query),
+    listOperationRecoveries: () => controller.listOperationRecoveries(),
+    saveAuctraRecoveryDraft: (input: import('@yeisme/dsh-creator-studio-host/contracts').EditorRecoverySaveQueryV1) => controller.saveAuctraRecoveryDraft(input),
+    listAuctraRecoveryDrafts: (input?: { readonly artifact?: ArtifactRefV1; readonly cursor?: string; readonly limit?: number }) => controller.listAuctraRecoveryDrafts(input),
+    readAuctraRecoveryDraft: (claim: unknown) => controller.readAuctraRecoveryDraft(claim),
+    reconcileStoredOperation: (request: PaneActionReconcileRequestV1) => controller.reconcileStoredOperation(request),
+    hasUnresolvedAction: (descriptor: PaneActionDescriptorV1) => controller.hasUnresolvedAction(descriptor),
     dispatchAction: (
       descriptor: PaneActionDescriptorV1,
       values: Readonly<Record<string, PaneActionValueV1>>,

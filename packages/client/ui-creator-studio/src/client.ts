@@ -31,7 +31,8 @@ import {
   CREATOR_STUDIO_RUNTIME_SERVICE,
   createCreatorStudioRuntime,
 } from './runtime.ts'
-import { CreatorMediaView, CreatorStudioView, type CreatorPaneFace, type CreatorStudioViewMode } from './views.tsx'
+import { DomainStudioView } from './domain-studio.tsx'
+import { CreatorMediaView, CreatorStudioView, type CreatorPaneFace, type CreatorStudioViewMode, type CreatorStudioViewProps } from './views.tsx'
 
 export const inject = ['slots', 'remote', 'locale']
 
@@ -77,9 +78,9 @@ function CreatorLauncher({ wide = true, disabled = false, reason, onOpen, t = de
 const VIEW_CONFIG: Record<CreatorStudioViewMode, { kind: string; labelKey: CreatorStudioKey; role: 'content' | 'utility'; preferredRegion: 'right' | 'bottom'; retention: 'keep-alive' | 'snapshot'; singleton: boolean; task?: string; owner?: CreatorStudioOwner; order: number; launcher?: boolean; legacy?: boolean }> = {
   home: { kind: 'creator.home', labelKey: 'mode.home', role: 'content', preferredRegion: 'right', retention: 'keep-alive', singleton: true, order: 0 },
   text: { kind: 'creator.text', labelKey: 'mode.text', role: 'content', preferredRegion: 'right', retention: 'keep-alive', singleton: true, task: 'text', owner: 'auctra', order: 10 },
-  visual: { kind: 'creator.visual', labelKey: 'mode.visual', role: 'content', preferredRegion: 'right', retention: 'snapshot', singleton: true, task: 'image', owner: 'eikona', order: 20 },
+  visual: { kind: 'creator.visual', labelKey: 'studio.eikona', role: 'content', preferredRegion: 'right', retention: 'keep-alive', singleton: true, task: 'image', owner: 'eikona', order: 20 },
   audio: { kind: 'creator.audio', labelKey: 'mode.audio', role: 'content', preferredRegion: 'right', retention: 'snapshot', singleton: true, task: 'audio', owner: 'sonora', order: 30 },
-  production: { kind: 'creator.production', labelKey: 'mode.production', role: 'content', preferredRegion: 'right', retention: 'keep-alive', singleton: true, task: 'video', owner: 'scaena', order: 40 },
+  production: { kind: 'creator.production', labelKey: 'studio.scaena', role: 'content', preferredRegion: 'right', retention: 'keep-alive', singleton: true, task: 'video', owner: 'scaena', order: 40 },
   context: { kind: 'creator.context', labelKey: 'mode.context', role: 'content', preferredRegion: 'right', retention: 'keep-alive', singleton: true, task: 'context', owner: 'pinax', order: 50 },
   assets: { kind: 'creator.assets', labelKey: 'mode.assets', role: 'content', preferredRegion: 'right', retention: 'keep-alive', singleton: true, task: 'assets', order: 60 },
   analysis: { kind: 'creator.analysis', labelKey: 'mode.analysis', role: 'content', preferredRegion: 'right', retention: 'snapshot', singleton: true, task: 'analysis', owner: 'anatomia', order: 70 },
@@ -229,7 +230,7 @@ function pluginDefinition(t: CreatorStudioTranslator): PanePluginDefinitionV1 {
   }
 }
 
-function registerViews(ctx: ClientContext, controller: CreatorStudioController, pane: CreatorPaneWorkbenchFace, t: CreatorStudioTranslator): () => void {
+function registerViews(ctx: ClientContext, controller: CreatorStudioController, pane: CreatorPaneWorkbenchFace, t: CreatorStudioTranslator, domainControllers: Record<'eikona' | 'scaena', CreatorStudioController>): () => void {
   const definition = pluginDefinition(t)
   let composerBridge: ComposerReferenceBridgeV1 | undefined
   try { composerBridge = ctx.get(COMPOSER_REFERENCE_BRIDGE_CONTEXT_KEY as never) as ComposerReferenceBridgeV1 | undefined } catch { composerBridge = undefined }
@@ -248,9 +249,10 @@ function registerViews(ctx: ClientContext, controller: CreatorStudioController, 
     const onOpenShowControl = director?.probe?.showControl?.available === true && typeof director.applyShowControlPreset === 'function'
       ? () => director.applyShowControlPreset?.()
       : undefined
-    return createElement(CreatorStudioView, {
+    const domain = mode === 'visual' ? 'eikona' : mode === 'production' ? 'scaena' : undefined
+    const viewProps: CreatorStudioViewProps = {
       mode: mode as CreatorStudioViewMode,
-      controller,
+      controller: domain === undefined ? controller : domainControllers[domain],
       pane,
       onOpenMode,
       onOpenDrama,
@@ -260,7 +262,8 @@ function registerViews(ctx: ClientContext, controller: CreatorStudioController, 
       onDirty: dirty => {
         if (props?.view.id !== undefined) pane.controller?.dispatch({ type: 'set_view_dirty', viewId: props.view.id, dirty })
       },
-    })
+    }
+    return domain === undefined ? createElement(CreatorStudioView, viewProps) : createElement(DomainStudioView, { ...viewProps, owner: domain })
   }]))
   Object.assign(viewFactories, {
     'creator-media': (input?: unknown) => {
@@ -301,21 +304,25 @@ function installUnavailableLauncher(slots: SlotsFace, reason: string, t: Creator
 
 function installAvailable(ctx: ClientContext, slots: SlotsFace, pane: CreatorPaneWorkbenchFace, remote: CreatorStudioRemote, t: CreatorStudioTranslator): () => void {
   const controller = new CreatorStudioController(remote)
+  const domainControllers = { eikona: new CreatorStudioController(remote, 'eikona'), scaena: new CreatorStudioController(remote, 'scaena') }
+  const controllers = [controller, ...Object.values(domainControllers)]
+  const refresh = () => { for (const item of controllers) void item.refresh() }
+  const reset = () => { for (const item of controllers) item.reset(); refresh() }
   const runtime = createCreatorStudioRuntime(controller)
   const disposers: Array<() => void> = [
     provide(ctx, CREATOR_STUDIO_RUNTIME_SERVICE, runtime),
-    registerViews(ctx, controller, pane, t),
+    registerViews(ctx, controller, pane, t, domainControllers),
   ]
   const openCreator = (): void => openMode(pane, 'home', t)
   const launcher = () => createElement(CreatorLauncher, {
     wide: false, onOpen: openCreator, t,
   })
   disposers.push(slots.inject('sidebar.footer.action', () => slots.register({ name: 'sidebar.footer.action', id: 'creator-studio-sidebar', order: 39 }, launcher)))
-  const timer = setInterval(() => { void controller.refresh() }, 15_000)
+  const timer = setInterval(refresh, 15_000)
   // G21 dispose 收口：宿主事件/会话订阅收纳进具名 unsubscribe 句柄，
   // cleanup 显式释放（对齐 dispose 合同的释放形状）。
   const resetSignal = {
-    unsubscribe: ctx.on('connection/reset', () => { controller.reset(); void controller.refresh() }),
+    unsubscribe: ctx.on('connection/reset', reset),
   }
   const sessions = ctx.get('sessions' as never) as { list?: { getSnapshot(): { current?: string }; subscribe(listener: () => void): () => void } } | undefined
   let sessionId = sessions?.list?.getSnapshot().current
@@ -328,13 +335,13 @@ function installAvailable(ctx: ClientContext, slots: SlotsFace, pane: CreatorPan
       void controller.refresh()
     }) ?? (() => {}),
   }
-  void controller.refresh()
+  refresh()
   return () => {
     clearInterval(timer)
     sessionSignal.unsubscribe()
     resetSignal.unsubscribe()
     for (const dispose of disposers.reverse()) dispose()
-    controller.dispose()
+    for (const item of controllers) item.dispose()
   }
 }
 

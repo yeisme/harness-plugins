@@ -1,5 +1,6 @@
 import type { WorkspaceSearchCandidateV1, WorkspaceSearchGroupIdV1, WorkspaceSearchKindV1 } from './search-identity.js'
 import { matchWorkspaceSearchCandidate, rankWorkspaceSearchCandidates } from './search-match.js'
+import { matchesSearchCenterControls, sortLocalSearchCandidates, type SearchCenterControls } from './search-controls.js'
 
 export type WorkspaceSearchCategoryV1 = 'all' | WorkspaceSearchKindV1
 
@@ -116,11 +117,19 @@ export function projectWorkspaceSearch(input: {
   readonly filters?: Partial<WorkspaceSearchFiltersV1>
   readonly sessionLoadedCount?: number
   readonly sessionTotalUnknown?: boolean
+  readonly browse?: boolean
+  readonly previewLimit?: number
+  readonly controls?: SearchCenterControls
+  readonly locale?: string
+  /** Already queried and ordered by the source; never re-match a bounded snippet. */
+  readonly remoteItems?: readonly WorkspaceSearchCandidateV1[]
 }): WorkspaceSearchProjectionV1 {
   const filters = applicableWorkspaceSearchFilters({ ...DEFAULT_WORKSPACE_SEARCH_FILTERS, ...input.filters })
   const query = input.query.trim()
-  const ranked = rankWorkspaceSearchCandidates(input.candidates, query)
+  const local = sortLocalSearchCandidates(rankWorkspaceSearchCandidates(input.candidates, query), input.controls, input.locale)
+  const ranked = [...local, ...(input.remoteItems ?? [])]
     .filter(candidate => candidatePassesWorkspaceSearchFilters(candidate, filters))
+    .filter(candidate => matchesSearchCenterControls(candidate, input.controls))
     .filter(candidate => {
       if (!candidate.compatibility) return true
       if (filters.showCompatibility || query.length === 0) return true
@@ -139,7 +148,8 @@ export function projectWorkspaceSearch(input: {
   }
 
   const groups: WorkspaceSearchGroupV1[] = []
-  if (query.length === 0) {
+  const resultLimit = input.previewLimit ?? EMPTY_SEARCH_PREVIEW.keyword
+  if (query.length === 0 && !input.browse) {
     const recent = previewGroup('recent', take(ranked.filter(item => item.recent && !item.compatibility)), EMPTY_SEARCH_PREVIEW.recent)
     const opened = previewGroup('opened', take(ranked.filter(item => item.opened && !item.compatibility)), EMPTY_SEARCH_PREVIEW.opened)
     const frequent = previewGroup('frequent', take(ranked.filter(item => item.frequent && !item.compatibility)), EMPTY_SEARCH_PREVIEW.frequent)
@@ -151,19 +161,19 @@ export function projectWorkspaceSearch(input: {
     if (compatibilityGroup !== undefined) groups.push(compatibilityGroup)
   } else {
     const sessionItems = ranked.filter(item => item.kind === 'session')
-    const paneItems = ranked.filter(item => item.kind === 'pane')
+    const paneItems = ranked.filter(item => item.kind === 'pane' && !item.compatibility)
     const commandItems = ranked.filter(item => item.kind === 'command' && !item.compatibility)
     const compatibilityItems = ranked.filter(item => item.compatibility)
     const sessionGroup = previewGroup(
       'session',
       sessionItems,
-      EMPTY_SEARCH_PREVIEW.keyword,
+      resultLimit,
       false,
       input.sessionTotalUnknown === true ? undefined : input.sessionLoadedCount === sessionItems.length ? sessionItems.length : undefined,
     )
-    const paneGroup = previewGroup('pane', paneItems, EMPTY_SEARCH_PREVIEW.keyword, false, paneItems.length)
-    const commandGroup = previewGroup('command', commandItems, EMPTY_SEARCH_PREVIEW.keyword, false, commandItems.length)
-    const compatibilityGroup = previewGroup('compatibility', compatibilityItems, EMPTY_SEARCH_PREVIEW.keyword, true)
+    const paneGroup = previewGroup('pane', paneItems, resultLimit, false, paneItems.length)
+    const commandGroup = previewGroup('command', commandItems, resultLimit, false, commandItems.length)
+    const compatibilityGroup = previewGroup('compatibility', compatibilityItems, resultLimit, !filters.showCompatibility && query.length === 0)
     if (sessionGroup !== undefined) {
       groups.push(input.sessionTotalUnknown === true || input.sessionLoadedCount !== undefined
         ? { ...sessionGroup, countLabelKind: 'found', loadedCount: input.sessionLoadedCount ?? sessionItems.length }

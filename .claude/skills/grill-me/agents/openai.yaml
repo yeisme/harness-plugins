@@ -1,0 +1,5 @@
+display_name: "Grill Me"
+short_description: "Stress-test a plan through dependency-aware interview."
+default_prompt: "Use $grill-me to challenge this plan in dependency-aware rounds, keep factual lookup with the agent, and do not implement until I confirm shared understanding."
+policy:
+  allow_implicit_invocation: false

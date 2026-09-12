@@ -60,7 +60,7 @@ const textPreviewSchema = z.object({
   after: z.string().max(1_200).optional(),
 }).strict()
 
-const artifactCandidateSchema = z.object({
+export const artifactCandidateSchema = z.object({
   ref: safeRef,
   version: z.string().min(1).max(160),
   title: safeText,
@@ -426,7 +426,7 @@ const ownerProjectionSchema = creatorOwnerSnapshotBaseSchema.omit({ context: tru
   validateArtifactWorkspaceBindings(value, ctx)
 })
 
-export const creatorStudioSnapshotSchema = z.object({
+const studioSnapshotBaseSchema = z.object({
   schemaVersion: z.literal('creator.studio.snapshot.v1alpha1'),
   snapshotRef: safeRef,
   snapshotVersion: z.number().int().nonnegative(),
@@ -443,15 +443,25 @@ export const creatorStudioSnapshotSchema = z.object({
   operations: operationsProjectionSchema.optional(),
   generationRuns: z.array(generationRunSchema).max(500).optional(),
   approvals: z.array(approvalSchema).max(500).optional(),
-}).strict().superRefine((value, ctx) => {
+}).strict()
+
+const refineStudioSnapshot = (value: z.infer<typeof studioSnapshotBaseSchema>, ctx: z.RefinementCtx) => {
   const owners = value.owners.map(owner => owner.owner)
-  if (new Set(owners).size !== CREATOR_STUDIO_OWNERS.length) ctx.addIssue({ code: 'custom', path: ['owners'], message: 'creator owner projections must be unique' })
+  if (new Set(owners).size !== owners.length) ctx.addIssue({ code: 'custom', path: ['owners'], message: 'creator owner projections must be unique' })
   value.owners.forEach((owner, index) => {
     if (owner.context !== undefined && (value.context === undefined || !sameCreatorStudioContext(value.context, owner.context))) {
       ctx.addIssue({ code: 'custom', path: ['owners', index, 'context'], message: 'owner projection context must match studio context' })
     }
   })
-})
+}
+
+export const creatorStudioSnapshotSchema = studioSnapshotBaseSchema.superRefine(refineStudioSnapshot)
+export const creatorOwnerViewSnapshotSchema = studioSnapshotBaseSchema.extend({ owners: z.array(ownerProjectionSchema).length(1) }).superRefine(refineStudioSnapshot)
+
+export function validateCreatorOwnerViewSnapshot(input: unknown): CreatorStudioSnapshotV1 | undefined {
+  const result = creatorOwnerViewSnapshotSchema.safeParse(input)
+  return result.success ? result.data as CreatorStudioSnapshotV1 : undefined
+}
 
 const mediaAccessSchema = z.object({
   url: z.string().min(1).max(4_096).refine(value => /^(?:https?:|blob:)/iu.test(value) && !/^(?:javascript:|data:|file:)/iu.test(value), 'unsupported media access URL'),

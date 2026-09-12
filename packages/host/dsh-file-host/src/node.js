@@ -14,7 +14,8 @@ import { promisify } from 'node:util';
 import { copyFile, mkdir, opendir, open, readFile, readdir, realpath, rename, rm, stat, lstat, unlink, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
-import { FILE_WORKSPACE_EDIT_CAPABILITY, FILE_INSPECT_CAPABILITY, FILE_TREE_PROJECTION_CAPABILITY_V2, FILE_RESOURCE_MUTATION_CAPABILITY_V1, FILE_TRANSFER_CAPABILITY_V1, } from './index.js';
+import { FILE_WORKSPACE_EDIT_CAPABILITY, FILE_INSPECT_CAPABILITY, isSafeFileWatchEvent, FILE_TREE_PROJECTION_CAPABILITY_V2, FILE_RESOURCE_MUTATION_CAPABILITY_V1, FILE_TRANSFER_CAPABILITY_V1, } from './index.js';
+export { createWorkspaceWatchRegistry, WATCH_BUFFER_MAX } from './watch-registry.js';
 const execFileAsync = promisify(execFile);
 const DEFAULT_LIST_LIMIT = 1000;
 const DEFAULT_READ_LIMIT = 256 * 1024;
@@ -90,6 +91,14 @@ export class OpaqueFileRefRegistry {
         this.byTarget.set(key, record);
         this.byRef.set(record.ref, record);
         return record;
+    }
+    /**
+     * Deterministic ref for one watched path (dsh-explorer-live-watch). Same
+     * key space as tree listings, so watcher events and later listings agree
+     * on the ref without exposing the path.
+     */
+    mint(workspace, target, directory) {
+        return this.issue(workspace, target, directory);
     }
     async list(cwd, parentRef) {
         const workspace = await realpath(requireAbsolute(cwd));
@@ -192,27 +201,44 @@ export class OpaqueFileRefRegistry {
             throw new YeismeFilesError('bad-request', 'search query is invalid');
         const workspace = await realpath(requireAbsolute(cwd));
         const matches = [];
+        let incomplete = false;
         const visit = async (parentRef, depth = 0) => {
-            if (depth > 32 || matches.length >= 20_000)
+            if (depth > 32 || matches.length >= 20_000) {
+                incomplete = true;
                 return;
+            }
             let cursor;
             do {
                 const page = await this.listV2(cwd, { ...(parentRef === undefined ? {} : { parentRef }), ...(cursor === undefined ? {} : { cursor }), limit: 500 });
+                if (page.truncated && page.nextCursor === undefined)
+                    incomplete = true;
                 for (const node of page.nodes) {
+                    if (matches.length >= 20_000) {
+                        incomplete = true;
+                        return;
+                    }
                     if (node.name.toLocaleLowerCase().includes(request.query.toLocaleLowerCase()))
                         matches.push(node);
                     if (node.kind === 'directory' && node.hasChildren)
                         await visit(node.ref, depth + 1);
                 }
                 cursor = page.nextCursor;
+                if (cursor !== undefined && matches.length >= 20_000)
+                    incomplete = true;
             } while (cursor !== undefined && matches.length < 20_000);
         };
         await visit();
-        const revision = createHash('sha256').update(JSON.stringify(matches.map(node => node.ref))).digest('hex').slice(0, 16);
+        const revision = createHash('sha256').update(JSON.stringify([request.query.toLocaleLowerCase(), incomplete, matches.map(node => [node.ref, node.version, node.name, node.hidden, node.ignored, node.sensitive])])).digest('hex').slice(0, 16);
         const limit = Math.max(1, Math.min(500, request.limit ?? 100));
-        const offset = request.cursor === undefined ? 0 : Number(/^search:(\d+):/.exec(request.cursor)?.[1] ?? 0);
+        let offset = 0;
+        if (request.cursor !== undefined) {
+            const cursor = /^search:(\d+):([a-f0-9]{16})$/.exec(request.cursor);
+            if (!cursor || cursor[2] !== revision || !Number.isSafeInteger(Number(cursor[1])) || Number(cursor[1]) > matches.length)
+                throw new YeismeFilesError('bad-request', 'file search cursor is stale or invalid', 409);
+            offset = Number(cursor[1]);
+        }
         const nodes = matches.slice(offset, offset + limit);
-        return { workspaceRef: `workspace:${createHash('sha256').update(workspace).digest('hex').slice(0, 16)}`, generation: 'local', revision, ...(request.cursor === undefined ? {} : { cursor: request.cursor }), ...(offset + nodes.length < matches.length ? { nextCursor: `search:${offset + nodes.length}:${revision}` } : {}), truncated: offset + nodes.length < matches.length, loaded: nodes.length, total: matches.length, nodes };
+        return { workspaceRef: `workspace:${createHash('sha256').update(workspace).digest('hex').slice(0, 16)}`, generation: 'local', revision, ...(request.cursor === undefined ? {} : { cursor: request.cursor }), ...(offset + nodes.length < matches.length ? { nextCursor: `search:${offset + nodes.length}:${revision}` } : {}), truncated: incomplete || offset + nodes.length < matches.length, loaded: nodes.length, ...(incomplete ? {} : { total: matches.length }), nodes };
     }
     async revealV2(cwd, ref) {
         const record = await this.resolve(cwd, ref);
@@ -225,8 +251,16 @@ export class OpaqueFileRefRegistry {
             const currentRecord = await this.refForPath(cwd, current);
             breadcrumbs.push({ ref: currentRecord.ref, name: part });
         }
-        const page = await this.listV2(cwd, { parentRef: breadcrumbs.length > 1 ? breadcrumbs[breadcrumbs.length - 2].ref : undefined });
-        return { workspaceRef: page.workspaceRef, generation: page.generation, revision: page.revision, breadcrumbs, target: page.nodes.find(node => node.ref === ref) };
+        // The root breadcrumb is a workspace identity, not a file ref. Resolve the
+        // root through the normal roots request, and locate targets beyond page one.
+        const request = { parentRef: breadcrumbs.length > 2 ? breadcrumbs[breadcrumbs.length - 2].ref : undefined, limit: 500 };
+        let page = await this.listV2(cwd, request);
+        let target = page.nodes.find(node => node.ref === ref);
+        while (target === undefined && page.nextCursor !== undefined) {
+            page = await this.listV2(cwd, { ...request, cursor: page.nextCursor });
+            target = page.nodes.find(node => node.ref === ref);
+        }
+        return { workspaceRef: page.workspaceRef, generation: page.generation, revision: page.revision, breadcrumbs, target };
     }
     revealAllowed(workspace, ref, version, token) {
         if (token === undefined)
@@ -1873,16 +1907,87 @@ function requireString(payload, key) {
  * POST /yeisme-files/api/fs.tree and /yeisme-files/api/fs.read.
  * Same JSON envelope as the community sidebar API, different prefix.
  */
-export async function handleYeismeFilesApi(req, res, options) {
-    if (req.method !== 'POST') {
-        writeJson(res, 405, { ok: false, error: { code: 'method-error', message: 'method not allowed' } });
+/**
+ * GET /yeisme-files/api/fs.watch.streamV1?sessionId=&since= — SSE live watch
+ * (dsh-explorer-live-watch-v1). Session-owner fenced like the opaque POST
+ * methods; replays buffered events beyond `since`, then streams live events
+ * as `event: fs` records (validated `isSafeFileWatchEvent`). The first
+ * `event: cursor` frame carries the owner cursor; a 15s comment heartbeat
+ * keeps intermediaries from buffering the stream. Connection close releases
+ * the refcounted watcher.
+ */
+async function handleWatchStream(req, res, requestUrl, options) {
+    if (req.method !== 'GET') {
+        writeJson(res, 405, { ok: false, error: { code: 'method-error', message: 'fs.watch.streamV1 requires GET' } });
         return;
     }
+    const sessionId = requestUrl.searchParams.get('sessionId') ?? undefined;
+    const resolvedCwd = sessionId === undefined ? undefined : options.sessionCwd(sessionId);
+    if (resolvedCwd === undefined || resolvedCwd === '') {
+        writeJson(res, 403, { ok: false, error: { code: 'forbidden', message: 'session workspace owner is unavailable' } });
+        return;
+    }
+    const registry = options.watchRegistry;
+    if (registry === undefined) {
+        writeJson(res, 404, { ok: false, error: { code: 'not-found', message: 'file watch capability is unavailable' } });
+        return;
+    }
+    let handle;
+    try {
+        handle = await registry.acquire(requireAbsolute(resolvedCwd));
+    }
+    catch {
+        writeJson(res, 503, { ok: false, error: { code: 'fs-error', message: 'workspace watcher is unavailable' } });
+        return;
+    }
+    res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', connection: 'keep-alive' });
+    const send = (chunk) => {
+        try {
+            return res.write?.(chunk) ?? false;
+        }
+        catch {
+            return false;
+        }
+    };
+    send('retry: 3000\n\n');
+    send(`event: cursor\ndata: ${JSON.stringify({ cursor: handle.snapshotCursor() })}\n\n`);
+    for (const event of handle.eventsSince(requestUrl.searchParams.get('since') ?? undefined)) {
+        if (!isSafeFileWatchEvent(event))
+            continue;
+        send(`event: fs\ndata: ${JSON.stringify(event)}\n\n`);
+    }
+    const unsubscribe = handle.subscribe(event => {
+        if (!isSafeFileWatchEvent(event))
+            return;
+        send(`event: fs\ndata: ${JSON.stringify(event)}\n\n`);
+    });
+    const heartbeat = setInterval(() => { send(': ka\n\n'); }, 15_000);
+    let closed = false;
+    const finish = () => {
+        if (closed)
+            return;
+        closed = true;
+        clearInterval(heartbeat);
+        unsubscribe();
+        handle.release();
+    };
+    req.on?.('close', finish);
+    res.on?.('close', finish);
+}
+export async function handleYeismeFilesApi(req, res, options) {
     const requestUrl = new URL(req.url ?? '/', 'http://dsh.internal');
     const pathname = requestUrl.pathname;
     const method = pathname.startsWith('/yeisme-files/api/') ? pathname.slice('/yeisme-files/api/'.length) : undefined;
     if (method === undefined || method.includes('/')) {
         writeJson(res, 404, { ok: false, error: { code: 'not-found', message: 'unknown files API method' } });
+        return;
+    }
+    if (method === 'fs.watch.streamV1') {
+        await handleWatchStream(req, res, requestUrl, options);
+        return;
+    }
+    if (req.method !== 'POST') {
+        writeJson(res, 405, { ok: false, error: { code: 'method-error', message: 'method not allowed' } });
         return;
     }
     try {

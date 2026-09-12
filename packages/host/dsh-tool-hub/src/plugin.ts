@@ -10,6 +10,8 @@ import { toolHubDomainSpec, type ToolHubDomainSpec, type ToolHubPrefsRowV1 } fro
 import { ToolHubRemoteService } from './remote.ts'
 import { ToolHubSidecar, type ToolHubCatalogPort, type ToolHubTablePort } from './service.ts'
 import { mcpId, skillId, splitMcpToolName, toolId } from './ids.ts'
+import { SkillReferenceReader, type SkillReferenceOwner } from './reference-reader.ts'
+import { SkillReferenceRemoteService } from './reference-remote.ts'
 
 export const name = 'dsh-tool-hub-host'
 export const inject = ['typert'] as const
@@ -72,11 +74,21 @@ const toolHubTypertContribution = {
         { kind: 'method', name: 'setEnabled', signature: 'setEnabled(input: ToolHubSetEnabledInputV1): Promise<ToolHubSetEnabledAnswerV1>' },
       ],
       types: [],
+    }, {
+      key: 'toolReferences', exportName: 'SkillReferenceRemoteService',
+      summary: 'Explicit bounded reads of installed filesystem Skill documents.', tags: [],
+      members: [{ kind: 'method', name: 'readSkill', signature: 'readSkill(input: SkillReferenceReadInputV1, signal: AbortSignal): Promise<SkillReferenceReadAnswerV1>' }],
+      types: [],
     }],
     events: [],
     objects: [],
   },
   invocations: [
+    {
+      id: '@yeisme/dsh-tool-hub-host#toolReferences/readSkill', service: 'toolReferences', namespace: 'toolReferences', method: 'readSkill',
+      invocation: { kind: 'direct' }, parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }],
+      cancellation: { parameter: 'signal' }, result: { mode: 'src-json' },
+    },
     {
       id: '@yeisme/dsh-tool-hub-host#toolHub/list',
       service: 'toolHub',
@@ -164,6 +176,7 @@ function denyReason(sidecar: ToolHubSidecar, execution: { name?: unknown; argume
 }
 
 export interface MountedToolHub {
+  readonly references?: SkillReferenceRemoteService
   readonly remote: ToolHubRemoteService
   readonly sidecar: ToolHubSidecar
   readonly dispose: () => Promise<void>
@@ -183,10 +196,12 @@ export async function mountToolHub(ctx: Context): Promise<MountedToolHub> {
     catalog: createHostCatalogPort(ctx),
   })
   const remote = new ToolHubRemoteService(ctx, sidecar)
+  const references = new SkillReferenceRemoteService(ctx, new SkillReferenceReader(() => optionalGet<SkillReferenceOwner>(ctx, 'skills')))
   const unregisterTypert = optionalGet<TypertRegistryFace>(ctx, 'typert')?.register(toolHubTypertContribution)
   const tools = optionalGet<ToolsFace>(ctx, 'tools')
   const unguard = tools?.guard?.(execution => denyReason(sidecar, execution))
   return {
+    references,
     remote,
     sidecar,
     dispose: async () => {

@@ -20,11 +20,17 @@ export interface SkillSummaryLike {
   readonly source?: unknown
   readonly provider?: unknown
   readonly invocation?: { readonly modelInvocable?: unknown; readonly userInvocable?: unknown }
+  readonly purposeZh?: unknown
+  readonly category?: unknown
+  readonly searchTerms?: unknown
 }
 
 export interface ToolSchemaLike {
   readonly name?: unknown
   readonly description?: unknown
+  readonly purposeZh?: unknown
+  readonly category?: unknown
+  readonly searchTerms?: unknown
 }
 
 export interface PluginInventoryEntryLike {
@@ -69,6 +75,17 @@ function safeDescription(value: unknown): string {
   return trimmed.length > MAX_DESCRIPTION_CHARS ? `${trimmed.slice(0, MAX_DESCRIPTION_CHARS - 1)}…` : trimmed
 }
 
+function safePurpose(value: { readonly purposeZh?: unknown; readonly category?: unknown; readonly searchTerms?: unknown }) {
+  const zh = safeDescription(value.purposeZh)
+  const category = safeName(value.category)
+  const terms = Array.isArray(value.searchTerms)
+    ? value.searchTerms.flatMap(term => typeof term === 'string' ? [safeDescription(term)] : []).filter(Boolean).slice(0, 8)
+    : []
+  return zh.length > 0 && category !== undefined
+    ? { zh, category, searchTerms: terms }
+    : undefined
+}
+
 function availabilityFor(enabled: boolean, extra?: string, reasonCode?: ToolHubReasonCodeV1): {
   availability: ToolHubAvailability
   disabledReason?: string
@@ -104,6 +121,7 @@ function projectSkill(input: SkillSummaryLike, disabled: ReadonlySet<string>): T
     ? (userEnabled ? undefined : 'disabled by user preference')
     : 'not model-invocable'
   const status = availabilityFor(enabled, reason, modelInvocable ? 'disabled_by_user' : 'not_model_invocable')
+  const purpose = safePurpose(input)
   return {
     id,
     family: 'skill',
@@ -117,6 +135,7 @@ function projectSkill(input: SkillSummaryLike, disabled: ReadonlySet<string>): T
     canToggle: modelInvocable,
     ...(status.disabledReason === undefined ? {} : { disabledReason: status.disabledReason }),
     ...(status.reasonCode === undefined ? {} : { reasonCode: status.reasonCode }),
+    ...(purpose === undefined ? {} : { purpose }),
   }
 }
 
@@ -127,6 +146,7 @@ function projectNativeTool(input: ToolSchemaLike, disabled: ReadonlySet<string>)
   const id = toolId(name)
   const enabled = !disabled.has(id)
   const status = availabilityFor(enabled)
+  const purpose = safePurpose(input)
   return {
     id,
     family: 'native',
@@ -140,6 +160,7 @@ function projectNativeTool(input: ToolSchemaLike, disabled: ReadonlySet<string>)
     canToggle: true,
     ...(status.disabledReason === undefined ? {} : { disabledReason: status.disabledReason }),
     ...(status.reasonCode === undefined ? {} : { reasonCode: status.reasonCode }),
+    ...(purpose === undefined ? {} : { purpose }),
   }
 }
 

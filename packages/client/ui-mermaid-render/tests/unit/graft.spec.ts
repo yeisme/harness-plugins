@@ -4,6 +4,7 @@ import { labelsFor } from '../../src/client/locales.ts'
 import type { MermaidRenderer } from '../../src/client/render.ts'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+const controllers: MermaidGraftController[] = []
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 function stubRenderer(svg = '<svg><path d="M0 0"/></svg>'): MermaidRenderer {
@@ -25,21 +26,78 @@ function addFence(text: string): { pre: HTMLElement; code: HTMLElement } {
 }
 
 function makeController(renderer: MermaidRenderer, stableMs = 20): MermaidGraftController {
-  return new MermaidGraftController({ labels: labelsFor('zh'), renderer, stableMs })
+  const controller = new MermaidGraftController({ labels: labelsFor('zh'), renderer, stableMs })
+  controllers.push(controller)
+  return controller
 }
 
 afterEach(() => {
+  for (const controller of controllers.splice(0)) controller.stop()
   document.body.innerHTML = ''
   document.head.querySelectorAll('style').forEach((s) => s.remove())
 })
 
 describe('MermaidGraftController', () => {
+  it('keeps the latest theme when an earlier render finishes last', async () => {
+    let finishOld!: (svg: string) => void
+    const renderer = stubRenderer('<svg><text>current theme</text></svg>')
+    vi.mocked(renderer.render).mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve }))
+    const controller = makeController(renderer, 5)
+    controller.start(document.documentElement)
+    const { pre } = addFence('graph TD\nA-->B')
+    try {
+      await vi.waitFor(() => expect(renderer.render).toHaveBeenCalledTimes(1))
+      controller.setTheme('dark')
+      await vi.waitFor(() => expect(document.querySelector('.dsh-mermaid-stage svg')?.textContent).toBe('current theme'))
+      finishOld('<svg><text>old theme</text></svg>')
+      await sleep(20)
+      expect(document.querySelector('.dsh-mermaid-stage svg')?.textContent).toBe('current theme')
+      expect(pre.style.display).toBe('none')
+      expect(document.querySelector('.is-failed')).toBeNull()
+    } finally { controller.stop() }
+  })
+
+  it('recovers a failed fence after the same code node is corrected', async () => {
+    const renderer = stubRenderer()
+    vi.mocked(renderer.render).mockRejectedValueOnce(new Error('synthetic parse error'))
+    const controller = makeController(renderer, 5)
+    controller.start(document.documentElement)
+    const { pre, code } = addFence('invalid diagram')
+    try {
+      await vi.waitFor(() => expect(document.querySelector('.is-failed')).not.toBeNull())
+      expect(pre.style.display).toBe('')
+      code.textContent = 'graph TD\nA-->B'
+      await vi.waitFor(() => expect(document.querySelector('.dsh-mermaid-stage svg')).not.toBeNull())
+      expect(document.querySelector('.is-failed')).toBeNull()
+      expect(pre.style.display).toBe('none')
+      expect(renderer.render).toHaveBeenLastCalledWith('graph TD\nA-->B')
+    } finally { controller.stop() }
+  })
+
+  it('ignores a late old render after the same code node changes', async () => {
+    let finishOld!: (value: string) => void
+    const renderer = stubRenderer('<svg><text>new</text></svg>')
+    vi.mocked(renderer.render).mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve }))
+    const controller = makeController(renderer, 5)
+    controller.start(document.documentElement)
+    const { code } = addFence('graph TD\nOld-->Old')
+    try {
+      await vi.waitFor(() => expect(renderer.render).toHaveBeenCalledTimes(1))
+      code.textContent = 'graph TD\nNew-->New'
+      await vi.waitFor(() => expect(document.querySelector('.dsh-mermaid-stage svg')?.textContent).toBe('new'))
+      finishOld('<svg><text>old</text></svg>')
+      await sleep(20)
+      expect(document.querySelectorAll('figure[data-dsh-mermaid-figure]')).toHaveLength(1)
+      expect(document.querySelector('.dsh-mermaid-stage svg')?.textContent).toBe('new')
+    } finally { controller.stop() }
+  })
+
   it('grafts a stable fence and hides the source pre', async () => {
     const renderer = stubRenderer()
     const controller = makeController(renderer)
     controller.start(document.documentElement)
     const { pre } = addFence('graph TD\nA-->B')
-    await sleep(60)
+    await vi.waitFor(() => expect(document.querySelector('.dsh-mermaid-stage svg')).not.toBeNull())
     const figure = document.querySelector('figure[data-dsh-mermaid-figure]')
     expect(figure).not.toBeNull()
     expect(figure?.querySelector('.dsh-mermaid-stage svg')).not.toBeNull()
@@ -64,7 +122,7 @@ describe('MermaidGraftController', () => {
     const controller = makeController(stubRenderer())
     controller.start(document.documentElement)
     const { pre } = addFence('A-->B')
-    await sleep(60)
+    await vi.waitFor(() => expect(document.querySelector('.dsh-mermaid-stage svg')).not.toBeNull())
     const figure = document.querySelector('figure[data-dsh-mermaid-figure]')
     const btn = figure?.querySelector<HTMLButtonElement>('button')
     expect(btn?.textContent).toContain('查看源码')
@@ -87,7 +145,7 @@ describe('MermaidGraftController', () => {
     const controller = makeController(renderer)
     controller.start(document.documentElement)
     const { pre, code } = addFence('not valid mermaid')
-    await sleep(60)
+    await vi.waitFor(() => expect(document.querySelector('figure[data-dsh-mermaid-figure]')?.textContent).toContain('mermaid 渲染失败'))
     const figure = document.querySelector('figure[data-dsh-mermaid-figure]')
     expect(figure?.classList.contains('is-failed')).toBe(true)
     expect(figure?.textContent).toContain('mermaid 渲染失败')
@@ -100,7 +158,7 @@ describe('MermaidGraftController', () => {
     const controller = makeController(stubRenderer())
     controller.start(document.documentElement)
     const { pre, code } = addFence('A-->B')
-    await sleep(60)
+    await vi.waitFor(() => expect(document.querySelector('.dsh-mermaid-stage svg')).not.toBeNull())
     const before = document.body.innerHTML
     expect(before).toContain('figure')
     controller.stop()
@@ -116,12 +174,12 @@ describe('MermaidGraftController', () => {
     const controller = makeController(renderer)
     controller.start(document.documentElement)
     const { pre, code } = addFence('A-->B')
-    await sleep(60)
+    await vi.waitFor(() => expect(document.querySelector('.dsh-mermaid-stage svg')).not.toBeNull())
     expect(document.querySelectorAll('figure[data-dsh-mermaid-figure]')).toHaveLength(1)
     // 模拟 React 重挂载：同结构新节点替换旧节点。
     const fresh = pre.cloneNode(true) as HTMLElement
     pre.replaceWith(fresh)
-    await sleep(80)
+    await vi.waitFor(() => expect(renderer.render).toHaveBeenCalledTimes(2))
     const figures = document.querySelectorAll('figure[data-dsh-mermaid-figure]')
     expect(figures).toHaveLength(1)
     expect(renderer.render).toHaveBeenCalledTimes(2)
@@ -152,7 +210,7 @@ describe('MermaidGraftController', () => {
     pre.append(code)
     card.append(head, pre)
     document.body.append(card)
-    await sleep(60)
+    await vi.waitFor(() => expect(document.querySelector('.dsh-mermaid-stage svg')).not.toBeNull())
     const figure = document.querySelector('figure[data-dsh-mermaid-figure]')
     expect(figure).not.toBeNull()
     expect(card.style.display).toBe('none')

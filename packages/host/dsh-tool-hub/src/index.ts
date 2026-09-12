@@ -59,6 +59,9 @@ export { ToolHubSidecar, createToolHubSidecar } from './service.ts'
 export type { ToolHubCatalogPort, ToolHubSidecarDeps, ToolHubTablePort } from './service.ts'
 
 export { ToolHubRemoteService, toolHubRemoteMarkers } from './remote.ts'
+export { SkillReferenceReader } from './reference-reader.ts'
+export type { SkillReferenceOwner, SkillReferenceReadInputV1, SkillReferenceReadAnswerV1 } from './reference-reader.ts'
+export { SkillReferenceRemoteService } from './reference-remote.ts'
 
 export {
   apply,

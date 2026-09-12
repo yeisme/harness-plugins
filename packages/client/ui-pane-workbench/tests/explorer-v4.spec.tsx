@@ -163,6 +163,125 @@ describe('V4 Task 4.3 Tree State', () => {
   })
 })
 
+describe('Explorer directory reveal handoff', () => {
+  it('acknowledges a rendered selected directory, preserves the original navigator and cancels on owner change', async () => {
+    const source = createExplorerRuntimeSource()
+    const bodyRead = vi.fn()
+    const runtime = { roots: async () => [node({ ref: 'file:original', name: 'original.txt' })], listChildren: async () => [], openResource: bodyRead,
+      revealResource: async () => ({ node: node({ ref: 'dir:target', name: 'target', kind: 'directory' }), breadcrumb: [{ ref: 'workspace:a', name: 'Project' }] }) }
+    const unbind = source.bind(runtime)
+    const owner = new AbortController(), pendingAction = new AbortController()
+    const pending = source.reveal!.request({ runtime, ref: 'dir:target', version: 'v1', isActive: () => true }, owner.signal, pendingAction.signal)
+    const view = render(createElement(StrictMode, null, createElement(ExplorerTreeView, { runtimeSource: source } as never)))
+    await screen.findByRole('button', { name: 'Back to previous Explorer view' })
+    await expect(pending).resolves.toBe(true)
+    expect(view.container.querySelector('[data-explorer-ref="dir:target"]')?.getAttribute('aria-selected')).toBe('true')
+    expect(document.activeElement?.getAttribute('role')).toBe('tree')
+    expect(bodyRead).not.toHaveBeenCalled()
+    act(() => pendingAction.abort())
+    expect(source.reveal!.getSnapshot()).toBeDefined()
+    act(() => owner.abort())
+    await screen.findByText('original.txt')
+    expect(source.reveal!.getSnapshot()).toBeUndefined()
+    view.unmount(); unbind()
+  })
+  it('refuses a location change while the original Explorer has an unfinished mutation draft', async () => {
+    const source = createExplorerRuntimeSource()
+    const propose = vi.fn()
+    const runtime = { roots: async () => [node({ ref: 'file:original', name: 'original.txt' })], getRootRef: () => 'root:a', listChildren: async () => [], openResource: async () => ({ ok: false }),
+      mutation: { enabled: true, propose }, revealResource: async () => undefined }
+    const unbind = source.bind(runtime)
+    render(createElement(ExplorerTreeView, { runtimeSource: source } as never))
+    await screen.findByText('original.txt')
+    fireEvent.click(screen.getByRole('button', { name: '新建文件' }))
+    const draft = screen.getByRole('textbox', { name: '资源名称' }) as HTMLInputElement
+    fireEvent.change(draft, { target: { value: 'draft.txt' } })
+    await expect(source.reveal!.request({ runtime, ref: 'dir:target', version: 'v1', isActive: () => true })).resolves.toBe(false)
+    expect(draft.value).toBe('draft.txt')
+    expect(propose).not.toHaveBeenCalled()
+    unbind()
+  })
+
+  it('hides the previous owner tree while a replacement runtime is still loading', async () => {
+    const source = createExplorerRuntimeSource()
+    const base = { listChildren: async () => [], openResource: async () => ({ ok: false }) }
+    source.bind({ ...base, roots: async () => [node({ ref: 'old:file', name: 'old-owner.txt' })] })
+    render(createElement(ExplorerTreeView, { runtimeSource: source } as never))
+    await screen.findByText('old-owner.txt')
+    let finish!: (nodes: readonly ExplorerTreeNodeV1[]) => void
+    act(() => { source.bind({ ...base, roots: () => new Promise(resolve => { finish = resolve }) }) })
+    expect(screen.queryByText('old-owner.txt')).toBeNull()
+    await act(async () => finish([node({ ref: 'new:file', name: 'new-owner.txt' })]))
+    await screen.findByText('new-owner.txt')
+  })
+
+  it('does not inspect an unrelated root file before the user focuses Explorer', async () => {
+    vi.useFakeTimers()
+    try {
+      const source = createExplorerRuntimeSource()
+      const inspectMetadata = vi.fn(async (item: ExplorerTreeNodeV1) => ({ ref: item.ref, version: item.version, state: 'ready' as const, label: item.name }))
+      source.bind({ roots: async () => [node({ ref: 'file:original', name: 'original.txt' })], listChildren: async () => [], openResource: async () => ({ ok: false }), inspectMetadata })
+      render(createElement(ExplorerTreeView, { runtimeSource: source } as never))
+      await act(async () => {})
+      await act(async () => { vi.advanceTimersByTime(500) })
+      expect(inspectMetadata).not.toHaveBeenCalled()
+      act(() => screen.getByRole('tree').focus())
+      await act(async () => { vi.advanceTimersByTime(500) })
+      expect(inspectMetadata).toHaveBeenCalledOnce()
+    } finally { vi.useRealTimers() }
+  })
+
+  it('does not move focus after the user leaves the target Pane during owner resolution', async () => {
+    const source = createExplorerRuntimeSource()
+    let active = true, finish!: (value: { node: ExplorerTreeNodeV1; breadcrumb: [] }) => void
+    const runtime = { roots: async () => [], listChildren: async () => [], openResource: async () => ({ ok: false }),
+      revealResource: () => new Promise<{ node: ExplorerTreeNodeV1; breadcrumb: [] }>(resolve => { finish = resolve }) }
+    source.bind(runtime)
+    const pending = source.reveal!.request({ runtime, ref: 'dir:target', version: 'v1', isActive: () => active })
+    render(createElement('div', null, createElement('button', null, 'Outside'), createElement(ExplorerTreeView, { runtimeSource: source } as never)))
+    act(() => { active = false; screen.getByRole('button', { name: 'Outside' }).focus() })
+    await act(async () => finish({ node: node({ ref: 'dir:target', name: 'target', kind: 'directory' }), breadcrumb: [] }))
+    await expect(pending).resolves.toBe(false)
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Outside' }))
+    expect(source.reveal!.getSnapshot()).toBeUndefined()
+  })
+
+  it('restores the original navigator scroll after returning from a located directory', async () => {
+    const source = createExplorerRuntimeSource()
+    const runtime = { roots: async () => Array.from({ length: 80 }, (_, index) => node({ ref: `file:row${index}`, name: `original-${index}.txt` })), listChildren: async () => [], openResource: async () => ({ ok: false }),
+      revealResource: async () => ({ node: node({ ref: 'dir:target', name: 'target', kind: 'directory' }), breadcrumb: [] }) }
+    source.bind(runtime)
+    render(createElement(ExplorerTreeView, { runtimeSource: source } as never))
+    await screen.findByText('original-0.txt')
+    const tree = screen.getByRole('tree')
+    act(() => { tree.scrollTop = 280; fireEvent.scroll(tree) })
+    let pending!: Promise<boolean>
+    act(() => { pending = source.reveal!.request({ runtime, ref: 'dir:target', version: 'v1', isActive: () => true }) })
+    await screen.findByRole('button', { name: 'Back to previous Explorer view' })
+    await expect(pending).resolves.toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Back to previous Explorer view' }))
+    expect(screen.getByRole('tree').scrollTop).toBe(280)
+  })
+
+  it('times out without a mounted receiver and rejects a superseded request', async () => {
+    vi.useFakeTimers()
+    try {
+      const source = createExplorerRuntimeSource()
+      const runtime = { roots: async () => [], listChildren: async () => [], openResource: async () => ({ ok: false }), revealResource: async () => undefined }
+      source.bind(runtime)
+      const input = { runtime, ref: 'dir:target', version: 'v1', isActive: () => true }
+      const first = source.reveal!.request(input)
+      const old = source.reveal!.getSnapshot()!
+      const second = source.reveal!.request(input)
+      await expect(first).resolves.toBe(false)
+      expect(source.reveal!.acknowledge(old, true)).toBe(false)
+      act(() => vi.advanceTimersByTime(3000))
+      await expect(second).resolves.toBe(false)
+      expect(source.reveal!.getSnapshot()).toBeUndefined()
+    } finally { vi.useRealTimers() }
+  })
+})
+
 describe('V4 Task 4.4 Tree UI', () => {
   it('restores directory roots after clearing a remote search and reports search failures', async () => {
     const runtimeSource = createExplorerRuntimeSource()
@@ -430,6 +549,9 @@ describe('ComposerReferenceCapabilityV1', () => {
     controller.dispatch({ type: 'mark_stale', ref: 'file:readme', version: 'v6' })
     render(createElement(ComposerReferenceDock, { controller }))
     const disabled = document.querySelector('[data-reference-view-current="r1"] button') as HTMLButtonElement
+    expect(disabled.disabled).toBe(true)
+  })
+})
 
 describe('explorer per-kind file icons (file-preview-dispatch)', () => {
   it('maps common media, document, archive and code extensions', () => {
@@ -507,8 +629,5 @@ describe('explorer watch pill + explicit refresh (dsh-explorer-live-watch)', () 
     expect(last.expandedRefs).toContain('dir:src')
     expect(last.selectedRef).toBe('file:readme')
     expect(runtime.listChildren).toHaveBeenCalledWith('dir:src')
-  })
-})
-    expect(disabled.disabled).toBe(true)
   })
 })

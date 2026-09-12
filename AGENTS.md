@@ -66,5 +66,7 @@ DSH 开发预览默认运行 `pnpm dsh:workbench -- --no-open --port 40869`，�
 - 新增、修改或评审任何 React/Web UI 前，必须先读取 `docs/design/dsh-unified-panel-visual-system.md`。完整 surface 使用 `ui-surface`，嵌入 renderer 使用 `ui-visual-kit` token；所属 `design.md` 必须填写该文档 §12 的 UI Contract，并运行 `pnpm run check:surfaces`、`pnpm run test:visual` 与 `pnpm run check:plugins`。
 - 设计/实现/评审 Ordo Agent Ops 适配：使用 `dsh-ordo-agent-ops`。
 - 创建/评审 DSH UI 插件：参考上游 deepseek-ai/deepseek-harness 的 dsh-plugin-experience skill（经 PR staging worktree 或上游仓读取）。
+- 用户明确要求质询、挑战、压力测试或逐问时：DSH 插件相关主题（tab/pane/overlay/preset/投影/seam/change 设计）使用 `dsh-plugin-grill-me`，与 `grill-me` 协议成对激活；其它主题使用 `grill-me`。访谈只收敛决策，不写文件、不创建 OpenSpec change、不启动实现；用法见 [docs/cookbook/dsh-plugin-grill-me.md](docs/cookbook/dsh-plugin-grill-me.md)。
 - 决定 owner 边界：遵循本仓库 openspec/changes/ordo-dsh-plugin-visualization-v1/。
 - TypeScript、host transport、safe projection、CLI output、集成证据和稳定合同变更分别使用本 profile 中的 `yeisme-coding-execution-driver`、`backend-system-workflow`、`ai-native-cli-output-contract`、`project-integration-test-evidence` 与 `yeisme-evolutionary-change-policy`。
+- 设计/实现 3D 导演台、glTF/GLB 能力矩阵、Shot 场景编排或画布/视口联动：使用 `dsh-3d-director-gltf-workbench`，并遵循 `openspec/changes/dsh-3d-director-gltf-workbench-v1/`。

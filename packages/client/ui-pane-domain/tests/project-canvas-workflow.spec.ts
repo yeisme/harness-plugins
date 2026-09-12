@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { PROJECT_CANVAS_SCHEMA, PANE_ARTIFACT_SCHEMA, type ProjectCanvasDocument, type ProjectCanvasNode } from '@yeisme/dsh-pane-protocol'
-import { inspectCanvasRunScope } from '../src/project-canvas-workflow.js'
+import { inspectCanvasRunScope, inspectCanvasImpact, inspectCanvasChangeImpact } from '../src/project-canvas-workflow.js'
 
 const artifact = { schema: PANE_ARTIFACT_SCHEMA, owner: 'eikona', kind: 'image', ref: 'eikona://asset/one', version: '4',
   mediaType: 'image/png', title: 'Image', evidenceRefs: [], capabilities: ['preview'] }
@@ -80,4 +80,49 @@ describe('canvas execution scope draft inspection', () => {
     expect(result.bindings.find(binding => binding.edgeId === 'prompt')!.source).toEqual({ kind: 'draft', nodeId: 'text' })
     expect(JSON.stringify(result)).not.toContain('Private user draft body')
   })
+})
+
+it('finds execution impact from upstream drafts without clearing adopted versions', () => {
+ const input = doc()
+ input.nodes.push({ ...base, id: 'prompt', kind: 'draft', title: 'Prompt', text: 'private input' })
+ input.edges.push({ id: 'pa', kind: 'execution', source: 'prompt', target: 'a', output: 'text', input: 'prompt', purpose: 'prompt' })
+ const a = input.nodes.find(node => node.id === 'a')!
+ if (a.kind === 'operation') a.selectedArtifact = artifact
+ const original = structuredClone(input)
+ expect(inspectCanvasImpact(input, ['prompt', 'prompt'])).toEqual({ valid: true, affectedOperationIds: ['a', 'b', 'c'] })
+ expect(input).toEqual(original)
+ expect(inspectCanvasImpact(input, ['unknown'])).toEqual({ valid: false, affectedOperationIds: [] })
+ expect(inspectCanvasImpact(input, [])).toEqual({ valid: true, affectedOperationIds: [] })
+ input.edges.push({ id: 'cycle', kind: 'execution', source: 'c', target: 'a', output: 'image', input: 'ref', purpose: 'reference' })
+ expect(inspectCanvasImpact(input, ['b']).affectedOperationIds).toEqual(['a', 'b', 'c'])
+})
+
+it('separates semantic edits from layout and accounts for removed execution dependencies', () => {
+ const before = doc(), after = structuredClone(before)
+ after.nodes[0]!.position.x = 50
+ after.nodes[0]!.title = 'Moved title'
+ after.camera.zoom = 2
+ after.edges.push({ id: 'another-reference', kind: 'reference', source: 'a', target: 'unrelated' })
+ expect(inspectCanvasChangeImpact(before,after).affectedOperationIds).toEqual([])
+ after.edges = after.edges.filter(edge => edge.id !== 'ab')
+ expect(inspectCanvasChangeImpact(before,after).affectedOperationIds).toEqual(['b','c'])
+ const changed = structuredClone(before)
+ const a = changed.nodes[0]!
+ if (a.kind === 'operation') a.controls = { prompt: 'changed' }
+ expect(inspectCanvasChangeImpact(before,changed).affectedOperationIds).toEqual(['a','b','c'])
+ expect(inspectCanvasChangeImpact(before,{ ...after, scope: { ...after.scope, projectRef: 'other' } }).valid).toBe(false)
+})
+
+it('reports changed external inputs while retaining their explicitly pinned output', () => {
+ const input = doc()
+ const upstream = input.nodes.find(node => node.id === 'a')!
+ if (upstream.kind !== 'operation') throw Error('fixture operation missing')
+ upstream.selectedArtifact = artifact
+ upstream.inputReviewRequired = true
+ const result = inspectCanvasRunScope(input, { kind: 'node', nodeId: 'b' })
+ expect(result.blockers).toEqual([])
+ expect(result.notices).toEqual([{ code: 'external_input_changed', nodeId: 'a', edgeId: 'ab' }])
+ expect(result.bindings[0]!.source).toMatchObject({ kind: 'artifact', artifact: { version: '4' } })
+ expect(result.nodeIds).toEqual(['b'])
+ expect(upstream.selectedArtifact.version).toBe('4')
 })

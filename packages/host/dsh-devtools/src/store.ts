@@ -17,6 +17,7 @@ const CAPACITY: Record<DevtoolsRecordV1['type'], number> = {
   sample: 600,
   finding: 200,
   lifecycle: 200,
+  tool: 500,
 }
 
 export interface DevtoolsStoreOptions {

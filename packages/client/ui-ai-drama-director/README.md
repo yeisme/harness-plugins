@@ -27,6 +27,16 @@ limited to 100 loaded targets and resets on filter, show, snapshot or runtime
 generation changes. `stale`, `partial`, `gap`, `offline` and `unknown` states
 disable mutation and never trigger an automatic retry.
 
+## Pipeline Workbench pane
+
+- **Pipeline Workbench** (`componentKey` `drama.pipeline.workbench`, pane kind `creator.pipeline`): vertical-slice pipeline canvas — capsule Agent ⇄ Workbench switching, edge selection → inspector with run status/actions, bottom run strip, and media drop → canvas asset-node draft intents.
+
+The pane is probe-first: without a projection owner it renders the honest
+disabled state with a reason, no dead buttons. The `creativePipelineFixture`
+context service key provides a fixture-tier owner for local/fixture evidence
+only — it is not a real owner: no mutations, canvas saves reconcile to
+`unavailable`, and media resolution never grants access.
+
 ## Commands
 
 - `/drama`: Open command center with current context
