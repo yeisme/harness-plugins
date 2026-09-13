@@ -1,3 +1,4 @@
+import { registerProjectCommandPane } from './project-registration.tsx'
 /** Ordo Agent Ops browser runtime：官方 slot + Host Remote 的小型值班摘要。 */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -73,6 +74,7 @@ function clientMounts(): WeakMap<object, SharedClientMount> {
 }
 
 function installSidebar(ctx: ClientContext): void {
+  ctx.effect(() => registerProjectCommandPane(ctx as never), "ordo-project: pane lifecycle")
   let remote: ConstructorParameters<typeof OrdoAgentOpsController>[0] | undefined
   try {
     remote = ctx.get('remote.ordoAgentOps') as ConstructorParameters<typeof OrdoAgentOpsController>[0] | undefined
@@ -90,24 +92,18 @@ function installSidebar(ctx: ClientContext): void {
 
   const openAgentsPane = (): boolean => {
     try {
-      const pane = ctx.get('paneWorkbench' as never) as { openView?(request: unknown): void } | undefined
+      const pane = ctx.get('paneWorkbench' as never) as { openView?(request: unknown): void; views?: { has(kind: string): boolean } } | undefined
+      if (typeof pane?.openView !== 'function') return false
+      if (pane.views?.has('agents.hub')) {
+        pane.openView({ kind: 'agents.hub', resourceKey: 'ordo-project:picker', role: 'content', preferredRegion: 'right', retention: 'keep-alive', singleton: true, title: 'Agent Team' })
+        return true
+      }
       const sessions = ctx.get('sessions' as never) as { list?: { getSnapshot(): { current?: string } } } | undefined
       const rootSessionId = sessions?.list?.getSnapshot().current
-      if (typeof pane?.openView !== 'function' || rootSessionId === undefined) return false
-      pane.openView({
-        kind: 'subagent.monitor',
-        resourceKey: `subagent:${rootSessionId}`,
-        role: 'navigator',
-        preferredRegion: 'right',
-        retention: 'keep-alive',
-        singleton: true,
-        pinned: true,
-        title: 'Agents',
-      })
+      if (!rootSessionId) return false
+      pane.openView({ kind: 'subagent.monitor', resourceKey: `subagent:${rootSessionId}`, role: 'navigator', preferredRegion: 'right', retention: 'keep-alive', singleton: true, pinned: true, title: 'Agents' })
       return true
-    } catch {
-      return false
-    }
+    } catch { return false }
   }
 
   const injected = (): OrdoAgentOpsPanelFace => ({
@@ -182,3 +178,8 @@ export async function applyLegacyClient(ctx: ClientContext): Promise<() => Promi
   warnLegacyPackage(ctx, '@yeisme/dsh-client-ui-ordo-agent-ops')
   return acquireClient(ctx)
 }
+
+export { ProjectPane, ProjectPicker, projectGraph, projectZh, projectEn } from './project-pane.tsx'
+export { ProjectController } from './project-controller.ts'
+
+export { SubagentMonitorView, SubagentMonitorController, subagentZh, subagentEn } from '@yeisme/dsh-client-ui-pane-subagent'

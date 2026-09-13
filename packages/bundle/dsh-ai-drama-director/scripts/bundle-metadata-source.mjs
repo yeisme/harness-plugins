@@ -80,11 +80,13 @@ export function createDirectorBundleMetadata(fixtureManifest) {
       '@deepseek-ai/cordis': '^4.0.1',
       '@deepseek-ai/dsh-client-runtime': '0.1.0-rc.6',
       '@deepseek-ai/dsh-client-ui-primitives': '0.1.0-rc.6',
+      '@deepseek-ai/dsh-typert-protocol': '^0.1.0-rc.6',
     },
     devDependencies: {
       '@deepseek-ai/cordis': '^4.0.1',
       '@deepseek-ai/dsh-client-runtime': '0.1.0-rc.6',
       '@deepseek-ai/dsh-client-ui-primitives': '0.1.0-rc.6',
+      '@deepseek-ai/dsh-typert-protocol': '^0.1.0-rc.6',
       jsdom: '^30.0.1',
       tsdown: '^0.22.14',
       typescript: '^5.9.3',

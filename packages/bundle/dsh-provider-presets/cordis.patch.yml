@@ -1,0 +1,19 @@
+# Yeisme DSH provider presets bundle.
+# Install with:
+#   dsh plugin --profile web add @yeisme/dsh-provider-presets
+# or from this checkout:
+#   dsh plugin --profile web add ./packages/bundle/dsh-provider-presets
+#
+# 渠道市场：Models 设置页 footer 扩展 slot 的预设渠道目录 + 引导式添加
+# （GET /models 拉取 + credentials.set 密钥入库 + llm-pi-ai.providers 保存
+# + 可选 agent-default-model 设默认）。client 插件 capability-probe：
+# 0.1.2-rc.1 之前的运行时没有 settings.models.footer slot 与
+# remote.settings/credentials/llm 子命名空间——零注册、无死按钮，
+# Models 页保持原生形态，boot 无 pending entry。
+#
+# Compatibility anchor: footer slot 与三个 remote 子命名空间自 0.1.2-rc.1
+# 起提供；DSH releases below 0.1.2-rc.1 are INCOMPATIBLE with this bundle's
+# surface (the row stays loadable; the market simply never registers).
+- insert:
+  - id: dsh-provider-presets
+    name: '@yeisme/dsh-provider-presets'

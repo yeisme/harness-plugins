@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "yeisme.dsh-bundle-compatibility.v1",
+  "package": {
+    "name": "@yeisme/dsh-provider-presets",
+    "version": "0.1.0-rc.1"
+  },
+  "dshHostCompatibility": {
+    "range": ">=0.1.2-rc.1 <0.2.0",
+    "strategy": "capability_probe",
+    "requiredClientRuntime": "0.1.0-rc.6"
+  },
+  "contributions": {
+    "hostPluginName": "dsh-provider-presets",
+    "clientModuleLoaderId": "@yeisme/dsh-provider-presets",
+    "clientExport": "./client"
+  },
+  "profile": {
+    "patch": "./cordis.patch.yml",
+    "rowId": "dsh-provider-presets",
+    "conformanceCommand": "pnpm --dir packages/bundle/dsh-provider-presets run test:integration"
+  },
+  "contracts": []
+}

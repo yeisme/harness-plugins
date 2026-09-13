@@ -24,7 +24,9 @@ import {
   PROJECT_CANVAS_SCHEMA,
   type ArtifactRefV1,
   type ProjectCanvasDocument,
+  type SceneDocumentV1,
 } from '@yeisme/dsh-pane-protocol'
+import type { Scene3DDirectorRemote } from '@yeisme/dsh-client-ui-3d-director'
 import type { PipelineCanvasRemote } from './workbench-controller.js'
 import type { PipelineMediaResolveFn } from './media.js'
 import type { PipelineWorkbenchOwnerFaceV1 } from './workbench-controller.js'
@@ -40,6 +42,13 @@ export const PIPELINE_FIXTURE_RUNNING_EDGE_ID = 'edge:shot04-run'
 export const PIPELINE_FIXTURE_BLOCKED_EDGE_ID = 'edge:poster-run'
 export const PIPELINE_FIXTURE_RUNNING_RUN_REF = 'run:shot04'
 export const PIPELINE_FIXTURE_BLOCKED_RUN_REF = 'run:poster'
+
+/** Priority-6 fixture anchors: the shot node the embedded 3D viewport opens from. */
+export const PIPELINE_FIXTURE_SHOT_NODE_ID = 'node:shot04'
+export const PIPELINE_FIXTURE_SHOT_REF = 'shot:episode01-04'
+export const PIPELINE_FIXTURE_SCENE_3D_DOCUMENT_ID = 'scene3d:main'
+/** Scene object the owner binds to the fixture shot (its scene node carries canvasNodeRef back to the shot node). */
+export const PIPELINE_FIXTURE_SCENE_3D_BOUND_OBJECT = 'scene3d:shot04-cam'
 
 const WORKSPACE_REF = 'ws:fixture'
 
@@ -220,9 +229,104 @@ function fixtureCanvasDocument(): ProjectCanvasDocument {
     ],
     edges: [
       { id: 'edge:cast', kind: 'reference', source: 'node:char-lin', target: 'node:scene-rooftop', label: 'cast' },
-      { id: 'edge:shot04-exec', kind: 'execution', source: 'node:shot04', target: 'node:op-image-gen', output: 'selected', input: 'reference-image', purpose: 'reference-image' },
+      // Canvas edge ids match the snapshot edge ids so canvas edge selection
+      // (onEdgeSelect) drives the same inspector the edge list does.
+      { id: PIPELINE_FIXTURE_RUNNING_EDGE_ID, kind: 'execution', source: 'node:shot04', target: 'node:op-image-gen', output: 'selected', input: 'reference-image', purpose: 'reference-image' },
+      { id: PIPELINE_FIXTURE_BLOCKED_EDGE_ID, kind: 'execution', source: 'node:asset-poster', target: 'node:op-image-gen', output: 'selected', input: 'asset', purpose: 'asset' },
       { id: 'edge:op-out', kind: 'reference', source: 'node:op-image-gen', target: 'node:candidate-c2', label: 'output' },
     ],
+  }
+}
+
+const IDENTITY_TRANSFORM = {
+  translate: [0, 0, 0] as [number, number, number],
+  rotate: [0, 0, 0, 1] as [number, number, number, number],
+  scale: [1, 1, 1] as [number, number, number],
+}
+
+/**
+ * Fixture scene graph for the embedded viewport. Scene nodes carry
+ * `canvasNodeRef` back-pointers so the fixture tier exercises the 3D → canvas
+ * selection convergence a real owner would provide.
+ */
+function fixtureScene3DDocument(): SceneDocumentV1 {
+  return {
+    schema: 'dsh.scene-3d.v1alpha1',
+    scope: { workspaceRef: WORKSPACE_REF, projectRef: PIPELINE_FIXTURE_PROJECT_REF },
+    id: PIPELINE_FIXTURE_SCENE_3D_DOCUMENT_ID,
+    version: 1,
+    scenes: [{ id: 'main', label: 'Main scene', rootNodeIds: ['scene3d:rooftop', 'scene3d:lin', PIPELINE_FIXTURE_SCENE_3D_BOUND_OBJECT], default: true }],
+    nodes: [
+      { id: 'scene3d:rooftop', label: 'Rooftop environment', kind: 'environment', transform: IDENTITY_TRANSFORM, visible: true, canvasNodeRef: 'node:scene-rooftop' },
+      { id: 'scene3d:lin', label: 'Lin (lead)', kind: 'character', transform: IDENTITY_TRANSFORM, visible: true, canvasNodeRef: 'node:char-lin' },
+      { id: PIPELINE_FIXTURE_SCENE_3D_BOUND_OBJECT, label: 'Shot 04 camera', kind: 'camera', transform: IDENTITY_TRANSFORM, visible: true, canvasNodeRef: PIPELINE_FIXTURE_SHOT_NODE_ID },
+    ],
+    resources: [],
+    extensions: { used: [], required: [] },
+    capabilityReport: { gltfVersion: '2.0', extensions: [], export: { ready: true, gaps: [] } },
+  }
+}
+
+/** Owner-projected `scene3d` envelope section: shot + canvas binding projections (raw JSON, re-decoded fail-closed by the controller). */
+function fixtureScene3DSection(): unknown {
+  return {
+    documentId: PIPELINE_FIXTURE_SCENE_3D_DOCUMENT_ID,
+    shots: [
+      {
+        shotRef: PIPELINE_FIXTURE_SHOT_REF,
+        sceneRef: 'scene:rooftop',
+        version: 'v6',
+        cameraRef: PIPELINE_FIXTURE_SCENE_3D_BOUND_OBJECT,
+        frameRange: { start: 0, end: 48, fps: 24 },
+        keyframes: [],
+        objectRefs: ['scene3d:lin', 'scene3d:rooftop'],
+        visibility: [],
+        generationRefs: [],
+        deliveryProjection: { status: 'pending' },
+      },
+    ],
+    bindings: [
+      {
+        nodeRef: PIPELINE_FIXTURE_SHOT_NODE_ID,
+        shotRef: PIPELINE_FIXTURE_SHOT_REF,
+        sceneObjectRef: PIPELINE_FIXTURE_SCENE_3D_BOUND_OBJECT,
+        edgeKind: 'reference',
+        layout: { position: { x: 620, y: 140 } },
+      },
+      // Bound non-shot nodes: character/scene selections highlight their scene
+      // object without re-anchoring the shot. node:asset-poster deliberately
+      // stays unbound — the sync must stay silent in both directions for it.
+      {
+        nodeRef: 'node:char-lin',
+        shotRef: PIPELINE_FIXTURE_SHOT_REF,
+        sceneObjectRef: 'scene3d:lin',
+        edgeKind: 'reference',
+        layout: { position: { x: 40, y: 240 } },
+      },
+      {
+        nodeRef: 'node:scene-rooftop',
+        shotRef: PIPELINE_FIXTURE_SHOT_REF,
+        sceneObjectRef: 'scene3d:rooftop',
+        edgeKind: 'reference',
+        layout: { position: { x: 330, y: 140 } },
+      },
+    ],
+  }
+}
+
+/**
+ * Fixture-tier scene3dDirector remote: reads the fixture scene graph, writes
+ * never land (`unavailable` — the fixture is not a writer and never pretends
+ * to be one).
+ */
+export function createPipelineFixtureScene3DRemote(): Scene3DDirectorRemote {
+  return {
+    sceneRead: async () => ({ status: 'ready', document: fixtureScene3DDocument() }),
+    saveScene: async () => ({ status: 'unavailable' }),
+    reconcileScene: async () => ({ status: 'unavailable' }),
+    importGlb: async () => ({ status: 'unavailable', reason: 'The fixture tier does not import GLB sources.' }),
+    exportGlb: async () => ({ status: 'unavailable', reason: 'The fixture tier does not export GLB bytes.' }),
+    listChangeSets: async () => ({ status: 'unavailable' }),
   }
 }
 
@@ -252,6 +356,7 @@ export function createPipelineFixtureOwner(): PipelineFixtureOwnerV1 {
     canvasRemote,
     canvasScope: { workspaceRef: WORKSPACE_REF, projectRef: PIPELINE_FIXTURE_PROJECT_REF },
     canvasDocumentId: 'main',
+    scene3dRemote: createPipelineFixtureScene3DRemote(),
     resolveMedia,
     snapshot: async () => {
       calls.snapshot += 1
@@ -263,6 +368,7 @@ export function createPipelineFixtureOwner(): PipelineFixtureOwnerV1 {
         edges: fixtureEdges(),
         runs: fixtureRuns(),
         runProjections: fixtureRunProjections(),
+        scene3d: fixtureScene3DSection(),
       }
     },
   }

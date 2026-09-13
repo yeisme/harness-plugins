@@ -126,3 +126,42 @@ it('reports changed external inputs while retaining their explicitly pinned outp
  expect(result.nodeIds).toEqual(['b'])
  expect(upstream.selectedArtifact.version).toBe('4')
 })
+
+describe('creative domain node kinds in draft impact analysis', () => {
+ function domainDoc(): ProjectCanvasDocument {
+   const input = doc()
+   input.nodes.push({ ...base, id: 'asset', title: 'Asset', kind: 'asset', domainRef: 'creator://asset/one', version: '1', artifact: structuredClone(artifact) })
+   input.edges.push({ id: 'asset-a', kind: 'execution', source: 'asset', target: 'a', output: 'image', input: 'reference', purpose: 'reference-image' })
+   return input
+ }
+
+ it('binds an asset execution source as an artifact instead of unsupported_source', () => {
+   const result = inspectCanvasRunScope(domainDoc(), { kind: 'node', nodeId: 'a' })
+   expect(result.blockers).toEqual([])
+   expect(result.bindings.find(binding => binding.edgeId === 'asset-a')!.source).toMatchObject({ kind: 'artifact', artifact: { version: '4' } })
+ })
+
+ it('triggers input review on downstream operations when domain version or artifact changes', () => {
+   const before = domainDoc()
+   const versionBump = structuredClone(before)
+   versionBump.nodes.find(node => node.id === 'asset')!.version = '2'
+   expect(inspectCanvasChangeImpact(before, versionBump).affectedOperationIds).toEqual(['a', 'b', 'c'])
+   const artifactBump = structuredClone(before)
+   const asset = artifactBump.nodes.find(node => node.id === 'asset')!
+   if (asset.kind === 'asset') asset.artifact = { ...asset.artifact, version: '5' }
+   expect(inspectCanvasChangeImpact(before, artifactBump).affectedOperationIds).toEqual(['a', 'b', 'c'])
+   // Display text is not an execution dependency and must not trigger review.
+   const summaryOnly = structuredClone(before)
+   summaryOnly.nodes.find(node => node.id === 'asset')!.summary = 'display text only'
+   expect(inspectCanvasChangeImpact(before, summaryOnly).affectedOperationIds).toEqual([])
+ })
+
+ it('treats character/scene/shot domainRef and version as execution-relevant inputs', () => {
+   const before = doc()
+   before.nodes.push({ ...base, id: 'role', title: 'Role', kind: 'character', domainRef: 'drama://character/one', version: '1' })
+   before.edges.push({ id: 'role-a', kind: 'execution', source: 'role', target: 'a', output: 'character', input: 'reference', purpose: 'reference-image' })
+   const after = structuredClone(before)
+   after.nodes.find(node => node.id === 'role')!.version = '2'
+   expect(inspectCanvasChangeImpact(before, after).affectedOperationIds).toEqual(['a', 'b', 'c'])
+ })
+})

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { createElement } from 'react'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SubagentMonitorController, type SubagentSessionListLike } from '../src/controller.js'
 import { SubagentMonitorView } from '../src/view.js'
+import { subagentEn } from '../src/labels.js'
 
 afterEach(cleanup)
 
@@ -22,6 +23,37 @@ function controllerWith(snapshot: SubagentSessionListLike) {
 }
 
 describe('SubagentMonitorView', () => {
+  it('renders an English empty session without an unstable snapshot loop', () => {
+    const controller = controllerWith({ byId: {}, subagentsByParent: {} })
+    expect(controller.getSnapshot()).toBe(controller.getSnapshot())
+    render(createElement(SubagentMonitorView, { controller, t: key => subagentEn[key] }))
+    expect(screen.getByText('No session selected')).toBeTruthy()
+    controller.dispose()
+  })
+
+  it('searches loaded descendants, restores focus, and ignores late detail feedback for a different target', async () => {
+    const snapshot: SubagentSessionListLike = { current: 'other-session', byId: {}, subagentsByParent: {
+      root: { state: 'ready', entries: [{ id: 'parent', kind: 'child', label: 'Research', mode: 'continuable', hasChildren: true }] },
+      parent: { state: 'ready', entries: [{ id: 'child', kind: 'child', label: 'Review', mode: 'continuable', activity: 'running' }] },
+    } }
+    let finish: (result: { ok: boolean; summary: string }) => void = () => {}
+    const history = vi.fn(() => new Promise<{ ok: boolean; summary: string }>(resolve => { finish = resolve }))
+    const controller = new SubagentMonitorController({ getSnapshot: () => snapshot, subscribe: () => () => {}, refresh: vi.fn(), openSubagent: vi.fn(), detail: { history, prompt: vi.fn(), interrupt: vi.fn() } }, 'root')
+    render(createElement(SubagentMonitorView, { controller }))
+    fireEvent.change(screen.getByLabelText('搜索子 Agent'), { target: { value: 'Review' } })
+    const child = screen.getByRole('button', { name: /Review可继续/ })
+    child.focus(); fireEvent.click(child)
+    expect(screen.getByRole('heading', { name: 'Review' })).toBe(document.activeElement)
+    fireEvent.click(screen.getByRole('button', { name: '查看最近记录' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回列表' }))
+    await waitFor(() => expect(document.activeElement).toBe(child))
+    fireEvent.change(screen.getByLabelText('搜索子 Agent'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: /Research可继续/ }))
+    await act(async () => { finish({ ok: true, summary: 'OLD TARGET RESULT' }) })
+    expect(screen.queryByText('OLD TARGET RESULT')).toBeNull()
+    expect(history).toHaveBeenCalledWith(expect.objectContaining({ parentSessionId: 'parent', childSessionId: 'child' }), { maxMessages: 20 })
+    controller.dispose()
+  })
   it('renders running/inactive nodes and summary', () => {
     const controller = controllerWith({
       current: 'root',

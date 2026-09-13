@@ -100,9 +100,11 @@ import {
 import {
   createPipelineWorkbenchView,
   pipelineWorkbenchViewDescriptor,
+  probePipelineScene3DRemote,
   probePipelineWorkbenchOwner,
   PIPELINE_WORKBENCH_UNAVAILABLE_REASON,
 } from './pipeline/workbench-pane.js'
+import { registerPipelineCapsuleSlot } from './capsule-slot.js'
 
 export {
   deriveDecisionTokenView,
@@ -198,6 +200,7 @@ export * as pipeline from './pipeline/index.js'
 export {
   createPipelineWorkbenchView,
   pipelineWorkbenchViewDescriptor,
+  probePipelineScene3DRemote,
   probePipelineWorkbenchOwner,
   PIPELINE_WORKBENCH_PANE_KIND,
 } from './pipeline/workbench-pane.js'
@@ -212,6 +215,27 @@ export type {
   PipelineWorkbenchRunActionRequestV1,
   PipelineWorkbenchViewStateV1,
 } from './pipeline/workbench-controller.js'
+export {
+  registerPipelineCapsuleSlot,
+  buildPipelineCapsuleOpenRequest,
+  decodePipelineCapsuleProjection,
+  minimalPipelineCapsule,
+  pipelineCapsuleSlotDeclared,
+  resolvePipelineCapsuleSource,
+  pipelineCapsuleSlotStyles,
+  PIPELINE_CAPSULE_REASONS,
+  PIPELINE_CAPSULE_SLOT,
+  PIPELINE_CAPSULE_SLOT_ENTRY_ID,
+  PIPELINE_CAPSULE_SLOT_ORDER,
+} from './capsule-slot.js'
+export type {
+  PipelineCapsuleSlotDeps,
+  PipelineCapsuleSlotHandle,
+  PipelineCapsuleSlotPhase,
+  PipelineCapsuleSlotSnapshotV1,
+  PipelineCapsuleSourceKind,
+  PipelineCapsuleSourceV1,
+} from './capsule-slot.js'
 
 export const name = 'client-ui-ai-drama-director'
 export const inject = [] as const
@@ -739,8 +763,14 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
       keymap: createDramaKeymap(),
       evidenceSnapshot: () => emitter.snapshot(),
     }
+    // The header capsule still registers (slot-gated): without the pane face
+    // its surface switch renders disabled with the probe reason.
+    const capsuleSlot = registerPipelineCapsuleSlot(ctx, {})
     const unprovide = provide(ctx, 'dramaDirector', probeOnlyFace)
-    return unprovide
+    return () => {
+      capsuleSlot.dispose()
+      unprovide()
+    }
   }
 
   const contextStore = createDramaContextStore({
@@ -769,14 +799,26 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   // probe-first and renders a disabled, reasoned surface until a pipeline
   // owner projection source (or an explicit fixture owner) is available.
   const pipelineOwner = probePipelineWorkbenchOwner(ctx)
+  // Priority-6 seam: the embedded Shot-anchored 3D viewport probes the
+  // scene3dDirector remote separately; absent → the Inspector entry renders
+  // disabled with the probe reason (no dead button).
+  const scene3dRemote = probePipelineScene3DRemote(ctx)
   const unregisterPipelineWorkbench = pane.registerView({
     descriptor: pipelineWorkbenchViewDescriptor(),
     component: createPipelineWorkbenchView(
       pipelineOwner === undefined
         ? { disabledReason: PIPELINE_WORKBENCH_UNAVAILABLE_REASON }
-        : { owner: pipelineOwner },
+        : {
+          owner: pipelineOwner,
+          ...(scene3dRemote === undefined ? {} : { scene3dRemote }),
+        },
     ),
   })
+
+  // Header capsule (real-render wave): declaration-gated slot contribution on
+  // the official session header actions slot; probe-first data source
+  // (remote.creativePipeline → creativePipelineFixture → static capsule).
+  const capsuleSlot = registerPipelineCapsuleSlot(ctx, { pane })
 
   // Initial context resolution is best-effort; failures degrade to a
   // disabled, reasoned state instead of throwing out of apply().
@@ -792,6 +834,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   return () => {
     if (disposed) return
     disposed = true
+    capsuleSlot.dispose()
     unregisterPipelineWorkbench()
     unprovide()
     runtime.dispose()

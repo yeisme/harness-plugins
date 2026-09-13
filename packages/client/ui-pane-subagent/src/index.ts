@@ -1,7 +1,9 @@
+import { subagentZh, subagentEn, type SubagentTranslate } from './labels.js'
+import { SessionProjectLinks } from './project-links.js'
 /** Subagent Monitor client plugin: Pane view + header entry over official DSH seams. */
 import type { Context } from '@deepseek-ai/cordis'
 import type { SubagentAddress } from '@deepseek-ai/dsh-client-connection/client'
-import { createElement, type ReactNode } from 'react'
+import { createElement, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { Button, IconAgentPresetOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { subscriptionHandle } from '@yeisme/dsh-plugin-contracts'
 import { SubagentMonitorController } from './controller.js'
@@ -10,6 +12,7 @@ import { createSubagentMonitorView } from './view.js'
 interface PaneWorkbenchFace {
   registerView(input: unknown): () => void
   openView(input: unknown): void
+  views?: { has(kind: string): boolean }
 }
 
 interface SlotsFace {
@@ -25,7 +28,7 @@ const AGENTS_LAUNCHER_STYLES = `
 
 function AgentsLauncher({ wide = true, onOpen, disabledReason }: { wide?: boolean; onOpen: () => void; disabledReason?: string }): ReactNode {
   const disabled = disabledReason !== undefined
-  const accessibleLabel = disabled ? `Agents unavailable: ${disabledReason}` : 'Agents'
+  const accessibleLabel = disabled ? `Subagents unavailable: ${disabledReason}` : 'Subagents'
   return createElement('span', {
     'data-subagent-monitor-sidebar': true,
     'data-wide': String(wide),
@@ -38,7 +41,7 @@ function AgentsLauncher({ wide = true, onOpen, disabledReason }: { wide?: boolea
       className: 'psa-launcher',
       onClick: disabled ? undefined : onOpen,
       disabled,
-      title: disabled ? accessibleLabel : 'Open Agents',
+      title: disabled ? accessibleLabel : 'Open session subagents',
       'aria-label': accessibleLabel,
       'aria-disabled': disabled,
     }, createElement('span', { 'aria-hidden': true }, createElement(IconAgentPresetOutline16, { size: 18 }))),
@@ -66,6 +69,12 @@ function resolvePaneWorkbench(ctx: Context): PaneWorkbenchFace | undefined {
 }
 
 export function apply(ctx: Context): () => void {
+  let locale: { register?(ns: string, dictionaries: unknown): () => void; bind?(ns: string): (key: string) => string; subscribe?(fn: () => void): () => void; getSnapshot?(): unknown } | undefined
+  try { locale = ctx.get('locale' as never) as typeof locale } catch { /* optional locale */ }
+  const offLocale = locale?.register?.('sessionSubagents', { zh: subagentZh, en: subagentEn })
+  const translate = locale?.bind?.('sessionSubagents')
+  const t: SubagentTranslate = key => translate?.(key) ?? subagentZh[key]
+
   const sessions = ctx.get('sessions') as {
     readonly list: {
       getSnapshot(): {
@@ -99,7 +108,7 @@ export function apply(ctx: Context): () => void {
     pane?.openView({
       kind: 'subagent.monitor', resourceKey: `subagent:${rootSessionId}`,
       role: 'navigator', preferredRegion: 'right', retention: 'keep-alive',
-      singleton: true, pinned: true, title: 'Agents',
+      singleton: true, pinned: true, title: t('title'),
     })
   }
 
@@ -109,8 +118,7 @@ export function apply(ctx: Context): () => void {
     pane = undefined
   }
 
-  const mountPane = (nextPane: PaneWorkbenchFace): void => {
-    const controller = new SubagentMonitorController({
+  const createController = (rootSessionId?: string): SubagentMonitorController => new SubagentMonitorController({
       getSnapshot: () => sessions.list.getSnapshot() as never,
       // 订阅经具名句柄转发；controller dispose 时统一 unsubscribe。
       subscribe: listener => {
@@ -119,7 +127,11 @@ export function apply(ctx: Context): () => void {
       },
       refresh: parentSessionId => void sessions.refreshSubagents(parentSessionId),
       openSubagent: address => sessions.openSubagent(address as never),
-      detail: {
+      canOpenAlongside: () => pane?.views?.has('dsh-side-chat.session') === true,
+      openAlongside: address => {
+        if (pane?.views?.has('dsh-side-chat.session')) pane.openView({ kind: 'dsh-side-chat.session', resourceKey: `side-chat:${address.childSessionId}`, role: 'content', preferredRegion: 'right', retention: 'keep-alive', singleton: false, title: 'Agent' })
+      },
+      ...(typeof connection?.api?.subagents?.history === 'function' && typeof connection.api.subagents.prompt === 'function' && typeof connection.api.subagents.interrupt === 'function' ? { detail: {
         history: async (address, opts) => {
           const response = await connection.api.subagents.history({ ...address, maxMessages: opts?.maxMessages })
           return response.result.ok
@@ -134,22 +146,41 @@ export function apply(ctx: Context): () => void {
           const response = await connection.api.subagents.interrupt({ ...address })
           return response.result.ok ? { ok: true } : { ok: false, error: response.result.error?.message ?? 'interrupt failed' }
         },
-      },
-    })
-    const nextDisposers: Array<() => void> = [() => controller.dispose()]
+      } } : {}),
+    }, rootSessionId)
+
+  function BoundMonitor(props: { rootSessionId?: string | undefined; view?: { resourceKey?: string } }) {
+    useSyncExternalStore(listener => locale?.subscribe?.(listener) ?? (() => {}), () => locale?.getSnapshot?.() ?? null)
+    const [fallbackRoot] = useState(() => sessions.list.getSnapshot().current ?? '')
+    const rootSessionId = props.rootSessionId ?? /^subagent:(.+)$/.exec(props.view?.resourceKey ?? '')?.[1] ?? fallbackRoot
+    const controller = useMemo(() => createController(rootSessionId), [rootSessionId])
+    useEffect(() => () => controller.dispose(), [controller])
+    const View = useMemo(() => createSubagentMonitorView(controller), [controller])
+    let remote: unknown
+    try { remote = ctx.get('remote.ordoAgentOps' as never) } catch { remote = undefined }
+    return createElement(View, { retry: () => controller.refresh(), t, footer: createElement(SessionProjectLinks, { sessionRef: rootSessionId, remote: remote as never, available: pane?.views?.has('agents.hub') === true, open: (projectRef: string, taskRef?: string) => {
+      if (!pane?.views?.has('agents.hub')) return
+      pane.openView({ kind: 'agents.hub', resourceKey: `ordo-project:${projectRef}`, role: 'content', preferredRegion: 'right', retention: 'keep-alive', singleton: false, title: 'Ordo', ...(taskRef ? { metadata: { selectedTaskRef: taskRef } } : {}) })
+    } }) })
+  }
+
+  const disposeTab = slots.inject('conversation.view', () => slots.register({ name: 'conversation.view', id: 'session-agents', order: 35, label: () => t('title'), inject: (sessionId: string) => ({ rootSessionId: sessionId }) }, BoundMonitor as never))
+
+  const mountPane = (nextPane: PaneWorkbenchFace): void => {
+    const nextDisposers: Array<() => void> = []
     try {
       nextDisposers.push(nextPane.registerView({
         descriptor: {
           kind: 'subagent.monitor',
-          label: 'Agents',
+          label: t('title'),
           componentKey: 'subagent-monitor',
           role: 'navigator',
           preferredRegion: 'right',
           retention: 'keep-alive',
           singleton: true,
         },
-        i18n: { namespace: 'paneWorkbench', labelKey: 'rail.agents' },
-        component: createSubagentMonitorView(controller),
+        i18n: { namespace: 'sessionSubagents', labelKey: 'title' },
+        component: BoundMonitor,
       }))
     } catch (error) {
       for (const dispose of nextDisposers.reverse()) dispose()
@@ -194,14 +225,25 @@ export function apply(ctx: Context): () => void {
       serviceEvents.unsubscribe()
       sessionEvents.unsubscribe()
       disposeLauncher()
+      disposeTab()
       disposePane()
+      offLocale?.()
     }
   } catch (error) {
     disposeLauncher()
+    disposeTab()
     disposePane()
+    offLocale?.()
     throw error
   }
 }
 
 const SubagentMonitorPlugin = { inject, apply }
 export default SubagentMonitorPlugin
+
+export { projectSubagentPane } from './projection.js'
+export type { SubagentProjectionSource } from './projection.js'
+
+export { SubagentMonitorView } from './view.js'
+export { SubagentMonitorController } from './controller.js'
+export { subagentZh, subagentEn } from './labels.js'

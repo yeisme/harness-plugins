@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "yeisme.dsh-bundle-compatibility.v1",
+  "package": {
+    "name": "@yeisme/dsh-3d-director",
+    "version": "0.1.0-rc.1"
+  },
+  "dshHostCompatibility": {
+    "range": ">=0.1.0-rc.6 <0.2.0",
+    "strategy": "capability_probe",
+    "requiredClientRuntime": "0.1.0-rc.6"
+  },
+  "contributions": {
+    "hostPluginName": "dsh-3d-director",
+    "clientModuleLoaderId": "@yeisme/dsh-3d-director",
+    "clientExport": "./client"
+  },
+  "profile": {
+    "patch": "./cordis.patch.yml",
+    "rowId": "dsh-3d-director",
+    "conformanceCommand": "pnpm --dir packages/bundle/dsh-3d-director run test"
+  },
+  "contracts": [
+    {
+      "id": "dsh.scene-3d.v1alpha1",
+      "status": "preferred"
+    },
+    {
+      "id": "dsh.scene-3d-context.v1alpha1",
+      "status": "preferred"
+    }
+  ],
+  "contractDigest": "d1662dd5876216a3c0921d4f29d740311a40610074aa8a73198764e7549e3e95",
+  "pluginReleaseDigest": "55ab0543d768087c876a51fee0114263e87f9b360a2abfe3ba989667dbf7013d"
+}

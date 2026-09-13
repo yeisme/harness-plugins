@@ -80,8 +80,17 @@ export const pipelineWorkbenchStyles = buildPanelStyles({
 [data-pipeline-workbench] .plw-production small{color:var(--vk-text-tertiary);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 [data-pipeline-workbench] .plw-canvas-region{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;position:relative}
 [data-pipeline-workbench] .plw-canvas-notice{margin:var(--vk-gap-sm) var(--vk-gap-md) 0;padding:6px 8px;border:1px solid color-mix(in srgb,var(--vk-tone-warn) 35%,var(--vk-border-subtle));border-radius:var(--vk-radius-md);color:var(--vk-tone-warn);font-size:var(--vk-font-small)}
+[data-pipeline-workbench] .plw-canvas-notice[data-tone='critical']{border-color:color-mix(in srgb,var(--vk-tone-critical) 35%,var(--vk-border-subtle));color:var(--vk-tone-critical)}
 [data-pipeline-workbench] .plw-canvas-host{flex:1;min-height:0;min-width:0;display:flex;flex-direction:column}
 [data-pipeline-workbench] .plw-canvas-host>[data-project-canvas]{flex:1;min-height:0}
+[data-pipeline-workbench] .plw-scene3d-region{flex:none;height:40%;min-height:180px;max-height:60%;display:flex;flex-direction:column;min-width:0;border-top:1px solid var(--vk-border-l1);overflow:hidden}
+[data-pipeline-workbench] .plw-scene3d-head{display:flex;align-items:center;gap:var(--vk-gap-sm);min-height:32px;padding:0 var(--vk-gap-md);border-bottom:1px solid var(--vk-border-l1)}
+[data-pipeline-workbench] .plw-scene3d-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--vk-font-small);font-weight:650;color:var(--vk-text-secondary)}
+[data-pipeline-workbench] .plw-scene3d-status{display:inline-flex;align-items:center;gap:var(--vk-gap-xs);font-size:10px;color:var(--vk-text-tertiary);white-space:nowrap}
+[data-pipeline-workbench] .plw-scene3d-close{margin-left:auto;flex:none}
+[data-pipeline-workbench] .plw-scene3d-body{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column}
+[data-pipeline-workbench] .plw-scene3d-body>[data-3d-director]{flex:1;min-height:0;display:flex;flex-direction:column}
+[data-pipeline-workbench] .plw-scene3d-body .d3d-viewport{flex:1;min-height:0}
 [data-pipeline-workbench] .plw-object-list{display:none}
 [data-pipeline-workbench] .plw-inspector{width:264px;max-width:40%;flex:none;display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--vk-border-l1);overflow:auto}
 [data-pipeline-workbench] .plw-tabs{display:flex;gap:2px;padding:var(--vk-gap-sm);border-bottom:1px solid var(--vk-border-l1)}
@@ -95,7 +104,7 @@ export const pipelineWorkbenchStyles = buildPanelStyles({
 [data-pipeline-workbench] .plw-strip-title{margin:0;font-size:var(--vk-font-small);font-weight:650;color:var(--vk-text-secondary)}
 [data-pipeline-workbench] .plw-strip-empty{margin:0}
 [data-pipeline-workbench] .plw-strip-list{display:grid;gap:2px;margin:0;padding:0;list-style:none}
-[data-pipeline-workbench] .plw-edge-list{display:grid;gap:2px;margin:0;padding:0;list-style:none}
+[data-pipeline-workbench] .plw-edge-list{display:none;gap:2px;margin:0;padding:0;list-style:none}
 [data-pipeline-workbench] .plw-strip-entry{display:flex;align-items:baseline;gap:var(--vk-gap-sm);min-width:0;padding:3px 0;font-size:var(--vk-font-small);color:var(--vk-text-secondary)}
 [data-pipeline-workbench] .plw-strip-entry .vk-dot{align-self:center}
 [data-pipeline-workbench] .plw-strip-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -120,7 +129,9 @@ export const pipelineWorkbenchStyles = buildPanelStyles({
 @container(max-width:420px){
   [data-pipeline-workbench] .plw-rail{display:none}
   [data-pipeline-workbench] .plw-canvas-host{display:none}
+  [data-pipeline-workbench] .plw-scene3d-region{height:44%;min-height:160px}
   [data-pipeline-workbench] .plw-object-list{display:flex;flex:1;min-height:0;flex-direction:column}
+  [data-pipeline-workbench] .plw-edge-list{display:grid}
   [data-pipeline-workbench] .plw-project-trigger{max-width:120px}
 }
 `,
@@ -217,8 +228,11 @@ export function PipelineWorkbenchShell(props: PipelineWorkbenchShellProps): Reac
     onCanvasDrop,
     onCanvasDragOver,
     canvasNotice,
+    availabilityBanner,
+    errorStrip,
     objects,
     onSelectObject,
+    viewport3d,
     inspectorTabs,
     runStrip,
     ariaLabel,
@@ -297,6 +311,16 @@ export function PipelineWorkbenchShell(props: PipelineWorkbenchShellProps): Reac
               {canvasNotice}
             </p>
           )}
+          {availabilityBanner === undefined ? null : (
+            <p className="plw-canvas-notice" role="status">
+              {availabilityBanner}
+            </p>
+          )}
+          {errorStrip === undefined ? null : (
+            <p className="plw-canvas-notice" data-tone="critical" role="alert">
+              {errorStrip}
+            </p>
+          )}
           <div className="plw-canvas-host">
             {canvas === undefined ? (
               <SurfaceState
@@ -308,6 +332,11 @@ export function PipelineWorkbenchShell(props: PipelineWorkbenchShellProps): Reac
               <ProjectCanvasView {...canvas} />
             )}
           </div>
+          {viewport3d === undefined ? null : (
+            <div className="plw-scene3d-region" data-pipeline-scene3d-region="">
+              {viewport3d}
+            </div>
+          )}
           <ObjectList objects={objects ?? []} onSelect={selectObject} />
           <button
             type="button"

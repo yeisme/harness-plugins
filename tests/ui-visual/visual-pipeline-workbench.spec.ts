@@ -9,8 +9,20 @@
  */
 import { test, expect } from '@playwright/test'
 
-const RUNNING_EDGE = /Candidate C2 · execution/
-const BLOCKED_EDGE = /Candidate P1 · execution/
+// Canvas edge ids mirror PIPELINE_FIXTURE_RUNNING_EDGE_ID /
+// PIPELINE_FIXTURE_BLOCKED_EDGE_ID in fixture-owner.ts. Since Wave B the
+// inspector edge list only renders at compact width, so edge selection goes
+// through the real canvas interaction path: a click on the React Flow edge
+// label (`.react-flow__edge-textwrapper`, pointer-events:all) bubbles to the
+// edge wrapper and fires onEdgeClick → onEdgeSelect.
+const RUNNING_EDGE_ID = 'edge:shot04-run'
+const BLOCKED_EDGE_ID = 'edge:poster-run'
+
+async function clickCanvasEdge(page: import('@playwright/test').Page, edgeId: string) {
+  const edge = page.locator(`.react-flow__edge[data-id="${edgeId}"]`)
+  await expect(edge).toBeVisible()
+  await edge.locator('.react-flow__edge-textwrapper').click()
+}
 
 async function openWorkbench(page: import('@playwright/test').Page, scenario: string, width = 1152) {
   const errors: string[] = []
@@ -59,7 +71,7 @@ test('loading state shows a bounded loading surface', async ({ page }, testInfo)
 test('running execution edge shows the run inspector with server-authored actions', async ({ page }, testInfo) => {
   const errors = await openWorkbench(page, 'running')
   await waitReady(page)
-  await page.getByRole('button', { name: RUNNING_EDGE }).click()
+  await clickCanvasEdge(page, RUNNING_EDGE_ID)
   const inspector = page.getByLabel('Pipeline inspector')
   await expect(inspector.getByText('running').first()).toBeVisible()
   await expect(inspector.getByRole('button', { name: 'Pause' })).toBeVisible()
@@ -70,7 +82,7 @@ test('running execution edge shows the run inspector with server-authored action
 test('blocked run keeps mutations disabled with a bounded blocker reason', async ({ page }, testInfo) => {
   const errors = await openWorkbench(page, 'blocked')
   await waitReady(page)
-  await page.getByRole('button', { name: BLOCKED_EDGE }).click()
+  await clickCanvasEdge(page, BLOCKED_EDGE_ID)
   const inspector = page.getByLabel('Pipeline inspector')
   await expect(inspector.getByText('blocked').first()).toBeVisible()
   await expect(inspector.getByText('Run blocked')).toBeVisible()
@@ -82,7 +94,7 @@ test('blocked run keeps mutations disabled with a bounded blocker reason', async
 test('stale run projection disables mutations and requires owner reconcile', async ({ page }, testInfo) => {
   const errors = await openWorkbench(page, 'stale')
   await waitReady(page)
-  await page.getByRole('button', { name: RUNNING_EDGE }).click()
+  await clickCanvasEdge(page, RUNNING_EDGE_ID)
   const inspector = page.getByLabel('Pipeline inspector')
   await expect(inspector.getByText('stale').first()).toBeVisible()
   await expect(inspector.getByRole('button', { name: /^Pause: / })).toHaveAttribute('aria-disabled', 'true')
@@ -93,7 +105,7 @@ test('stale run projection disables mutations and requires owner reconcile', asy
 test('unknown run projection disables mutations with a bounded reason', async ({ page }, testInfo) => {
   const errors = await openWorkbench(page, 'unknown')
   await waitReady(page)
-  await page.getByRole('button', { name: RUNNING_EDGE }).click()
+  await clickCanvasEdge(page, RUNNING_EDGE_ID)
   const inspector = page.getByLabel('Pipeline inspector')
   await expect(inspector.getByText('unknown').first()).toBeVisible()
   await expect(inspector.getByText('Run unknown')).toBeVisible()
@@ -104,7 +116,7 @@ test('unknown run projection disables mutations with a bounded reason', async ({
 test('missing run projection derives the needs_contract inspector state', async ({ page }, testInfo) => {
   const errors = await openWorkbench(page, 'needs_contract')
   await waitReady(page)
-  await page.getByRole('button', { name: RUNNING_EDGE }).click()
+  await clickCanvasEdge(page, RUNNING_EDGE_ID)
   const inspector = page.getByLabel('Pipeline inspector')
   await expect(inspector.getByText('needs_contract').first()).toBeVisible()
   await expect(inspector.getByText('Run needs_contract')).toBeVisible()

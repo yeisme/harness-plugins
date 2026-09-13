@@ -1,3 +1,4 @@
+import { inlineCssPlugin } from '../../../scripts/inline-css-plugin.mjs'
 import { defineConfig } from 'tsdown'
 
 const clientExternals = [
@@ -16,6 +17,8 @@ const clientExternals = [
  * applyLegacyClient，不保留第二份 slot 或 panel 实现。
  */
 export default defineConfig({
+  plugins: [inlineCssPlugin()],
+  define: { 'process.env.NODE_ENV': JSON.stringify('production'), 'import.meta.env.MODE': JSON.stringify('production') },
   entry: { client: 'lib/types/client/index.js' },
   outDir: 'lib',
   format: 'cjs',
@@ -28,10 +31,7 @@ export default defineConfig({
     neverBundle: [...clientExternals],
     // 旧 browser leaf 不能要求 DSH 再解析一个 node package；把统一运行时
     // 直接编入 legacy factory，仍由它自己的 client entry 承担发现职责。
-    alwaysBundle: [
-      '@yeisme/dsh-ordo-agent-ops',
-      '@yeisme/dsh-ordo-agent-ops/**',
-    ],
+    alwaysBundle: [/^(?!@deepseek-ai\/|react(?:\/|$)|react-dom(?:\/|$))/u],
   },
   outputOptions: {
     entryFileNames: 'client.js',

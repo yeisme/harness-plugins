@@ -1,0 +1,42 @@
+{
+  "name": "@yeisme/dsh-3d-director-host",
+  "version": "0.1.0-rc.1",
+  "description": "DSH 3D Director host: scene graph gateway, glTF/GLB import/export with capability gating, revisioned scene store",
+  "license": "MIT",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.json && tsdown"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "4.0.1",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.1",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  },
+  "dependencies": {
+    "@gltf-transform/core": "^4.2.1",
+    "@yeisme/dsh-pane-protocol": "workspace:*",
+    "@yeisme/dsh-plugin-contracts": "workspace:*"
+  }
+}

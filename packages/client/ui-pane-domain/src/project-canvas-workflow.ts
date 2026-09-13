@@ -63,7 +63,7 @@ export function inspectCanvasRunScope(document: ProjectCanvasDocument, scope: Ca
       indegree.set(edge.target, indegree.get(edge.target)! + 1)
       outgoing.set(edge.source, [...(outgoing.get(edge.source) ?? []), edge.target])
       bindings.push({ ...binding, source: { kind: 'step', nodeId: edge.source } })
-    } else if (source?.kind === 'material' || source?.kind === 'result') {
+    } else if (source?.kind === 'material' || source?.kind === 'result' || source?.kind === 'asset') {
       bindings.push({ ...binding, source: { kind: 'artifact', artifact: structuredClone(source.artifact) } })
     } else if (source?.kind === 'draft') {
       // Do not place user text in control-plane previews or receipts.
@@ -118,6 +118,8 @@ export function inspectCanvasChangeImpact(before: ProjectCanvasDocument, after: 
   if (node.kind === 'draft') return ['draft', node.text]
   if (node.kind === 'operation') return ['operation', node.owner, node.actionRef, Object.entries(node.controls).sort(([a],[b]) => a.localeCompare(b)), artifact(node.selectedArtifact)]
   if (node.kind === 'material' || node.kind === 'result') return [node.kind, artifact(node.artifact)]
+  if (node.kind === 'asset' || node.kind === 'candidate') return [node.kind, node.domainRef, node.version, artifact(node.artifact)]
+  if (node.kind === 'character' || node.kind === 'scene' || node.kind === 'shot') return [node.kind, node.domainRef, node.version]
   return ['group']
  }
  const previous = new Map(before.nodes.map(node => [node.id,node]))

@@ -210,6 +210,7 @@ export function OrdoAgentOpsSidebar({ wide, useState: useAgentOpsState, refresh,
           data-active={open || undefined}
           data-ordo-agent-ops-trigger
           aria-label={t('panel.aria')}
+          title={t('panel.aria')}
           aria-expanded={open}
           aria-haspopup="true"
           onClick={() => {

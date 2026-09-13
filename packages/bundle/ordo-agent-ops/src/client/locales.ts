@@ -3,9 +3,9 @@
 export const NS = 'ordoAgentOps'
 
 export const zh = {
-  'panel.title': 'Agent Ops',
-  'panel.trigger': 'Agent Ops',
-  'panel.aria': 'Agent Ops 值班摘要',
+  'panel.title': 'Agent Team',
+  'panel.trigger': 'Agent Team',
+  'panel.aria': 'Agent Team · 用户工作区',
   'panel.loading': '读取 Ordo 投影…',
   'panel.cold': '尚未读取',
   'panel.error': '读取失败：{code}',
@@ -18,8 +18,8 @@ export const zh = {
   'panel.permissionDenied': '无权读取',
   'panel.contractMismatch': '合同不匹配',
   'panel.refresh': '刷新投影',
-  'panel.openStudio': '在 Workbench 打开',
-  'panel.openStudioUnavailable': 'Workbench deep link 尚未接入',
+  'panel.openStudio': '打开 Agent Team',
+  'panel.openStudioUnavailable': '当前宿主未提供 Agent Team Pane',
   'panel.noRun': '当前没有安全 run 摘要',
   'panel.capacity': '容量：{observed}/{policy}',
   'panel.capacityUnreserved': '尚无持久 reservation',
@@ -43,9 +43,9 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 export const en = {
-  'panel.title': 'Agent Ops',
-  'panel.trigger': 'Agent Ops',
-  'panel.aria': 'Agent Ops duty summary',
+  'panel.title': 'Agent Team',
+  'panel.trigger': 'Agent Team',
+  'panel.aria': 'Agent Team · User workspace',
   'panel.loading': 'Reading the Ordo projection…',
   'panel.cold': 'Not read yet',
   'panel.error': 'Read failed: {code}',
@@ -58,8 +58,8 @@ export const en = {
   'panel.permissionDenied': 'Read permission denied',
   'panel.contractMismatch': 'Contract mismatch',
   'panel.refresh': 'Refresh projection',
-  'panel.openStudio': 'Open in Workbench',
-  'panel.openStudioUnavailable': 'Workbench deep link is not connected',
+  'panel.openStudio': 'Open Agent Team',
+  'panel.openStudioUnavailable': 'Agent Team Pane is unavailable in this host',
   'panel.noRun': 'No safe run summary is available',
   'panel.capacity': 'Capacity: {observed}/{policy}',
   'panel.capacityUnreserved': 'No durable reservation',

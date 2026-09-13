@@ -1,3 +1,5 @@
+import { OrdoProjectOwner } from './project-owner.ts'
+import type { ProjectRequest } from '../project-contract.ts'
 /** Ordo 安全只读投影的 Host Remote。 */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -93,12 +95,46 @@ function matchesExpectedContext(expected: OrdoAgentOpsExpectedContext, actual: O
  * Remote-only Host 服务。它不创建 scheduler、缓存、文件系统或任何 Ordo 写入模型。
  */
 export class OrdoAgentOpsGateway extends TypertRemoteService {
+  private readonly projectOwner = new OrdoProjectOwner()
   private readonly expectedContext: OrdoAgentOpsExpectedContext | undefined
 
   constructor(ctx: Context) {
     super(ctx, 'ordoAgentOps')
+    ctx.effect(() => () => this.projectOwner.dispose())
     this.expectedContext = validateOrdoAgentOpsExpectedContext(ctx.get(ORDO_AGENT_OPS_EXPECTED_CONTEXT))
   }
+
+  private async withProjectContext<T>(operation: () => Promise<T>): Promise<T> {
+    const assertContext = () => {
+      const current = validateOrdoAgentOpsExpectedContext(this.ctx.get(ORDO_AGENT_OPS_EXPECTED_CONTEXT))
+      if (!this.expectedContext || !current || !matchesExpectedContext(this.expectedContext, current)) throw new Error('project_context_unavailable')
+    }
+    assertContext()
+    const result = await operation()
+    assertContext()
+    return result
+  }
+
+  @Remote('projects')
+  projects() { return this.withProjectContext(() => this.projectOwner.projects()) }
+
+  @Remote('projectSessionLinks')
+  projectSessionLinks(sessionRef: string) { return this.withProjectContext(() => this.projectOwner.sessionLinks(sessionRef)) }
+
+  @Remote('projectSnapshot')
+  projectSnapshot(projectRef: string) { return this.withProjectContext(() => this.projectOwner.snapshot(projectRef)) }
+
+  @Remote('projectEvents')
+  projectEvents(projectRef: string, cursor: string) { return this.withProjectContext(() => this.projectOwner.events(projectRef, cursor)) }
+
+  @Remote('projectInvoke')
+  projectInvoke(request: ProjectRequest) { return this.withProjectContext(() => this.projectOwner.invoke(request)) }
+
+  @Remote('projectDraft')
+  projectDraft(projectRef: string, targetRef: string) { return this.withProjectContext(() => this.projectOwner.draft(projectRef, targetRef)) }
+
+  @Remote('projectSettlement')
+  projectSettlement(projectRef: string, requestId: string) { return this.withProjectContext(() => this.projectOwner.settlement(projectRef, requestId)) }
 
   /**
    * 读取 owner 的当前投影；授权上下文或合同不成立时返回无事实的退化状态。

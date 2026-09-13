@@ -17,6 +17,7 @@
 | 镜头级制作、编排与交付 | split-owner；Scaena | [制作台](../../openspec/changes/dsh-scaena-production-studio-v1/design.md) | [Scaena](../../openspec/changes/dsh-scaena-production-studio-v1/tasks.md) |
 | 小说、剧本和文本版本 | split-owner；Auctra | [文本台](../../openspec/changes/dsh-auctra-writing-studio-v1/design.md) | [Auctra](../../openspec/changes/dsh-auctra-writing-studio-v1/tasks.md) |
 | 配音、音乐、音效、字幕与交接 | split-owner；Sonora | [声音台](../../openspec/changes/dsh-sonora-audio-studio-v1/design.md) | [Sonora](../../openspec/changes/dsh-sonora-audio-studio-v1/tasks.md) |
+| 3D 场景编排、Shot 预演与 glTF/GLB 交换 | fit/split-owner；插件 host 经 storageDomain 保存工作台 scene graph，领域资产、生成与交付仍归 owner | 3D 导演台（独立 surface，可嵌入做剧工作台停靠视口） | [3D 导演台](../../openspec/changes/dsh-3d-director-gltf-workbench-v1/tasks.md) |
 | 完整创作路径及跨项目故障恢复 | split-owner；各 owner 维护自身状态 | 共用画布和 Pane | [综合验收](../../openspec/changes/dsh-creative-cross-owner-journeys-v1/tasks.md) |
 
 五个专业 Pane 都是 required，分别交付；任何一个 Pane 都不以其他专业 Pane、画布或 Ordo 完成为其直接操作前置。单领域内部 workflow 使用该 owner 的原引擎；跨领域调度使用 Ordo，不在浏览器或插件 host 新建执行循环。

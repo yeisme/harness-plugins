@@ -1,3 +1,5 @@
+import { agentSurfacesPage } from './agent-surfaces-page.mjs'
+import { ordoProjectPage } from './ordo-project-page.mjs'
 import { domainStudioPage } from './domain-studio-page.mjs'
 import { marketPage } from './market-page.mjs'
 import { toolsDiscoveryPage } from './tools-discovery-page.mjs'
@@ -10,6 +12,7 @@ import { dirname, join } from 'node:path'
 import { projectCanvasPage } from './project-canvas-page.mjs'
 import { ownerSavePage } from './owner-save-page.mjs'
 import { pipelineWorkbenchPage } from './pipeline-workbench-page.mjs'
+import { director3DPage } from './3d-director-page.mjs'
 import {
   Surface,
   SurfaceActionBar,
@@ -57,6 +60,11 @@ const statusFlowVendor = {
   '/vendor/rich-media-client.js': () => readFileSync(new URL('../../packages/client/ui-creator-studio/node_modules/@yeisme/dsh-rich-media/lib/client.js', import.meta.url), 'utf8'),
   '/vendor/xyflow-umd.js': () => readFileSync(new URL('../../packages/client/ui-ai-drama-director/node_modules/@xyflow/react/dist/umd/index.js', import.meta.url), 'utf8'),
   '/vendor/xyflow-base.css': () => readFileSync(new URL('../../packages/client/ui-ai-drama-director/node_modules/@xyflow/react/dist/base.css', import.meta.url), 'utf8'),
+  // 3D Director fixture (dsh-3d-director-gltf-workbench-v1, task 4.3): real
+  // built client ESM bundle plus its declared browser externals (pane-protocol
+  // contract bundle; zod/three are served by the deep vendor prefix below).
+  '/3d-director-client.js': () => readFileSync(new URL('../../packages/client/ui-3d-director/lib/index.js', import.meta.url), 'utf8'),
+  '/vendor/dsh-pane-protocol.mjs': () => readFileSync(new URL('../../packages/host/pane-protocol/lib/index.mjs', import.meta.url), 'utf8'),
   '/vendor/react.global.js': () => wrapCjsGlobal(join(reactDir, 'cjs/react.production.min.js'), 'React'),
   '/vendor/scheduler.global.js': () => wrapCjsGlobal(join(schedulerDir, 'cjs/scheduler.production.min.js'), 'Scheduler'),
   '/vendor/react-dom.global.js': () => `${wrapCjsGlobal(join(reactDomDir, 'cjs/react-dom.production.min.js'), 'ReactDOM', { react: 'React', scheduler: 'Scheduler' })}window.ReactDOMClient = { createRoot: window.ReactDOM.createRoot, hydrateRoot: window.ReactDOM.hydrateRoot };\n`,
@@ -75,9 +83,18 @@ const statusFlowVendor = {
   '/vendor/ui-session-status.mjs': () => readFileSync(new URL('../../packages/client/ui-session-status/lib/index.js', import.meta.url), 'utf8'),
   '/vendor/ui-command-experience-web/index.mjs': () => readFileSync(new URL('../../packages/client/ui-command-experience-web/lib/index.mjs', import.meta.url), 'utf8'),
   '/vendor/ui-command-experience-web/client.mjs': () => readFileSync(new URL('../../packages/client/ui-command-experience-web/lib/client.mjs', import.meta.url), 'utf8'),
+  '/ordo-project-client.js': () => readFileSync(new URL('../../packages/bundle/ordo-agent-ops/lib/client.js', import.meta.url), 'utf8'),
   '/tools-client.js': () => readFileSync(new URL('../../packages/client/ui-mcp-inspector/lib/client.js', import.meta.url), 'utf8'),
   '/status-flow-client.js': () => readFileSync(new URL('../../packages/client/ui-token-usage/lib/client.js', import.meta.url), 'utf8'),
 }
+
+// Deep vendor roots for ESM packages whose entry points fan out into relative
+// imports (zod v4 classic chain, three.module.js → three.core.js). Containment
+// is enforced per request; only .js/.mjs sources are served.
+const deepVendorRoots = [
+  ['/vendor/zod/', '../../packages/host/pane-protocol/node_modules/zod/'],
+  ['/vendor/three/', '../../packages/client/ui-3d-director/node_modules/three/'],
+]
 
 const statusFlowImportMap = {
   imports: {
@@ -326,6 +343,24 @@ const visualServer = createServer((request, response) => {
     response.end(vendorAsset())
     return
   }
+  const deepRoot = deepVendorRoots.find(([prefix]) => url.pathname.startsWith(prefix))
+  if (deepRoot !== undefined) {
+    const rootUrl = new URL(deepRoot[1], import.meta.url)
+    const fileUrl = new URL(deepRoot[1] + url.pathname.slice(deepRoot[0].length), import.meta.url)
+    if (!fileUrl.pathname.startsWith(rootUrl.pathname) || !/\.m?js$/u.test(fileUrl.pathname)) {
+      response.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' })
+      response.end('forbidden')
+      return
+    }
+    try {
+      response.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' })
+      response.end(readFileSync(fileUrl, 'utf8'))
+    } catch {
+      response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
+      response.end('not found')
+    }
+    return
+  }
   if (url.pathname === '/transcription-capabilities') {
     const width = [360, 560, 960].includes(Number(url.searchParams.get('width'))) ? Number(url.searchParams.get('width')) : 960
     const lang = url.searchParams.get('lang') === 'en' ? 'en' : 'zh'
@@ -475,6 +510,16 @@ if(mode==='explorer'){
 </script></body></html>`)
     return
   }
+  if (url.pathname === '/agent-surfaces') {
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+    response.end(agentSurfacesPage(Math.max(360, Math.min(1200, Number(url.searchParams.get('width')) || 960)), statusFlowImportMap, url.searchParams.get('mode') === 'team' ? 'team' : 'subagents', url.searchParams.get('lang') === 'en' ? 'en' : 'zh'))
+    return
+  }
+  if (url.pathname === '/ordo-project') {
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+    response.end(ordoProjectPage(Math.max(360, Math.min(1200, Number(url.searchParams.get('width')) || 960)), statusFlowImportMap))
+    return
+  }
   if (url.pathname === '/tools-discovery') {
     const width = [360, 560, 960].includes(Number(url.searchParams.get('width'))) ? Number(url.searchParams.get('width')) : 960
     const height = url.searchParams.get('short') === 'true' ? 300 : 700
@@ -500,6 +545,16 @@ const activity=exports.deriveToolActivity(Array.from({length:30},(_,i)=>({kind:'
 function Fixture(){const [section,setSection]=React.useState('activity'),[call,setCall]=React.useState(),[filter,setFilter]=React.useState('all'),[mode,setMode]=React.useState('list');return exports.renderToolsInspectorTree({catalogState:{status:'unavailable',message:'catalog_unavailable'},activity,query:'',family:'all',enabled:'all',activeSection:section,selectedCall:call,activityFilter:filter,activityMode:mode,onActivityModeChange:setMode,canRefresh:true,onQueryChange(){},onFamilyChange(){},onEnabledChange(){},onToggle(){},onActiveSectionChange:setSection,onSelectCall:setCall,onActivityFilterChange:setFilter,onRevealCall(){window.__revealed=true},onRefresh(){},toolbarActions:React.createElement('button',{className:'vk-btn'},'Pin to side pane')})}
 ReactDOM.createRoot(document.getElementById('tools')).render(React.createElement(Fixture));document.body.dataset.ready='true'
 </script></body></html>`)
+    return
+  }
+  if (url.pathname === '/3d-director') {
+    const requestedWidth = Math.trunc(Number(url.searchParams.get('width') ?? 1152) || 1152)
+    const width = [400, 720, 1152].includes(requestedWidth) ? requestedWidth : 1152
+    const scenarios = new Set(['desktop', 'narrow', 'conflict', 'export-blocked'])
+    const requestedScenario = url.searchParams.get('case') ?? 'desktop'
+    const scenario = scenarios.has(requestedScenario) ? requestedScenario : 'desktop'
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+    response.end(director3DPage(width, scenario, statusFlowImportMap))
     return
   }
   if (url.pathname === '/pipeline-workbench') {

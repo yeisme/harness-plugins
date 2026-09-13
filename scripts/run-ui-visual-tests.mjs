@@ -10,7 +10,7 @@ const runId = `ui-visual-${startedAt.toISOString().replace(/[:.]/gu, '-')}-${pro
 const runRoot = resolve(projectRoot, 'temp/integration-test-runs', runId)
 const artifacts = resolve(runRoot, 'artifacts')
 const update = process.argv.includes('--update-snapshots')
-const testFile = process.argv.find(arg => /^visual-[a-z-]+\.spec\.ts$/.test(arg))
+const testFile = process.argv.find(arg => /^visual-[a-z0-9-]+\.spec\.ts$/.test(arg))
 const grepAt = process.argv.indexOf('--grep')
 const grep = grepAt < 0 ? undefined : process.argv[grepAt + 1]
 if (grepAt >= 0 && !grep) throw new Error('--grep requires a pattern')

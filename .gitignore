@@ -30,3 +30,6 @@ core.*
 .scaena/
 data/
 test-results/
+
+# Local runtime packaging artifacts
+/runtime/

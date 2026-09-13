@@ -1,0 +1,59 @@
+{
+  "name": "@yeisme/dsh-client-ui-3d-director",
+  "version": "0.1.0-rc.1",
+  "description": "DSH 3D Director client: Shot-anchored 3D viewport, timeline, scene graph revision handling, canvas/viewport sync",
+  "license": "MIT",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.json && tsdown"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "4.0.1",
+    "react": "^18.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.1",
+    "@testing-library/react": "^16.1.0",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.1",
+    "@types/three": "^0.180.0",
+    "jsdom": "^30.0.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.6",
+    "@yeisme/dsh-client-ui-surface": "workspace:^",
+    "@yeisme/dsh-client-ui-visual-kit": "workspace:*",
+    "@yeisme/dsh-pane-protocol": "workspace:*",
+    "@yeisme/dsh-plugin-contracts": "workspace:*",
+    "three": "^0.180.0"
+  }
+}

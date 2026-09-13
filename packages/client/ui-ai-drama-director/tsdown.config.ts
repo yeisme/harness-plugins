@@ -34,7 +34,9 @@ export default defineConfig([
     sourcemap: true,
     clean: false,
     deps: {
-      alwaysBundle: [/^@yeisme\//u],
+      // three 必须随嵌入 3D 视口（ui-3d-director）内联：DSH Web 的
+      // ModuleLoader 只提供宿主模块，profile node_modules 里取不到 three。
+      alwaysBundle: [/^@yeisme\//u, /^three(?:\/|$)/u],
       neverBundle: [...clientExternals],
     },
     outputOptions: {

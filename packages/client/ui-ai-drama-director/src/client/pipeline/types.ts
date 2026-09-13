@@ -10,7 +10,7 @@
  * owner actions, or mutate project/selection/run state themselves.
  */
 
-import type { DragEventHandler, ReactNode } from 'react'
+import type { DragEvent, DragEventHandler, ReactNode } from 'react'
 import type {
   BoundedSummary,
   CreativePipelineNodeKindV1,
@@ -18,7 +18,7 @@ import type {
   WorkSurfaceCapsuleV1,
 } from '@yeisme/dsh-plugin-contracts'
 import type { ArtifactRefV1, PaneActionDescriptorV1 } from '@yeisme/dsh-pane-protocol'
-import type { ProjectCanvasController } from '@yeisme/dsh-client-ui-pane-domain'
+import type { ProjectCanvasController, CanvasDropPosition } from '@yeisme/dsh-client-ui-pane-domain'
 import type { SurfacePhase } from '@yeisme/dsh-client-ui-surface'
 
 export type {
@@ -60,13 +60,17 @@ export interface PipelineWorkbenchNavProps {
   readonly sectionLabels?: Readonly<Record<PipelineWorkbenchSection, string>>
 }
 
-/** Props forwarded to the embedded ui-pane-domain ProjectCanvasView (structural; ViewProps is not exported upstream). */
+/** Props forwarded to the embedded ui-pane-domain ProjectCanvasView (structural match of the upstream ViewProps seam). */
 export interface PipelineCanvasHostProps {
   readonly controller: ProjectCanvasController
   readonly artifacts?: readonly ArtifactRefV1[]
   readonly actions?: readonly PaneActionDescriptorV1[]
   readonly resolveMedia?: (artifact: ArtifactRefV1) => Promise<{ readonly url: string; readonly expiresAt: string } | undefined>
   readonly openProfessional?: (owner: string, artifact?: ArtifactRefV1) => void
+  /** Observer-only edge selection; never enters editor.selection or undo/save semantics. */
+  readonly onEdgeSelect?: (edgeId: string | undefined) => void
+  /** In-pane drop intent with a transient screenToFlowPosition borrow; the ReactFlow instance is never exposed. */
+  readonly onCanvasDropIntent?: (event: DragEvent, toFlowPosition: CanvasDropPosition) => void
   readonly t?: (key: string) => string
 }
 
@@ -149,9 +153,19 @@ export interface PipelineWorkbenchShellProps {
   readonly onCanvasDragOver?: DragEventHandler<HTMLDivElement>
   /** Bounded, visible reason for the last rejected drop or unavailable action channel. */
   readonly canvasNotice?: string
+  /** Owner-projected honest-degrade banner (partial snapshot, runs needs_contract, offline channel); the graph stays rendered. */
+  readonly availabilityBanner?: string
+  /** Compact refresh-failure strip (role=alert); shown over the retained graph, never replaces it. */
+  readonly errorStrip?: string
   /** Compact-mode object list (<=420px folds the canvas into this list + detail overlay). */
   readonly objects?: readonly PipelineObjectListItem[]
   readonly onSelectObject?: (id: string) => void
+  /**
+   * Embedded Shot-anchored 3D viewport region (priority 6), docked below the
+   * canvas inside the canvas region. Composition-owned: the shell only places
+   * it and never creates scene state itself.
+   */
+  readonly viewport3d?: ReactNode
   readonly inspectorTabs?: PipelineInspectorTabs
   readonly runStrip?: BottomRunStripProps
   readonly ariaLabel?: string

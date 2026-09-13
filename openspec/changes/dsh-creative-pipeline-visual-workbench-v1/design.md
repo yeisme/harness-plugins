@@ -102,11 +102,18 @@ owner 不可用、输入缺失、版本过期或能力缺失时，保留图、�
 
 工作台内部采用左侧图标化资产导航与 Productions 卡片、中部可拖拽节点画布、右侧 Inspector/Versions/Comments、底部只读 Log/Validation/Render Queue。媒体节点只保存安全引用与受限预览元数据；blob、signed URL、object URL 与解码缓存必须在内存生命周期内对称释放。
 
-## Slice 已知边界（2026-09-11）
+## Slice 已知边界（2026-09-11；2026-09-12 客户端接线波次闭环）
 
-以下为 vertical slice 评审确认的已知边界，不属于本 slice 的完成条件：
+以下为 vertical slice 评审确认的已知边界。2026-09-12 的客户端接线波次（ui-pane-domain seam 落地 + host `CreativePipelineGateway` 真实 owner）已闭环 (a)–(d)，证据指针见各条目：
 
-- **(a) R6 确认生命周期**：已实现为纯函数 `derivePipelineConfirmationPhase`（`packages/client/ui-ai-drama-director/src/client/pipeline/inspector-state.ts`）并有测试覆盖；但 live pane 尚未接入 confirmation/budget 来源，属诚实降级——无确认绕过路径，确认/budget 不可用时控件保持禁用并带原因。
-- **(b) R7 owner 观察期**：不可用状态下的恢复需要 refresh/订阅通道；当前 `PipelineWorkbenchController.load()` 仅在挂载时读取一次，`phase != ready` 时以整体 `SurfaceState` 替代渲染。后续任务接入 error strip-over-preserved-graph（保留已有图 + 错误条）。
-- **(c) ui-pane-domain fall-through**：共享包 `ui-pane-domain` 对新 domain kind 的 `semantic()`/缩略图 fall-through 为已知边界，需上游 seam，本 slice 不改共享包源码。
-- **(d) 画布选中直达 inspector**：画布上边选中直达 inspector 依赖 `ui-pane-domain` 增加 selection 回调 seam，列为 upstream-prs 候选，本 slice 未实现该直达路径。
+- **(a) R6 确认生命周期**：~~live pane 尚未接入 confirmation/budget 来源~~ **已闭环**。`PipelineWorkbenchController` 维护 preview/confirm 记录（注入式 `PipelineConfirmationStoreV1`，缺省内存 Map，按 execution edge ref 键控、版本维度随记录携带），`recordRunPreview`/`confirmRunPreview` 写入后经 `buildPipelineInspectorViewModel` 的 `confirmation` 入参派生相位；预览后输入版本漂移 → `invalidated` 在 inspector 可见，漂移后 confirm 被拒绝并要求 re-preview。证据：`packages/client/ui-ai-drama-director/src/client/pipeline/workbench-controller.ts`（`recordRunPreview`/`confirmRunPreview`）+ `tests/pipeline-integration.spec.tsx`「R6 confirmation wiring」三例。budget 仍属诚实降级（owner 未投影时不显示，不伪造 0）。
+- **(b) R7 owner 观察期**：~~`load()` 仅挂载时读取一次、`phase != ready` 整体 SurfaceState 替代~~ **已闭环**。owner face 增加可选 `subscribe`/`onUnavailable`/`onAvailable`（语义对齐 `DomainOwnerEventTransport`：断线只降级 offline 横幅不重试、恢复恰好重读一次、push 信号驱动单次重读，无轮询）；已有解码数据时 load 失败保留图与画布草案、渲染紧凑 `role=alert` error strip；无数据时失败 envelope 映射为 disabled（needs_contract/unavailable）/error（contract_mismatch）SurfaceState；刷新后 running/blocked/stale/unknown 如实迁移；迟到结果仍由 projectRef+generation 栅栏隔离。证据：`workbench-controller.ts`（观察钩子 + error strip 路径）+ 同测试文件「R7 refresh semantics」三例。
+- **(c) ui-pane-domain fall-through**：~~新 domain kind 缩略图需上游 seam~~ **已闭环**。Wave A 起 `ProjectCanvasView` 的 `CanvasNodeView` 对 `asset`/`candidate` 节点经既有 `Media` 组件 + `resolveMedia` 渲染缩略图（无 resolver 时诚实显示「预览不可用」）；工作台侧只确认接线（`workbench-pane.tsx` 的 canvas `resolveMedia`），不重复实现。证据：`packages/client/ui-pane-domain/src/project-canvas-view.tsx` + 其 `tests/project-canvas-view.spec.tsx`「renders asset and candidate thumbnails」。
+- **(d) 画布选中直达 inspector**：~~依赖 selection 回调 seam~~ **已闭环**。Wave A `ViewProps.onEdgeSelect`（observer-only，不进 editor.selection/undo）已接到 `controller.selectEdge`，画布点边直达 inspector；画布外边列表保留为 ≤420px 紧凑 fallback（宽屏 CSS 隐藏）。drop 迁移到 `ViewProps.onCanvasDropIntent`（React Flow pane 内，瞬时借出 `toFlowPosition` 换算落点），onReject 原因仍落画布 notice 区。证据：`workbench-pane.tsx` canvas props + 同测试文件「keeps blocked-run mutations disabled」（画布边点击）与「wires a valid media drop inside the React Flow pane」。
+
+仍未闭环（保留观察）：
+
+- **真实 run action 通道**：`CreativePipelineGateway` 目前只读（snapshot/canvasRead），`dispatchRunAction` 需 Ordo 侧 adapter 立项；缺通道时 run 控件继续 force-disabled 带原因。
+- **budget 投影来源**：等 run-owner adapter 合同立项后接入。
+
+2026-09-12 优先级 6 补充：3D 视口嵌入已落地——owner envelope 的可选 `scene3d` 节（Shot + CanvasBinding，附属 fail-closed）+ `remote.scene3dDirector` probe-first 入口在选中 shot 时出现，展开为画布下方停靠 3D 视口并经 CanvasBinding/`canvasNodeRef` 双向同步选区（无绑定双向静默、probe 缺失 disabled+原因、pane dispose 对称释放、项目切换回收旧 scene controller）；证据 `tests/pipeline-scene3d.spec.tsx` 15 例 + `tests/pipeline-scene3d-pane.spec.tsx` 6 例（评审 F2 去重后两文件，原 pipeline-3d-embed.spec.tsx 已并入；2026-09-12 评审 F1/F3 追加嵌入区节点编辑与 Save 控件两例）；GLB 导入/导出与 change-set 审计仍归 3D 导演台自身 surface。

@@ -118,6 +118,42 @@ const variants = {
   } },
 };
 const owner = variants[scenario] ?? base;
+// Visual-tier canvas layout: the shared fixture document spreads nodes to
+// x≈1130, but the embedded canvas stage is only ~470px wide at the 1152px
+// frame — execution edges either fall outside the rendered viewport
+// (onlyRenderVisibleElements) or their labels land under other nodes, so
+// the spec's real canvas edge click has nothing to hit. Re-layout fixture
+// node positions into a compact two-column grid whose edge label midpoints
+// sit in the free gutter (x≈230/370). Fixture data only: ids, edge wiring
+// and the contract envelope are unchanged.
+const CANVAS_LAYOUT = {
+  'node:asset-poster': { x: 10, y: 20, width: 170, height: 100 },
+  'node:shot04': { x: 10, y: 150, width: 170, height: 100 },
+  'node:char-lin': { x: 10, y: 280, width: 170, height: 100 },
+  'node:scene-rooftop': { x: 280, y: 20, width: 180, height: 100 },
+  'node:candidate-c2': { x: 280, y: 150, width: 180, height: 100 },
+  'node:candidate-c1': { x: 280, y: 280, width: 180, height: 100 },
+  'node:op-image-gen': { x: 280, y: 410, width: 180, height: 100 },
+};
+if (owner.canvasRemote) {
+  const read = owner.canvasRemote.canvasRead;
+  owner.canvasRemote = { ...owner.canvasRemote, canvasRead: async input => {
+    const result = await read(input);
+    if (result?.status !== 'ready') return result;
+    // Edge stacking: SVG siblings paint in array order, and the two execution
+    // bezier strokes cross the gutter near the running edge label. Rendering
+    // edge:shot04-run last keeps its label the topmost hit target there (the
+    // blocked label at y≈265 stays clear of every later stroke).
+    const edges = result.document.edges;
+    const running = edges.filter(edge => edge.id === 'edge:shot04-run');
+    return { ...result, document: { ...result.document,
+      edges: [...edges.filter(edge => edge.id !== 'edge:shot04-run'), ...running],
+      nodes: result.document.nodes.map(node => {
+        const layout = CANVAS_LAYOUT[node.id];
+        return layout === undefined ? node : { ...node, position: { x: layout.x, y: layout.y }, size: { width: layout.width, height: layout.height } };
+      }) } };
+  } };
+}
 window.__pipelineOwner = owner;
 const View = drama.createPipelineWorkbenchView({ owner });
 window.ReactDOM.createRoot(document.getElementById('fixture')).render(window.React.createElement(View));

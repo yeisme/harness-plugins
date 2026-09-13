@@ -29,6 +29,38 @@ function makeEnv(initial: SubagentSessionListLike) {
 const empty: SubagentSessionListLike = { current: undefined, byId: {}, subagentsByParent: {} }
 
 describe('SubagentMonitorController', () => {
+  it('keeps two bound roots isolated when the global selection changes and rejects a stale child target', async () => {
+    const initial: SubagentSessionListLike = { current: 'root-a', byId: {}, subagentsByParent: {
+      'root-a': { state: 'ready', entries: [{ id: 'a', kind: 'child', mode: 'continuable', label: 'A' }] },
+      'root-b': { state: 'ready', entries: [{ id: 'b', kind: 'child', mode: 'continuable', label: 'B' }] },
+    } }
+    const harness = makeEnv(initial)
+    const prompt = vi.fn(async () => ({ ok: true }))
+    const a = new SubagentMonitorController({ ...harness.env, detail: { prompt, history: vi.fn(), interrupt: vi.fn() } }, 'root-a')
+    const b = new SubagentMonitorController(harness.env, 'root-b')
+    const child = a.getSnapshot().nodes[0]!
+    harness.setSnapshot({ ...initial, current: 'root-b' })
+    expect(a.getSnapshot().nodes[0]!.ref).toBe('a')
+    expect(b.getSnapshot().nodes[0]!.ref).toBe('b')
+    a.refresh(); expect(harness.refresh).toHaveBeenCalledWith('root-a')
+    expect((await a.send(b.getSnapshot().nodes[0]!, 'follow-up')).ok).toBe(false)
+    harness.setSnapshot({ ...initial, subagentsByParent: { 'root-a': { state: 'ready', entries: [] } } })
+    expect((await a.send(child, 'follow-up')).ok).toBe(false)
+    expect(prompt).not.toHaveBeenCalled(); expect(harness.openSubagent).not.toHaveBeenCalled()
+    a.dispose(); b.dispose(); expect(harness.listeners.size).toBe(0)
+  })
+
+  it('opens alongside through a capability-gated port without changing the main session', () => {
+    const harness = makeEnv({ current: 'root', byId: {}, subagentsByParent: { root: { state: 'ready', entries: [{ id: 'child', kind: 'child', mode: 'continuable' }] } } })
+    let available = false; const openAlongside = vi.fn()
+    const controller = new SubagentMonitorController({ ...harness.env, openAlongside, canOpenAlongside: () => available }, 'root')
+    const child = controller.getSnapshot().nodes[0]!
+    controller.openAlongside(child); expect(openAlongside).not.toHaveBeenCalled()
+    available = true; controller.openAlongside(child)
+    expect(openAlongside).toHaveBeenCalledWith({ parentSessionId: 'root', childSessionId: 'child', mode: 'continuable' })
+    expect(harness.openSubagent).not.toHaveBeenCalled(); controller.dispose()
+  })
+
   it('projects the current root and invalidates on snapshot change', () => {
     const harness = makeEnv(empty)
     const controller = new SubagentMonitorController(harness.env)

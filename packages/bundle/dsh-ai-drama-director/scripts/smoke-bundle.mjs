@@ -6,9 +6,11 @@ import { JSDOM } from 'jsdom'
 
 const bundleUrl = new URL('../lib/client.js', import.meta.url)
 const bundleSource = readFileSync(bundleUrl, 'utf8')
-// 内联的 zod JSON-Schema 走查器有名为 process 的局部函数，并非 Node 全局引用；
-// 只禁止对全局 process 的成员访问（process.env 等），浏览器下才会真正抛错。
-if (/\bprocess\s*\./u.test(bundleSource)) throw new Error('browser bundle must not reference the Node.js process global')
+// 内联的 three.js 文档注释里含 "process." 字样（"the update matrix process."），
+// 并非 Node 全局引用；先剥掉块/行注释再禁止对全局 process 的成员访问
+//（process.env 等），浏览器下才会真正抛错。
+const codeOnly = bundleSource.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+if (/\bprocess\s*\./u.test(codeOnly)) throw new Error('browser bundle must not reference the Node.js process global')
 
 const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', { url: 'http://localhost/' })
 const { window } = dom

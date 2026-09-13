@@ -28,6 +28,10 @@ const REVIEWED_EXEMPTIONS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   // fork owner 复核 2026-09-11：插件自我描述的仓库链接构建期回退字面量——不是
   // host→client 投影 URL，不参与资源加载，仅用于 Plugin 卡片跳转与测试断言。
   ['packages/bundle/dsh-context/src/client/meta.ts', new Set(['SAFEPROJ/RAW_URL_LITERAL'])],
+  // owner 复核 2026-09-12（dsh-provider-presets-v1）：渠道预设目录的官方端点静态
+  // 数据——用户可选的目录条目（cc-switch 预设同类），不是 host→client 投影，
+  // 不参与资源加载；保存时由 host 侧 discoverModels 实测，坏端点如实报错。
+  ['packages/client/ui-provider-presets/src/client/presets.ts', new Set(['SAFEPROJ/RAW_URL_LITERAL'])],
 ])
 
 export function runSafeProjectionAudit(root: string): CheckerReport {

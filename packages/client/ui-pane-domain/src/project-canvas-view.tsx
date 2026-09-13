@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from 'react'
 import { ReactFlow, ReactFlowProvider, Background, Controls, MiniMap, Handle, Position, NodeResizer,
   useReactFlow, type Node, type NodeProps, type NodeChange, type Connection } from '@xyflow/react'
 import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -42,13 +42,18 @@ export const canvasEn: Record<CanvasTextKey, string> = {
   mediaUnavailable: 'Preview unavailable', loading: 'Loading', inputUnavailable: 'The target action has no mappable inputs', objects: 'Object list',
 }
 export type CanvasTranslator = (key: CanvasTextKey) => string
-type ResolveMedia = (artifact: ArtifactRefV1) => Promise<{ url: string; expiresAt: string } | undefined>
-interface ViewProps {
+export type ResolveMedia = (artifact: ArtifactRefV1) => Promise<{ url: string; expiresAt: string } | undefined>
+export type CanvasDropPosition = (point: { x: number; y: number }) => { x: number; y: number }
+export interface ViewProps {
   controller: ProjectCanvasController
   artifacts?: readonly ArtifactRefV1[]
   actions?: readonly PaneActionDescriptorV1[]
   resolveMedia?: ResolveMedia
   openProfessional?: (owner: string, artifact?: ArtifactRefV1) => void
+  /** Observer-only edge selection callback; never enters editor.selection or undo/save semantics. */
+  onEdgeSelect?: (edgeId: string | undefined) => void
+  /** Drop intent seam: receives the drag event plus a transient screenToFlowPosition borrow. The ReactFlow instance is never exposed. */
+  onCanvasDropIntent?: (event: DragEvent, toFlowPosition: CanvasDropPosition) => void
   t?: CanvasTranslator
 }
 type CanvasFlowNode = Node<{ model: ProjectCanvasNode; controller: ProjectCanvasController; t: CanvasTranslator; resolveMedia?: ResolveMedia }, 'canvas'>
@@ -95,7 +100,7 @@ function Media({ artifact, resolve, t }: { artifact: ArtifactRefV1; resolve?: Re
 
 function CanvasNodeView({ data, selected }: NodeProps<CanvasFlowNode>): ReactNode {
   const { model, controller, t } = data
-  const artifact = model.kind === 'material' || model.kind === 'result' ? model.artifact : model.kind === 'operation' ? model.selectedArtifact : undefined
+  const artifact = model.kind === 'material' || model.kind === 'result' || model.kind === 'asset' || model.kind === 'candidate' ? model.artifact : model.kind === 'operation' ? model.selectedArtifact : undefined
   return <div className="canvas-node" data-kind={model.kind} data-selected={selected}>
     <NodeResizer isVisible={selected} minWidth={120} minHeight={80} onResizeStart={() => controller.beginGesture()} onResizeEnd={() => setTimeout(() => controller.endGesture(), 50)} />
     {model.kind !== 'group' && <Handle type="target" position={Position.Left} />}
@@ -110,7 +115,7 @@ function CanvasNodeView({ data, selected }: NodeProps<CanvasFlowNode>): ReactNod
 }
 const nodeTypes = { canvas: CanvasNodeView }
 
-function CanvasContent({ controller, artifacts = [], actions = [], resolveMedia, openProfessional, t = key => canvasZh[key] }: ViewProps): ReactNode {
+function CanvasContent({ controller, artifacts = [], actions = [], resolveMedia, openProfessional, onEdgeSelect, onCanvasDropIntent, t = key => canvasZh[key] }: ViewProps): ReactNode {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot)
   const flow = useReactFlow<CanvasFlowNode>()
   const [query, setQuery] = useState('')
@@ -226,7 +231,10 @@ function CanvasContent({ controller, artifacts = [], actions = [], resolveMedia,
     {message && <div role="alert">{message}</div>}
     <div className="canvas-layout"><div className="canvas-stage">
       <ReactFlow<CanvasFlowNode> nodes={nodes} nodeTypes={nodeTypes} edges={document.edges.map(edge => ({ id: edge.id, source: edge.source, target: edge.target, label: edge.kind === 'reference' ? edge.label ?? t('reference') : edge.purpose, className: edge.kind === 'reference' ? 'canvas-reference-edge' : undefined }))}
-        onNodesChange={nodeChanges} onEdgesChange={changes => { for (const change of changes) if (change.type === 'remove') controller.edit({ type: 'disconnect', id: change.id }) }}
+        onNodesChange={nodeChanges} onEdgesChange={changes => { for (const change of changes) { if (change.type === 'remove') controller.edit({ type: 'disconnect', id: change.id }); else if (change.type === 'select' && onEdgeSelect !== undefined) onEdgeSelect(change.selected ? change.id : undefined) } }}
+        onEdgeClick={onEdgeSelect === undefined ? undefined : (_, edge) => onEdgeSelect(edge.id)}
+        onDrop={onCanvasDropIntent === undefined ? undefined : event => onCanvasDropIntent(event, point => flow.screenToFlowPosition(point))}
+        onDragOver={onCanvasDropIntent === undefined ? undefined : event => event.preventDefault()}
         onNodeDragStart={() => { flowGesture.current = true; controller.beginGesture() }} onNodeDragStop={() => { finishGesture(); setTimeout(() => { flowGesture.current = false }, 50) }}
         onNodeDoubleClick={(_, node) => { const m = node.data.model; if (m.kind === 'material' || m.kind === 'result') openProfessional?.(m.artifact.owner, m.artifact); else if (m.kind === 'operation') openProfessional?.(m.owner) }}
         onConnect={value => { if (edgeKind === 'reference') controller.edit({ type: 'connect', edge: { id: `edge-${crypto.randomUUID()}`, kind: 'reference', source: value.source, target: value.target } }); else { setConnection(value); setInput('') } }}

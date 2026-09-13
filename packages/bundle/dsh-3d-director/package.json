@@ -1,0 +1,91 @@
+{
+  "name": "@yeisme/dsh-3d-director",
+  "version": "0.1.0-rc.1",
+  "description": "DSH 3D Director bundle: scene graph gateway (scene3dDirector) plus the Shot-anchored 3D viewport client face",
+  "main": "lib/index.mjs",
+  "scripts": {
+    "generate:metadata": "node scripts/generate-bundle-metadata.mjs",
+    "check:metadata": "node scripts/generate-bundle-metadata.mjs --check",
+    "test": "pnpm run build && pnpm run smoke:bundle",
+    "test:declaration": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "pnpm run check:metadata && tsc -p tsconfig.json && tsdown",
+    "bundle": "tsdown",
+    "smoke:bundle": "node scripts/smoke-bundle.mjs"
+  },
+  "keywords": [
+    "dsh",
+    "3d",
+    "director",
+    "gltf",
+    "glb",
+    "shot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "types": "lib/types/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yeisme/harness-plugins.git",
+    "directory": "packages/bundle/dsh-3d-director"
+  },
+  "files": [
+    "lib/index.mjs",
+    "lib/client.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "cordis.patch.yml",
+    "dsh.compatibility.json",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.mts",
+      "default": "./lib/index.mjs"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./dsh.compatibility.json": "./dsh.compatibility.json",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-runtime"
+      ],
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "dependencies": {
+    "@yeisme/dsh-3d-director-host": "workspace:*",
+    "@yeisme/dsh-client-ui-3d-director": "workspace:*"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.1",
+    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
+    "jsdom": "^30.0.1",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

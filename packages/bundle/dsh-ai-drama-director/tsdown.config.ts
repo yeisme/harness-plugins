@@ -23,7 +23,19 @@ const node = {
 } as const
 
 export default defineConfig([
-  { ...node, entry: ['./src/index.ts'] },
+  {
+    ...node,
+    entry: ['./src/index.ts'],
+    // The bundle shares its package name with the host pack, so resolving the
+    // gateway specifier hits this bundle's own exports (Node/rolldown
+    // self-reference). Alias it to the host pack's BUILT lib (tsc-lowered
+    // decorators — src would publish raw @Remote syntax) and force it inline,
+    // matching the client-entry alias handling of the same name collision.
+    alias: {
+      '@yeisme/dsh-ai-drama-director/pipeline-gateway': fileURLToPath(new URL('../../host/dsh-ai-drama-director/lib/pipeline-gateway.js', import.meta.url)),
+    },
+    deps: { alwaysBundle: [/^@yeisme\/dsh-ai-drama-director/u] },
+  },
   {
     // workspace 客户端包经 alias 直连源码并整体内联：ModuleLoader 单文件
     alias: {
@@ -46,7 +58,8 @@ export default defineConfig([
     sourcemap: true,
     clean: false,
     deps: {
-      alwaysBundle: [/^@yeisme\//u],
+      // three 随嵌入 3D 视口（ui-3d-director）内联：ModuleLoader 只提供宿主模块。
+      alwaysBundle: [/^@yeisme\//u, /^three(?:\/|$)/u],
       neverBundle: [...clientExternals],
     },
     outputOptions: {

@@ -7,6 +7,7 @@ const allowPending = process.argv.includes('--allow-pending')
 
 /** @type {Record<string, 'adopted'|'embed'|'excluded'|'pending'>} */
 const clientCatalog = {
+  'ui-3d-director': 'adopted',
   'ui-agent-preset': 'adopted',
   'ui-browser-pane': 'adopted', // live Browser Pane view consumes the shared Surface
   'ui-ai-drama-director': 'adopted',
@@ -25,6 +26,7 @@ const clientCatalog = {
   'ui-pane-subagent': 'adopted',
   'ui-pane-workbench': 'adopted',
   'ui-personal-radar': 'adopted', // market face uses Surface; legacy text face remains compatible
+  'ui-provider-presets': 'adopted', // dsh-provider-presets-v1: Models-footer market + guided dialog use shared Surface + vk tokens
   'ui-semantic-file-editor': 'adopted',
   'ui-session-cookie-manager': 'adopted',
   'ui-session-tags': 'adopted',
@@ -67,6 +69,7 @@ const dynamicStyleAllowlist = new Map([
   ['packages/client/ui-pane-workbench/src/chrome/group-chrome.tsx', 'measured drop-target marker and menu geometry'],
   ['packages/client/ui-pane-workbench/src/chrome/split-tree.tsx', 'split ratio flex and virtual row translate geometry'],
   ['packages/client/ui-ai-drama-director/src/client/show-control-views.tsx', 'measured show-control timeline and pane geometry'],
+  ['packages/client/ui-3d-director/src/ShotTimeline.tsx', 'playhead and keyframe marker positions as percentages of the shot frame range'],
   ['packages/client/ui-creator-studio/src/projection-components.tsx', 'measured storyboard grid and progress geometry'],
   ['packages/client/ui-creator-studio/src/artifact-workspace.tsx', 'owner-bounded media time range start and width percentages'],
   ['packages/client/ui-desktop-workbench/src/client/docx-preview.tsx', 'measured document preview container geometry'],

@@ -343,6 +343,8 @@ describe('package contract', () => {
     const patch = await readFile(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
 
     expect(manifest.dependencies).toEqual({
+      '@xyflow/react': '12.11.6',
+      '@yeisme/dsh-client-ui-pane-subagent': 'workspace:*',
       '@yeisme/dsh-client-ui-surface': 'workspace:^',
       zod: '^4.4.3',
     })

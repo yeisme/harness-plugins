@@ -1,20 +1,106 @@
 /**
  * @yeisme/dsh-ai-drama-director root entry.
  *
- * Installable DSH Web bundle for AI Drama Director pack. Host face is no-op:
- * commands, panes, and preset registration live in the client face at `./client`.
+ * Installable DSH Web bundle for AI Drama Director pack.
+ *
+ * Host face: mounts the CreativePipelineGateway (service key `creativePipeline`)
+ * so the pipeline workbench pane can probe a real (non-fixture) owner
+ * projection through `remote.creativePipeline`, and registers the matching
+ * typert contribution when the host registry is available. The gateway owns no
+ * domain state and fail-closes until an integration provides
+ * `creativePipelineExpectedContext` (tenant/workspace/project) — context is
+ * never derived from browser parameters. The browser face stays at `./client`.
+ *
+ * The bundle package shares its name with the host pack, so a bare self-import
+ * would resolve to this bundle entry; the gateway is therefore bundled from the
+ * host pack build output via the tsdown alias (see tsdown.config.ts), matching
+ * the existing client-entry handling of the name collision.
  *
  * @module @yeisme/dsh-ai-drama-director
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import {
+  CreativePipelineGateway,
+  CREATIVE_PIPELINE_EXPECTED_CONTEXT,
+  CREATIVE_PIPELINE_RUN_OWNER,
+  CREATIVE_PIPELINE_SERVICE_KEY,
+  CREATIVE_PIPELINE_SNAPSHOT_SCHEMA,
+} from '@yeisme/dsh-ai-drama-director/pipeline-gateway'
+
+export {
+  CreativePipelineGateway,
+  CREATIVE_PIPELINE_EXPECTED_CONTEXT,
+  CREATIVE_PIPELINE_RUN_OWNER,
+  CREATIVE_PIPELINE_SNAPSHOT_SCHEMA,
+}
+export type {
+  CreativePipelineContextV1,
+  CreativePipelineRunOwnerFaceV1,
+  CreativePipelineSnapshotResultV1,
+} from '@yeisme/dsh-ai-drama-director/pipeline-gateway'
 
 export const name = 'dsh-ai-drama-director'
-export const inject: readonly string[] = []
+export const inject: readonly string[] = ['typert']
 
-/** No-op Host lifecycle: this change adds no DSH core fork and does not replicate private Host implementation. */
-export function apply(_ctx: Context): void {
-  // host side intentionally empty
+interface TypertRegistryFace {
+  register(contribution: typeof creativePipelineTypertContribution): (() => void | Promise<void>) | undefined
+}
+
+const creativePipelineTypertContribution = {
+  package: '@yeisme/dsh-ai-drama-director',
+  face: 'host',
+  schemas: [],
+  model: {
+    services: [{
+      key: CREATIVE_PIPELINE_SERVICE_KEY,
+      exportName: 'CreativePipelineGateway',
+      summary: 'Safe creative pipeline workbench projection gateway (read-only canvas seam plus owner run projections).',
+      tags: [],
+      members: [
+        { kind: 'method', name: 'snapshot', signature: 'snapshot(): Promise<CreativePipelineSnapshotResultV1>' },
+        { kind: 'method', name: 'canvasRead', signature: 'canvasRead(input: unknown): Promise<ProjectCanvasReadResult>' },
+      ],
+      types: [],
+    }],
+    events: [],
+    objects: [],
+  },
+  invocations: [
+    {
+      id: '@yeisme/dsh-ai-drama-director#creativePipeline/snapshot',
+      service: CREATIVE_PIPELINE_SERVICE_KEY,
+      namespace: CREATIVE_PIPELINE_SERVICE_KEY,
+      method: 'snapshot',
+      invocation: { kind: 'direct' },
+      parameters: [],
+      result: { mode: 'src-json' },
+    },
+    {
+      id: '@yeisme/dsh-ai-drama-director#creativePipeline/canvasRead',
+      service: CREATIVE_PIPELINE_SERVICE_KEY,
+      namespace: CREATIVE_PIPELINE_SERVICE_KEY,
+      method: 'canvasRead',
+      invocation: { kind: 'direct' },
+      parameters: [{ name: 'input', wire: 'input', source: 'json', codec: { mode: 'src-json' } }],
+      result: { mode: 'src-json' },
+    },
+  ],
+}
+
+/**
+ * Mounts the pipeline gateway once per root context. The gateway is a cordis
+ * child plugin of this bundle and unloads with it; the typert contribution is
+ * best-effort and unregisters on dispose. No owner adapter, run owner, or
+ * context is fabricated here — integrations provide
+ * `creativePipelineExpectedContext` / `creativePipelineRunOwner` separately.
+ */
+export async function apply(ctx: Context): Promise<void> {
+  if (ctx.get(CREATIVE_PIPELINE_SERVICE_KEY as never) !== undefined) return
+  await ctx.plugin(CreativePipelineGateway)
+  const registry = ctx.get('typert' as never) as TypertRegistryFace | undefined
+  const unregister = registry?.register(creativePipelineTypertContribution)
+  if (unregister !== undefined) ctx.effect(() => unregister, 'creativePipeline.typert')
 }
 
 const DshAiDramaDirectorPlugin = { name, inject, apply }

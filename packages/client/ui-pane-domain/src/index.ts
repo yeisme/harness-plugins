@@ -244,5 +244,7 @@ export { createProjectCanvasEditor, editProjectCanvas, searchProjectCanvas } fro
 export type { ProjectCanvasEditor, ProjectCanvasEdit, ProjectCanvasEditResult } from './project-canvas.js'
 export { inspectCanvasRunScope, inspectCanvasImpact, inspectCanvasChangeImpact } from './project-canvas-workflow.js'
 export type { CanvasRunScope, CanvasScopeInspection } from './project-canvas-workflow.js'
-export { ProjectCanvasView } from './project-canvas-view.js'
+export { ProjectCanvasView, canvasZh, canvasEn } from './project-canvas-view.js'
+export type { CanvasDropPosition, CanvasTextKey, CanvasTranslator, ResolveMedia, ViewProps } from './project-canvas-view.js'
 export { ProjectCanvasController } from './project-canvas-controller.js'
+export type { ProjectCanvasRemote } from './project-canvas-controller.js'

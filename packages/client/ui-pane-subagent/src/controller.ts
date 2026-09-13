@@ -38,6 +38,8 @@ export interface SubagentMonitorEnvironment {
   subscribe(listener: () => void): () => void
   refresh(parentSessionId: string): void | Promise<void>
   openSubagent(address: SubagentOpenAddress): void
+  canOpenAlongside?(): boolean
+  openAlongside?(address: SubagentOpenAddress): void
   readonly detail?: SubagentDetailPort
 }
 
@@ -57,7 +59,7 @@ export class SubagentMonitorController {
   private disposed = false
   private _parallel = false
 
-  constructor(env: SubagentMonitorEnvironment) {
+  constructor(env: SubagentMonitorEnvironment, readonly boundRootSessionId?: string) {
     this.env = env
     this.unsubscribe = env.subscribe(() => this.invalidate())
   }
@@ -65,17 +67,7 @@ export class SubagentMonitorController {
   getSnapshot(): SubagentPaneProjectionV1 {
     if (this.disposed) throw new Error('SubagentMonitorController is disposed')
     const snapshot = this.env.getSnapshot()
-    const rootSessionId = snapshot.current
-    if (rootSessionId === undefined) {
-      return {
-        rootSessionId: '',
-        nodes: [],
-        runningCount: 0,
-        totalTokens: undefined,
-        freshness: 'unknown',
-        generation: this.generation,
-      }
-    }
+    const rootSessionId = this.boundRootSessionId ?? snapshot.current ?? ''
     const cached = this.cache
     if (cached !== undefined && cached.snapshot === snapshot && cached.rootSessionId === rootSessionId) {
       return cached.projection
@@ -84,7 +76,7 @@ export class SubagentMonitorController {
       rootSessionId,
       catalogs: snapshot.subagentsByParent,
       summaries: snapshot.byId,
-      freshness: 'fresh',
+      freshness: snapshot.subagentsByParent[rootSessionId]?.state === 'error' ? 'stale' : snapshot.subagentsByParent[rootSessionId]?.state === 'loading' || !rootSessionId ? 'unknown' : 'fresh',
       generation: this.generation,
     })
     this.cache = { snapshot, rootSessionId, projection }
@@ -98,7 +90,7 @@ export class SubagentMonitorController {
 
   refresh(): void {
     const snapshot = this.env.getSnapshot()
-    const rootSessionId = snapshot.current
+    const rootSessionId = this.boundRootSessionId ?? snapshot.current
     if (rootSessionId !== undefined) void this.env.refresh(rootSessionId)
   }
 
@@ -113,7 +105,7 @@ export class SubagentMonitorController {
   }
 
   openInMain(node: SubagentPaneNodeV1): void {
-    if (node.parentRef === undefined) return
+    if (this.disposed || node.parentRef === undefined || !this.getSnapshot().nodes.some(current => current.ref === node.ref && current.parentRef === node.parentRef)) return
     this.env.openSubagent({
       parentSessionId: node.parentRef,
       childSessionId: node.ref,
@@ -121,7 +113,16 @@ export class SubagentMonitorController {
     })
   }
 
+  get canOpenAlongside(): boolean { return this.env.openAlongside !== undefined && (this.env.canOpenAlongside?.() ?? true) }
+  get canManage(): boolean { return this.env.detail !== undefined }
+
+  openAlongside(node: SubagentPaneNodeV1): void {
+    if (!this.canOpenAlongside || this.disposed || node.parentRef === undefined || !this.getSnapshot().nodes.some(current => current.ref === node.ref && current.parentRef === node.parentRef)) return
+    this.env.openAlongside?.({ parentSessionId: node.parentRef, childSessionId: node.ref, mode: node.mode })
+  }
+
   async peek(node: SubagentPaneNodeV1): Promise<SubagentDetailResult> {
+    if (this.disposed || !this.getSnapshot().nodes.some(current => current.ref === node.ref && current.parentRef === node.parentRef && current.mode === node.mode)) return { ok: false, error: 'subagent_target_changed' }
     const detail = this.env.detail
     if (detail === undefined || node.parentRef === undefined) {
       return { ok: false, error: 'subagent detail API is unavailable' }
@@ -134,6 +135,7 @@ export class SubagentMonitorController {
   }
 
   async send(node: SubagentPaneNodeV1, text: string): Promise<SubagentDetailResult> {
+    if (this.disposed || !this.getSnapshot().nodes.some(current => current.ref === node.ref && current.parentRef === node.parentRef && current.mode === node.mode)) return { ok: false, error: 'subagent_target_changed' }
     const detail = this.env.detail
     if (detail === undefined || node.parentRef === undefined || node.mode !== 'continuable') {
       return { ok: false, error: 'send follow-up requires a continuable subagent and the detail API' }
@@ -146,6 +148,7 @@ export class SubagentMonitorController {
   }
 
   async interrupt(node: SubagentPaneNodeV1): Promise<SubagentDetailResult> {
+    if (this.disposed || !this.getSnapshot().nodes.some(current => current.ref === node.ref && current.parentRef === node.parentRef && current.mode === node.mode)) return { ok: false, error: 'subagent_target_changed' }
     const detail = this.env.detail
     if (detail === undefined || node.parentRef === undefined || node.mode !== 'continuable') {
       return { ok: false, error: 'interrupt requires a continuable subagent and the detail API' }

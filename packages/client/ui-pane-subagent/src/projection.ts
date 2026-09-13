@@ -138,11 +138,13 @@ function walk(
   summaries: Readonly<Record<string, SubagentSummarySource>>,
   output: SubagentPaneNodeV1[],
   depth: number,
+  seen = new Set<string>([rootSessionId]),
 ): void {
   const catalog = catalogs[rootSessionId]
   if (catalog === undefined || catalog.entries.length === 0) return
   for (const entry of catalog.entries) {
-    if (!safeRef(entry.id)) continue
+    if (!safeRef(entry.id) || seen.has(entry.id)) continue
+    seen.add(entry.id)
     const summary = summaries[entry.id]
     const timingMs = timingMsOf(summary)
     const tokenUsage = tokenUsageOf(summary)
@@ -158,7 +160,7 @@ function walk(
       ...(tokenUsage === undefined ? {} : { tokenUsage }),
     }
     output.push(node)
-    if (node.hasChildren) walk(entry.id, catalogs, summaries, output, depth + 1)
+    if (node.hasChildren) walk(entry.id, catalogs, summaries, output, depth + 1, seen)
   }
 }
 

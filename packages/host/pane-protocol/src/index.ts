@@ -1034,6 +1034,16 @@ export type SceneGraphDraft = z.infer<typeof SceneGraphDraftSchema>
 export type SceneGraphReadResult = z.infer<typeof SceneGraphReadResultSchema>
 export type SceneGraphSaveResult = z.infer<typeof SceneGraphSaveResultSchema>
 
+/** Negotiated workbench envelope; legacy scene documents remain unchanged. */
+export const SceneWorkbenchSaveRequestSchema = SceneGraphSaveRequestSchema.extend({ shots: z.array(ShotSchema).max(1000) }).strict()
+export const SceneWorkbenchReadResultSchema = z.object({
+  schema: z.literal('dsh.scene-workbench.v1'),
+  result: SceneGraphReadResultSchema,
+  shots: z.array(ShotSchema).max(1000).optional(),
+}).strict()
+export type SceneWorkbenchSaveRequest = z.infer<typeof SceneWorkbenchSaveRequestSchema>
+export type SceneWorkbenchReadResult = z.infer<typeof SceneWorkbenchReadResultSchema>
+
 export function parseSceneDocument(input: unknown): SceneDocumentV1 {
   return SceneDocumentSchema.parse(input)
 }

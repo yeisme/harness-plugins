@@ -89,32 +89,50 @@ export { PipelineInspector } from './inspector.js'
 export type { PipelineInspectorProps } from './inspector.js'
 export {
   createPipelineFixtureOwner,
+  createPipelineFixtureScene3DRemote,
   PIPELINE_FIXTURE_BLOCKED_EDGE_ID,
   PIPELINE_FIXTURE_OWNER_SERVICE,
   PIPELINE_FIXTURE_PROJECT_REF,
   PIPELINE_FIXTURE_RUNNING_EDGE_ID,
   PIPELINE_FIXTURE_BLOCKED_RUN_REF,
   PIPELINE_FIXTURE_RUNNING_RUN_REF,
+  PIPELINE_FIXTURE_SCENE_3D_BOUND_OBJECT,
+  PIPELINE_FIXTURE_SCENE_3D_DOCUMENT_ID,
+  PIPELINE_FIXTURE_SHOT_NODE_ID,
+  PIPELINE_FIXTURE_SHOT_REF,
   PIPELINE_FIXTURE_SNAPSHOT_SCHEMA,
 } from './fixture-owner.js'
 export type { PipelineFixtureOwnerV1 } from './fixture-owner.js'
 export {
   PipelineWorkbenchController,
   decodePipelineWorkbenchSnapshotV1,
+  PIPELINE_SCENE_3D_NO_PROJECTION_REASON,
+  PIPELINE_SCENE_3D_NO_SCOPE_REASON,
   PIPELINE_WORKBENCH_NO_CHANNEL_REASON,
   PIPELINE_WORKBENCH_SNAPSHOT_SCHEMA,
 } from './workbench-controller.js'
 export type {
+  PipelineConfirmationStoreV1,
+  PipelineScene3DViewV1,
+  PipelineSelectedShotV1,
+  PipelineWorkbenchAvailabilityV1,
   PipelineWorkbenchControllerDeps,
   PipelineWorkbenchEdgeItemV1,
+  PipelineWorkbenchFailureStatus,
   PipelineWorkbenchOwnerFaceV1,
   PipelineWorkbenchPhase,
   PipelineWorkbenchRunActionRequestV1,
   PipelineWorkbenchViewStateV1,
 } from './workbench-controller.js'
 export {
+  findScene3DBindingForCanvasNode,
+  findScene3DBindingForSceneObject,
+} from './scene-3d.js'
+export {
   createPipelineWorkbenchView,
+  creativePipelineRemoteOwnerFace,
   pipelineWorkbenchViewDescriptor,
+  probePipelineScene3DRemote,
   probePipelineWorkbenchOwner,
   PIPELINE_WORKBENCH_COMPONENT_KEY,
   PIPELINE_WORKBENCH_PANE_KIND,

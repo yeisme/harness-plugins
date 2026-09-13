@@ -32,6 +32,13 @@ function source(overrides: Partial<SubagentProjectionSource> = {}): SubagentProj
 }
 
 describe('projectSubagentPane', () => {
+  it('does not duplicate nodes or recurse into a cyclic catalog', () => {
+    const projection = projectSubagentPane(source({ catalogs: {
+      root: { entries: [{ id: 'child', kind: 'child', hasChildren: true }, { id: 'child', kind: 'child' }] },
+      child: { entries: [{ id: 'root', kind: 'child', hasChildren: true }] },
+    } }))
+    expect(projection.nodes.map(node => node.ref)).toEqual(['child'])
+  })
   it('folds direct child catalogs into a bounded tree', () => {
     const projection = projectSubagentPane(source())
     expect(projection.nodes.map(node => node.ref)).toEqual(['child-a', 'child-b'])

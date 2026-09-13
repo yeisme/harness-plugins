@@ -1,3 +1,4 @@
+import { inlineCssPlugin } from '../../../scripts/inline-css-plugin.mjs'
 import { defineConfig } from 'tsdown'
 
 const clientExternals = [
@@ -30,16 +31,18 @@ export default defineConfig([
   { ...node, entry: ['lib/types/index.js'] },
   { ...node, entry: ['lib/types/invariant.js'] },
   {
+    plugins: [inlineCssPlugin()],
     entry: { client: 'lib/types/client/index.js' },
     outDir: 'lib',
     format: 'cjs',
     platform: 'browser',
+    define: { 'process.env.NODE_ENV': JSON.stringify('production'), 'import.meta.env.MODE': JSON.stringify('production') },
     target: 'es2024',
     dts: false,
     sourcemap: true,
     clean: false,
     deps: {
-      alwaysBundle: [/^@yeisme\//u],
+      alwaysBundle: [/^(?!@deepseek-ai\/|react(?:\/|$)|react-dom(?:\/|$))/u],
       neverBundle: [...clientExternals],
     },
     outputOptions: {
