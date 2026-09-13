@@ -17,7 +17,18 @@ globalThis.window = {
 }
 
 const require_ = createRequire(import.meta.url)
-const moduleRequire = id => require_(id)
+// The browser factory runs in Node only for this smoke: react and the host
+// ui-primitives are runtime externals declared by the workspace client
+// package, not by this bundle, so resolve them from the client's own tree.
+const clientRequire = createRequire(new URL('../../../client/ui-personal-radar/package.json', import.meta.url))
+// The real ui-primitives bundle pulls KaTeX CSS, which Node cannot load and
+// which the browser Host supplies anyway; the smoke never renders, so a
+// non-rendering component stub keeps the boundary honest.
+const stubs = new Map([['@deepseek-ai/dsh-client-ui-primitives', { Button: () => null }]])
+const moduleRequire = id => {
+  if (stubs.has(id)) return stubs.get(id)
+  try { return require_(id) } catch { return clientRequire(id) }
+}
 require_(bundleUrl.pathname)
 
 if (entry === null) throw new Error('ModuleLoader.load was not called')

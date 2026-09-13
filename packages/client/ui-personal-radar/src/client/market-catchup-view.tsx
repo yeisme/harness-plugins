@@ -3,6 +3,7 @@ import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SurfaceActionBar, SurfaceSection, SurfaceState } from '@yeisme/dsh-client-ui-surface'
 import type { createMarketCatchupController } from '@yeisme/dsh-personal-radar'
 import { marketLabel, marketTime } from './market-labels.js'
+import type { MarketActionsController } from './market-actions.js'
 import type { MarketLocale } from './market-view.js'
 
 type Controller = ReturnType<typeof createMarketCatchupController>
@@ -11,6 +12,7 @@ const words = {
   empty: ['No unread changes in this window', '本窗口没有未读变化'], continuation: ['No visible items on this page; more pages remain', '本页没有可显示项目，仍有后续页'],
   failed: ['Catch-up needs a fresh read', '补看需要重新读取'], first: ['Read from start', '从头读取'], next: ['Next page', '下一页'],
   boundary: ['Last 30 days only; older history remains with Radar', '仅覆盖最近30天，更早历史保留在 Radar'],
+  markPage: ['Mark this page as read', '标记本页已读'],
   offline: ['Radar is offline. Check the owner connection.', 'Radar 已离线，请检查连接。'],
   timeout: ['Reading timed out; no read marks were changed.', '读取超时，已读状态未改变。'],
   cancelled: ['The reading context changed; the old page was discarded.', '读取上下文已改变，旧页已丢弃。'],
@@ -22,7 +24,7 @@ const words = {
   reference_unavailable: ['The selected revision or evidence is unavailable.', '所选修订或证据引用不可用。'],
   content_blocked: ['The current content policy prevents this read.', '当前内容禁区禁止读取该内容。'],
 } as const
-export function MarketCatchupView({ controller, locale }: { controller: Controller; locale: MarketLocale }) {
+export function MarketCatchupView({ controller, locale, actions }: { controller: Controller; locale: MarketLocale; actions?: MarketActionsController }) {
   const [state, setState] = useState(() => controller.snapshot())
   useEffect(() => {
     const dispose = controller.subscribe(setState)
@@ -31,6 +33,7 @@ export function MarketCatchupView({ controller, locale }: { controller: Controll
   }, [controller])
   const t = (key: keyof typeof words) => locale === 'zh' ? words[key][1] : locale === 'pseudo' ? `[!! ${words[key][0]} !!]` : words[key][0]
   const result = state.result, page = result?.ok ? result.page : null
+  const visible = page?.signals.map(signal => ({ signalRef: signal.signalRef, revision: signal.revision })) ?? []
   return <SurfaceSection title={t('title')}>
     {state.loading ? <SurfaceState phase="loading" title={t('loading')} /> : null}
     {!state.loading && !page ? <SurfaceState phase={result && !result.ok ? 'error' : 'disabled'} title={t('failed')}
@@ -49,6 +52,10 @@ export function MarketCatchupView({ controller, locale }: { controller: Controll
     <SurfaceActionBar>
       <Button disabled={state.loading || state.contextRef === null} onClick={() => { void controller.first() }}>{t('first')}</Button>
       <Button disabled={state.loading || !page?.nextCursor} onClick={() => { void controller.next() }}>{t('next')}</Button>
+      {/* Read marks submit exactly the revisions rendered on THIS page; later pages stay unread. */}
+      {actions ? <Button disabled={state.loading || visible.length === 0} onClick={() => {
+        void actions.markRead(visible, { readerRevision: page!.readerRevision, policyRevision: page!.policyRevision })
+      }}>{t('markPage')}</Button> : null}
     </SurfaceActionBar>
   </SurfaceSection>
 }

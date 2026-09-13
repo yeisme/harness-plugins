@@ -18,11 +18,15 @@ export type { ConnectedMarketTransport, MarketReadResult, MarketCatchupReadResul
 export { createMarketReadingController, createMarketCatchupController, createMarketDetailController, createMarketCompareController } from './market-controller.js'
 export type { MarketReadingState, MarketLoader, MarketCatchupLoader, MarketSignalSelection, MarketSignalLoader, MarketCompareLoader } from './market-controller.js'
 export { createConnectedRadarMarketHost } from './market-host.js'
-export type { RadarMarketHostFace, MarketContextSource, MarketConnectionContext } from './market-host.js'
+export type { RadarMarketHostFace, MarketContextSource, MarketConnectionContext, MarketMutationDispatchResult } from './market-host.js'
 export { createMarketToolTransport } from './market-tool-transport.js'
 export type { DiscoveredMarketSearch, MarketToolCaller } from './market-tool-transport.js'
 export { createScopedMarketToolConnection } from './market-tool-runtime.js'
 export type { MarketToolRuntime } from './market-tool-runtime.js'
+export { probeMarketCapability, MARKET_PROBE_REASONS, MARKET_REQUIRED_VIEWS, MARKET_OPTIONAL_VIEWS } from './market-probe.js'
+export type { MarketCapabilityStatus, MarketCapabilityProbeResultV1, MarketViewName } from './market-probe.js'
+export { MARKET_MUTATION_SCHEMA, MARKET_RECEIPT_SCHEMA, MARKET_MUTATION_KINDS, buildMarketMutationIntent, marketMutationIdempotencyKey, digestMarketMutationPayload, validateMarketMutationIntent, createMarketActionStore } from './market-actions.js'
+export type { MarketMutationKind, MarketMutationSelection, MarketMutationIntentV1, MarketActionReceiptV1, MarketReceiptOutcome, MarketMutationTransport, MarketMutationLedgerV1, MarketMutationLedgerEntryV1, MarketDispatchResult, MarketActionStore } from './market-actions.js'
 
 export {
   RADAR_HANDOFF_SPEC,

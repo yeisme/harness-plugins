@@ -72,6 +72,49 @@ try {
   assert(radar.isRedactedRadarEvidence(evidence), 'evidence must pass the redaction check')
   checks.push({ stage: 'handoff_evidence_redaction', ok: true })
 
+  // Market mutation leg (dsh-radar-market-intelligence-v1 §1.4): typed intent,
+  // double-click dedupe, unknown→receipt reconcile, stale-revision conflict.
+  const marketApplies = []
+  const marketLookups = []
+  const settled = new Map()
+  const marketTransport = {
+    async apply({ intent }) {
+      marketApplies.push(intent.idempotencyKey)
+      if (intent.kind === 'watch') throw new Error('ECONNRESET')
+      settled.set(intent.idempotencyKey, { schema: radar.MARKET_RECEIPT_SCHEMA, idempotencyKey: intent.idempotencyKey, outcome: 'accepted', reason: 'owner applied', readerRevision: intent.readerRevision + 1 })
+      return { status: 'accepted', readerRevision: intent.readerRevision + 1 }
+    },
+    async lookupReceipt(key) {
+      marketLookups.push(key)
+      // The owner settles the disconnected watch after reconnect.
+      return settled.get(key) ?? { schema: radar.MARKET_RECEIPT_SCHEMA, idempotencyKey: key, outcome: 'accepted', reason: 'owner completed after reconnect', readerRevision: 6 }
+    },
+  }
+  const marketStore = radar.createMarketActionStore(marketTransport)
+  const marketIntent = await radar.buildMarketMutationIntent('mark_read', [{ signalRef: 'signal:integration-1', revision: 1 }], 4, 'sha256:policy-integration')
+  const firstMarket = await marketStore.dispatch(marketIntent)
+  assert(firstMarket.dispatched === true && firstMarket.receipt.outcome === 'accepted', 'market mark_read must dispatch once and be accepted')
+  const doubleClick = await marketStore.dispatch({ ...marketIntent })
+  assert(doubleClick.dispatched === false && doubleClick.receipt.outcome === 'accepted', 'market double click must dedupe to the existing receipt')
+  assert(marketApplies.length === 1, 'market dedupe must not reach the owner twice')
+  const killedKey = (await radar.buildMarketMutationIntent('watch', [{ signalRef: 'signal:integration-1', revision: 1 }], 5, 'sha256:policy-integration')).idempotencyKey
+  const killed = await marketStore.dispatch(await radar.buildMarketMutationIntent('watch', [{ signalRef: 'signal:integration-1', revision: 1 }], 5, 'sha256:policy-integration'))
+  assert(killed.receipt.outcome === 'unknown', 'disconnected market watch must surface unknown')
+  const beforeReconcile = marketApplies.length
+  const reconciledWatch = await marketStore.reconcile(killedKey)
+  assert(reconciledWatch !== null && reconciledWatch.outcome === 'reconciled', 'market unknown must reconcile via receipt lookup')
+  assert(marketApplies.length === beforeReconcile, 'market reconcile must never re-dispatch')
+  assert(marketLookups.includes(killedKey), 'market reconcile must query the original key')
+  const stale = await marketStore.dispatch(await radar.buildMarketMutationIntent('mark_read', [{ signalRef: 'signal:integration-2', revision: 1 }], 4, 'sha256:policy-integration'))
+  assert(stale.receipt.outcome === 'conflict' && stale.dispatched === false, 'stale reader revision must conflict without a write')
+  checks.push({
+    stage: 'market_mutation_reconcile',
+    owner_apply_calls: marketApplies.length,
+    double_click_deduped: true,
+    unknown_reconciled_without_redispatch: true,
+    stale_revision_conflict: true,
+  })
+
   if (liveEnabled) {
     const liveConfig = { binary: liveBinary }
     const liveIntent = (kind, refs = [], key = `dsh-live-${kind}`) => ({

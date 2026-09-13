@@ -22,3 +22,12 @@ test('unconnected and pseudo locale states render accessible status rather than 
   expect(html).toContain('[!! Market changes Market changes !!]')
   expect(html).not.toContain('<article')
 })
+
+test('a deterministic capability gap shows the owner disabled reason without fake content', () => {
+  const controller = createMarketReadingController(async () => ({ ok: false, reason: 'capability_unavailable', recovery: 'Private' }))
+  const html = renderToStaticMarkup(createElement(MarketReadingView, { controller, locale: 'zh',
+    capability: { status: 'reader_only', reason: 'market_capability_reader_only: the Radar owner exposes the market reader view but no market briefs yet; the market face stays disabled' } }))
+  expect(html).toContain('market_capability_reader_only')
+  expect(html).not.toContain('<article')
+  expect(html).not.toContain('Private')
+})

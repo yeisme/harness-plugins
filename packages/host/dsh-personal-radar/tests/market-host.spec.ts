@@ -46,3 +46,36 @@ test('detail host rejects stale contexts before dispatch and discards responses 
   expect(await pending).toMatchObject({ reason: 'cancelled' })
   expect(calls).toBe(1)
 })
+
+test('probeCapability classifies through the current connection and reports no-connection honestly', async () => {
+  const transport = { async readResource({ uri }: { uri: string }) {
+    return { contents: [{ uri, mimeType: 'application/json', text: JSON.stringify({ spec: 'radar.market_capabilities.v1', views: ['market_capabilities', 'market_reader'] }) }] }
+  } }
+  const host = createConnectedRadarMarketHost({ current: () => ({ ref: 'session-a', connection: transport }), subscribeContext: () => () => {}, subscribePolicy: () => () => {} })
+  const probe = await host.probeCapability!()
+  expect(probe.status).toBe('reader_only')
+  expect(probe.reason).toContain('market_capability_reader_only')
+  const empty = createConnectedRadarMarketHost({ current: () => null, subscribeContext: () => () => {}, subscribePolicy: () => () => {} })
+  expect((await empty.probeCapability!()).status).toBe('unavailable')
+})
+
+test('probeCapability results from a replaced connection are discarded', async () => {
+  let release!: (value: unknown) => void
+  const read = new Promise<unknown>(resolve => { release = resolve })
+  let context: MarketConnectionContext = { ref: 'session-a', connection: { async readResource() { return read } } }
+  const host = createConnectedRadarMarketHost({ current: () => context, subscribeContext: () => () => {}, subscribePolicy: () => () => {} })
+  const pending = host.probeCapability!()
+  context = { ref: 'session-b', connection: { async readResource() { throw new Error('Not used') } } }
+  release({ contents: [{ uri: 'radar://market/capabilities', mimeType: 'application/json', text: JSON.stringify({ spec: 'radar.market_capabilities.v1', views: ['market_capabilities', 'market_reader', 'market_brief'] }) }] })
+  const result = await pending
+  expect(result.status).toBe('unavailable')
+  expect(result.reason).toContain('connection changed')
+})
+
+test('mutate is refused without the owner mutation seam and mutationsAvailable stays false', async () => {
+  const host = createConnectedRadarMarketHost({ current: () => ({ ref: 'session-a', connection: { async readResource() { throw new Error('unused') } } }), subscribeContext: () => () => {}, subscribePolicy: () => () => {} })
+  expect(host.mutationsAvailable!()).toBe(false)
+  const intent = { schema: 'dsh.radar.market-mutation.v1', kind: 'mark_read', selections: [{ signalRef: 'signal-a', revision: 1 }], readerRevision: 1, policyRevision: 'sha256:policy', idempotencyKey: 'x', payloadDigest: 'x' } as never
+  const refused = await host.mutate!('session-a', intent, new AbortController().signal)
+  expect(refused).toMatchObject({ ok: false, reason: 'capability_unavailable' })
+})

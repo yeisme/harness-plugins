@@ -14,6 +14,7 @@
 
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import { isRadarMarketHost, mountRadarMarket } from './market-runtime.js'
+import type { MarketQuestionSessionsFace } from './market-question.js'
 import {
   RADAR_COMMAND_USAGE,
   createRadarPaneState,
@@ -223,9 +224,12 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
 
   const { probe, pane, radarHost } = await probeRadarClientCapability(ctx)
   const marketHost = readContextService<unknown>(ctx, 'radarMarketHost')
-  let market: ReturnType<typeof mountRadarMarket> | undefined
+  // The official sessions face powers evidence question drafts; without it
+  // the market face stays read-only and the question action stays disabled.
+  const sessions = readContextService<MarketQuestionSessionsFace>(ctx, 'sessions')
+  let market: Awaited<ReturnType<typeof mountRadarMarket>> | undefined
   if (pane && isRadarMarketHost(marketHost)) {
-    try { market = mountRadarMarket(pane, marketHost) } catch { /* Keep the legacy face usable when market mounting fails. */ }
+    try { market = await mountRadarMarket(pane, marketHost, sessions) } catch { /* Keep the legacy face usable when market mounting fails. */ }
   }
 
   if (pane === undefined || radarHost === undefined) {
