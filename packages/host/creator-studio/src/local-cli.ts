@@ -9,6 +9,8 @@ import { createLocalAuctraAdapter, localAuctraConfigSchema } from './local-auctr
 import { withLocalScaenaTable } from './local-scaena-table.ts'
 import { withLocalScaenaPackage } from './local-scaena-package.ts'
 import { withLocalScaena } from './local-scaena.ts'
+import { withLocalScaenaStoryboardActions } from './scaena-storyboard-actions.ts'
+import { withLocalScaenaProduction } from './local-scaena-production.ts'
 import { withLocalEikonaReview } from './local-eikona-review.ts'
 import { withLocalEikona } from './local-eikona.ts'
 import type { CreatorOwnerAdapterV1, CreatorResourceV1, CreatorStudioContextV1 } from './types.ts'
@@ -122,6 +124,16 @@ export class LocalStudioCLI {
       const match = projects.data.projects.find(project => configured ? project.project_id === configured : resolve(project.root_path) === this.cwd)
       return match?.project_id
     }
-    return owner === 'eikona' ? withLocalEikonaReview(withLocalEikona(base, (args, timeout) => this.invoke(owner, args, timeout), resolveProject), (args, timeout) => this.invoke(owner, args, timeout), resolveProject) : withLocalScaenaTable(withLocalScaenaPackage(withLocalScaena(base, (args, timeout) => this.invoke(owner, args, timeout), this.cwd), (args, timeout) => this.invoke(owner, args, timeout), this.cwd), (args, timeout) => this.invoke(owner, args, timeout), this.cwd)
+    // 制作台链（外→内）：production 阶段/只读 face → 镜头表 → storyboard 动作族
+    // （§2.2–§2.4，镜像包选择）→ 制作包导出 → 会话动作 → base。动作按 id 各自
+    // 认领互不重复；导出仍由 withLocalScaenaPackage 独家拥有。
+    return owner === 'eikona' ? withLocalEikonaReview(withLocalEikona(base, (args, timeout) => this.invoke(owner, args, timeout), resolveProject), (args, timeout) => this.invoke(owner, args, timeout), resolveProject)
+      : withLocalScaenaProduction(
+        withLocalScaenaTable(
+          withLocalScaenaStoryboardActions(
+            withLocalScaenaPackage(withLocalScaena(base, (args, timeout) => this.invoke(owner, args, timeout), this.cwd), (args, timeout) => this.invoke(owner, args, timeout), this.cwd),
+            (args, timeout) => this.invoke(owner, args, timeout), this.cwd),
+          (args, timeout) => this.invoke(owner, args, timeout), this.cwd),
+        (args, timeout) => this.invoke(owner, args, timeout), this.cwd)
   }
 }

@@ -1,5 +1,8 @@
 import { scaenaTableQuerySchema, scaenaTableResultSchema } from './scaena-table-contract.ts'
 import { scaenaPackageQuerySchema, scaenaPackageResultSchema } from './scaena-package-contract.ts'
+import { scaenaProductionPageQuerySchema } from './scaena-production-reads.ts'
+import { scaenaDeliveryQuerySchema } from './scaena-export-delivery.ts'
+import { scaenaPackageEventsQuerySchema } from './scaena-review-package-transport.ts'
 import { inputQuerySchema } from "./input-contract.ts"
 import { eikonaBatchMembersQuerySchema, eikonaBatchMembersResultSchema, matchesEikonaBatchMembers } from './eikona-batch-members.ts'
 import { eikonaBatchPlanResultSchema } from './eikona-batch-plan.ts'
@@ -343,6 +346,62 @@ export class CreatorStudioGateway extends TypertRemoteService {
       if (!result.success || (result.data.status === 'ready' && result.data.view.breakdown_ref !== query.data.breakdownRef)) return { status: 'unconfirmed' as const }
       return result.data
     } catch { return { status: 'unconfirmed' as const } }
+  }
+
+  /** §2.1 制作台四合同分页读取：context/owner/generation 三重 fence 后透传。 */
+  @Remote('readScaenaProduction')
+  async readScaenaProduction(input: unknown) {
+    const query = scaenaProductionPageQuerySchema.safeParse(input), context = this.expectedContext
+    if (!query.success) return { status: 'rejected' as const, reason: 'invalid_input' as const }
+    if (!context) return null
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('scaena')
+    if (!adapter?.readScaenaProduction) return null
+    const generation = directory?.generation
+    try {
+      const result = await adapter.readScaenaProduction(query.data, context)
+      const latest = this.expectedContext
+      if (!latest || !sameContext(context, latest) || directory?.generation !== generation || directory?.selected('scaena') !== adapter) return null
+      return result
+    } catch { return null }
+  }
+
+  /** §2.5 导出交付页：owner 回执/产物 ref 投影；无运行态，关闭 Pane 不影响。 */
+  @Remote('readScaenaDelivery')
+  async readScaenaDelivery(input: unknown) {
+    const query = scaenaDeliveryQuerySchema.safeParse(input), context = this.expectedContext
+    if (!query.success) return { status: 'rejected' as const, reason: 'invalid_input' as const }
+    if (!context) return null
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('scaena')
+    if (!adapter?.readScaenaDelivery) return null
+    const generation = directory?.generation
+    try {
+      const result = await adapter.readScaenaDelivery(query.data, context)
+      const latest = this.expectedContext
+      if (!latest || !sameContext(context, latest) || directory?.generation !== generation || directory?.selected('scaena') !== adapter) return null
+      if (result.status === 'ready' && result.packageRef !== query.data.packageRef) return { status: 'unknown' as const, reason: 'unconfirmed' as const }
+      return result
+    } catch { return null }
+  }
+
+  /** §2.6 包事件 refs-only 观察面：numeric cursor resume；纯观察零副作用。 */
+  @Remote('readScaenaPackageEvents')
+  async readScaenaPackageEvents(input: unknown) {
+    const query = scaenaPackageEventsQuerySchema.safeParse(input), context = this.expectedContext
+    if (!query.success) return { status: 'rejected' as const, reason: 'invalid_input' as const }
+    if (!context) return null
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('scaena')
+    if (!adapter?.readScaenaPackageEvents) return null
+    const generation = directory?.generation
+    try {
+      const result = await adapter.readScaenaPackageEvents(query.data, context)
+      const latest = this.expectedContext
+      if (!latest || !sameContext(context, latest) || directory?.generation !== generation || directory?.selected('scaena') !== adapter) return null
+      if (result.status === 'ready' && result.packageRef !== query.data.packageRef) return { status: 'unknown' as const, reason: 'unconfirmed' as const }
+      return result
+    } catch { return null }
   }
 
   @Remote('snapshotOwner')

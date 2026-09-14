@@ -329,6 +329,12 @@ export interface CreatorArtifactImageV1 {
 export interface CreatorOwnerAdapterV1 {
   readScaenaTable?(query: import('./scaena-table-contract.ts').ScaenaTableQuery, context: CreatorStudioContextV1): Promise<import('./scaena-table-contract.ts').ScaenaTableResult>
   selectScaenaPackage?(query: import('./scaena-package-contract.ts').ScaenaPackageQuery, context: CreatorStudioContextV1): Promise<import('./scaena-package-contract.ts').ScaenaPackageResult>
+  /** 制作台四合同分页读取（§2.1）：owner 描述为源，诚实态透传。 */
+  readScaenaProduction?(query: import('./scaena-production-reads.ts').ScaenaProductionPageQuery, context: CreatorStudioContextV1): Promise<import('./scaena-production-reads.ts').ScaenaProductionPageResult>
+  /** 导出交付页（§2.5）：owner 回执与产物 ref 为准；部分成功保留已完成成果。 */
+  readScaenaDelivery?(query: import('./scaena-export-delivery.ts').ScaenaDeliveryQuery, context: CreatorStudioContextV1): Promise<import('./scaena-export-delivery.ts').ScaenaDeliveryPageResult>
+  /** 包事件 refs-only 观察面（§2.6）：numeric cursor resume；关闭 Pane 不取消运行。 */
+  readScaenaPackageEvents?(query: import('./scaena-review-package-transport.ts').ScaenaPackageEventsQuery, context: CreatorStudioContextV1): Promise<import('./scaena-review-package-transport.ts').ScaenaPackageEventsResult>
   inputIntake?: import("./input-intake.ts").CreatorInputIntake
 
   readEikonaCandidateImage?(query: import('./eikona-asset-contract.ts').EikonaImageQuery, context: CreatorStudioContextV1): ReturnType<import('./eikona-discovery-client.ts').EikonaDiscoveryClient['readCandidateImage']>

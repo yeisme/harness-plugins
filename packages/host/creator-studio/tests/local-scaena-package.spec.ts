@@ -4,7 +4,7 @@ import { withLocalScaenaPackage } from '../src/local-scaena-package.ts'
 import type { CreatorOwnerAdapterV1, CreatorStudioContextV1 } from '../src/types.ts'
 
 const context: CreatorStudioContextV1 = { tenantRef: 'local:user', principalRef: 'local:user', workspaceRef: 'workspace:one', projectRef: 'project:one', revision: '1', membershipRevision: '1', installationRef: 'installation:one', pluginDigest: 'digest:one', policyRevision: '1', runtimeGeneration: '1' }
-const value = { schema_version: 'scaena.storyboard.review_package_projection.v1', package_ref: 'review-package:one', project_ref: 'project:one', episode_ref: 'episode:one', package_version: 3, graph_version: 2, state: 'reviewing', scene_has_more: false,
+const value = { schema_version: 'scaena.storyboard.review_package_projection.v1', package_ref: 'review-package:one', project_ref: 'project:one', episode_ref: 'episode:one', scenario: 'short_drama', state: 'reviewing', episode_graph_ref: 'graph:one', package_version: 3, graph_version: 2, episode_completed: false, input_source_kind: 'local_attestation', input_digest: `sha256:${'a'.repeat(64)}`, scene_has_more: false,
   scene_cards: [{ scene_ref: 'scene:one', order: 0, shot_refs: ['shot:one'], structural_accepted: true, visual_accepted: false, stale: false }], export: { formal_allowed: false, draft_allowed: true }, allowed_actions: [] }
 
 it('opens canonical scenes, gates formal export, and observes an original export without repeating it', async () => {

@@ -3,21 +3,10 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { PaneActionDescriptorSchema, PANE_ACTION_DESCRIPTOR_SCHEMA, type PaneActionReceiptV1 } from '@yeisme/dsh-pane-protocol'
 import type { CreatorOwnerAdapterV1, CreatorResourceV1, CreatorStudioContextV1 } from './types.ts'
-import { scaenaPackageQuerySchema } from './scaena-package-contract.ts'
+import { scaenaPackageQuerySchema, scaenaPackageProjectionSchema as projectionSchema, scaenaPackageExportManifestSchema as exportSchema } from './scaena-package-contract.ts'
 
 type Invoke = (args: readonly string[], timeout?: number) => Promise<unknown>
 const ref = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u)
-const projectionSchema = z.object({ schema_version: z.literal('scaena.storyboard.review_package_projection.v1'), package_ref: ref, project_ref: ref,
-  episode_ref: ref, package_version: z.number().int().positive(), graph_version: z.number().int().nonnegative(), state: z.string().max(100),
-  scene_has_more: z.boolean(), scene_cards: z.array(z.object({ scene_ref: ref, order: z.number().int(), shot_refs: z.array(ref).max(200),
-    structural_accepted: z.boolean(), visual_accepted: z.boolean(), stale: z.boolean() })).max(200).optional(),
-  export: z.object({ formal_allowed: z.boolean(), draft_allowed: z.boolean() }), allowed_actions: z.array(z.string()).max(64),
-})
-const exportSchema = z.object({ schema_version: z.literal('scaena.storyboard.package_export_manifest.v1'), package_ref: ref,
-  idempotency_key_digest: z.string().regex(/^sha256:[a-f0-9]{64}$/u), request_digest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
-  package_version: z.number().int().positive(), export_mode: z.enum(['formal', 'draft']), production_ready: z.boolean(),
-  files: z.array(z.object({ path: z.string().regex(/^[A-Za-z0-9._-]+$/u), digest: z.string().min(1), size_bytes: z.number().int().nonnegative() })).max(64),
-})
 const hash = (input: string) => createHash('sha256').update(input).digest('hex')
 
 export function withLocalScaenaPackage(base: CreatorOwnerAdapterV1, invoke: Invoke, cwd: string): CreatorOwnerAdapterV1 {
