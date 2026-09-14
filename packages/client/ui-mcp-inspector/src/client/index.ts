@@ -31,7 +31,11 @@ export { ToolsHubController, createToolsHubController } from './controller.ts'
 export { toolHubRemoteContribution } from './remote-contribution.ts'
 export { resolveToolHubRemote } from './remote.ts'
 export { normalizeToolHubClientError, ToolHubClientError } from './remote.ts'
-export type { ToolHubClientErrorCode } from './remote.ts'
+export type { ToolHubAuthCause, ToolHubClientErrorCode } from './remote.ts'
+export { decodeToolFailure, deriveCatalogFailureSignals, resolveFailurePresentation, retryAfterHint, FAILURE_PRESENTATION, FAILURE_TAXONOMY_CODES } from './failure-decode.ts'
+export type { DecodedFailure, DecodedTaxonomyCode, EmptyToolsFailureSignal, FailurePresentation, FailurePresentationVocabulary, FailureTaxonomyCode, RetryAfterHint, ToolActivityFailureSignal, ToolFailureSignal, ToolHubClientFailureSignal } from './failure-decode.ts'
+export { FailureDecodeCard } from './DebugCards.tsx'
+export type { FailureDecodeCardProps } from './DebugCards.tsx'
 export type {
   ToolHubAvailability,
   ToolHubCatalogAnswerV1,

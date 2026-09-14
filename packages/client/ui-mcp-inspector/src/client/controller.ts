@@ -9,14 +9,14 @@ import type {
   ToolHubRemoteFace,
   ToolHubSetEnabledAnswerV1,
 } from './wire.ts'
-import { normalizeToolHubClientError, type ToolHubClientErrorCode } from './remote.ts'
+import { normalizeToolHubClientError, type ToolHubAuthCause, type ToolHubClientErrorCode } from './remote.ts'
 
 export type ToolsHubControllerState =
   | { readonly status: 'idle' }
   | { readonly status: 'loading' }
   | { readonly status: 'ready'; readonly catalog: ToolHubCatalogV1 }
-  | { readonly status: 'unavailable'; readonly message: string; readonly code?: ToolHubClientErrorCode; readonly catalog?: ToolHubCatalogV1; readonly stale?: true }
-  | { readonly status: 'error'; readonly message: string; readonly code?: ToolHubClientErrorCode; readonly catalog?: ToolHubCatalogV1; readonly stale?: true }
+  | { readonly status: 'unavailable'; readonly message: string; readonly code?: ToolHubClientErrorCode; readonly catalog?: ToolHubCatalogV1; readonly stale?: true; readonly accessDenied?: true; readonly authCause?: ToolHubAuthCause }
+  | { readonly status: 'error'; readonly message: string; readonly code?: ToolHubClientErrorCode; readonly catalog?: ToolHubCatalogV1; readonly stale?: true; readonly accessDenied?: true; readonly authCause?: ToolHubAuthCause }
 
 const IDLE: ToolsHubControllerState = Object.freeze({ status: 'idle' })
 const LOADING: ToolsHubControllerState = Object.freeze({ status: 'loading' })
@@ -103,7 +103,7 @@ export class ToolsHubController {
         } catch (error) {
           if (this.disposed || serving !== this.generation) continue
           const normalized = normalizeToolHubClientError(error)
-          this.setState({ ...(this.lastCatalog ? { catalog: this.lastCatalog, stale: true as const } : {}), status: 'error', message: normalized.code, code: normalized.code })
+          this.setState({ ...(this.lastCatalog ? { catalog: this.lastCatalog, stale: true as const } : {}), status: 'error', message: normalized.code, code: normalized.code, ...(normalized.accessDenied ? { accessDenied: true as const } : {}), ...(normalized.authCause !== undefined ? { authCause: normalized.authCause } : {}) })
         } finally {
           this.served = serving
           this.resolveWaiters(serving)

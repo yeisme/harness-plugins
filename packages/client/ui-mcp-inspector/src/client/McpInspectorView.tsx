@@ -7,7 +7,7 @@
  *
  * @module @yeisme/dsh-client-ui-mcp-inspector/client
  */
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react'
 import type { ConvViewProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { ToolsViewState } from './workspace-state.ts'
 import { Surface } from '@yeisme/dsh-client-ui-surface'
@@ -19,6 +19,8 @@ import { en, type McpInspectorKey } from './locales.ts'
 import { mcpInspectorStyles } from './styles.ts'
 import type { ToolHubClientErrorCode } from './remote.ts'
 import type { ToolHubHealthStateV1, ToolHubItemV1 } from './wire.ts'
+import { FailureDecodeCard } from './DebugCards.tsx'
+import { deriveCatalogFailureSignals, type ToolFailureSignal } from './failure-decode.ts'
 
 export type ToolsTranslator = (key: McpInspectorKey, params?: Readonly<Record<string, string | number>>) => string
 export type ToolsSection = 'catalog' | 'details'
@@ -63,6 +65,8 @@ export interface ToolsInspectorTreeProps {
   readonly preferChinesePurpose?: boolean
   readonly draftPendingId?: string
   readonly draftDisabledReason?: string
+  /** Read-only failure decode signals; absent or empty renders no card. */
+  readonly failureSignals?: readonly ToolFailureSignal[]
   readonly onAddToDraft?: (item: ToolHubItemV1) => Promise<DraftReferenceResult>
   readonly onScopeChange?: (scope: 'session' | 'installed') => void
   readonly onOpenSession?: () => void
@@ -248,6 +252,8 @@ export function renderToolsInspectorTree(props: ToolsInspectorTreeProps): JSX.El
         </div>
       ) : null}
 
+      {props.failureSignals !== undefined && props.failureSignals.length > 0 ? <FailureDecodeCard signals={props.failureSignals} text={text} /> : null}
+
       <div className="tools-workspace" data-active-section={activeSection} data-right-content={rightContent}>
         <section className="tools-pane tools-catalog-pane" data-section="catalog" aria-label={text('section.catalog')}>
           <header className="tools-pane-header">
@@ -344,6 +350,10 @@ export function ToolsInspectorContent({ binding, controller, t, renderReference,
   const setSource = (value: SourceFilter) => shared.set('source', value)
   const setSelectedId = (value: string | undefined) => shared.set('selectedId', value)
   const setActiveSection = (value: ToolsSection | ((previous: ToolsSection) => ToolsSection)) => shared.set('activeSection', value)
+  // In-pane failure signals: health-gated connected-but-empty MCP servers plus
+  // transport-layer toolHub client errors. Read-only; session call errors are
+  // appended by callers that own the ConversationSnapshot projection.
+  const failureSignals = useMemo(() => deriveCatalogFailureSignals(catalogState), [catalogState])
   const [notice, setNotice] = useState<ToolsNotice>()
   const [draftPendingId, setDraftPendingId] = useState<string>()
   const focusIntent = useRef<'detail' | 'row'>()
@@ -381,6 +391,7 @@ export function ToolsInspectorContent({ binding, controller, t, renderReference,
   return renderToolsInspectorTree({
     catalogState, toolbarActions, instanceId, ...(preferChinesePurpose === undefined ? {} : { preferChinesePurpose }), ...(globalManagement === undefined ? {} : { globalManagement }), ...(contextLabel === undefined ? {} : { contextLabel }), ...(readOnlyCatalog === undefined ? {} : { readOnlyCatalog }), ...(scope === undefined ? {} : { scope }), ...(boundSessionLabel === undefined ? {} : { boundSessionLabel }), ...(boundSessionId === undefined ? {} : { boundSessionId }), ...(draftDisabledReason === undefined ? {} : { draftDisabledReason }), ...(onScopeChange === undefined ? {} : { onScopeChange }), ...(onOpenSession === undefined ? {} : { onOpenSession }),
     ...(pendingId === undefined ? {} : { pendingId }),
+    ...(failureSignals.length > 0 ? { failureSignals } : {}),
     query,
     family,
     enabled,

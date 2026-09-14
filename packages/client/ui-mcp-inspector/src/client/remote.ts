@@ -22,10 +22,17 @@ export type ToolHubClientErrorCode =
   | 'catalog_unavailable'
   | 'unknown'
 
+export type ToolHubAuthCause = 'unauthenticated' | 'permission_denied'
+
 export class ToolHubClientError extends Error {
   readonly code: ToolHubClientErrorCode
 
-  constructor(code: ToolHubClientErrorCode, readonly accessDenied = false) {
+  /**
+   * Additive structured auth cause: preserves the 401-vs-403 distinction the
+   * legacy `accessDenied` boolean dropped. Optional and never consumed by
+   * existing call sites; absent means the distinction was not recoverable.
+   */
+  constructor(code: ToolHubClientErrorCode, readonly accessDenied = false, readonly authCause?: ToolHubAuthCause) {
     super(code)
     this.name = 'ToolHubClientError'
     this.code = code
@@ -42,7 +49,10 @@ function transportText(error: unknown): string {
 export function normalizeToolHubClientError(error: unknown): ToolHubClientError {
   if (error instanceof ToolHubClientError) return error
   const text = transportText(error).toLowerCase()
-  if (/\b(?:401|403)\b|permission[ _-]?denied|forbidden|unauthorized/.test(text)) return new ToolHubClientError('unknown', true)
+  // Additive structured causes keep the 401/403 distinction; `code`/`accessDenied`
+  // semantics are unchanged for every existing consumer.
+  if (/\b401\b|unauthorized|token[ _-]?invalid/.test(text)) return new ToolHubClientError('unknown', true, 'unauthenticated')
+  if (/\b403\b|permission[ _-]?denied|forbidden/.test(text)) return new ToolHubClientError('unknown', true, 'permission_denied')
   if (/\b404\b|not[ _-]?found/.test(text)) return new ToolHubClientError('endpoint_not_found')
   if (/contract|schema|codec|specversion|incompatible/.test(text)) return new ToolHubClientError('contract_mismatch')
   if (/storage/.test(text)) return new ToolHubClientError('storage_unavailable')

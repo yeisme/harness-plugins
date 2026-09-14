@@ -12,40 +12,47 @@
 
 ## 2. 失败解码卡
 
-- [ ] 2.1 纯解码函数 `decodeToolFailure(signal)`：按 design §2 冻结映射表把三路信号（ConversationSnapshot `errorCode`/`errorName`、toolHub client error、目录派生空工具信号）映射到根仓冻结分类法七码，fail-closed。
+- [x] 2.1 纯解码函数 `decodeToolFailure(signal)`：按 design §2 冻结映射表把三路信号（ConversationSnapshot `errorCode`/`errorName`、toolHub client error、目录派生空工具信号）映射到根仓冻结分类法七码，fail-closed。
   - **Owner/Scope**：`packages/client/ui-mcp-inspector/src/client/failure-decode.ts` + `tests/failure-decode.test.ts`。
   - **Acceptance**：框架无关纯函数；同输入输出确定；分类法码字面量透传不改写；未知形状/超界输入 → `undecoded`，永不猜测码。
   - **Validation**：`pnpm --filter @yeisme/dsh-client-ui-mcp-inspector test -- tests/failure-decode.test.ts`。
-- [ ] 2.2 归一器 additive 结构化原因：`ToolHubClientError` 增加可选 `authCause`（`unauthenticated | permission_denied`），保留结构化 `status`；丢失区分度的 `accessDenied` → 解码为 `undecoded`。
+  - **Evidence**：`src/client/failure-decode.ts`（框架无关纯函数，安全门沿用 errorCode/errorName 门格式）+ `tests/failure-decode.test.ts`；focused Vitest 27 项绿（2026-09-14）。未知/超界/无字段输入实测落 `undecoded`。
+- [x] 2.2 归一器 additive 结构化原因：`ToolHubClientError` 增加可选 `authCause`（`unauthenticated | permission_denied`），保留结构化 `status`；丢失区分度的 `accessDenied` → 解码为 `undecoded`。
   - **Owner/Scope**：`packages/client/ui-mcp-inspector/src/client/remote.ts` + `tests/remote.test.ts`。
   - **Acceptance**：既有 `code`/`accessDenied` 字段与消费者语义零变化；仅 additive 可选字段。
   - **Validation**：`pnpm --filter @yeisme/dsh-client-ui-mcp-inspector test -- tests/remote.test.ts`。
-- [ ] 2.3 合并码单一状态实现：`permission_denied_or_unknown_action` 渲染一个共享常量状态对象；解码结果无任何可反推触发条件的字段。
+  - **Evidence**：`src/client/remote.ts` additive：`ToolHubClientError` 增可选 `authCause`，`normalizeToolHubClientError` 401/403 分支携带结构化原因（含结构化 `status` 文本）；`code`/`accessDenied` 既有语义与消费者零变化（`tests/remote.test.ts` 新增三例，10 项全绿）。
+- [x] 2.3 合并码单一状态实现：`permission_denied_or_unknown_action` 渲染一个共享常量状态对象；解码结果无任何可反推触发条件的字段。
   - **Owner/Scope**：`src/client/failure-decode.ts`（共享常量）+ 卡片组件。
   - **Acceptance**：403、空 tools、unknown-action 三类输入命中同一呈现对象（同 title/likely causes/next actions：capability 搜索拼写核对、申请授权、预算内重试）。
   - **Validation**：合同测试 §3.1。
-- [ ] 2.4 bounded `retry_after_seconds` 呈现：仅 rate/budget 码携带；`0–3600` 显示精确秒，`>3600` 定性提示，缺省不造数；无倒计时、无据此自动重试或调度。
+  - **Evidence**：合并码渲染共享冻结常量 `PLAIN_DECODED.permission_denied_or_unknown_action`（仅 `taxonomyCode` 键，无 cause/detail/hit-reason）；403/空 tools/unknown-action 三类输入命中同一对象，由 §3.1 合同测试钉死。
+- [x] 2.4 bounded `retry_after_seconds` 呈现：仅 rate/budget 码携带；`0–3600` 显示精确秒，`>3600` 定性提示，缺省不造数；无倒计时、无据此自动重试或调度。
   - **Owner/Scope**：`src/client/failure-decode.ts` + 卡片渲染 + locale。
   - **Acceptance**：缺省字段时不显示任何时间承诺；源码无 timer/auto-retry 路径。
   - **Validation**：`pnpm --filter @yeisme/dsh-client-ui-mcp-inspector test`。
-- [ ] 2.5 失败解码卡组件接入既有 pane（session-scope；activity/catalog 信号已在仓内），zh/en 双语，空态（无失败信号）不渲染卡片。
+  - **Evidence**：`retryAfterHint`：仅 rate/budget 码可携带 `retryAfterSeconds`；0–3600 精确秒、>3600 定性提示、缺失/非有限/负值不造数；`failure-decode.ts`/`DebugCards.tsx` grep 无 timer/auto-retry/mount 触发路径。
+- [x] 2.5 失败解码卡组件接入既有 pane（session-scope；activity/catalog 信号已在仓内），zh/en 双语，空态（无失败信号）不渲染卡片。
   - **Owner/Scope**：`src/client/McpInspectorView.tsx`（或新增 `DebugCards.tsx`）+ `src/client/locales.ts`；不改 pane 注册与 tab 结构。
   - **Acceptance**：纯只读呈现，无调用动作；卸载插件随 pane 一并移除；不触碰 `dsh-mcp-inspector-v1` 既有 snapshot。
   - **Validation**：`pnpm --filter @yeisme/dsh-client-ui-mcp-inspector typecheck && pnpm --filter @yeisme/dsh-client-ui-mcp-inspector build`。
 
 ## 3. 合同测试：合并态不可拆分
 
-- [ ] 3.1 合并态 non-split 断言：对"403/forbidden 信号、server 健康但空 tools 信号、unknown-action 信号"三类输入断言呈现输出 deep-equal（taxonomy code、title、likely causes、next actions 全一致），并断言解码结果对象上不存在任何可区分触发条件的键。
+  - **Evidence**：`src/client/DebugCards.tsx` FailureDecodeCard 经 `failureSignals` 接入 `renderToolsInspectorTree`（pane 注册与 tab 结构零改动）；信号源为 health-gated 空工具目录信号与 `error` 态 toolHub client error（controller additive 携带 authCause）；空态不渲染卡片；locale zh/en 对称（173/173 键一致）。`pnpm --filter @yeisme/dsh-client-ui-mcp-inspector typecheck && vitest run && build` 全绿（18 文件/121 测试）。
+- [x] 3.1 合并态 non-split 断言：对"403/forbidden 信号、server 健康但空 tools 信号、unknown-action 信号"三类输入断言呈现输出 deep-equal（taxonomy code、title、likely causes、next actions 全一致），并断言解码结果对象上不存在任何可区分触发条件的键。
   - **Owner/Scope**：`tests/failure-decode.test.ts`（`describe('merged-state contract')`）。
   - **Acceptance**：任何试图拆分合并态（新增 cause/hit-reason 字段或分叉文案）的实现使本测试红灯；测试注释引用根仓冻结合同（存在性预言机）。
   - **Validation**：`pnpm --filter @yeisme/dsh-client-ui-mcp-inspector test -- tests/failure-decode.test.ts`。
-- [ ] 3.2 分类法快照测试：冻结七码逐一有用例覆盖 + 每码一条未知/无信号输入 → `undecoded` 的 fail-closed 用例。
+  - **Evidence**：`tests/failure-decode.test.ts` `describe('merged-state contract')`：三类输入解码结果 `toBe` 同一冻结常量 + `Object.keys` 仅 `['taxonomyCode']` + zh/en 呈现 deep-equal；注释引用根仓冻结合同（存在性预言机）。
+- [x] 3.2 分类法快照测试：冻结七码逐一有用例覆盖 + 每码一条未知/无信号输入 → `undecoded` 的 fail-closed 用例。
   - **Owner/Scope**：`tests/failure-decode.test.ts`（`describe('frozen taxonomy snapshot')`）。
   - **Acceptance**：分类法码集合变化（根仓未来演进）时本测试显式红灯而非静默漂移。
   - **Validation**：同 3.1。
 
 ## 4. 能力地图卡
 
+  - **Evidence**：`tests/failure-decode.test.ts` `describe('frozen taxonomy snapshot')`：冻结七码逐一用例 + 字面量透传 + 未知/无信号/超界/丢失区分度 fail-closed 用例；分类法码集合变化显式红灯。
 - [ ] 4.1 Host additive connect-doc 投影：`toolHub` Remote 新增 `connectDoc()` 只读方法与 wire 类型（compact faces + `docDigest` digest_sha256_16 + observedAt；`connect-doc-unavailable` 失败形状），从已批准绑定/当前暴露读取 `gateway_connect_doc.v1`；既有 `list`/`setEnabled` 与 `specVersion` 不变。
   - **Owner/Scope**：`packages/host/dsh-tool-hub/src/wire.ts`、`src/remote.ts`、新增 `src/connect-doc.ts` + `tests/service.spec.ts` 增例。
   - **Acceptance**：旧客户端零感知；wire 只传 safe projection 字段；G4 未落地时回 `connect-doc-unavailable`（带原因）。

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { toolHubRemoteContribution } from '../src/client/remote-contribution.ts'
-import { normalizeToolHubClientError } from '../src/client/remote.ts'
+import { normalizeToolHubClientError, ToolHubClientError } from '../src/client/remote.ts'
 
 const listCodec = toolHubRemoteContribution.descriptors.find(descriptor => descriptor.method === 'list')?.result.schema
 
@@ -43,6 +43,24 @@ describe('toolHub error normalization', () => {
     expect(error.code).toBe('endpoint_not_found')
     expect(error.message).toBe('endpoint_not_found')
     expect(JSON.stringify(error)).not.toMatch(/secret|HTTP 404/)
+  })
+
+  it('keeps the additive structured 401 auth cause', () => {
+    expect(normalizeToolHubClientError({ message: 'HTTP 401 Unauthorized' })).toMatchObject({ code: 'unknown', accessDenied: true, authCause: 'unauthenticated' })
+    expect(normalizeToolHubClientError({ code: 'auth', message: 'token invalid' })).toMatchObject({ accessDenied: true, authCause: 'unauthenticated' })
+  })
+
+  it('keeps the additive structured 403 auth cause including structured status', () => {
+    expect(normalizeToolHubClientError({ message: 'forbidden' })).toMatchObject({ code: 'unknown', accessDenied: true, authCause: 'permission_denied' })
+    expect(normalizeToolHubClientError({ message: 'call failed', status: 403 })).toMatchObject({ accessDenied: true, authCause: 'permission_denied' })
+    expect(normalizeToolHubClientError({ message: 'permission denied for tool' })).toMatchObject({ accessDenied: true, authCause: 'permission_denied' })
+  })
+
+  it('leaves authCause absent when the distinction is not recoverable', () => {
+    expect(normalizeToolHubClientError({ message: 'gateway hiccup' })).toMatchObject({ code: 'unknown' })
+    expect(normalizeToolHubClientError({ message: 'gateway hiccup' }).authCause).toBeUndefined()
+    // Legacy constructor shape keeps working unchanged.
+    expect(new ToolHubClientError('unknown', true).authCause).toBeUndefined()
   })
 })
 
