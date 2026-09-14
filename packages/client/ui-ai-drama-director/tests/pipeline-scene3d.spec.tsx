@@ -328,10 +328,28 @@ describe('scene3d viewport lifecycle (controller layer)', () => {
 })
 
 describe('scene3d remote probe', () => {
-  it('probes remote.scene3dDirector both nested and direct, and rejects shape mismatches', () => {
+  it('probes remote.scene3dDirector both nested and direct, and rejects shape mismatches', async () => {
     const remote = createPipelineFixtureOwner().scene3dRemote!
-    expect(probePipelineScene3DRemote({ get: key => key === 'remote' ? { scene3dDirector: remote } : undefined })).toBe(remote)
-    expect(probePipelineScene3DRemote({ get: key => key === 'remote.scene3dDirector' ? remote : undefined })).toBe(remote)
+    // The probe wraps the probed face in a transport adapter (typert
+    // RemoteResult unwrapping): plain fixture payloads pass through with
+    // identical results, and RemoteResult envelopes unwrap to their payload.
+    const nested = probePipelineScene3DRemote({ get: key => key === 'remote' ? { scene3dDirector: remote } : undefined })
+    expect(nested).toBeDefined()
+    const direct = probePipelineScene3DRemote({ get: key => key === 'remote.scene3dDirector' ? remote : undefined })
+    expect(direct).toBeDefined()
+    const target = { scope: { workspaceRef: 'ws:fixture', projectRef: 'project:fixture' }, documentId: 'scene3d:main' }
+    const plain = await remote.sceneRead(target)
+    await expect(nested!.sceneRead(target)).resolves.toStrictEqual(plain)
+    await expect(direct!.sceneRead(target)).resolves.toStrictEqual(plain)
+    // Enveloped transport results unwrap; failures degrade to undefined so the
+    // controller's fail-closed parse owns the honest degradation.
+    const envelopedMethods = () => ({ sceneRead: async () => ({ ok: true, value: plain }), saveScene: async () => ({ ok: true, value: { status: 'saved' } }),
+      reconcileScene: async () => ({ ok: true, value: { status: 'saved' } }), importGlb: async () => ({ ok: true, value: { status: 'imported' } }),
+      exportGlb: async () => ({ ok: true, value: { status: 'exported' } }), listChangeSets: async () => ({ ok: true, value: { changeSets: [] } }) })
+    const enveloped = envelopedMethods()
+    await expect(probePipelineScene3DRemote({ get: key => key === 'remote' ? { scene3dDirector: enveloped } : undefined })!.sceneRead(target)).resolves.toBe(plain)
+    const failing = { ...envelopedMethods(), sceneRead: async () => ({ ok: false, error: { code: 'x' } }) }
+    await expect(probePipelineScene3DRemote({ get: key => key === 'remote' ? { scene3dDirector: failing } : undefined })!.sceneRead(target)).resolves.toBeUndefined()
     expect(probePipelineScene3DRemote({ get: () => undefined })).toBeUndefined()
     expect(probePipelineScene3DRemote({ get: key => key === 'remote' ? { scene3dDirector: { sceneRead: 'nope' } } : undefined })).toBeUndefined()
   })

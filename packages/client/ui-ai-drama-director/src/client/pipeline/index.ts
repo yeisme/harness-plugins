@@ -150,6 +150,17 @@ export type {
   PipelinePaneSelectionSourceV1,
 } from './pane-selection.js'
 export {
+  createPipelinePaneLinkBus,
+  isPipelinePaneLinkBus,
+  PipelinePaneLinkBus,
+  PIPELINE_PANE_LINK_SERVICE,
+} from './pane-link-bus.js'
+export type {
+  PaneLinkAdoptionEmitInputV1,
+  PaneLinkHandoffEmitInputV1,
+  PipelinePaneLinkBusV1,
+} from './pane-link-bus.js'
+export {
   createPipelineWorkbenchView,
   creativePipelineRemoteOwnerFace,
   pipelineWorkbenchViewDescriptor,

@@ -32,7 +32,7 @@ import {
   createCreatorStudioRuntime,
 } from './runtime.ts'
 import { DomainStudioView } from './domain-studio.tsx'
-import { CreatorMediaView, CreatorStudioView, type CreatorPaneFace, type CreatorStudioViewMode, type CreatorStudioViewProps } from './views.tsx'
+import { CreatorMediaView, CreatorStudioView, type CreatorPaneFace, type CreatorPaneLinkBusFace, type CreatorStudioViewMode, type CreatorStudioViewProps } from './views.tsx'
 
 export const inject = ['slots', 'remote', 'locale']
 
@@ -238,6 +238,20 @@ function registerViews(ctx: ClientContext, controller: CreatorStudioController, 
   const resolveDirector = (): { readonly applyPreset?: () => unknown; readonly applyShowControlPreset?: () => unknown; readonly probe?: { readonly showControl?: { readonly available?: boolean } } } | undefined => {
     try { return ctx.get('dramaDirector' as never) as { readonly applyPreset?: () => unknown; readonly applyShowControlPreset?: () => unknown; readonly probe?: { readonly showControl?: { readonly available?: boolean } } } | undefined } catch { return undefined }
   }
+  // Professional-pane link bus (task 3.2 选择联动): resolved at factory-call
+  // time (when the workspace pane actually opens), so a drama client plugin
+  // that applied after this pack is still found; absent → the Scaena
+  // workspace keeps its selection purely local.
+  const resolvePaneLinkBus = (): CreatorPaneLinkBusFace | undefined => {
+    try {
+      const candidate = ctx.get('pipelinePaneLink' as never) as CreatorPaneLinkBusFace | undefined
+      return candidate !== null && typeof candidate === 'object'
+        && typeof candidate.emitPaneSelectionHandoff === 'function'
+        && typeof candidate.emitCandidateAdoption === 'function'
+        ? candidate
+        : undefined
+    } catch { return undefined }
+  }
   const onOpenDrama = (): void => {
     const director = resolveDirector()
     if (director !== undefined && typeof director.applyPreset === 'function') director.applyPreset()
@@ -250,6 +264,9 @@ function registerViews(ctx: ClientContext, controller: CreatorStudioController, 
       ? () => director.applyShowControlPreset?.()
       : undefined
     const domain = mode === 'visual' ? 'eikona' : mode === 'production' ? 'scaena' : undefined
+    // The pane-link emission seam is Scaena-镜头表-only (the 3D director
+    // emits from its own viewport pick seam inside the drama workbench).
+    const paneLinkBus = domain === 'scaena' ? resolvePaneLinkBus() : undefined
     const viewProps: CreatorStudioViewProps = {
       mode: mode as CreatorStudioViewMode,
       controller: domain === undefined ? controller : domainControllers[domain],
@@ -258,6 +275,7 @@ function registerViews(ctx: ClientContext, controller: CreatorStudioController, 
       onOpenDrama,
       ...(composerBridge === undefined ? {} : { composerBridge }),
       ...(onOpenShowControl === undefined ? {} : { onOpenShowControl }),
+      ...(paneLinkBus === undefined ? {} : { paneLinkBus }),
       t,
       onDirty: dirty => {
         if (props?.view.id !== undefined) pane.controller?.dispatch({ type: 'set_view_dirty', viewId: props.view.id, dirty })

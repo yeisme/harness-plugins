@@ -317,7 +317,24 @@ export interface CreatorStudioViewProps {
   readonly onDirty?: (dirty: boolean) => void
   readonly composerBridge?: CreatorComposerBridge
   readonly recovery?: ReactNode
+  /**
+   * Professional-pane link bus (dsh-screenplay-production-continuity-v1 task
+   * 3.2 选择联动), resolved duck-typed from the drama client plugin's
+   * `pipelinePaneLink` service. Present only in the Scaena 镜头表 workspace;
+   * absent → selection stays local and nothing is emitted.
+   */
+  readonly paneLinkBus?: CreatorPaneLinkBusFace
   readonly t?: CreatorStudioTranslator
+}
+
+/**
+ * Structural pane-link bus face this package consumes. Kept local (duck-typed,
+ * mirroring the shape provided by the drama client plugin) so this package
+ * keeps no dependency on the drama client package.
+ */
+export interface CreatorPaneLinkBusFace {
+  emitPaneSelectionHandoff(input: { source: 'scaena-table' | '3d-director'; projectRef: string; kind: 'shot' | 'scene' | 'object' | 'candidate'; ref: string }): boolean
+  emitCandidateAdoption(input: { source: 'scaena-table' | '3d-director'; projectRef: string; candidateRef: string; adoptedVersion: string; adoptedForShotRef?: string }): boolean
 }
 
 function LifecycleNav({ mode, onOpenMode, onOpenDrama, t }: { mode: CreatorStudioViewMode; onOpenMode(mode: CreatorStudioViewMode): void; onOpenDrama?(): void; t: CreatorStudioTranslator }): ReactNode {

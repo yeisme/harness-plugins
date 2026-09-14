@@ -84,12 +84,18 @@ importers:
 
   packages/bundle/dsh-ai-drama-director:
     dependencies:
+      '@yeisme/dsh-3d-director-host':
+        specifier: workspace:*
+        version: link:../../host/dsh-3d-director
       '@yeisme/dsh-ai-drama-director':
         specifier: workspace:*
         version: link:../../host/dsh-ai-drama-director
       '@yeisme/dsh-client-ui-ai-drama-director':
         specifier: workspace:*
         version: link:../../client/ui-ai-drama-director
+      '@yeisme/dsh-creator-studio-host':
+        specifier: workspace:*
+        version: link:../../host/creator-studio
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.1
@@ -2860,6 +2866,9 @@ importers:
 
   packages/host/dsh-ai-drama-director:
     dependencies:
+      '@yeisme/dsh-3d-director-host':
+        specifier: workspace:*
+        version: link:../dsh-3d-director
       '@yeisme/dsh-creator-studio-host':
         specifier: workspace:^
         version: link:../creator-studio

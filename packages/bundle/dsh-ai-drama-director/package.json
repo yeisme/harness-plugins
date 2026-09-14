@@ -71,7 +71,9 @@
   },
   "dependencies": {
     "@yeisme/dsh-client-ui-ai-drama-director": "workspace:*",
-    "@yeisme/dsh-ai-drama-director": "workspace:*"
+    "@yeisme/dsh-ai-drama-director": "workspace:*",
+    "@yeisme/dsh-3d-director-host": "workspace:*",
+    "@yeisme/dsh-creator-studio-host": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

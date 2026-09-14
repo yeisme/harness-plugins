@@ -72,3 +72,48 @@ describe('dsh-ai-drama-director bundle contract', () => {
     expect(compatibility.pluginReleaseDigest).toMatch(/^[0-9a-f]{64}$/u)
   })
 })
+
+describe('local staging expected contexts (dsh-screenplay-production-continuity-v1 task 3.2)', () => {
+  it('provides both gateway expected contexts from the deterministic local identity once the workspace registry exists', async () => {
+    const { Context } = await import('@deepseek-ai/cordis')
+    // The BUILT bundle entry: the name-collision gateway alias is applied by
+    // the build, so the artifact is the only alias-free import surface.
+    const { default: bundleEntry } = await import('../lib/index.mjs')
+    const { validateCreativePipelineContext } = await import('../../../host/dsh-ai-drama-director/src/pipeline-gateway.js')
+    const { validateScene3DContext } = await import('../../../host/dsh-3d-director/src/gateway.js')
+    const ctx = new Context()
+    ctx.provide('workspaceRegistry', { list: () => [] })
+    await bundleEntry.apply(ctx)
+    await new Promise(resolve => setTimeout(resolve, 20))
+    const pipeline = validateCreativePipelineContext(ctx.get('creativePipelineExpectedContext'))
+    const scene3d = validateScene3DContext(ctx.get('scene3dDirectorExpectedContext'))
+    expect(pipeline).toBeDefined()
+    expect(scene3d).toBeDefined()
+    // Same deterministic local identity across both gateways: the pipeline
+    // canvas domain and the 3D scene domain key the same project tuple.
+    expect(pipeline?.tenantRef).toBe(scene3d?.tenantRef)
+    expect(pipeline?.workspaceRef).toBe(scene3d?.workspaceRef)
+    expect(pipeline?.projectRef).toBe(scene3d?.projectRef)
+    await ctx.fiber.dispose()
+  })
+
+  it('keeps an explicitly provided integration context and never shadows it', async () => {
+    const { Context } = await import('@deepseek-ai/cordis')
+    // The BUILT bundle entry: the name-collision gateway alias is applied by
+    // the build, so the artifact is the only alias-free import surface.
+    const { default: bundleEntry } = await import('../lib/index.mjs')
+    const { validateCreativePipelineContext } = await import('../../../host/dsh-ai-drama-director/src/pipeline-gateway.js')
+    const ctx = new Context()
+    ctx.provide('workspaceRegistry', { list: () => [] })
+    ctx.provide('creativePipelineExpectedContext', {
+      schema: 'dsh.creative-pipeline-context.v1alpha1',
+      tenantRef: 'tenant:explicit',
+      workspaceRef: 'workspace:explicit',
+      projectRef: 'project:explicit',
+    })
+    await bundleEntry.apply(ctx)
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(validateCreativePipelineContext(ctx.get('creativePipelineExpectedContext'))?.projectRef).toBe('project:explicit')
+    await ctx.fiber.dispose()
+  })
+})

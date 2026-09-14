@@ -29,6 +29,7 @@ import {
 } from '@yeisme/dsh-client-ui-3d-director'
 import { PipelineInspector } from './inspector.js'
 import { PipelineWorkbenchShell } from './workbench-shell.js'
+import type { PipelinePaneLinkBusV1 } from './pane-link-bus.js'
 import type { PipelineWorkbenchSection } from './types.js'
 import { handlePipelineMediaDrop } from './media-drag.js'
 import type { PipelineMediaEntry, PipelineMediaResolveFn } from './media.js'
@@ -107,19 +108,34 @@ function readContextService<T>(ctx: ContextReader, name: string): T | undefined 
  * stay honest-unavailable — the single canvas writer remains the host-side
  * Creator Studio gateway), then the explicitly named fixture service (fixture
  * evidence tier). Missing both → the pane renders disabled.
+ *
+ * Namespace member reads are guarded: on the real client runtime the typed
+ * remote guards a namespace property access behind the caller's service
+ * inject, and a missing/unauthorized member must degrade to `undefined`
+ * (probe-only), never throw out of a mount cycle.
  */
 export function probePipelineWorkbenchOwner(ctx: ContextReader): PipelineWorkbenchOwnerFaceV1 | undefined {
   const remote = readContextService<unknown>(ctx, 'remote')
-  const owner = isRecord(remote) ? remote.creativePipeline : undefined
-  const creator = isRecord(remote) && isRecord(remote.creatorStudio) ? remote.creatorStudio : readContextService<Record<string, unknown>>(ctx, 'remote.creatorStudio')
-  const remoteFace = isRecord(owner) ? creativePipelineRemoteOwnerFace(owner, creator) : undefined
+  const owner = readRemoteMember(remote, 'creativePipeline')
+  const creator = readRemoteMember(remote, 'creatorStudio') ?? readContextService<Record<string, unknown>>(ctx, 'remote.creatorStudio')
+  const remoteFace = isRecord(owner) ? creativePipelineRemoteOwnerFace(owner, isRecord(creator) ? creator : undefined) : undefined
   if (remoteFace !== undefined) return remoteFace
   const direct = readContextService<unknown>(ctx, 'remote.creativePipeline')
-  const directFace = isRecord(direct) ? creativePipelineRemoteOwnerFace(direct, creator) : undefined
+  const directFace = isRecord(direct) ? creativePipelineRemoteOwnerFace(direct, isRecord(creator) ? creator : undefined) : undefined
   if (directFace !== undefined) return directFace
   const fixture = readContextService<unknown>(ctx, PIPELINE_FIXTURE_OWNER_SERVICE)
   if (isPipelineWorkbenchOwner(fixture)) return fixture
   return undefined
+}
+
+/** Reads one namespace member off the resolved `remote` service; guards throw to undefined. */
+function readRemoteMember(remote: unknown, member: string): unknown {
+  if (!isRecord(remote)) return undefined
+  try {
+    return (remote as Record<string, unknown>)[member]
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -129,6 +145,12 @@ export function probePipelineWorkbenchOwner(ctx: ContextReader): PipelineWorkben
  * through when the transport offers them. The canvas remote is read-only:
  * the Creator Studio seam is used when available; otherwise saves and
  * reconciles degrade to `unavailable`. No second writer is created.
+ *
+ * The real typert transport wraps every method result in a `RemoteResult`
+ * (`{ ok: true, value } | { ok: false, error }`); the mapping unwraps the
+ * payload here so the controller keeps decoding plain projections. A failed
+ * transport call maps to the gateway's data-less failure envelope (honest
+ * `unavailable` degradation), never a fabricated projection.
  */
 export function creativePipelineRemoteOwnerFace(remote: Record<string, unknown>, creator?: Record<string, unknown>): PipelineWorkbenchOwnerFaceV1 | undefined {
   if (typeof remote.snapshot !== 'function') return undefined
@@ -136,12 +158,12 @@ export function creativePipelineRemoteOwnerFace(remote: Record<string, unknown>,
   const face: {
     -readonly [K in keyof PipelineWorkbenchOwnerFaceV1]?: PipelineWorkbenchOwnerFaceV1[K]
   } & { snapshot: () => Promise<unknown> } = {
-    snapshot: () => snapshot.call(remote),
+    snapshot: async () => unwrapSnapshot(await snapshot.call(remote)),
   }
   if (typeof remote.canvasRead === 'function') {
     const canvasRead = remote.canvasRead as (input: never) => Promise<unknown>
     face.canvasRemote = {
-      canvasRead: input => canvasRead.call(remote, input as never),
+      canvasRead: async input => unwrapPayload(await canvasRead.call(remote, input as never), { status: 'unavailable' }),
       // The single canvas writer stays host-side; this face never writes.
       canvasSave: async () => ({ status: 'unavailable' }),
       canvasReconcile: async () => ({ status: 'unavailable' }),
@@ -152,18 +174,18 @@ export function creativePipelineRemoteOwnerFace(remote: Record<string, unknown>,
   if (creator && ['canvasRead', 'canvasSave', 'canvasReconcile'].every(key => typeof creator[key] === 'function')) {
     const writer = creator as unknown as NonNullable<PipelineWorkbenchOwnerFaceV1['canvasRemote']>
     face.canvasRemote = {
-      canvasRead: input => writer.canvasRead.call(creator, input),
-      canvasSave: input => writer.canvasSave.call(creator, input),
-      canvasReconcile: input => writer.canvasReconcile.call(creator, input),
+      canvasRead: async input => unwrapPayload(await writer.canvasRead.call(creator, input), { status: 'unavailable' }),
+      canvasSave: async input => unwrapPayload(await writer.canvasSave.call(creator, input), { status: 'unavailable' }),
+      canvasReconcile: async input => unwrapPayload(await writer.canvasReconcile.call(creator, input), { status: 'unavailable' }),
     }
   }
   if (typeof remote.dispatchRunAction === 'function') {
     const dispatch = remote.dispatchRunAction as (input: PipelineWorkbenchRunActionRequestV1) => Promise<unknown>
-    face.dispatchRunAction = input => dispatch.call(remote, input)
+    face.dispatchRunAction = async input => unwrapPayload(await dispatch.call(remote, input), undefined)
   }
   if (typeof remote.resolveMedia === 'function') {
     const resolve = remote.resolveMedia as PipelineMediaResolveFn
-    face.resolveMedia = entry => resolve.call(remote, entry)
+    face.resolveMedia = async entry => unwrapPayload(await resolve.call(remote, entry), undefined)
   }
   for (const key of ['subscribe', 'onUnavailable', 'onAvailable'] as const) {
     if (typeof remote[key] === 'function') {
@@ -175,14 +197,87 @@ export function creativePipelineRemoteOwnerFace(remote: Record<string, unknown>,
 }
 
 /**
+ * Unwraps one typert `RemoteResult`. A transport failure without a payload
+ * degrades to the data-less snapshot failure envelope; an unwrapped (test or
+ * fixture) result passes through unchanged so the existing evidence tiers
+ * keep their plain-projection shape.
+ */
+function unwrapSnapshot(result: unknown): unknown {
+  if (isRemoteResult(result)) {
+    if (result.ok) return result.value
+    warnTransportFailure('creativePipeline.snapshot', result)
+    return { schema: 'dsh.creative-pipeline-workbench-snapshot.v1alpha1', status: 'unavailable', reasonCode: 'remote_transport', safeMessage: 'The pipeline owner projection transport failed; nothing was fabricated.' }
+  }
+  return result
+}
+
+/**
+ * Bounded transport diagnostic: surfaces the owner's failure CODE (never the
+ * payload) on the console so an honest degradation is observable; the surface
+ * state stays the single source of truth.
+ */
+function warnTransportFailure(endpoint: string, result: { readonly ok: boolean; readonly error?: unknown }): void {
+  const code = isRecord(result.error) && typeof result.error.code === 'string' ? result.error.code : 'unknown'
+  try {
+    console.warn(`[pipeline-pane] ${endpoint} transport failure: ${code.slice(0, 80)}`)
+  } catch { /* console may be absent */ }
+}
+
+/** Unwraps one typert `RemoteResult` with a caller-chosen failure fallback. */
+function unwrapPayload<T>(result: unknown, failure: T): T {
+  if (isRemoteResult(result)) return result.ok ? result.value as T : failure
+  return result as T
+}
+
+function isRemoteResult(value: unknown): value is { readonly ok: boolean; readonly value?: unknown } {
+  return isRecord(value) && typeof value.ok === 'boolean'
+}
+
+/**
  * Probes the host `scene3dDirector` remote for the embedded Shot-anchored 3D
  * viewport (priority 6). A missing/shape-mismatched seam returns undefined —
  * the Inspector 3D entry renders disabled with the probe reason, never a dead
  * button.
+ *
+ * The probed capability is wrapped in a transport adapter: the real typert
+ * namespace wraps every method result in a `RemoteResult`, while the
+ * Scene3DController decodes plain payloads fail-closed. A transport failure
+ * unwraps to `undefined` → the controller's own invalid/error degradation;
+ * plain (fixture) remotes pass through unchanged.
  */
 export function probePipelineScene3DRemote(ctx: ContextReader): Scene3DDirectorRemote | undefined {
   const probe = probeScene3DDirector(ctx)
-  return probe.status === 'available' ? probe.capability : undefined
+  return probe.status === 'available' ? wrapScene3DTransport(probe.capability) : undefined
+}
+
+/** Unwraps typert `RemoteResult` envelopes around every scene3d remote method. */
+function wrapScene3DTransport(remote: Scene3DDirectorRemote): Scene3DDirectorRemote {
+  const unwrap = async (call: () => Promise<unknown>, endpoint: string): Promise<unknown> => {
+    let result: unknown
+    try {
+      result = await call()
+    } catch (error) {
+      // Carrier/assembly faults surface the bounded message so the honest
+      // degradation is observable; the caller's fail-closed path still owns it.
+      try {
+        console.warn(`[pipeline-pane] ${endpoint} transport threw: ${String(error).slice(0, 160)}`)
+      } catch { /* console may be absent */ }
+      throw error
+    }
+    if (isRemoteResult(result)) {
+      if (result.ok) return result.value
+      warnTransportFailure(endpoint, result)
+      return undefined
+    }
+    return result
+  }
+  const wrapped: Record<string, unknown> = {}
+  for (const key of ['sceneWorkbenchRead', 'saveSceneWorkbench', 'sceneRead', 'saveScene', 'reconcileScene', 'importGlb', 'exportGlb', 'listChangeSets', 'previewChangeSet', 'acceptChangeSet', 'rejectChangeSet', 'rollbackChangeSet'] as const) {
+    const method = remote[key]
+    if (typeof method !== 'function') continue
+    wrapped[key] = async (...args: unknown[]) => unwrap(() => (method as (...input: unknown[]) => Promise<unknown>).apply(remote, args), `scene3dDirector.${key}`)
+  }
+  return wrapped as unknown as Scene3DDirectorRemote
 }
 
 export interface PipelineWorkbenchViewDeps {
@@ -193,6 +288,8 @@ export interface PipelineWorkbenchViewDeps {
   readonly confirmations?: PipelineConfirmationStoreV1
   /** Probed `scene3dDirector` remote; absent → the 3D viewport entry stays disabled with a reason. */
   readonly scene3dRemote?: Scene3DDirectorRemote
+  /** Pane-link bus for professional-pane handoff/adoption intake + 3D pick emission (task 3.2). */
+  readonly paneLinkBus?: PipelinePaneLinkBusV1
 }
 
 function artifactMediaEntry(artifact: ArtifactRefV1): PipelineMediaEntry {
@@ -407,6 +504,7 @@ export function createPipelineWorkbenchView(deps: PipelineWorkbenchViewDeps): ()
       ...(deps.newId === undefined ? {} : { newId: deps.newId }),
       ...(deps.confirmations === undefined ? {} : { confirmations: deps.confirmations }),
       ...(deps.scene3dRemote === undefined ? {} : { scene3dRemote: deps.scene3dRemote }),
+      ...(deps.paneLinkBus === undefined ? {} : { paneLinkBus: deps.paneLinkBus }),
     }))
     useEffect(() => {
       void controller.load()

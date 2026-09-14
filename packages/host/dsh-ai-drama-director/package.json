@@ -43,6 +43,7 @@
     "vitest": "^3.2.7"
   },
   "dependencies": {
+    "@yeisme/dsh-3d-director-host": "workspace:*",
     "@yeisme/dsh-creator-studio-host": "workspace:^",
     "@yeisme/dsh-pane-protocol": "workspace:*",
     "@yeisme/dsh-plugin-contracts": "workspace:*"

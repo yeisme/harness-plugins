@@ -11,6 +11,8 @@ import {
   decodeCreativePipelineRunProjectionV1,
   decodeWorkSurfaceCapsuleV1,
 } from '@yeisme/dsh-plugin-contracts'
+import { ProjectCanvasStore } from '@yeisme/dsh-creator-studio-host'
+import { SceneGraphStore } from '@yeisme/dsh-3d-director-host'
 import {
   CREATIVE_PIPELINE_EXPECTED_CONTEXT,
   CREATIVE_PIPELINE_RUN_OWNER,
@@ -71,9 +73,23 @@ function row(document: ProjectCanvasDocument, inflight?: unknown) {
   return { document, receipts: [], ...(inflight === undefined ? {} : { inflight }) }
 }
 
-function storageWith(rows: Map<string, unknown>, onGet?: () => void) {
-  const table = { get: (key: string) => { onGet?.(); return rows.get(key) }, put: vi.fn(async () => {}) }
-  return { open: vi.fn(async () => ({ table: () => table, close: vi.fn(async () => {}) })) }
+/**
+ * Two-domain storage mock (canvas + scene3d), because the pipeline gateway
+ * delegates to the SINGLE domain owners: real ProjectCanvasStore and real
+ * SceneGraphStore instances are mounted over the mock as the in-process
+ * `creatorStudio` / `scene3dDirector` owner services — exactly the composed
+ * staging shape the gateway runs in.
+ */
+function storageWith(rows: Map<string, unknown>, onGet?: () => void, sceneRows: Map<string, unknown> = new Map()) {
+  const tables = new Map<string, { get(key: string): unknown; put(value: never): Promise<void> }>([
+    ['yeisme_project_canvas_v1', { get: (key: string) => { onGet?.(); return rows.get(key) }, put: vi.fn(async () => {}) }],
+    ['yeisme_scene_3d_graph_v1', { get: (key: string) => sceneRows.get(key), put: vi.fn(async () => {}) }],
+  ])
+  return {
+    open: vi.fn(async (spec: { readonly name: string }) => ({ table: () => tables.get(spec.name), close: vi.fn(async () => {}) })),
+    canvasRows: rows,
+    sceneRows,
+  }
 }
 
 function runOwnerSnapshot() {
@@ -106,12 +122,23 @@ function runOwnerSnapshot() {
   }
 }
 
-async function harness(input?: { context?: CreativePipelineContextV1; storage?: unknown; runOwner?: unknown }) {
+async function harness(input?: { context?: CreativePipelineContextV1; storage?: unknown; runOwner?: unknown; mountOwners?: boolean }) {
   const ctx = new Context()
   contexts.push(ctx)
   if (input?.context !== undefined) ctx.provide(CREATIVE_PIPELINE_EXPECTED_CONTEXT, input.context)
-  if (input?.storage !== undefined) ctx.provide('storageDomain', input.storage)
   if (input?.runOwner !== undefined) ctx.provide(CREATIVE_PIPELINE_RUN_OWNER, input.runOwner)
+  if (input?.storage !== undefined) {
+    ctx.provide('storageDomain', input.storage)
+    if (input?.mountOwners !== false) {
+      // The composed-host owner services: the real stores over the same mock
+      // storage, exposed under the service keys the gateway delegates to.
+      const creatorContext = { ...pipelineContext(), schemaVersion: 'creator.studio.context.v1alpha1', principalRef: 'principal:one', sessionRef: 'session:one', revision: '1', membershipRevision: '1', installationRef: 'install:one', pluginDigest: 'digest:one', policyRevision: '1', runtimeGeneration: 'runtime:1' } as never
+      const canvasStore = new ProjectCanvasStore(input.storage as never, () => creatorContext)
+      const sceneStore = new SceneGraphStore(input.storage as never, () => ({ tenantRef: 'tenant:one', workspaceRef: 'workspace:one', projectRef: 'project:one' }))
+      ctx.provide('creatorStudio', { canvasRead: (request: unknown) => canvasStore.read(request) })
+      ctx.provide('scene3dDirector', { sceneWorkbenchRead: (request: unknown) => sceneStore.readWorkbench(request) })
+    }
+  }
   await ctx.plugin(CreativePipelineGateway)
   return { ctx, gateway: ctx.get('creativePipeline') as CreativePipelineGateway }
 }
@@ -149,9 +176,9 @@ describe('CreativePipelineGateway snapshot', () => {
     expect(await gateway.canvasRead({ scope: { workspaceRef: 'workspace:one', projectRef: 'project:one' }, documentId: 'main' })).toEqual({ status: 'unavailable' })
   })
 
-  it('reports unavailable when the storage domain is not mounted', async () => {
+  it('reports unavailable when no canvas owner service is mounted', async () => {
     const { gateway } = await harness({ context: pipelineContext() })
-    expect(await gateway.snapshot()).toMatchObject({ status: 'unavailable', reasonCode: 'storage_unavailable' })
+    expect(await gateway.snapshot()).toMatchObject({ status: 'unavailable', reasonCode: 'canvas_owner_unavailable' })
   })
 
   it('projects layout, capsule, and safe references from the stored canvas document', async () => {
@@ -292,5 +319,82 @@ describe('CreativePipelineGateway canvasRead', () => {
     const storage = storageWith(rows, () => { mutable.projectRef = 'project:other' })
     const { gateway } = await harness({ context: mutable, storage })
     expect(await gateway.canvasRead(read)).toEqual({ status: 'forbidden' })
+  })
+})
+
+describe('CreativePipelineGateway scene3d section (task 3. composition)', () => {
+  const IDENTITY = { translate: [0, 0, 0], rotate: [0, 0, 0, 1], scale: [1, 1, 1] }
+  const SCENE_KEY = JSON.stringify(['tenant:one', 'workspace:one', 'project:one', 'main'])
+
+  function sceneDocument(overrides: Record<string, unknown> = {}) {
+    return {
+      schema: 'dsh.scene-3d.v1alpha1',
+      scope: { workspaceRef: 'workspace:one', projectRef: 'project:one' },
+      id: 'main',
+      version: 3,
+      scenes: [{ id: 'main', label: 'Main scene', rootNodeIds: ['node-camera', 'node-lin', 'node-prop'], default: true }],
+      nodes: [
+        { id: 'node-camera', label: 'Shot 04 camera', kind: 'camera', transform: IDENTITY, visible: true, canvasNodeRef: 'node:shot04' },
+        { id: 'node-lin', label: 'Lin (lead)', kind: 'character', transform: IDENTITY, visible: true, canvasNodeRef: 'node:char-lin', resourceRef: 'asset:lin' },
+        { id: 'node-prop', label: 'Unbound prop', kind: 'prop', transform: IDENTITY, visible: true, canvasNodeRef: 'node:asset-poster' },
+      ],
+      resources: [],
+      extensions: { used: [], required: [] },
+      capabilityReport: { gltfVersion: '2.0', extensions: [], export: { ready: true, gaps: [] } },
+      ...overrides,
+    }
+  }
+
+  function sceneShots() {
+    return [{
+      shotRef: 'shot:episode01-04',
+      sceneRef: 'scene:rooftop',
+      version: 'v6',
+      cameraRef: 'node-camera',
+      frameRange: { start: 0, end: 48, fps: 24 },
+      keyframes: [],
+      objectRefs: ['node-lin'],
+      visibility: [],
+      generationRefs: [],
+      deliveryProjection: { status: 'pending' },
+    }]
+  }
+
+  it('projects committed shots and canvasNodeRef-derived bindings for shot-referenced objects', async () => {
+    const sceneRows = new Map<string, unknown>([[SCENE_KEY, { document: sceneDocument(), shots: sceneShots(), receipts: [], history: [] }]])
+    const { gateway } = await harness({ context: pipelineContext(), storage: storageWith(new Map<string, unknown>([[KEY, row(canvasDocument())]]), undefined, sceneRows) })
+    const envelope = expectEnvelope(await gateway.snapshot())
+    expect(envelope.scene3d).toBeDefined()
+    expect(envelope.scene3d?.documentId).toBe('main')
+    expect(envelope.scene3d?.shots).toEqual(sceneShots())
+    // Bindings only for objects a committed shot references: camera (via
+    // cameraRef) and Lin (via objectRefs, by node id AND resourceRef); the
+    // unbound prop stays silent in both directions.
+    expect(envelope.scene3d?.bindings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ nodeRef: 'node:shot04', shotRef: 'shot:episode01-04', sceneObjectRef: 'node-camera', layout: { position: { x: 620, y: 140 } } }),
+      expect.objectContaining({ nodeRef: 'node:char-lin', shotRef: 'shot:episode01-04', sceneObjectRef: 'node-lin', layout: { position: { x: 40, y: 240 } } }),
+    ]))
+    expect(envelope.scene3d?.bindings).toHaveLength(2)
+  })
+
+  it('omits the section when no scene row exists (adjunct degradation, canvas unaffected)', async () => {
+    const { gateway } = await harness({ context: pipelineContext(), storage: storageWith(new Map<string, unknown>([[KEY, row(canvasDocument())]])) })
+    const envelope = expectEnvelope(await gateway.snapshot())
+    expect(envelope.scene3d).toBeUndefined()
+    expect(envelope.availability).toEqual({ canvas: 'ready', runs: 'needs_contract' })
+  })
+
+  it('omits the section when the scene row violates the storage contract', async () => {
+    const sceneRows = new Map<string, unknown>([[SCENE_KEY, { document: sceneDocument(), shots: [{ broken: true }], receipts: [], history: [] }]])
+    const { gateway } = await harness({ context: pipelineContext(), storage: storageWith(new Map<string, unknown>([[KEY, row(canvasDocument())]]), undefined, sceneRows) })
+    const envelope = expectEnvelope(await gateway.snapshot())
+    expect(envelope.scene3d).toBeUndefined()
+  })
+
+  it('omits the section when the scene row scope does not match the bound context', async () => {
+    const sceneRows = new Map<string, unknown>([[SCENE_KEY, { document: sceneDocument({ scope: { workspaceRef: 'workspace:one', projectRef: 'project:other' } }), shots: sceneShots(), receipts: [], history: [] }]])
+    const { gateway } = await harness({ context: pipelineContext(), storage: storageWith(new Map<string, unknown>([[KEY, row(canvasDocument())]]), undefined, sceneRows) })
+    const envelope = expectEnvelope(await gateway.snapshot())
+    expect(envelope.scene3d).toBeUndefined()
   })
 })

@@ -75,6 +75,12 @@ export function createDirectorBundleMetadata(fixtureManifest) {
     dependencies: {
       '@yeisme/dsh-client-ui-ai-drama-director': 'workspace:*',
       '@yeisme/dsh-ai-drama-director': 'workspace:*',
+      // Local staging expected-context derivation (task 3.2): the same
+      // LocalStudioCLI identity the Creator Studio bundle derives its canvas
+      // context from, plus the 3D scene context schema, so the pipeline and
+      // 3D gateways key the same [tenant, workspace, project] domains.
+      '@yeisme/dsh-3d-director-host': 'workspace:*',
+      '@yeisme/dsh-creator-studio-host': 'workspace:*',
     },
     peerDependencies: {
       '@deepseek-ai/cordis': '^4.0.1',

@@ -227,6 +227,11 @@ export class SceneGraphGateway extends TypertRemoteService {
     const latest = this.expectedContext
     if (!latest || !sameScene3DContext(context, latest)) return { schema: 'dsh.scene-workbench.v1', result: { status: 'forbidden' } }
     const parsed = SceneWorkbenchReadResultSchema.safeParse(result)
+    // Bounded degradation diagnostic: names only the status/issue code of a
+    // failed exit gate (never row contents) so an honest 'error' is traceable.
+    if (!parsed.success && result.result?.status === 'ready') {
+      try { console.warn(`[scene3dDirector] sceneWorkbenchRead exit gate failed: ${parsed.error.issues.at(0)?.path.join('.')} ${parsed.error.issues.at(0)?.message.slice(0, 80)}`) } catch { /* console may be absent */ }
+    }
     return parsed.success ? parsed.data : { schema: 'dsh.scene-workbench.v1', result: { status: 'error' } }
   }
 

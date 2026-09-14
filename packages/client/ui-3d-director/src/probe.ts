@@ -26,7 +26,15 @@ function resolveScene3DRemote(ctx: Scene3DContextReader): Scene3DDirectorRemote 
   if (direct !== undefined) return isScene3DDirectorRemote(direct) ? direct : undefined
   const remote = readContextService(ctx, 'remote')
   if (!isRecord(remote)) return undefined
-  const member = remote[SCENE_3D_DIRECTOR_REMOTE_KEY]
+  // Guarded member read: the real client runtime guards typed namespace
+  // properties behind the caller's service inject; a guarded read degrades to
+  // needs_contract, never throws out of the probe.
+  let member: unknown
+  try {
+    member = (remote as Record<string, unknown>)[SCENE_3D_DIRECTOR_REMOTE_KEY]
+  } catch {
+    return undefined
+  }
   return isScene3DDirectorRemote(member) ? member : undefined
 }
 

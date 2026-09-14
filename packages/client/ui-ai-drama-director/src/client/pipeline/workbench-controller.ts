@@ -72,10 +72,13 @@ import {
   PaneLinkSequenceGate,
   decodePipelineCandidateAdoption,
   decodePipelinePaneSelectionHandoff,
+  PIPELINE_CANDIDATE_ADOPTION_SCHEMA,
+  PIPELINE_PANE_SELECTION_HANDOFF_SCHEMA,
   type PipelineCandidateAdoptionV1,
   type PipelinePaneLinkOutcome,
   type PipelinePaneSelectionHandoffV1,
 } from './pane-selection.js'
+import type { PipelinePaneLinkBusV1 } from './pane-link-bus.js'
 import type {
   BottomRunStripProps,
   PipelineObjectListItem,
@@ -447,6 +450,12 @@ export interface PipelineWorkbenchControllerDeps {
   readonly confirmations?: PipelineConfirmationStoreV1
   /** Probed `scene3dDirector` remote; takes precedence over `owner.scene3dRemote`. */
   readonly scene3dRemote?: Scene3DDirectorRemote
+  /**
+   * Professional-pane link bus (task 3.2 emission wiring). The controller
+   * subscribes for its lifetime and routes entries by schema id into the
+   * fail-closed handoff/adoption appliers; absent → no pane-link intake.
+   */
+  readonly paneLinkBus?: PipelinePaneLinkBusV1
 }
 
 const AVAILABILITY_RUN_REASONS: Readonly<Record<Exclude<PipelineWorkbenchAvailabilityV1['runs'], 'ready'>, string>> = {
@@ -482,6 +491,8 @@ export class PipelineWorkbenchController {
   private readonly candidateAdoptions = new Map<string, PipelineCandidateAdoptionStateV1>()
   /** Last APPLIED pane selection handoff, projected through the view state. */
   private paneSelection: PipelinePaneSelectionStateV1 | undefined
+  /** Pane-link bus used for 3D-director emission; absent when no bus was injected. */
+  private paneLinkBus: PipelinePaneLinkBusV1 | undefined
 
   private state: PipelineWorkbenchViewStateV1
   private decoded: DecodedSnapshotV1 | undefined
@@ -525,6 +536,24 @@ export class PipelineWorkbenchController {
         if (this.disposed) return
         this.offlineBanner = undefined
         void this.load()
+      }))
+    }
+    // Professional-pane link intake (task 3.2 emission wiring): entries are
+    // routed by schema id into the fail-closed appliers — a shape that fails
+    // either decoder is dropped whole there, never here. The subscription is
+    // controller-lifetime, so a remount re-subscribes and a disposed
+    // controller stops observing (entries are never buffered for it).
+    if (deps.paneLinkBus !== undefined) {
+      this.paneLinkBus = deps.paneLinkBus
+      this.ownerDisposers.push(deps.paneLinkBus.subscribe(entry => {
+        if (this.disposed) return
+        if ((entry as { schema?: unknown })?.schema === PIPELINE_CANDIDATE_ADOPTION_SCHEMA) {
+          this.applyCandidateAdoption(entry)
+          return
+        }
+        if ((entry as { schema?: unknown })?.schema === PIPELINE_PANE_SELECTION_HANDOFF_SCHEMA) {
+          this.applyPaneSelectionHandoff(entry)
+        }
       }))
     }
     this.state = this.compose('loading')
@@ -991,18 +1020,34 @@ export class PipelineWorkbenchController {
     if (scene === undefined) return
     if (scene.getSnapshot().selectedNodeId !== nodeId) scene.selectNode(nodeId)
     const canvas = this.canvas
-    if (canvas === undefined) return
+    if (canvas === undefined) {
+      this.warnScene3DRouting(nodeId, 'no canvas controller')
+      return
+    }
     const sceneNode = scene.getSnapshot().document?.nodes.find(node => node.id === nodeId)
     let canvasRef = sceneNode?.canvasNodeRef
     if (canvasRef === undefined && this.decoded?.scene3d !== undefined) {
       canvasRef = findScene3DBindingForSceneObject(this.decoded.scene3d.bindings, nodeId, sceneNode?.resourceRef)?.nodeRef
     }
-    if (canvasRef === undefined) return
+    if (canvasRef === undefined) {
+      this.warnScene3DRouting(nodeId, 'no canvasNodeRef and no binding')
+      return
+    }
     const editor = canvas.getSnapshot().editor
     const target = editor?.document.nodes.find(node => node.id === canvasRef || ('domainRef' in node && node.domainRef === canvasRef))
-    if (target === undefined || editor === undefined) return
+    if (target === undefined || editor === undefined) {
+      this.warnScene3DRouting(nodeId, `canvas node ${canvasRef} not found`)
+      return
+    }
     if (editor.selection.length === 1 && editor.selection[0] === target.id) return
-    canvas.edit({ type: 'select', ids: [target.id] })
+    if (!canvas.edit({ type: 'select', ids: [target.id] })) this.warnScene3DRouting(nodeId, 'canvas edit rejected')
+  }
+
+  /** Bounded pick-routing diagnostic: names the step where a pick stayed 3D-side only. */
+  private warnScene3DRouting(nodeId: string, step: string): void {
+    try {
+      console.warn(`[pipeline-pane] scene3d pick ${nodeId} stayed local: ${step}`)
+    } catch { /* console may be absent */ }
   }
 
   /**
@@ -1042,6 +1087,22 @@ export class PipelineWorkbenchController {
     return document.nodes.find(node => node.id === ref || node.resourceRef === ref)?.id ?? ref
   }
 
+  /**
+   * Publishes one 3D-director pick handoff through the pane-link bus. Stable
+   * refs only; the emission is skipped entirely (no sequence consumed) when
+   * there is no bus, no decoded projection (no project ref to fence with), or
+   * the bus rejects the ref — an unpublishable pick still routes through the
+   * local selection path, so linkage inside this workbench never regresses.
+   */
+  private emitScene3DPick(sceneNodeId: string): void {
+    const bus = this.paneLinkBus
+    const projectRef = this.decoded?.project.ref
+    if (bus === undefined || projectRef === undefined) return
+    const sceneNode = this.scene3dController?.getSnapshot().document?.nodes.find(node => node.id === sceneNodeId)
+    const ref = sceneNode?.resourceRef ?? sceneNodeId
+    bus.emitPaneSelectionHandoff({ source: '3d-director', projectRef, kind: 'object', ref })
+  }
+
   private onScene3DChange(): void {
     if (this.disposed) return
     const scene = this.scene3dController
@@ -1054,6 +1115,15 @@ export class PipelineWorkbenchController {
     const isPick = picked !== undefined && picked !== this.scene3dObservedNodeId && picked !== this.scene3dPushedNodeId
     this.scene3dObservedNodeId = picked
     if (isPick) {
+      // 3D-director emission (task 3.2): a user pick in the Shot-anchored
+      // viewport is ALSO published through the pane-link bus as a stable-ref
+      // handoff, so independent panes observing the bus converge with the
+      // canvas. The ref is the scene object's stable identity — resourceRef
+      // first, node id second — matching the binding matcher's lookups. The
+      // workbench itself still routes through its own single-selection path;
+      // the bus emission is fenced by the current project ref and dropped
+      // (not buffered) when no bus is mounted.
+      this.emitScene3DPick(picked)
       this.selectScene3DNode(picked)
     } else {
       this.syncScene3DSelection()

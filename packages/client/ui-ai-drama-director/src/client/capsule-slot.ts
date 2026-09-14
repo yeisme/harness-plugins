@@ -161,7 +161,14 @@ export function resolvePipelineCapsuleSource(
   ctx: ContextReader,
 ): { readonly source: PipelineCapsuleSourceV1; readonly kind: PipelineCapsuleSourceKind } | undefined {
   const remote = readContextService<unknown>(ctx, 'remote')
-  const member = isRecord(remote) ? remote.creativePipeline : undefined
+  // Guarded member read: the typed remote can guard namespace properties
+  // behind the caller's service inject; guarded reads degrade, never throw.
+  let member: unknown
+  try {
+    member = isRecord(remote) ? (remote as Record<string, unknown>).creativePipeline : undefined
+  } catch {
+    member = undefined
+  }
   if (isCapsuleSource(member)) return { source: member, kind: 'remote' }
   const direct = readContextService<unknown>(ctx, 'remote.creativePipeline')
   if (isCapsuleSource(direct)) return { source: direct, kind: 'remote' }

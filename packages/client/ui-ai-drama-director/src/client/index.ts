@@ -32,6 +32,7 @@ import {
   type DramaShowControlPaneId,
   type DramaPaneViewV1,
   type DramaCommandRequestV1,
+  type DramaShowControlRemoteV1,
 } from '@yeisme/dsh-ai-drama-director'
 import {
   createDramaContextStore,
@@ -82,12 +83,13 @@ import {
   dramaViewAvailability,
   probeDramaCapability,
   DRAMA_SLASH_CONTRIBUTIONS,
+  type CreatorStudioProjectionTransport,
   type DramaAvailabilityV1,
   type DramaCapabilityProbeResultV1,
   type DramaHostTransport,
   type DramaPaneWorkbenchFace,
 } from './probe.js'
-import { DramaShowControlController } from './show-control-controller.js'
+import { DramaShowControlController, type DramaSelectionAnnotationOwnerV1 } from './show-control-controller.js'
 import {
   createDramaShowControlViewFactories,
   DRAMA_SHOW_CONTROL_VIEW_REGISTRATIONS,
@@ -104,6 +106,14 @@ import {
   probePipelineWorkbenchOwner,
   PIPELINE_WORKBENCH_UNAVAILABLE_REASON,
 } from './pipeline/workbench-pane.js'
+import type { PipelineWorkbenchOwnerFaceV1 } from './pipeline/workbench-controller.js'
+import type { Scene3DDirectorRemote } from '@yeisme/dsh-client-ui-3d-director'
+import {
+  createPipelinePaneLinkBus,
+  PIPELINE_PANE_LINK_SERVICE,
+  type PipelinePaneLinkBusV1,
+} from './pipeline/pane-link-bus.js'
+import { mountPipelineRemotes } from './pipeline/remote-mount.js'
 import { registerPipelineCapsuleSlot } from './capsule-slot.js'
 
 export {
@@ -238,7 +248,15 @@ export type {
 } from './capsule-slot.js'
 
 export const name = 'client-ui-ai-drama-director'
-export const inject = [] as const
+/**
+ * Required services (same shape the Creator Studio client declares): `remote`
+ * authorizes the typed namespace property reads (`remote.creativePipeline`,
+ * `remote.scene3dDirector`) after this plugin's own `$mount` defines them —
+ * without the inject, cordis guards reject those reads ("cannot get property
+ * without inject") and the pane renders its probe-only disables forever.
+ * `paneWorkbench`/`dramaDirector` stay OPTIONAL (probed, honest disables).
+ */
+export const inject = ['slots', 'remote', 'locale'] as const
 
 interface DramaCommandSpecV1 {
   readonly id: string
@@ -746,33 +764,143 @@ function createRuntime(input: {
  * Mounts the Drama Director client face and returns an exact, idempotent
  * disposer. A second apply on an already-mounted context is a no-op; after
  * dispose, apply rebuilds cleanly (HMR-safe).
+ *
+ * Real-host ordering (task 3.2 staging composition fix): this bundle's client
+ * entry declares `immediately`, so it can apply BEFORE sibling client plugins
+ * provide `paneWorkbench` / the slots service — a one-shot probe would then
+ * strand the pack in the probe-only branch with the Pipeline Workbench pane
+ * never registered in the launcher. The mount is therefore re-run when either
+ * sibling service arrives later (the same `internal/service` pattern the
+ * Creator Studio client uses); each mount fully disposes the previous one, so
+ * nothing registers twice and a missing pane still degrades honestly.
  */
 export async function apply(ctx: ClientContext): Promise<() => void> {
   const existing = readContextService<DramaDirectorClientFace>(ctx, 'dramaDirector')
   if (existing !== undefined) return () => {}
 
-  const { probe, pane, dramaHost, creatorRuntime, creatorStudio, showControl, selectionAnnotation } = await probeDramaCapability(ctx)
+  // Professional-pane link bus (task 3.2 emission wiring): provided for the
+  // plugin's whole lifetime — including the probe-only branch — so
+  // independent panes (the Scaena 镜头表 pane) can always resolve it. Without
+  // a mounted workbench controller entries simply have no listener
+  // (fail-closed, never buffered for a future consumer).
+  const paneLinkBus = createPipelinePaneLinkBus()
+  const unprovideBus = provide(ctx, PIPELINE_PANE_LINK_SERVICE, paneLinkBus)
+
+  let disposed = false
+  let generation = 0
+  let mounted: (() => void) | undefined
+  /** Last registration signature; guards no-op re-mounts (see mount()). */
+  let lastSignature: string | undefined
+  // Pipeline Remote namespaces (creativePipeline / scene3dDirector): the
+  // `remote` service can arrive after this immediately client entry applied,
+  // so the mount is (re-)attempted inside every mount cycle until it sticks —
+  // the SAME one-shot namespace seam the Creator Studio client uses. Absent
+  // `remote`/`$mount` → undefined → the pane renders its honest probe-only
+  // disables.
+  let remoteMount: Awaited<ReturnType<typeof mountPipelineRemotes>> | undefined
+  // The Remote namespace mount is deliberately NEVER awaited inside the mount
+  // cycle: `$mount` can queue behind the gateway connection, and view/command
+  // registration must not block on transport arrival. When the namespaces
+  // land, the re-mount re-probes the owner faces and re-registers the
+  // pipeline pane with the now-mounted projection source.
+  const ensureRemoteMount = async (): Promise<void> => {
+    if (remoteMount !== undefined) return
+    const remotes = await mountPipelineRemotes(ctx)
+    if (disposed || remotes === undefined || remoteMount !== undefined) return
+    remoteMount = remotes
+    void mount()
+  }
+  const mount = async (): Promise<void> => {
+    const current = ++generation
+    void ensureRemoteMount()
+    const { probe, pane, dramaHost, creatorRuntime, creatorStudio, showControl, selectionAnnotation } = await probeDramaCapability(ctx)
+    if (disposed || current !== generation) return
+    // Registration signature: a re-mount only re-registers when a seam
+    // AVAILABILITY actually flipped (pane face, pipeline owner projection, or
+    // scene3dDirector remote). Unchanged signature keeps the LIVE registration
+    // — re-registering an already-open pane would reset its local state
+    // (selection, drafts) for no observable gain.
+    const pipelineOwner = probePipelineWorkbenchOwner(ctx)
+    const scene3dRemote = probePipelineScene3DRemote(ctx)
+    const signature = `${pane !== undefined}:${pipelineOwner !== undefined}:${scene3dRemote !== undefined}`
+    if (mounted !== undefined && signature === lastSignature) return
+    lastSignature = signature
+    mounted?.()
+    mounted = undefined
+    mounted = pane === undefined
+      ? mountProbeOnlyFace(ctx, { probe, paneLinkBus })
+      : mountResolvedFace(ctx, {
+        probe,
+        pane,
+        dramaHost,
+        creatorRuntime,
+        creatorStudio,
+        showControl,
+        selectionAnnotation,
+        paneLinkBus,
+        pipelineOwner,
+        scene3dRemote,
+      })
+  }
+  const serviceEvents = ctx.on?.('internal/service', name => {
+    if (!disposed && (name === 'paneWorkbench' || name === 'slots' || name === 'remote')) void mount()
+  }, { global: true })
+  await mount()
+  return () => {
+    if (disposed) return
+    disposed = true
+    serviceEvents?.()
+    mounted?.()
+    mounted = undefined
+    remoteMount?.dispose()
+    paneLinkBus.dispose()
+    unprovideBus()
+  }
+}
+
+/** Fail-closed mount without the Pane Workbench face: probe-only service + slot-gated capsule. */
+function mountProbeOnlyFace(
+  ctx: ClientContext,
+  deps: { readonly probe: DramaCapabilityProbeResultV1; readonly paneLinkBus: PipelinePaneLinkBusV1 },
+): () => void {
+  // Fail closed: no view/command registration without the Pane Workbench
+  // face. The probe projection stays visible for the capability matrix.
   const sink = readContextService<DramaEvidenceSink>(ctx, 'dramaEvidenceSink')
   const emitter = createDramaEvidenceEmitter(sink)
-
-  if (pane === undefined) {
-    // Fail closed: no view/command registration without the Pane Workbench
-    // face. The probe projection stays visible for the capability matrix.
-    const probeOnlyFace: Pick<DramaDirectorClientFace, 'probe' | 'keymap' | 'evidenceSnapshot'> = {
-      probe,
-      keymap: createDramaKeymap(),
-      evidenceSnapshot: () => emitter.snapshot(),
-    }
-    // The header capsule still registers (slot-gated): without the pane face
-    // its surface switch renders disabled with the probe reason.
-    const capsuleSlot = registerPipelineCapsuleSlot(ctx, {})
-    const unprovide = provide(ctx, 'dramaDirector', probeOnlyFace)
-    return () => {
-      capsuleSlot.dispose()
-      unprovide()
-    }
+  const probeOnlyFace: Pick<DramaDirectorClientFace, 'probe' | 'keymap' | 'evidenceSnapshot'> = {
+    probe: deps.probe,
+    keymap: createDramaKeymap(),
+    evidenceSnapshot: () => emitter.snapshot(),
   }
+  // The header capsule still registers (slot-gated): without the pane face
+  // its surface switch renders disabled with the probe reason.
+  const capsuleSlot = registerPipelineCapsuleSlot(ctx, {})
+  const unprovide = provide(ctx, 'dramaDirector', probeOnlyFace)
+  return () => {
+    capsuleSlot.dispose()
+    unprovide()
+  }
+}
 
+interface ResolvedMountDeps {
+  readonly probe: DramaCapabilityProbeResultV1
+  readonly pane: DramaPaneWorkbenchFace
+  readonly dramaHost: DramaHostTransport | undefined
+  readonly creatorRuntime: CreatorStudioRuntimeV1 | undefined
+  readonly creatorStudio: CreatorStudioProjectionTransport | undefined
+  readonly showControl: DramaShowControlRemoteV1 | undefined
+  readonly selectionAnnotation: DramaSelectionAnnotationOwnerV1 | undefined
+  readonly paneLinkBus: PipelinePaneLinkBusV1
+  /** Probed at mount time (re-probed per mount cycle; fixed per registration). */
+  readonly pipelineOwner: PipelineWorkbenchOwnerFaceV1 | undefined
+  readonly scene3dRemote: Scene3DDirectorRemote | undefined
+}
+
+/** Full mount: runtime face + pipeline workbench pane + header capsule. */
+function mountResolvedFace(ctx: ClientContext, deps: ResolvedMountDeps): () => void {
+  const { probe, pane, dramaHost, creatorRuntime, creatorStudio, showControl, selectionAnnotation, paneLinkBus, pipelineOwner, scene3dRemote } = deps
+  const sink = readContextService<DramaEvidenceSink>(ctx, 'dramaEvidenceSink')
+  const emitter = createDramaEvidenceEmitter(sink)
   const contextStore = createDramaContextStore({
     ...(dramaHost === undefined ? {} : { transport: dramaHost }),
     emitter,
@@ -798,19 +926,18 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   // registered whenever the Pane Workbench face exists; the view itself is
   // probe-first and renders a disabled, reasoned surface until a pipeline
   // owner projection source (or an explicit fixture owner) is available.
-  const pipelineOwner = probePipelineWorkbenchOwner(ctx)
   // Priority-6 seam: the embedded Shot-anchored 3D viewport probes the
-  // scene3dDirector remote separately; absent → the Inspector entry renders
-  // disabled with the probe reason (no dead button).
-  const scene3dRemote = probePipelineScene3DRemote(ctx)
+  // scene3dDirector remote separately (probed by the caller per mount cycle);
+  // absent → the Inspector entry renders disabled with the probe reason.
   const unregisterPipelineWorkbench = pane.registerView({
     descriptor: pipelineWorkbenchViewDescriptor(),
     component: createPipelineWorkbenchView(
       pipelineOwner === undefined
-        ? { disabledReason: PIPELINE_WORKBENCH_UNAVAILABLE_REASON }
+        ? { disabledReason: PIPELINE_WORKBENCH_UNAVAILABLE_REASON, paneLinkBus }
         : {
           owner: pipelineOwner,
           ...(scene3dRemote === undefined ? {} : { scene3dRemote }),
+          paneLinkBus,
         },
     ),
   })

@@ -253,8 +253,15 @@ function resolveRemoteMember(ctx: ContextReader, name: string): unknown {
   const direct = readContextService<unknown>(ctx, `remote.${name}`)
   if (direct !== undefined) return direct
   const remote = readContextService<unknown>(ctx, 'remote')
-  if (isRecord(remote)) return remote[name]
-  return undefined
+  // Guarded member read: the real client runtime guards typed namespace
+  // properties behind the caller's service inject; a guarded read must degrade
+  // to undefined (probe-only), never throw out of the probe.
+  if (!isRecord(remote)) return undefined
+  try {
+    return (remote as Record<string, unknown>)[name]
+  } catch {
+    return undefined
+  }
 }
 
 /** Slash names this client contributes; reserved P0 collisions stay disabled. */

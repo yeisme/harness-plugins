@@ -36,7 +36,7 @@ export function DomainStudioView(props: CreatorStudioViewProps & { owner: 'eikon
   </Surface>
 }
 
-function ScaenaWorkspace({ owner, controller, t = defaultCreatorStudioTranslator, onDirty }: CreatorStudioViewProps & { owner: CreatorOwnerProjectionV1 }): ReactNode {
+function ScaenaWorkspace({ owner, controller, t = defaultCreatorStudioTranslator, onDirty, paneLinkBus }: CreatorStudioViewProps & { owner: CreatorOwnerProjectionV1 }): ReactNode {
   const state = useSyncExternalStore(controller.store.subscribe, controller.store.getSnapshot, controller.store.getSnapshot)
   const [dirty, setDirty] = useState(false)
   const reportDirty = useCallback((value: boolean) => { setDirty(value); onDirty?.(value) }, [onDirty])
@@ -51,15 +51,41 @@ function ScaenaWorkspace({ owner, controller, t = defaultCreatorStudioTranslator
   const resources = owner.resources.filter(item => !item.kind.endsWith('capability'))
   const resource = resources.find(item => item.ref === selected)
   const currentOwner = { ...owner, actions: owner.actions.filter(action => resource === undefined || action.targetRef === resource.ref || action.targetRef === snapshot.context?.projectRef || action.targetRef === table?.breakdown_ref) }
+  // Professional-pane selection emission (task 3.2 选择联动): one handoff per
+  // user selection action, addressed by the canonical STABLE ref (shot_ref /
+  // scene_ref) and fenced by this workspace's project ref. The bus validates
+  // fail-closed and assigns the per-source monotonic sequence; a missing bus
+  // keeps the selection purely local (nothing is emitted, nothing breaks).
+  const emitPaneSelection = useCallback((kind: 'shot' | 'scene', ref: string): void => {
+    const projectRef = snapshot.context?.projectRef
+    if (paneLinkBus === undefined || projectRef === undefined || !live.current) return
+    paneLinkBus.emitPaneSelectionHandoff({ source: 'scaena-table', projectRef, kind, ref })
+  }, [paneLinkBus, snapshot.context?.projectRef])
   const lastRefresh = useRef<string>()
   useEffect(() => {
     const receipt = state.lastReceipt
     if (!table || !receipt || receipt.status !== 'completed' || lastRefresh.current === receipt.receiptRef || !receipt.actionId?.startsWith('scaena.table.')) return
     lastRefresh.current = receipt.receiptRef
+    // Candidate adoption emission (task 3.2): a completed scaena.table.* edit
+    // fixed a new storyboard candidate version for the table's stable
+    // breakdown ref. The workbench backfills that ref's row (adopted + the
+    // owner-confirmed version) until its next owner snapshot refresh; the
+    // canvas draft itself is never rewritten by the backfill.
+    const projectRef = snapshot.context?.projectRef
+    const adoptedVersion = receipt.evidenceRefs?.[0]
+    if (paneLinkBus !== undefined && projectRef !== undefined && typeof adoptedVersion === 'string') {
+      paneLinkBus.emitCandidateAdoption({
+        source: 'scaena-table',
+        projectRef,
+        candidateRef: table.breakdown_ref,
+        adoptedVersion,
+        ...(selected === undefined ? {} : { adoptedForShotRef: selected }),
+      })
+    }
     void controller.readScaenaTable({ breakdownRef: table.breakdown_ref, ...(selected ? { shotRef: selected } : {}) }).then(result => {
       if (live.current && result.status === 'ready') setTable(result.view)
     })
-  }, [state.lastReceipt, table, selected, controller])
+  }, [state.lastReceipt, table, selected, controller, paneLinkBus, snapshot.context?.projectRef])
   return <div className="cs-scaena-grid" data-scaena-workspace>
     <SurfaceSection className="cs-scaena-tree" title={t('studio.shots')}>
       <form onSubmit={async event => {
@@ -78,6 +104,10 @@ function ScaenaWorkspace({ owner, controller, t = defaultCreatorStudioTranslator
       {resources.length === 0 && <SurfaceState phase="empty" title={t('studio.emptyShots')} description={owner.summary} />}
       <div className="cs-shot-list">{resources.map(item => <Button className="cs-button vk-btn" key={item.ref} type="button" size="sm" variant="toolbar" data-kind={item.kind} disabled={opening || dirty} aria-pressed={selected === item.ref} onClick={async () => {
         if (!table || item.kind !== 'shot') { setSelected(item.ref); return }
+        // Shot selection publishes the fixed shot_ref handoff FIRST (stable
+        // ref, never the row position); the table refresh below only re-reads
+        // the canonical view for this workspace.
+        emitPaneSelection('shot', item.ref)
         setOpening(true)
         const result = await controller.readScaenaTable({ breakdownRef: table.breakdown_ref, shotRef: item.ref, ...(cursors.at(-1) ? { continuation: cursors.at(-1)! } : {}) })
         if (live.current) { setOpening(false); if (result.status === 'ready') { setTable(result.view); setSelected(item.ref) } else setOpenFailed(true) }

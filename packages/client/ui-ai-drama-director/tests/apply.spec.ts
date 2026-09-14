@@ -235,6 +235,45 @@ describe('drama client apply', () => {
     expect(ctx.get('dramaDirector')).toBeUndefined()
   })
 
+  it('remounts when paneWorkbench arrives after this immediately client entry applied (real-host launcher ordering)', async () => {
+    // Reproduces the real staging boot: the drama client (dsh.client
+    // immediately) applies BEFORE the pane workbench sibling provides its
+    // service, so the first mount lands in the probe-only branch. The
+    // internal/service re-mount then registers every view exactly once.
+    const ctx = new Context()
+    const pane = fakePane()
+    const dispose = await apply(ctx as never)
+    expect(pane.views.size).toBe(0)
+    const probeOnly = ctx.get('dramaDirector') as Pick<DramaDirectorClientFace, 'probe'>
+    expect(probeOnly.probe.paneWorkbench.available).toBe(false)
+    ctx.provide('paneWorkbench', pane)
+    await flush()
+    await flush()
+    expect(pane.views.size).toBe(11)
+    expect(pane.views.has('creator.pipeline')).toBe(true)
+    const full = ctx.get('dramaDirector') as Pick<DramaDirectorClientFace, 'probe'>
+    expect(full.probe.paneWorkbench.available).toBe(true)
+    dispose()
+    expect(pane.views.size).toBe(0)
+  })
+
+  it('provides the pane-link bus service for the plugin lifetime, including the probe-only branch', async () => {
+    const ctx = new Context()
+    const dispose = await apply(ctx as never)
+    const bus = ctx.get('pipelinePaneLink') as { emitPaneSelectionHandoff(input: unknown): boolean; subscribe(listener: () => void): () => void }
+    expect(typeof bus.emitPaneSelectionHandoff).toBe('function')
+    expect(bus.emitPaneSelectionHandoff({ source: 'scaena-table', projectRef: 'project:one', kind: 'shot', ref: 'shot:s1' })).toBe(true)
+    let delivered = 0
+    const unsubscribe = bus.subscribe(() => { delivered += 1 })
+    expect(bus.emitPaneSelectionHandoff({ source: 'scaena-table', projectRef: 'project:one', kind: 'shot', ref: 'shot:s2' })).toBe(true)
+    expect(delivered).toBe(1)
+    unsubscribe()
+    dispose()
+    // Disposal fences the bus: emissions stop dispatching.
+    expect(bus.emitPaneSelectionHandoff({ source: 'scaena-table', projectRef: 'project:one', kind: 'shot', ref: 'shot:s3' })).toBe(false)
+    expect(ctx.get('pipelinePaneLink')).toBeUndefined()
+  })
+
   it('registers views even when command-experience is missing, with a standard reason', async () => {
     const { ctx, pane, face } = setup()
     const dispose = await apply(ctx as never)

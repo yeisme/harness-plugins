@@ -39,14 +39,21 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import {
+  CanvasBindingSchema,
   PipelineRunProjectionSchema,
   ProjectCanvasDocumentSchema,
   ProjectCanvasReadRequestSchema,
+  SceneGraphReadResultSchema,
+  SceneWorkbenchReadResultSchema,
+  ShotSchema,
+  type CanvasBindingV1,
   type PipelineRunProjectionV1,
   type ProjectCanvasDocument,
   type ProjectCanvasEdge,
   type ProjectCanvasNode,
   type ProjectCanvasReadResult,
+  type SceneDocumentV1,
+  type ShotV1,
 } from '@yeisme/dsh-pane-protocol'
 import {
   decodeCreativePipelineEdgeProjectionV1,
@@ -59,12 +66,6 @@ import {
   type CreativePipelineRunStateKindV1,
   type WorkSurfaceCapsuleV1,
 } from '@yeisme/dsh-plugin-contracts'
-import {
-  projectCanvasDomainSpec,
-  projectCanvasRowSchema,
-  type ProjectCanvasStorage,
-  type ProjectCanvasTable,
-} from '@yeisme/dsh-creator-studio-host'
 import { isSafeDramaRef } from './contracts.js'
 
 /** Neutral snapshot envelope schema id shared with the client fail-closed decoder. */
@@ -160,10 +161,36 @@ export interface CreativePipelineWorkbenchSnapshotV1 {
   readonly runProjections: readonly PipelineRunProjectionV1[]
   /** Committed canvas document; omitted when no document exists yet. Never the unconfirmed draft. */
   readonly canvas?: ProjectCanvasDocument
+  /** Committed 3D scene attachment; omitted when no scene row exists for this project. */
+  readonly scene3d?: CreativePipelineScene3DSectionV1
   readonly availability: CreativePipelineSnapshotAvailabilityV1
 }
 
 export type CreativePipelineSnapshotResultV1 = CreativePipelineWorkbenchSnapshotV1 | CreativePipelineSnapshotFailureV1
+
+/**
+ * Scene document id the pipeline anchors its embedded 3D viewport to — the
+ * same `main` convention the 3D Director workbench and its tests use, so the
+ * pipeline projection and the 3D Director pane observe ONE scene document per
+ * project through their respective owners.
+ */
+export const CREATIVE_PIPELINE_SCENE_3D_DOCUMENT_ID = 'main' as const
+/** Bounded adjunct section: beyond this the section degrades instead of growing. */
+const MAX_SCENE_3D_SHOTS = 256
+const MAX_SCENE_3D_BINDINGS = 512
+
+/**
+ * Optional `scene3d` envelope section: the Shot-anchored 3D attachment the
+ * workbench opens its embedded viewport from. Committed previsualization
+ * shots plus canvas bindings derived from the scene document's stable
+ * `canvasNodeRef` back-pointers — never fabricated when the scene store has
+ * no committed row for this project.
+ */
+export interface CreativePipelineScene3DSectionV1 {
+  readonly documentId: string
+  readonly shots: readonly ShotV1[]
+  readonly bindings: readonly CanvasBindingV1[]
+}
 
 /**
  * Optional run-projection owner. `snapshot` returns a raw, untrusted projection
@@ -181,80 +208,56 @@ interface PipelineRunLayer {
 
 const DOMAIN_NODE_KINDS = new Set(['asset', 'character', 'scene', 'shot', 'candidate'])
 
-type CanvasDomain = { table(name: 'documents'): ProjectCanvasTable; close(): Promise<void> }
+/**
+ * In-process canvas owner face: the Creator Studio gateway service
+ * (`creatorStudio`) is the SINGLE canvas-domain owner in a composed host —
+ * the storage-domain facility enforces one open per domain name, so this
+ * gateway must never open the canvas domain itself. It delegates reads to the
+ * owner service and stays read-only (the single writer contract is unchanged).
+ */
+interface CanvasOwnerFaceV1 {
+  canvasRead(input: unknown): Promise<ProjectCanvasReadResult>
+}
 
 /**
- * Read-only view over the shared Creator Studio canvas domain. Reuses the exact
- * domain spec and key pattern so rows written by the single existing writer
- * (Creator Studio gateway) are read back with identical semantics, including
- * the journaled (unconfirmed) draft surfacing rules.
+ * In-process scene owner face: the 3D Director gateway service
+ * (`scene3dDirector`) owns the scene domain for the same single-open reason.
+ * The optional workbench read carries the committed scene document plus its
+ * previsualization shots.
  */
-class PipelineCanvasReader {
-  private domain: Promise<CanvasDomain> | undefined
-  private closed = false
-
-  constructor(private readonly storage: ProjectCanvasStorage) {}
-
-  private table(): Promise<ProjectCanvasTable> {
-    if (this.closed) return Promise.reject(new Error('pipeline canvas storage closed'))
-    if (this.domain === undefined) {
-      const opened = this.storage.open(projectCanvasDomainSpec)
-      this.domain = opened
-      void opened.catch(() => { if (this.domain === opened) this.domain = undefined })
-    }
-    return this.domain.then(domain => domain.table('documents'))
-  }
-
-  private key(context: CreativePipelineContextV1, documentId: string): string {
-    return JSON.stringify([context.tenantRef, context.workspaceRef, context.projectRef, documentId])
-  }
-
-  async read(context: CreativePipelineContextV1, documentId: string): Promise<ProjectCanvasReadResult> {
-    try {
-      const table = await this.table()
-      if (this.closed) return { status: 'error' }
-      const raw = table.get(this.key(context, documentId))
-      if (raw === undefined) return { status: 'missing' }
-      const row = projectCanvasRowSchema.safeParse(raw)
-      if (!row.success) return { status: 'error' }
-      const document = row.data.document
-      if (document.scope.workspaceRef !== context.workspaceRef || document.scope.projectRef !== context.projectRef
-        || document.id !== documentId) return { status: 'error' }
-      const inflight = row.data.inflight
-      const draft = inflight !== undefined
-        && inflight.document.scope.workspaceRef === context.workspaceRef
-        && inflight.document.scope.projectRef === context.projectRef
-        && inflight.document.id === documentId
-        && inflight.baseRevision === document.revision
-        ? { draft: { requestId: inflight.requestId, baseRevision: inflight.baseRevision, document: inflight.document } }
-        : undefined
-      // A committed row is always at revision >= 1; revision 0 exists only as an unconfirmed write-ahead placeholder.
-      if (document.revision === 0) return draft === undefined ? { status: 'missing' } : { status: 'missing', ...draft }
-      return { status: 'ready', document, ...(draft ?? {}) }
-    } catch {
-      return { status: 'error' }
-    }
-  }
-
-  async close(): Promise<void> {
-    if (this.closed) return
-    this.closed = true
-    const domain = this.domain
-    this.domain = undefined
-    try { await domain?.then(opened => opened.close()) } catch { /* close is best-effort */ }
-  }
+interface Scene3DOwnerFaceV1 {
+  sceneWorkbenchRead?(input: unknown): Promise<unknown>
+  sceneRead?(input: unknown): Promise<unknown>
 }
 
 /** Safe Remote for the pipeline workbench. It owns no domain canonical state. */
 export class CreativePipelineGateway extends TypertRemoteService {
-  private readonly canvasReader: PipelineCanvasReader | undefined
-
   constructor(ctx: Context) {
     super(ctx, CREATIVE_PIPELINE_SERVICE_KEY)
-    const storage = ctx.get('storageDomain' as never) as ProjectCanvasStorage | undefined
-    if (storage !== undefined && typeof storage.open === 'function') {
-      this.canvasReader = new PipelineCanvasReader(storage)
-      ctx.effect(() => async () => { await this.canvasReader?.close() }, 'creativePipeline.canvas')
+  }
+
+  /** The single canvas-domain owner, resolved per read (owner may arrive later). */
+  private canvasOwner(): CanvasOwnerFaceV1 | undefined {
+    try {
+      const service = this.ctx.get('creatorStudio' as never)
+      return service !== null && typeof service === 'object' && typeof (service as CanvasOwnerFaceV1).canvasRead === 'function'
+        ? service as CanvasOwnerFaceV1
+        : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  /** The single scene-domain owner, resolved per read (owner may arrive later). */
+  private scene3DOwner(): Scene3DOwnerFaceV1 | undefined {
+    try {
+      const service = this.ctx.get('scene3dDirector' as never)
+      return service !== null && typeof service === 'object'
+        && (typeof (service as Scene3DOwnerFaceV1).sceneWorkbenchRead === 'function' || typeof (service as Scene3DOwnerFaceV1).sceneRead === 'function')
+        ? service as Scene3DOwnerFaceV1
+        : undefined
+    } catch {
+      return undefined
     }
   }
 
@@ -262,17 +265,21 @@ export class CreativePipelineGateway extends TypertRemoteService {
     return validateCreativePipelineContext(this.ctx.get(CREATIVE_PIPELINE_EXPECTED_CONTEXT as never))
   }
 
-  /** Read-only canvas projection through the shared storage seam. Writes stay with the single existing writer. */
+  /**
+   * Read-only canvas projection delegated to the single canvas-domain owner
+   * (the Creator Studio gateway service). Writes stay with that owner.
+   */
   @Remote('canvasRead')
   async canvasRead(input: unknown): Promise<ProjectCanvasReadResult> {
     const request = ProjectCanvasReadRequestSchema.safeParse(input)
     if (!request.success) return { status: 'invalid' }
     const context = this.expectedContext
-    if (context === undefined || this.canvasReader === undefined) return { status: 'unavailable' }
+    const owner = this.canvasOwner()
+    if (context === undefined || owner === undefined) return { status: 'unavailable' }
     if (request.data.scope.workspaceRef !== context.workspaceRef || request.data.scope.projectRef !== context.projectRef) {
       return { status: 'forbidden' }
     }
-    const result = await this.canvasReader.read(context, request.data.documentId)
+    const result = await owner.canvasRead(request.data)
     const latest = this.expectedContext
     if (latest === undefined || !samePipelineContext(context, latest)) return { status: 'forbidden' }
     return result
@@ -296,10 +303,11 @@ export class CreativePipelineGateway extends TypertRemoteService {
     if (context === undefined) {
       return this.failure('needs_contract', 'context_unavailable', 'The pipeline workbench is waiting for a bound tenant/workspace/project context.')
     }
-    if (this.canvasReader === undefined) {
-      return this.failure('unavailable', 'storage_unavailable', 'Pipeline canvas storage is not mounted; no layout or safe reference can be projected.')
+    const canvasOwner = this.canvasOwner()
+    if (canvasOwner === undefined) {
+      return this.failure('unavailable', 'canvas_owner_unavailable', 'The pipeline canvas projection is waiting for the single canvas owner service.')
     }
-    const read = await this.canvasReader.read(context, CANVAS_DOCUMENT_ID)
+    const read = await canvasOwner.canvasRead({ scope: { workspaceRef: context.workspaceRef, projectRef: context.projectRef }, documentId: CANVAS_DOCUMENT_ID })
     if (read.status === 'error' || read.status === 'invalid' || read.status === 'unavailable' || read.status === 'forbidden') {
       return this.failure('unavailable', 'canvas_read_failed', 'The pipeline canvas projection could not be read; nothing was fabricated.')
     }
@@ -344,6 +352,12 @@ export class CreativePipelineGateway extends TypertRemoteService {
       return this.failure('needs_contract', 'context_changed', 'The pipeline context changed while composing the projection; reconcile with the owner.')
     }
 
+    // Adjunct scene3d section: delegated to the single scene-domain owner and
+    // decoded fail-closed; a missing owner, missing scene, or violating row
+    // degrades the embedded viewport only (bounded reason on the client) and
+    // never fails the pipeline snapshot.
+    const scene3d = await this.readScene3DSection(context, document)
+
     const title = context.projectTitle ?? context.projectRef
     const label = bounded(title, MAX_LABEL)
     const runState = runLayerStatus(runLayer)
@@ -379,6 +393,7 @@ export class CreativePipelineGateway extends TypertRemoteService {
       runs: runLayer.runs,
       runProjections: runLayer.runProjections,
       ...(document === undefined ? {} : { canvas: document }),
+      ...(scene3d === undefined ? {} : { scene3d }),
       availability: { canvas: document === undefined ? 'missing' : 'ready', runs: runLayer.status },
     }
     // Final fail-closed gate: everything leaving the gateway re-passes the transport schemas.
@@ -389,6 +404,88 @@ export class CreativePipelineGateway extends TypertRemoteService {
       return this.failure('contract_mismatch', 'run_contract_mismatch', 'A composed run projection failed the transport schema.')
     }
     return envelope
+  }
+
+  /**
+   * Reads the optional `scene3d` section through the single scene-domain
+   * owner (the 3D Director gateway service). The negotiated workbench read is
+   * preferred (document + committed previz shots); the legacy strict read is
+   * the fallback. Every payload re-passes the frozen transport schema before
+   * the section is composed; any miss degrades to an omitted section.
+   */
+  private async readScene3DSection(context: CreativePipelineContextV1, canvas: ProjectCanvasDocument | undefined): Promise<CreativePipelineScene3DSectionV1 | undefined> {
+    const owner = this.scene3DOwner()
+    if (owner === undefined) return undefined
+    const request = { scope: { workspaceRef: context.workspaceRef, projectRef: context.projectRef }, documentId: CREATIVE_PIPELINE_SCENE_3D_DOCUMENT_ID }
+    let document: SceneDocumentV1 | undefined
+    let shots: readonly ShotV1[] | undefined
+    try {
+      if (typeof owner.sceneWorkbenchRead === 'function') {
+        const parsed = SceneWorkbenchReadResultSchema.safeParse(await owner.sceneWorkbenchRead(request))
+        if (!parsed.success) return undefined
+        if (parsed.data.result.status !== 'ready') return undefined
+        document = parsed.data.result.document
+        shots = parsed.data.shots
+      } else {
+        const parsed = SceneGraphReadResultSchema.safeParse(await owner.sceneRead?.(request))
+        if (!parsed.success || parsed.data.status !== 'ready') return undefined
+        document = parsed.data.document
+      }
+    } catch {
+      return undefined
+    }
+    if (document === undefined
+      || document.scope.workspaceRef !== context.workspaceRef || document.scope.projectRef !== context.projectRef
+      || document.id !== CREATIVE_PIPELINE_SCENE_3D_DOCUMENT_ID || document.version === 0) return undefined
+    return this.composeScene3DSection(canvas, document, shots ?? [])
+  }
+
+  /**
+   * Composes the optional `scene3d` section from the committed scene row.
+   *
+   * Bindings derive from the scene document's stable `canvasNodeRef`
+   * back-pointers — the scene object's own id is the `sceneObjectRef`, the
+   * back-pointer keys the canvas node — and only for scene objects a
+   * committed shot actually references (camera, object list, visibility, or
+   * keyframes, by node id or resourceRef). An unreferenced object has no
+   * honest shot association, so it stays unbound: the pipeline ⇄ 3D selection
+   * sync stays silent for it in both directions by contract. Layout positions
+   * reuse the canvas node's committed position when it resolves; otherwise
+   * the binding carries a zero position (selection semantics only).
+   *
+   * Every emitted item re-passes the frozen transport schemas; any violation
+   * drops the whole section (adjunct fail-closed), never a partial truth.
+   */
+  private composeScene3DSection(
+    canvas: ProjectCanvasDocument | undefined,
+    sceneDocument: SceneDocumentV1,
+    sceneShots: readonly ShotV1[],
+  ): CreativePipelineScene3DSectionV1 | undefined {
+    const shots: ShotV1[] = []
+    for (const shot of sceneShots.slice(0, MAX_SCENE_3D_SHOTS)) {
+      const parsed = ShotSchema.safeParse(shot)
+      if (!parsed.success) return undefined
+      shots.push(parsed.data)
+    }
+    const bindings: CanvasBindingV1[] = []
+    for (const node of sceneDocument.nodes) {
+      if (node.canvasNodeRef === undefined) continue
+      const shotRef = shotRefForSceneObject(shots, node.id, node.resourceRef)
+      if (shotRef === undefined) continue
+      const position = canvasNodePosition(canvas, node.canvasNodeRef)
+      const candidate = {
+        nodeRef: node.canvasNodeRef,
+        shotRef,
+        sceneObjectRef: node.id,
+        edgeKind: 'reference' as const,
+        layout: { position },
+      }
+      const parsed = CanvasBindingSchema.safeParse(candidate)
+      if (!parsed.success) return undefined
+      bindings.push(parsed.data)
+      if (bindings.length >= MAX_SCENE_3D_BINDINGS) break
+    }
+    return { documentId: CREATIVE_PIPELINE_SCENE_3D_DOCUMENT_ID, shots, bindings }
   }
 
   /**
@@ -459,6 +556,28 @@ function executionEdgeInput(edge: Extract<ProjectCanvasEdge, { kind: 'execution'
     // mounted owner no projection claims this ref, so nothing is fabricated.
     owner_projection_ref: edge.id,
   }
+}
+
+/**
+ * First committed shot that references the scene object (node id or
+ * resourceRef) through its camera, object list, visibility, or keyframes.
+ * `undefined` = no honest shot association; the binding is then skipped.
+ */
+function shotRefForSceneObject(shots: readonly ShotV1[], nodeId: string, resourceRef: string | undefined): string | undefined {
+  for (const shot of shots) {
+    const refs = [nodeId, ...(resourceRef === undefined ? [] : [resourceRef])]
+    if (refs.includes(shot.cameraRef)) return shot.shotRef
+    if (shot.objectRefs.some(ref => refs.includes(ref))) return shot.shotRef
+    if (shot.visibility.some(entry => refs.includes(entry.objectRef))) return shot.shotRef
+    if (shot.keyframes.some(keyframe => refs.includes(keyframe.objectRef))) return shot.shotRef
+  }
+  return undefined
+}
+
+/** Committed canvas position for a bound canvas node (id or domainRef); zero fallback is selection-layout only. */
+function canvasNodePosition(canvas: ProjectCanvasDocument | undefined, nodeRef: string): { readonly x: number; readonly y: number } {
+  const node = canvas?.nodes.find(entry => entry.id === nodeRef || ('domainRef' in entry && entry.domainRef === nodeRef))
+  return node === undefined ? { x: 0, y: 0 } : { x: node.position.x, y: node.position.y }
 }
 
 function runLayerStatus(layer: PipelineRunLayer): CreativePipelineRunStateKindV1 {
