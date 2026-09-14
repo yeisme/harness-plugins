@@ -154,6 +154,131 @@ describe('project canvas keyboard equivalents', () => {
     await act(async () => root.unmount())
   })
 
+  it('pans, zooms and clears selection from the keyboard through document camera edits', async () => {
+    const { controller } = setup()
+    await controller.load()
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = await mount(controller, container)
+    const surface = container.querySelector('[data-project-canvas="true"]')!
+
+    // No selection: arrows pan the camera (screen space / zoom).
+    await key(surface, { key: 'ArrowRight' })
+    expect(controller.getSnapshot().editor!.document.camera).toEqual({ x: -40, y: 0, zoom: 1 })
+    await key(surface, { key: 'ArrowDown', shiftKey: true })
+    expect(controller.getSnapshot().editor!.document.camera).toEqual({ x: -40, y: -100, zoom: 1 })
+
+    // Ctrl+= zooms around the stage center (clientWidth is 0 in jsdom, so the
+    // camera anchor scales deterministically); Ctrl+- and Ctrl+0 return it.
+    await key(surface, { key: '=', ctrlKey: true })
+    expect(controller.getSnapshot().editor!.document.camera).toEqual({ x: -48, y: -120, zoom: 1.2 })
+    await key(surface, { key: '0', ctrlKey: true })
+    expect(controller.getSnapshot().editor!.document.camera).toEqual({ x: -40, y: -100, zoom: 1 })
+    await key(surface, { key: '=', ctrlKey: true })
+    await key(surface, { key: '-', ctrlKey: true })
+    expect(controller.getSnapshot().editor!.document.camera).toEqual({ x: -40, y: -100, zoom: 1 })
+
+    // Plain f fits the whole graph without changing the selection.
+    await key(surface, { key: 'Tab' })
+    expect(controller.getSnapshot().editor!.selection).toEqual(['a'])
+    await key(surface, { key: 'f' })
+    const camera = controller.getSnapshot().editor!.document.camera
+    expect(Number.isFinite(camera.x) && Number.isFinite(camera.y) && camera.zoom > 0).toBe(true)
+    expect(controller.getSnapshot().editor!.selection).toEqual(['a'])
+
+    // Escape clears the selection; undo restores the previous camera step.
+    await key(surface, { key: 'Escape' })
+    expect(controller.getSnapshot().editor!.selection).toEqual([])
+    await act(async () => { controller.edit({ type: 'undo' }) })
+    expect(controller.getSnapshot().editor!.document.camera).toEqual({ x: -40, y: -100, zoom: 1 })
+    await act(async () => root.unmount())
+  })
+
+})
+
+describe('material reference kinds and lazy media (5.1/5.5)', () => {
+  const media = (kind: string, mediaType: string): ArtifactRefV1 => ({ schema: PANE_ARTIFACT_SCHEMA, owner: 'eikona', kind, ref: `eikona://asset/${kind}`, version: '1', mediaType, title: `Material ${kind}`, evidenceRefs: [], capabilities: ['preview'] })
+  function materialDocument(): ProjectCanvasDocument {
+    // All nodes overlap the origin so onlyRenderVisibleElements does not cull
+    // them inside the 1px jsdom stage; rendering order still follows the array.
+    const position = { x: 0, y: 0 }
+    const size = { width: 100, height: 80 }
+    return { schema: PROJECT_CANVAS_SCHEMA, id: 'main', revision: 0, camera: { x: 0, y: 0, zoom: 1 }, scope, nodes: [
+      { id: 'mat-image', kind: 'material', title: 'Image', artifact: media('image', 'image/png'), position, size },
+      { id: 'mat-video', kind: 'material', title: 'Video', artifact: media('video', 'video/mp4'), position, size },
+      { id: 'mat-audio', kind: 'material', title: 'Audio', artifact: media('audio', 'audio/mpeg'), position, size },
+      { id: 'mat-file', kind: 'material', title: 'File', artifact: media('file', 'application/pdf'), position, size },
+      { id: 'mat-domain', kind: 'material', title: 'Domain', artifact: media('shot', 'application/vnd.scaena.shot+json'), position, size },
+      { id: 'mat-prompt', kind: 'material', title: 'Prompt', artifact: media('prompt', 'text/markdown'), position, size },
+    ], edges: [] }
+  }
+  function materialSetup() {
+    let current = materialDocument()
+    const remote: ProjectCanvasRemote = {
+      canvasRead: vi.fn(async () => ({ status: 'ready', document: current })),
+      canvasSave: vi.fn(async request => ({ status: 'saved', requestId: request.requestId, revision: request.document.revision + 1 })),
+      canvasReconcile: vi.fn(async () => ({ status: 'unknown' })),
+    }
+    return { controller: new ProjectCanvasController(remote, { scope, documentId: 'main' }) }
+  }
+  async function mountMaterials(controller: ProjectCanvasController, container: HTMLElement, props: Record<string, unknown>): Promise<Root> {
+    const root = createRoot(container)
+    await act(async () => { root.render(createElement(ProjectCanvasView, { controller, artifacts: [], actions: [], t, ...props })) })
+    await act(async () => {})
+    return root
+  }
+
+  it('labels each material node with its localized reference kind, never color only', async () => {
+    const { controller } = materialSetup()
+    await controller.load()
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = await mountMaterials(controller, container, {})
+    const kinds = [...container.querySelectorAll('[data-reference-kind-chip]')].map(chip => chip.textContent)
+    expect(kinds).toEqual([canvasZh.kindImage, canvasZh.kindVideo, canvasZh.kindAudio, canvasZh.kindFile, canvasZh.kindDomain, canvasZh.kindPrompt])
+    expect([...container.querySelectorAll('.canvas-node[data-reference-kind]')].map(node => (node as HTMLElement).dataset.referenceKind)).toEqual(['image', 'video', 'audio', 'file', 'domain', 'prompt'])
+    await act(async () => root.unmount())
+  })
+
+  it('resolves media lazily on visibility and pauses offscreen video', async () => {
+    // Controllable IntersectionObserver: no initial callback, tests flip visibility.
+    const observers: IntersectionObserverCallback[] = []
+    class TestIntersectionObserver {
+      constructor(callback: IntersectionObserverCallback) { observers.push(callback) }
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    }
+    vi.stubGlobal('IntersectionObserver', TestIntersectionObserver)
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+    const { controller } = materialSetup()
+    await controller.load()
+    const container = document.createElement('div')
+    document.body.append(container)
+    const resolveMedia = vi.fn(async (artifact: ArtifactRefV1) => ({ url: `https://media.invalid/${artifact.kind}.${artifact.kind === 'image' ? 'png' : 'mp4'}`, expiresAt: new Date(Date.now() + 60_000).toISOString() }))
+    const root = await mountMaterials(controller, container, { resolveMedia })
+
+    // Offscreen (never intersected): nothing resolves, honest placeholder shown.
+    await act(async () => {})
+    expect(resolveMedia).not.toHaveBeenCalled()
+    expect(container.textContent).toContain(canvasZh.mediaUnavailable)
+
+    // Entering the viewport resolves and renders the media.
+    await act(async () => { for (const callback of [...observers]) callback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver) })
+    await act(async () => {})
+    expect(resolveMedia).toHaveBeenCalledTimes(6)
+    expect(container.querySelectorAll('.canvas-node img')).toHaveLength(1)
+
+    // Leaving the viewport pauses the playing video without unmounting it.
+    const video = container.querySelector('video[data-video="canvas"]')!
+    expect(video).not.toBeNull()
+    pause.mockClear()
+    await act(async () => { for (const callback of [...observers]) callback([{ isIntersecting: false } as IntersectionObserverEntry], {} as IntersectionObserver) })
+    expect(pause).toHaveBeenCalled()
+    // The resolved URL stays cached so re-entering the viewport does not refetch.
+    expect(resolveMedia).toHaveBeenCalledTimes(6)
+    await act(async () => root.unmount())
+  })
 })
 
 describe('creative pipeline seams', () => {

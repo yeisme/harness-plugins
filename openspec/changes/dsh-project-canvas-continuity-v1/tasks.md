@@ -15,12 +15,16 @@
 - [ ] 3.1 对接既有选择引用 prepare/ack；明确目标会话，切换/迟到/重复提交测试不串数据。
 - [ ] 3.2 复用既有 Creator Studio 成果预览/比较/receipt，将选定成果回填原画布；禁止复制保存/版本状态机。
 - [ ] 3.3 实现项目续接摘要与显式继续；Pinax 缺席诚实降级，关闭不取消、unknown 只对账。
-- [ ] 4.1 依赖2/3组与5.1–5.5稳定；完成协议 focused 测试及稳定后 typecheck/test/build/check:bundles/check:plugins/check:surfaces/test:visual。 | evidence: 进行中：现有画布reducer/workflow/controller/view/pane五文件36项定向测试及typecheck通过。UI测试曾产生大量React act环境未配置警告；两份画布UI测试beforeEach显式设置IS_REACT_ACT_ENVIRONMENT，afterEach沿用unstubAllGlobals恢复。修复后两文件5项UI测试通过且无act环境/未包裹警告。完整稳定门、视觉与真实画布验收仍未完成。
+- [ ] 4.1 依赖2/3组与5.1–5.5稳定；完成协议 focused 测试及稳定后 typecheck/test/build/check:bundles/check:plugins/check:surfaces/test:visual。 | evidence: 进行中：现有画布reducer/workflow/controller/view/pane五文件36项定向测试及typecheck通过。UI测试曾产生大量React act环境未配置警告；两份画布UI测试beforeEach显式设置IS_REACT_ACT_ENVIRONMENT，afterEach沿用unstubAllGlobals恢复。修复后两文件5项UI测试通过且无act环境/未包裹警告。2026-09-14：ui-pane-domain 画布focused测试166→176项（内核六类引用3项、视图键盘相机/素材标签/媒体门控3项、300节点性能采样4项），包级test/typecheck/build通过。完整稳定门、视觉与真实画布验收仍未完成。
 - [ ] 4.2 真实 DSH staging/profile 验证 Agent→成果→重开续接、双栏隔离、拖拽与无重复 Target 底栏；协议 pass 不替代本项。
 - [ ] 4.3 三个项目两类工作、10次续接至少8次30秒内、60分钟零已确认丢稿/零重复提交；保存脱敏证据并更新实际 readiness。 300混合节点，输入p95≤100ms、缓存切换p95≤200ms，记录订阅/DOM/heap/帧趋势与机器/样本。
-- [ ] 5.1 依赖1.2/2.1；实现完整素材/草稿/操作/成果/分组节点及六类引用，固定@xyflow/react@12.11.6；执行边只由workflow消费同一document；无第二状态owner。
-- [ ] 5.2 依赖5.1；实现复制、撤销/重做、搜索、fit selection/全图、运行定位、小地图及键盘对象列表等价；复制操作不复制run。
+- [ ] 5.1 依赖1.2/2.1；实现完整素材/草稿/操作/成果/分组节点及六类引用，固定@xyflow/react@12.11.6；执行边只由workflow消费同一document；无第二状态owner。 | evidence: 进行中（2026-09-14）：ui-pane-domain 内核已落六类素材引用分类（图片/视频/声音/文件/领域对象/提示词）与五类节点族同一document的确定性编辑（见5.1a）；@xyflow/react 固定12.11.6。剩余：完整真实交互验收、专业Pane联动与运行/成果闭环（依赖 creator-studio 与 ai-drama-director 并行 lane 归还）。
+- [x] 5.1a 内核六类素材引用与五类节点族同文档语义（ui-pane-domain）：引用分类纯函数 image/video/audio/file/domain/prompt（文件=二进制容器或语义kind=file，领域对象=无预览体的owner投影，提示词=文本/语义kind=prompt）、六类素材×五类节点×两类边混合文档的reducer编辑/分组移动/复制/撤销测试、六类引用全部经执行边绑定为artifact输入且复制不复制run、素材节点渲染中英引用类别标签（不只用颜色）。父5.1保留真实交互与专业Pane验收。 | evidence: implementation-baseline.md 2026-09-14；project-canvas.spec 新增3项（分类确定性/五族六引用同文档编辑无第二状态owner/六类执行边绑定）；pane-domain 176项全绿、typecheck/build通过
+- [ ] 5.2 依赖5.1；实现复制、撤销/重做、搜索、fit selection/全图、运行定位、小地图及键盘对象列表等价；复制操作不复制run。 | evidence: 进行中（2026-09-14）：搜索、fit selection（Ctrl+Shift+F）、fit 全图（f）、小地图、复制/撤销/重做与键盘相机等价已落（5.2a/5.2b）。剩余：运行定位需 workflow 运行状态（run→节点映射）接入，真实键盘走查验收未做。
 - [x] 5.2a 键盘对象列表等价：Tab/Shift+Tab按搜索顺序循环选择、方向键±1（Shift±10）步进移动、Ctrl+D复制选中、Ctrl+Shift+F适配、Delete移除；输入控件内按键不劫持；复制不复制run。父5.2保留运行定位与全键盘走查验收。 | evidence: implementation-baseline.md；project-canvas-view.spec 2项键盘等价（循环/步进/复制/移除/输入不劫持）；pane-domain 145项全绿
+- [x] 5.2b 键盘相机与全键盘走查（ui-pane-domain 视图层）：无选区方向键平移（Shift×100像素）、Ctrl+=/Ctrl+-/Ctrl+0 缩放（保持视口中心、经document camera编辑可撤销）、f 适配全图、Escape 清除选择；jsdom 真实 controller 走查平移/缩放/复位/适配/选择/移动/复制/移除/撤销。父5.2保留运行定位（需workflow运行状态）与真实键盘验收。 | evidence: implementation-baseline.md 2026-09-14；project-canvas-view.spec 相机走查1项（精确断言 camera 数值与undo还原）；pane-domain 176项全绿
 - [ ] 5.3 依赖1.2/3.1；实现Agent指定范围内草稿/布局变更、摘要与撤销；拒绝修改领域正文/采用版本/运行快照，执行另确认。
 - [ ] 5.4 依赖1.2；完成带fixture标识的可丢弃原型：五节点/两边/媒体/窄Pane与专业Pane并排，人工走查回填UI Contract；不升级实际能力。
-- [ ] 5.5 依赖5.1/5.2；实现媒体lazy-load与离屏视频暂停；建立300混合节点60分钟性能样本和原始指标采集，阈值见design；不空匹配。
+- [ ] 5.5 依赖5.1/5.2；实现媒体lazy-load与离屏视频暂停；建立300混合节点60分钟性能样本和原始指标采集，阈值见design；不空匹配。 | evidence: 进行中（2026-09-14）：媒体可见性门控lazy-load与离屏视频暂停已落（5.5a），300混合节点采样框架真实跑一次记录输入/缓存切换p95。剩余：60分钟持续采样、订阅/DOM/heap/帧趋势与真实媒体样本。
+- [x] 5.5a 媒体可见性门控与300节点采样框架（ui-pane-domain）：IntersectionObserver 门控下媒体仅可见时 resolve、离屏暂停视频、已解析URL缓存不因可见性翻转重取、无IO环境诚实退化为立即加载；300混合节点（五类节点族×六类引用×两类边）确定性样本真实跑一次，记录 kernel 输入 p95 8.06ms/240样本、controller 输入 p95 8.45ms/120样本、缓存切换（schema parse+freeze）p95 6.70ms/30样本，均低于design阈值（100/100/200ms）。父5.5保留60分钟持续采样与DOM/heap/帧趋势。 | evidence: implementation-baseline.md 2026-09-14（采样数值与机器说明）；project-canvas-perf.spec 4项全绿；project-canvas-view.spec 媒体门控1项
+

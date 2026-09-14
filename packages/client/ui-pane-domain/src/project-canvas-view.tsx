@@ -6,7 +6,7 @@ import { Surface, SurfaceActionBar, SurfaceContextBar, SurfaceState } from '@yei
 import { buildPanelStyles } from '@yeisme/dsh-client-ui-visual-kit'
 import type { ArtifactRefV1, PaneActionDescriptorV1, ProjectCanvasDocument, ProjectCanvasNode } from '@yeisme/dsh-pane-protocol'
 import { ProjectCanvasController } from './project-canvas-controller.js'
-import { searchProjectCanvas, orderProjectCanvasPositions } from './project-canvas.js'
+import { searchProjectCanvas, orderProjectCanvasPositions, classifyProjectCanvasReference, type ProjectCanvasReferenceKind } from './project-canvas.js'
 import { inspectCanvasRunScope, type CanvasRunScope } from './project-canvas-workflow.js'
 import flowCss from '@xyflow/react/dist/base.css?inline'
 
@@ -24,6 +24,7 @@ export const canvasZh = {
   selected: '选中对象', x: '横坐标', y: '纵坐标', width: '宽度', height: '高度', collapse: '折叠分组', expand: '展开分组',
   noExecution: '这里只检查草案。工作流执行尚未连接；没有提交或收费。', blockers: '需要处理的项', noBlockers: '结构检查通过，仍需 owner 校验权限、输入、费用和计划。',
   mediaUnavailable: '预览不可用', loading: '正在读取', inputUnavailable: '目标操作没有可映射输入', objects: '对象列表',
+  kindImage: '图片', kindVideo: '视频', kindAudio: '声音', kindFile: '文件', kindDomain: '领域对象', kindPrompt: '提示词',
 } as const
 export type CanvasTextKey = keyof typeof canvasZh
 export const canvasEn: Record<CanvasTextKey, string> = {
@@ -40,6 +41,7 @@ export const canvasEn: Record<CanvasTextKey, string> = {
   selected: 'Selected object', x: 'X position', y: 'Y position', width: 'Width', height: 'Height', collapse: 'Collapse group', expand: 'Expand group',
   noExecution: 'Draft inspection only. Workflow execution is not connected; nothing was submitted or charged.', blockers: 'Items to resolve', noBlockers: 'Structure checks passed. Owner input, permission, cost and plan validation are still required.',
   mediaUnavailable: 'Preview unavailable', loading: 'Loading', inputUnavailable: 'The target action has no mappable inputs', objects: 'Object list',
+  kindImage: 'Image', kindVideo: 'Video', kindAudio: 'Audio', kindFile: 'File', kindDomain: 'Owner object', kindPrompt: 'Prompt',
 }
 export type CanvasTranslator = (key: CanvasTextKey) => string
 export type ResolveMedia = (artifact: ArtifactRefV1) => Promise<{ url: string; expiresAt: string } | undefined>
@@ -65,6 +67,7 @@ const styles = buildPanelStyles({ scope: 'project-canvas' }) + `
 [data-project-canvas] .canvas-node{height:100%;width:100%;box-sizing:border-box;overflow:hidden;padding:var(--vk-gap-sm);background:var(--vk-bg-layer-1);color:var(--vk-text-primary);border:1px solid var(--vk-border-l2);border-radius:var(--vk-radius-md)}
 [data-project-canvas] .canvas-node[data-kind=group]{background:color-mix(in srgb,var(--vk-bg-layer-2) 40%,transparent);border-style:dashed}
 [data-project-canvas] .canvas-node[data-selected=true]{border-color:var(--vk-border-focus)}
+[data-project-canvas] .canvas-node .canvas-media{display:block}
 [data-project-canvas] .canvas-node img,[data-project-canvas] .canvas-node video{width:100%;max-height:110px;object-fit:contain}
 [data-project-canvas] .canvas-node audio{width:100%}
 [data-project-canvas] .canvas-node textarea{width:100%;height:75%;resize:none}
@@ -76,12 +79,32 @@ const styles = buildPanelStyles({ scope: 'project-canvas' }) + `
 @container(max-width:420px){[data-project-canvas] .canvas-layout{flex-direction:column}[data-project-canvas] .canvas-stage{min-height:320px}[data-project-canvas] .canvas-detail{width:auto;max-width:none;max-height:260px;border-left:0;border-top:1px solid var(--vk-border-l2)}}
 `
 
+/**
+ * Lazy, visibility-gated media preview (5.5): the artifact URL resolves only
+ * while the node intersects the viewport (with a small prerender margin), and
+ * an offscreen video is paused eagerly instead of playing hidden. When
+ * IntersectionObserver is unavailable the component degrades to the previous
+ * eager behaviour rather than faking visibility.
+ */
 function Media({ artifact, resolve, t }: { artifact: ArtifactRefV1; resolve?: ResolveMedia; t: CanvasTranslator }): ReactNode {
   const [url, setUrl] = useState<string>()
+  const [visible, setVisible] = useState(() => typeof IntersectionObserver === 'undefined')
   const video = useRef<HTMLVideoElement>(null)
+  const host = useRef<HTMLSpanElement>(null)
   useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(entries => { setVisible(entries.some(entry => entry.isIntersecting)) }, { root: null, rootMargin: '20%' })
+    if (host.current !== null) observer.observe(host.current)
+    return () => observer.disconnect()
+  }, [])
+  // A pinned version switch drops the previous preview immediately; visibility
+  // flips keep the cached URL so toggling does not refetch.
+  useEffect(() => { setUrl(undefined) }, [artifact.owner, artifact.ref, artifact.version])
+  useEffect(() => {
+    // Offscreen media neither resolves nor keeps playing; audio keeps playing
+    // only in dedicated listening panes, which this node never is.
+    if (!visible) { video.current?.pause(); return }
     let active = true; let timer: ReturnType<typeof setTimeout> | undefined
-    setUrl(undefined)
     if (resolve !== undefined) void resolve(artifact).then(media => {
       const remaining = media === undefined ? 0 : Date.parse(media.expiresAt) - Date.now()
       if (!active || media === undefined || !/^(https?:|blob:)/i.test(media.url) || !Number.isFinite(remaining) || remaining <= 0) return
@@ -89,23 +112,35 @@ function Media({ artifact, resolve, t }: { artifact: ArtifactRefV1; resolve?: Re
     }).catch(() => {})
     const element = video.current
     return () => { active = false; if (timer !== undefined) clearTimeout(timer); element?.pause() }
-  }, [artifact.owner, artifact.ref, artifact.version, resolve])
+  }, [visible, artifact.owner, artifact.ref, artifact.version, resolve])
   useEffect(() => { const element = video.current; return () => { element?.pause() } }, [url])
-  if (url === undefined) return <span className="vk-muted">{artifact.mediaType} · {t('mediaUnavailable')}</span>
-  if (artifact.mediaType.startsWith('image/')) return <img src={url} alt={artifact.title} loading="lazy" onError={() => setUrl(undefined)} />
-  if (artifact.mediaType.startsWith('video/')) return <video ref={video} src={url} controls preload="metadata" className="nodrag nowheel" />
-  if (artifact.mediaType.startsWith('audio/')) return <audio src={url} controls preload="metadata" className="nodrag nowheel" />
-  return <span>{artifact.title}</span>
+  const body = url === undefined
+    ? <span className="vk-muted">{artifact.mediaType} · {t('mediaUnavailable')}</span>
+    : artifact.mediaType.startsWith('image/')
+      ? <img src={url} alt={artifact.title} loading="lazy" onError={() => setUrl(undefined)} />
+      : artifact.mediaType.startsWith('video/')
+        ? <video ref={video} src={url} controls preload="metadata" className="nodrag nowheel" data-video="canvas" />
+        : artifact.mediaType.startsWith('audio/')
+          ? <audio src={url} controls preload="metadata" className="nodrag nowheel" />
+          : <span>{artifact.title}</span>
+  return <span ref={host} className="canvas-media" data-media-visible={visible}>{body}</span>
+}
+
+/** Kind chips carry a localized name so the six reference families are never color-only. */
+const referenceKindLabel: Record<ProjectCanvasReferenceKind, CanvasTextKey> = {
+  image: 'kindImage', video: 'kindVideo', audio: 'kindAudio', file: 'kindFile', domain: 'kindDomain', prompt: 'kindPrompt',
 }
 
 function CanvasNodeView({ data, selected }: NodeProps<CanvasFlowNode>): ReactNode {
   const { model, controller, t } = data
   const artifact = model.kind === 'material' || model.kind === 'result' || model.kind === 'asset' || model.kind === 'candidate' ? model.artifact : model.kind === 'operation' ? model.selectedArtifact : undefined
-  return <div className="canvas-node" data-kind={model.kind} data-selected={selected}>
+  const referenceKind = model.kind === 'material' ? classifyProjectCanvasReference(model.artifact) : undefined
+  return <div className="canvas-node" data-kind={model.kind} data-selected={selected} data-reference-kind={referenceKind}>
     <NodeResizer isVisible={selected} minWidth={120} minHeight={80} onResizeStart={() => controller.beginGesture()} onResizeEnd={() => setTimeout(() => controller.endGesture(), 50)} />
     {model.kind !== 'group' && <Handle type="target" position={Position.Left} />}
     {model.kind !== 'group' && <Handle type="source" position={Position.Right} />}
     <strong>{model.title}</strong>
+    {referenceKind !== undefined && <span className="vk-muted" data-reference-kind-chip>{t(referenceKindLabel[referenceKind])}</span>}
     {model.kind === 'operation' && model.inputReviewRequired && <span className="vk-muted" data-input-review-required>{t('inputReview')}</span>}
     {model.kind === 'draft' && <label className="ys-field vk-field"><textarea className="nodrag nowheel" aria-label={t('draft')} value={model.text} onChange={event => controller.edit({ type: 'text', id: model.id, text: event.target.value })} /></label>}
     {artifact !== undefined && <Media artifact={artifact} resolve={data.resolveMedia} t={t} />}
@@ -128,6 +163,7 @@ function CanvasContent({ controller, artifacts = [], actions = [], resolveMedia,
   const [discard, setDiscard] = useState(false)
   const [runScope, setRunScope] = useState<CanvasRunScope['kind']>('branch')
   const flowGesture = useRef(false)
+  const stageRef = useRef<HTMLDivElement>(null)
   const [preview, setPreview] = useState<{ document: ProjectCanvasDocument; selection: string; scope: CanvasRunScope['kind']; result: ReturnType<typeof inspectCanvasRunScope> }>()
   const editor = state.editor
   const document = editor?.document
@@ -181,6 +217,27 @@ function CanvasContent({ controller, artifacts = [], actions = [], resolveMedia,
   const selected = document?.nodes.find(node => node.id === editor?.selection[0])
   const matches = document === undefined ? [] : searchProjectCanvas(document, query)
   const fit = () => void flow.fitView({ nodes: editor?.selection.length ? editor.selection.map(id => ({ id })) : undefined, duration: 0, padding: 0.2 })
+  const fitAll = () => void flow.fitView({ duration: 0, padding: 0.2 })
+  // Keyboard camera equivalents go through the same document camera edits as
+  // pointer navigation, so pan/zoom stay undoable and testable state
+  // transitions rather than React Flow instance internals.
+  const zoomBy = (factor: number) => {
+    if (document === undefined) return
+    const camera = document.camera
+    // Clamp matches the ReactFlow minZoom/maxZoom props so the controlled
+    // viewport never fights the library.
+    const zoom = Math.min(4, Math.max(0.05, camera.zoom * factor))
+    if (zoom === camera.zoom) return
+    const width = stageRef.current?.clientWidth ?? 0, height = stageRef.current?.clientHeight ?? 0
+    // Flow-space point currently under the stage center stays centered.
+    const centerX = (width / 2 - camera.x) / camera.zoom, centerY = (height / 2 - camera.y) / camera.zoom
+    controller.edit({ type: 'camera', camera: { x: width / 2 - centerX * zoom, y: height / 2 - centerY * zoom, zoom } })
+  }
+  const panBy = (screenDx: number, screenDy: number) => {
+    if (document === undefined) return
+    const camera = document.camera
+    controller.edit({ type: 'camera', camera: { x: camera.x - screenDx / camera.zoom, y: camera.y - screenDy / camera.zoom, zoom: camera.zoom } })
+  }
   // React Flow may emit the final position/camera change after its stop
   // callback. End the history gesture in a microtask so the complete drag is
   // recorded as one undo step.
@@ -194,6 +251,14 @@ function CanvasContent({ controller, artifacts = [], actions = [], resolveMedia,
       event.preventDefault(); copy()
     }
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'f') { event.preventDefault(); fit() }
+    // Keyboard equivalents for camera controls: zoom keys mirror the React
+    // Flow controls buttons, plain f fits the whole graph, arrows pan when
+    // nothing is selected, and Escape clears the selection.
+    if ((event.ctrlKey || event.metaKey) && (event.key === '=' || event.key === '+')) { event.preventDefault(); zoomBy(1.2) }
+    if ((event.ctrlKey || event.metaKey) && event.key === '-') { event.preventDefault(); zoomBy(1 / 1.2) }
+    if ((event.ctrlKey || event.metaKey) && event.key === '0') { event.preventDefault(); zoomBy(1 / document.camera.zoom) }
+    if (!(event.ctrlKey || event.metaKey || event.altKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); fitAll() }
+    if (event.key === 'Escape' && editor.selection.length) { event.preventDefault(); choose([]) }
     // Keyboard equivalents for object-list operations: arrow nudge, tab cycle, delete.
     if (editor.selection.length && (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
       event.preventDefault()
@@ -201,6 +266,12 @@ function CanvasContent({ controller, artifacts = [], actions = [], resolveMedia,
       controller.edit({ type: 'move', ids: editor.selection,
         dx: event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0,
         dy: event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0 })
+    } else if (!editor.selection.length && (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+      // With no selection the arrows pan the camera instead of moving nodes.
+      event.preventDefault()
+      const step = event.shiftKey ? 100 : 40
+      panBy(event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0,
+        event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0)
     }
     if (event.key === 'Tab' && matches.length) {
       event.preventDefault()
@@ -229,7 +300,7 @@ function CanvasContent({ controller, artifacts = [], actions = [], resolveMedia,
       <Button className="vk-btn" disabled={state.saveStatus === 'saving' || state.saveStatus === 'unknown'} onClick={() => state.dirty ? setDiscard(true) : void controller.load()}>{t('reload')}</Button>
     </SurfaceActionBar>
     {message && <div role="alert">{message}</div>}
-    <div className="canvas-layout"><div className="canvas-stage">
+    <div className="canvas-layout"><div className="canvas-stage" ref={stageRef}>
       <ReactFlow<CanvasFlowNode> nodes={nodes} nodeTypes={nodeTypes} edges={document.edges.map(edge => ({ id: edge.id, source: edge.source, target: edge.target, label: edge.kind === 'reference' ? edge.label ?? t('reference') : edge.purpose, className: edge.kind === 'reference' ? 'canvas-reference-edge' : undefined }))}
         onNodesChange={nodeChanges} onEdgesChange={changes => { for (const change of changes) { if (change.type === 'remove') controller.edit({ type: 'disconnect', id: change.id }); else if (change.type === 'select' && onEdgeSelect !== undefined) onEdgeSelect(change.selected ? change.id : undefined) } }}
         onEdgeClick={onEdgeSelect === undefined ? undefined : (_, edge) => onEdgeSelect(edge.id)}

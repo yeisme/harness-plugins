@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { PROJECT_CANVAS_SCHEMA, ProjectCanvasDocumentSchema, PANE_ARTIFACT_SCHEMA,
-  type ProjectCanvasDocument, type ProjectCanvasNode } from '@yeisme/dsh-pane-protocol'
-import { createProjectCanvasEditor, editProjectCanvas, searchProjectCanvas, orderProjectCanvasPositions, type ProjectCanvasEdit } from '../src/project-canvas.js'
+  type ArtifactRefV1, type ProjectCanvasDocument, type ProjectCanvasNode } from '@yeisme/dsh-pane-protocol'
+import { createProjectCanvasEditor, editProjectCanvas, searchProjectCanvas, orderProjectCanvasPositions,
+  classifyProjectCanvasReference, PROJECT_CANVAS_REFERENCE_KINDS, type ProjectCanvasEdit } from '../src/project-canvas.js'
+import { inspectCanvasRunScope } from '../src/project-canvas-workflow.js'
 
 const scope = { workspaceRef: 'workspace:one', projectRef: 'project:one' }
 const target = { ...scope, documentId: 'canvas-one' }
@@ -164,4 +166,76 @@ it('persists input review markers with the draft and restores them through undo'
  expect(restored.document.nodes.find(node => node.id === 'generate')).toHaveProperty('inputReviewRequired', true)
  expect(apply(edited, { type: 'undo' }).document).toEqual(moved.document)
  expect(original.document.nodes.find(node => node.id === 'generate')).not.toHaveProperty('inputReviewRequired')
+})
+
+describe('six material reference kinds across the five node families (5.1)', () => {
+  const reference = (kind: string, mediaType: string): ArtifactRefV1 => ({ schema: PANE_ARTIFACT_SCHEMA, owner: 'eikona', kind, ref: `eikona://asset/${kind}`, version: '1', mediaType, title: `Material ${kind}`, evidenceRefs: [], capabilities: ['preview'] })
+  const material = (id: string, artifact: ArtifactRefV1, groupId?: string): ProjectCanvasNode => ({ ...base, id, title: artifact.title, kind: 'material', artifact, ...(groupId === undefined ? {} : { groupId }) })
+
+  it('classifies each of the six reference families deterministically', () => {
+    expect(PROJECT_CANVAS_REFERENCE_KINDS).toEqual(['image', 'video', 'audio', 'file', 'domain', 'prompt'])
+    expect(classifyProjectCanvasReference(reference('image', 'image/png'))).toBe('image')
+    expect(classifyProjectCanvasReference(reference('video', 'video/mp4'))).toBe('video')
+    expect(classifyProjectCanvasReference(reference('audio', 'audio/mpeg'))).toBe('audio')
+    expect(classifyProjectCanvasReference(reference('file', 'application/pdf'))).toBe('file')
+    expect(classifyProjectCanvasReference(reference('file', 'application/octet-stream'))).toBe('file')
+    expect(classifyProjectCanvasReference(reference('prompt', 'text/markdown'))).toBe('prompt')
+    expect(classifyProjectCanvasReference(reference('prompt', 'application/json'))).toBe('prompt')
+    // Owner projections without a preview body classify as domain objects.
+    expect(classifyProjectCanvasReference(reference('shot', 'application/vnd.scaena.shot+json'))).toBe('domain')
+    expect(classifyProjectCanvasReference(reference('story', 'application/json'))).toBe('domain')
+  })
+
+  function fullFamilyDocument(): ProjectCanvasDocument {
+    return { schema: PROJECT_CANVAS_SCHEMA, scope, id: target.documentId, revision: 1, camera: { x: 0, y: 0, zoom: 1 },
+      nodes: [
+        { ...base, id: 'grp', title: 'Group', kind: 'group', collapsed: false },
+        material('mat-image', reference('image', 'image/png'), 'grp'),
+        material('mat-video', reference('video', 'video/mp4'), 'grp'),
+        material('mat-audio', reference('audio', 'audio/mpeg'), 'grp'),
+        material('mat-file', reference('file', 'application/pdf')),
+        material('mat-domain', reference('shot', 'application/vnd.scaena.shot+json')),
+        material('mat-prompt', reference('prompt', 'text/markdown')),
+        { ...base, id: 'note', title: 'Note', kind: 'draft', text: '说明' },
+        { ...base, id: 'op', title: 'Operation', kind: 'operation', owner: 'eikona', actionRef: 'action:generate', controls: {}, selectedArtifact: reference('image', 'image/png') },
+        { ...base, id: 'res', title: 'Result', kind: 'result', artifact: reference('image', 'image/png') },
+      ],
+      edges: [
+        { id: 'ref-edge', kind: 'reference', source: 'note', target: 'mat-image', label: 'inspiration' },
+        { id: 'exec-image', kind: 'execution', source: 'mat-image', target: 'op', input: 'reference', output: 'asset', purpose: 'reference-image' },
+        { id: 'exec-video', kind: 'execution', source: 'mat-video', target: 'op', input: 'video', output: 'asset', purpose: 'asset' },
+        { id: 'exec-audio', kind: 'execution', source: 'mat-audio', target: 'op', input: 'audio', output: 'asset', purpose: 'audio' },
+        { id: 'exec-file', kind: 'execution', source: 'mat-file', target: 'op', input: 'file', output: 'asset', purpose: 'asset' },
+        { id: 'exec-domain', kind: 'execution', source: 'mat-domain', target: 'op', input: 'domain', output: 'asset', purpose: 'asset' },
+        { id: 'exec-prompt', kind: 'execution', source: 'mat-prompt', target: 'op', input: 'prompt', output: 'asset', purpose: 'prompt' },
+      ] }
+  }
+
+  it('edits all six references and five families in one document without a second state owner', () => {
+    let editor = createProjectCanvasEditor(fullFamilyDocument())
+    expect(editor.document.nodes).toHaveLength(10)
+    expect(editor.document.nodes.filter(node => node.kind === 'material').map(node => classifyProjectCanvasReference(node.artifact))).toEqual(['image', 'video', 'audio', 'file', 'domain', 'prompt'])
+    // Reference edges never widen the execution graph; only execution edges bind inputs.
+    editor = apply(editor, { type: 'move', ids: ['grp'], dx: 3, dy: 3 })
+    for (const id of ['grp', 'mat-image', 'mat-video', 'mat-audio']) expect(editor.document.nodes.find(node => node.id === id)!.position).toEqual({ x: 3, y: 3 })
+    const copied = apply(editor, { type: 'copy', ids: ['mat-image', 'mat-prompt'], nodeIds: { 'mat-image': 'mat-image-2', 'mat-prompt': 'mat-prompt-2' }, edgeIds: {}, dx: 5, dy: 5 })
+    // Copying a material re-pins the same owner artifact version; it never duplicates assets or run state.
+    for (const id of ['mat-image-2', 'mat-prompt-2']) {
+      expect(copied.document.nodes.find(node => node.id === id)).toMatchObject({ kind: 'material', artifact: expect.objectContaining({ version: '1' }) })
+      expect(copied.document.nodes.find(node => node.id === id)).not.toHaveProperty('runId')
+    }
+    expect(copied.document).not.toHaveProperty('runs')
+    const undone = apply(copied, { type: 'undo' })
+    expect(undone.document.nodes).toHaveLength(10)
+  })
+
+  it('feeds every reference family through execution edges of the same document', () => {
+    const editor = createProjectCanvasEditor(fullFamilyDocument())
+    const inspection = inspectCanvasRunScope(editor.document, { kind: 'all' })
+    // All six material sources bind as artifacts; none is rejected as unsupported.
+    expect(inspection.bindings).toHaveLength(6)
+    expect(inspection.bindings.every(binding => binding.source.kind === 'artifact')).toBe(true)
+    expect(inspection.blockers).toEqual([])
+    expect(inspection.order).toEqual(['op'])
+  })
 })

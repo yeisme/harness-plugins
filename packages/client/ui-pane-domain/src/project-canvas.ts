@@ -1,11 +1,43 @@
 import { inspectCanvasChangeImpact } from './project-canvas-workflow.js'
 import {
   ProjectCanvasDocumentSchema,
+  type ArtifactRefV1,
   type ProjectCanvasDocument,
   type ProjectCanvasEdge,
   type ProjectCanvasNode,
   type ProjectCanvasScope,
 } from '@yeisme/dsh-pane-protocol'
+
+/**
+ * The six material reference families a canvas 素材 node can pin
+ * (dsh-project-canvas-continuity-v1 5.1): image, video, audio, file,
+ * prompt (提示词) and domain object. Classification is presentation-kernel
+ * only; it never rewrites the stored artifact ref or invents protocol fields.
+ */
+export type ProjectCanvasReferenceKind = 'image' | 'video' | 'audio' | 'file' | 'domain' | 'prompt'
+export const PROJECT_CANVAS_REFERENCE_KINDS: readonly ProjectCanvasReferenceKind[] = ['image', 'video', 'audio', 'file', 'domain', 'prompt']
+
+/**
+ * Deterministic classification of a pinned artifact reference into one of the
+ * six material families. Precedence (documented so tests can pin it):
+ * 1. Renderable media classify by mediaType prefix: image/, video/, audio/.
+ * 2. Bounded text payloads are prompt materials (mediaType text/* or an
+ *    artifact whose semantic kind is already "prompt"); they feed workflow
+ *    "prompt" input purposes and are never free-form draft notes.
+ * 3. Payload-bearing materials (semantic kind "file" or a known binary
+ *    container mediaType) read as files.
+ * 4. Everything else is a domain object projection: an owner entity without
+ *    a canvas preview body.
+ */
+export function classifyProjectCanvasReference(artifact: ArtifactRefV1): ProjectCanvasReferenceKind {
+  const mediaType = artifact.mediaType.trim().toLowerCase()
+  if (mediaType.startsWith('image/')) return 'image'
+  if (mediaType.startsWith('video/')) return 'video'
+  if (mediaType.startsWith('audio/')) return 'audio'
+  if (mediaType.startsWith('text/') || artifact.kind === 'prompt') return 'prompt'
+  if (artifact.kind === 'file' || /^application\/(pdf|zip|x-7z-compressed|octet-stream|vnd\.rar)$/.test(mediaType)) return 'file'
+  return 'domain'
+}
 
 export interface ProjectCanvasEditor {
   readonly document: ProjectCanvasDocument

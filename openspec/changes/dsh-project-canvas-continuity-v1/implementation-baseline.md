@@ -1,5 +1,29 @@
 # 画布实现基线与证据
 
+## 2026-09-14：六类引用、键盘相机、媒体门控与300节点采样（5.1a/5.2b/5.5a，ui-pane-domain 单仓切片）
+
+本轮严格限定在 `packages/client/ui-pane-domain`（并行 lane 持有 creator-studio / ai-drama-director / ui-3d-director，未触碰）。pane-protocol schema 保持原义：六类引用是呈现内核对既有 `ArtifactRefV1` 的确定性分类，不新增协议字段或第二状态owner。
+
+### 实现
+
+- `src/project-canvas.ts` 新增 `classifyProjectCanvasReference` 与 `PROJECT_CANVAS_REFERENCE_KINDS`（image/video/audio/file/domain/prompt）。判定次序固定：mediaType 前缀 image/ video/ audio/；文本（text/* 或语义 kind=prompt）为提示词素材；二进制容器（application/pdf、zip、x-7z-compressed、octet-stream、vnd.rar）或语义 kind=file 为文件；其余无预览体的 owner 投影为领域对象。分类纯函数不改写存储引用。
+- `src/project-canvas-view.tsx`：素材节点渲染中英引用类别标签（kindImage…kindPrompt 六个 locale key，节点根带 `data-reference-kind`，标签不只用颜色）；键盘相机等价——无选区方向键平移（Shift×100px 屏幕像素/zoom）、Ctrl+=/Ctrl+-/Ctrl+0 缩放（保持视口中心，clamp 到 minZoom 0.05/maxZoom 4 与 React Flow props 一致，全部走 document camera 编辑故可撤销）、f 适配全图、Escape 清除选择；`Media` 组件改为 IntersectionObserver 门控（rootMargin 20%）——不可见不 resolve、离屏立即暂停视频、已解析 URL 缓存不因可见性翻转重取（版本切换才清除）、无 IO 环境诚实退化为立即加载。
+- `tests/project-canvas-perf.spec.ts` 新增 300 混合节点采样框架：确定性 LCG 样本（五类节点族 × 六类引用 × 200 执行边 + 100 参考边），真实跑一次并打印 p50/p95/max。
+
+### 300 混合节点采样数值（2026-09-14，本机 vitest 3.2.7/node jsdom 环境单次运行）
+
+- kernel 输入（editProjectCanvas：move/text/undo/select 混合，240 样本）：p50 4.21ms / p95 8.06ms / max 13.69ms（阈值 ≤100ms）。
+- controller 输入（controller.edit 真实路径：move/camera，120 样本）：p50 4.84ms / p95 8.45ms / max 9.97ms（阈值 ≤100ms）。
+- 缓存切换（cached document 重入 = schema parse + 深冻结，30 样本）：p50 4.44ms / p95 6.70ms / max 7.26ms（阈值 ≤200ms）。
+- 记录项：search p95 0.10ms（40 样本）、draft inspection(all) 2.42ms（30 操作）。
+- 边界：单次短时采样，不是 60 分钟持续样本；无 DOM/heap/帧趋势与真实媒体解码。机器/视口/媒体样本记录与持续采集仍属父 5.5/4.3。
+
+### 验证及边界
+
+- `pnpm --dir packages/client/ui-pane-domain run test`：28 文件 176 项全绿（前值 166；+内核 3、视图 3、性能 4）；`run typecheck`、`run build` 通过。
+- 新增测试：project-canvas.spec 六类分类确定性、五族六引用同文档编辑（分组移动/复制重钉原版本资产/撤销，无 runs 等第二状态owner字段）、六类引用全部经执行边绑定为 artifact 输入；project-canvas-view.spec 键盘相机走查（jsdom 精确断言 camera 数值、Ctrl+0 复原、undo 还原相机、f 适配后选择不变）、素材类别标签（六种中英标签与 data-reference-kind）、媒体门控（不可见零 resolve、可见后渲染、离屏 pause 调用、URL 缓存不重取）。
+- 未触碰 packages/host/creator-studio、ui-ai-drama-director、ui-3d-director 及其 bundle；宿主/工作流/专业 Pane 集成与真实 DSH 验收保留父任务。运行定位（run→节点映射）需 workflow 运行状态，本轮无法在 ui-pane-domain 内完成。
+
 ## 2026-09-08：续接原journal保存至确定回执
 
 控制器原来在恢复journal后对账仍未知时落回旧confirmed文档，丢失客户端的pending身份；对账刚确认saved时也没有应用新revision。现在验证journal的project/document/baseRevision后，恢复该原请求为pending，显示未确认草稿；unknown继续只对账原requestId并禁止新保存。saved通过现有ack规则确认journal文档及新revision；not_applied恢复dirty，下一次显式保存可使用新键。恢复过程不自动提交保存或领域执行。

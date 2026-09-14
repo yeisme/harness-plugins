@@ -240,8 +240,8 @@ export type {
 const DomainPanePlugin = { inject, apply }
 export default DomainPanePlugin
 
-export { createProjectCanvasEditor, editProjectCanvas, searchProjectCanvas } from './project-canvas.js'
-export type { ProjectCanvasEditor, ProjectCanvasEdit, ProjectCanvasEditResult } from './project-canvas.js'
+export { createProjectCanvasEditor, editProjectCanvas, searchProjectCanvas, classifyProjectCanvasReference, PROJECT_CANVAS_REFERENCE_KINDS } from './project-canvas.js'
+export type { ProjectCanvasEditor, ProjectCanvasEdit, ProjectCanvasEditResult, ProjectCanvasReferenceKind } from './project-canvas.js'
 export { inspectCanvasRunScope, inspectCanvasImpact, inspectCanvasChangeImpact } from './project-canvas-workflow.js'
 export type { CanvasRunScope, CanvasScopeInspection } from './project-canvas-workflow.js'
 export { ProjectCanvasView, canvasZh, canvasEn } from './project-canvas-view.js'
