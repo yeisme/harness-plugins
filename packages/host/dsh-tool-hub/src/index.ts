@@ -30,6 +30,17 @@ export {
 export type { ToolHubFamily, ToolHubItemId } from './ids.ts'
 
 export type {
+  ConnectDocUnavailableFailureV1,
+  ToolHubConnectDocAnswerV1,
+  ToolHubConnectDocOkV1,
+  ToolHubConnectFaceV1,
+  ToolHubRediscoverAnswerV1,
+  ToolHubRediscoverFailureV1,
+  ToolHubRediscoverOkV1,
+} from './wire.ts'
+export { ToolHubConnectDocReader, createConnectDocReader, parseConnectDoc } from './connect-doc.ts'
+export type { ToolHubConnectDocSource } from './connect-doc.ts'
+export type {
   CatalogUnavailableFailureV1,
   GenerationConflictFailureV1,
   ItemUnknownFailureV1,

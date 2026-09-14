@@ -8,8 +8,11 @@ import { TOOL_HUB_PREFS_KEY, TOOL_HUB_SPEC_VERSION } from './constants.ts'
 import { isToolHubItemId, type ToolHubItemId } from './ids.ts'
 import { findCatalogItem, projectCatalog, type CatalogSource } from './catalog.ts'
 import type { ToolHubPrefsRowV1 } from './domain.ts'
+import { ToolHubConnectDocReader, type ToolHubConnectDocSource } from './connect-doc.ts'
 import type {
   ToolHubCatalogAnswerV1,
+  ToolHubConnectDocAnswerV1,
+  ToolHubRediscoverAnswerV1,
   ToolHubSetEnabledAnswerV1,
   ToolHubSetEnabledInputV1,
 } from './wire.ts'
@@ -26,20 +29,25 @@ export interface ToolHubCatalogPort {
 export interface ToolHubSidecarDeps {
   readonly table?: ToolHubTablePort
   readonly catalog: ToolHubCatalogPort
+  /** Additive: absent until the Gateway-side `gateway_connect_doc.v1` projection lands. */
+  readonly connectDocSource?: ToolHubConnectDocSource
   readonly newVersion?: () => string
 }
 
 export class ToolHubSidecar {
   private readonly table: ToolHubTablePort | undefined
   private readonly catalog: ToolHubCatalogPort
+  private readonly connectDoc: ToolHubConnectDocReader
   private readonly newVersion: () => string
   private generation = 1
   private mutation: Promise<unknown> = Promise.resolve()
   private memoryDisabled = new Set<string>()
+  private rediscovering: Promise<ToolHubRediscoverAnswerV1> | undefined
 
   constructor(deps: ToolHubSidecarDeps) {
     this.table = deps.table
     this.catalog = deps.catalog
+    this.connectDoc = new ToolHubConnectDocReader(deps.connectDocSource)
     this.newVersion = deps.newVersion ?? (() => `rv${Date.now().toString(36)}`)
   }
 
@@ -77,6 +85,38 @@ export class ToolHubSidecar {
     } catch (error) {
       return { ok: false, code: 'catalog-unavailable', message: 'Catalog sources are unavailable' }
     }
+  }
+
+  /** Additive read-only projection; degrades to `connect-doc-unavailable` until G4 lands. */
+  connectDocRead(): Promise<ToolHubConnectDocAnswerV1> {
+    return this.connectDoc.read()
+  }
+
+  /**
+   * Server-authored exactly-once re-discovery: one `tools/list` through the
+   * existing catalog collect path, then generation bump and digest re-fetch.
+   * In-flight calls are rejected; nothing here ever schedules itself.
+   */
+  rediscover(): Promise<ToolHubRediscoverAnswerV1> {
+    if (this.rediscovering !== undefined) {
+      return Promise.resolve({ ok: false, code: 'rediscover-in-progress', message: 'a re-discovery is already in progress' })
+    }
+    const run = (async (): Promise<ToolHubRediscoverAnswerV1> => {
+      const catalog = await this.list()
+      if (!catalog.ok) return { ok: false, code: 'rediscover-unavailable', message: catalog.message }
+      this.generation += 1
+      const doc = await this.connectDoc.read()
+      // Fail-closed: the answer contract cannot report success without the
+      // reconciled digest, so a missing doc degrades with its reason even
+      // though the generation already moved (visible through `list`).
+      if (!doc.ok) return { ok: false, code: 'rediscover-unavailable', message: doc.message }
+      return { ok: true, generation: this.generation, docDigest: doc.docDigest }
+    })()
+    const settled = run.finally(() => {
+      if (this.rediscovering === settled) this.rediscovering = undefined
+    })
+    this.rediscovering = settled
+    return settled
   }
 
   setEnabled(input: ToolHubSetEnabledInputV1): Promise<ToolHubSetEnabledAnswerV1> {

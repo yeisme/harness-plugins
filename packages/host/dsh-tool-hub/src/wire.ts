@@ -109,6 +109,44 @@ export type ToolHubSetEnabledAnswerV1 =
   | StorageUnavailableFailureV1
   | CatalogUnavailableFailureV1
 
+/** Compact connect-doc face: display vocabulary only (no URLs, tokens, or fetch surface). */
+export interface ToolHubConnectFaceV1 {
+  readonly id: string
+  readonly publicName: string
+  readonly kind: string
+  readonly toolCount?: number
+}
+
+/** Additive `gateway_connect_doc.v1` read-only projection (digest_sha256_16). */
+export interface ToolHubConnectDocOkV1 {
+  readonly ok: true
+  readonly docDigest: string
+  readonly observedAt: number
+  readonly faces: readonly ToolHubConnectFaceV1[]
+}
+
+export interface ConnectDocUnavailableFailureV1 {
+  readonly ok: false
+  readonly code: 'connect-doc-unavailable'
+  readonly message: string
+}
+
+export type ToolHubConnectDocAnswerV1 = ToolHubConnectDocOkV1 | ConnectDocUnavailableFailureV1
+
+export interface ToolHubRediscoverOkV1 {
+  readonly ok: true
+  readonly generation: number
+  readonly docDigest: string
+}
+
+export interface ToolHubRediscoverFailureV1 {
+  readonly ok: false
+  readonly code: 'rediscover-in-progress' | 'rediscover-unavailable'
+  readonly message: string
+}
+
+export type ToolHubRediscoverAnswerV1 = ToolHubRediscoverOkV1 | ToolHubRediscoverFailureV1
+
 export const TOOL_HUB_SET_FAILURE_CODES = new Set([
   'item-unknown',
   'toggle-unsupported',

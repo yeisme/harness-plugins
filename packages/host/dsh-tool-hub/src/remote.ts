@@ -8,7 +8,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService, remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
 import { TOOL_HUB_REMOTE_SERVICE_KEY } from './constants.ts'
 import type { ToolHubSidecar } from './service.ts'
-import type { ToolHubCatalogAnswerV1, ToolHubSetEnabledAnswerV1, ToolHubSetEnabledInputV1 } from './wire.ts'
+import type { ToolHubCatalogAnswerV1, ToolHubConnectDocAnswerV1, ToolHubRediscoverAnswerV1, ToolHubSetEnabledAnswerV1, ToolHubSetEnabledInputV1 } from './wire.ts'
 
 export class ToolHubRemoteService extends TypertRemoteService {
   private readonly sidecar: ToolHubSidecar
@@ -26,6 +26,16 @@ export class ToolHubRemoteService extends TypertRemoteService {
   @Remote
   async setEnabled(input: ToolHubSetEnabledInputV1): Promise<ToolHubSetEnabledAnswerV1> {
     return this.sidecar.setEnabled(input)
+  }
+
+  @Remote
+  async connectDoc(): Promise<ToolHubConnectDocAnswerV1> {
+    return this.sidecar.connectDocRead()
+  }
+
+  @Remote
+  async rediscover(): Promise<ToolHubRediscoverAnswerV1> {
+    return this.sidecar.rediscover()
   }
 }
 

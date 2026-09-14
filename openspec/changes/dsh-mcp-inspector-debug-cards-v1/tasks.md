@@ -53,14 +53,16 @@
 ## 4. 能力地图卡
 
   - **Evidence**：`tests/failure-decode.test.ts` `describe('frozen taxonomy snapshot')`：冻结七码逐一用例 + 字面量透传 + 未知/无信号/超界/丢失区分度 fail-closed 用例；分类法码集合变化显式红灯。
-- [ ] 4.1 Host additive connect-doc 投影：`toolHub` Remote 新增 `connectDoc()` 只读方法与 wire 类型（compact faces + `docDigest` digest_sha256_16 + observedAt；`connect-doc-unavailable` 失败形状），从已批准绑定/当前暴露读取 `gateway_connect_doc.v1`；既有 `list`/`setEnabled` 与 `specVersion` 不变。
+- [x] 4.1 Host additive connect-doc 投影：`toolHub` Remote 新增 `connectDoc()` 只读方法与 wire 类型（compact faces + `docDigest` digest_sha256_16 + observedAt；`connect-doc-unavailable` 失败形状），从已批准绑定/当前暴露读取 `gateway_connect_doc.v1`；既有 `list`/`setEnabled` 与 `specVersion` 不变。
   - **Owner/Scope**：`packages/host/dsh-tool-hub/src/wire.ts`、`src/remote.ts`、新增 `src/connect-doc.ts` + `tests/service.spec.ts` 增例。
   - **Acceptance**：旧客户端零感知；wire 只传 safe projection 字段；G4 未落地时回 `connect-doc-unavailable`（带原因）。
   - **Validation**：`pnpm --filter @yeisme/dsh-tool-hub-host test`。
-- [ ] 4.2 Host server-authored 恰好一次 re-discovery：`rediscover()` 单次 `tools/list`、in-flight 守卫（`rediscover-in-progress`）、完成后 generation 递增并重取 digest；无 timer/mount/漂移自动触发路径。
+  - **Evidence**：`packages/host/dsh-tool-hub` additive：`src/wire.ts` 新增 connect-doc/rediscover wire 类型、`src/connect-doc.ts`（digest_sha256_16/face 白名单/有界校验，未知字段不透传）、`src/remote.ts` 增 `connectDoc()` 只读转发、`src/service.ts` 增 reader；`list`/`setEnabled` 描述符与 `specVersion` 零变化（markers 测试更新为 4 方法）。G4 未落地时实测回 `connect-doc-unavailable`（带原因，transport error 不泄私有细节）。`tests/service.spec.ts` 全绿；包 typecheck+build 绿。
+- [x] 4.2 Host server-authored 恰好一次 re-discovery：`rediscover()` 单次 `tools/list`、in-flight 守卫（`rediscover-in-progress`）、完成后 generation 递增并重取 digest；无 timer/mount/漂移自动触发路径。
   - **Owner/Scope**：`packages/host/dsh-tool-hub/src/connect-doc.ts` + `tests/service.spec.ts`。
   - **Acceptance**：并发调用只放行一次；源码 grep 无自动调度调用点。
   - **Validation**：`pnpm --filter @yeisme/dsh-tool-hub-host test`。
+  - **Evidence**：`src/service.ts` `rediscover()`：单次 catalog collect（=一次 tools/list）→ generation 递增 → 重取 digest；in-flight 守卫实测并发第二调用回 `rediscover-in-progress`、settle 后守卫解除；collect/doc 失败回 `rediscover-unavailable`。源码 grep 无 timer/mount/漂移自动调用点（仅 Remote 显式转发）。`tests/service.spec.ts` 全绿。包内 2 个 owner spec 需 `--host` 集成证据入口（环境门），基线 worktree 复核为 pre-existing environmental，非本 change 引入。
 - [ ] 4.3 Client wire mirror + 轻量 controller：digest 背书记录、漂移置 stale、重读后一致才撤；浏览器不直连 Gateway 的静态守卫测试（client 源无 gateway URL/token/cookie、无新增任意 fetch 面）。
   - **Owner/Scope**：`packages/client/ui-mcp-inspector/src/client/wire.ts`（mirror）、新增 `src/client/connect-doc.ts` + `tests/connect-doc.test.ts`。
   - **Acceptance**：probe 不到 `connectDoc`/`rediscover`（旧宿主）→ controller 呈禁用态而非报错。
