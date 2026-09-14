@@ -63,10 +63,11 @@
   - **Acceptance**：并发调用只放行一次；源码 grep 无自动调度调用点。
   - **Validation**：`pnpm --filter @yeisme/dsh-tool-hub-host test`。
   - **Evidence**：`src/service.ts` `rediscover()`：单次 catalog collect（=一次 tools/list）→ generation 递增 → 重取 digest；in-flight 守卫实测并发第二调用回 `rediscover-in-progress`、settle 后守卫解除；collect/doc 失败回 `rediscover-unavailable`。源码 grep 无 timer/mount/漂移自动调用点（仅 Remote 显式转发）。`tests/service.spec.ts` 全绿。包内 2 个 owner spec 需 `--host` 集成证据入口（环境门），基线 worktree 复核为 pre-existing environmental，非本 change 引入。
-- [ ] 4.3 Client wire mirror + 轻量 controller：digest 背书记录、漂移置 stale、重读后一致才撤；浏览器不直连 Gateway 的静态守卫测试（client 源无 gateway URL/token/cookie、无新增任意 fetch 面）。
+- [x] 4.3 Client wire mirror + 轻量 controller：digest 背书记录、漂移置 stale、重读后一致才撤；浏览器不直连 Gateway 的静态守卫测试（client 源无 gateway URL/token/cookie、无新增任意 fetch 面）。
   - **Owner/Scope**：`packages/client/ui-mcp-inspector/src/client/wire.ts`（mirror）、新增 `src/client/connect-doc.ts` + `tests/connect-doc.test.ts`。
   - **Acceptance**：probe 不到 `connectDoc`/`rediscover`（旧宿主）→ controller 呈禁用态而非报错。
   - **Validation**：`pnpm --filter @yeisme/dsh-client-ui-mcp-inspector test -- tests/connect-doc.test.ts`。
+  - **Evidence**：`src/client/wire.ts` mirror（connect-doc/rediscover 类型 + `ToolHubRemoteFace` 可选方法）、`src/client/connect-doc.ts` `ConnectDocController`（digest 背书/漂移置 stale 保留渲染 doc/重读一致不冒充/rediscover 单飞守卫同步生效）、`src/client/remote.ts` unwrapNamespace 仅在 namespace 已暴露时 additive 转发；`tests/connect-doc.test.ts` 8 项绿（含禁用/错误/stale/单飞/守卫静态扫描：client 源无 fetch/XMLHttpRequest/WebSocket/document.cookie/gateway URL）。包 vitest 19 文件 129 测试全绿、typecheck+build 绿、check:bundles 29/29、check:plugins 全 PASS。
 - [ ] 4.4 能力地图卡 UI：faces+digest+observedAt 呈现、digest 漂移 mismatch 横幅（stale 标注，不冒充新鲜）、横幅内单一 re-discovery 动作（in-flight 禁用）、禁用+原因降级态；zh/en 双语；无手写快速卡兜底、无静默陈旧回退。
   - **Owner/Scope**：卡片组件 + `src/client/locales.ts`；接入既有 pane，不加 tab/bundle/pane kind。
   - **Acceptance**：`ui-conversation` 只读边界不变；bundle 仅在需要时 additive 导出（cordis.patch.yml insert 行不变）。

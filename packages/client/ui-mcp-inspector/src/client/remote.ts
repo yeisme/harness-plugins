@@ -6,7 +6,7 @@
 
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import { toolHubRemoteContribution } from './remote-contribution.ts'
-import type { ToolHubCatalogAnswerV1, ToolHubRemoteFace, ToolHubSetEnabledAnswerV1, ToolHubSetEnabledInputV1 } from './wire.ts'
+import type { ToolHubCatalogAnswerV1, ToolHubConnectDocAnswerV1, ToolHubRediscoverAnswerV1, ToolHubRemoteFace, ToolHubSetEnabledAnswerV1, ToolHubSetEnabledInputV1 } from './wire.ts'
 
 interface RemoteResultLike<T> {
   readonly ok: boolean
@@ -72,7 +72,7 @@ function optionalLookup(ctx: ClientContext, name: string): Record<string, unknow
   }
 }
 
-type ReadableToolHubFace = Pick<ToolHubRemoteFace, 'list'> & Partial<Pick<ToolHubRemoteFace, 'setEnabled'>>
+type ReadableToolHubFace = Pick<ToolHubRemoteFace, 'list'> & Partial<Pick<ToolHubRemoteFace, 'setEnabled' | 'connectDoc' | 'rediscover'>>
 
 function isRemoteFace(candidate: unknown): candidate is ReadableToolHubFace {
   return typeof candidate === 'object' && candidate !== null
@@ -80,7 +80,7 @@ function isRemoteFace(candidate: unknown): candidate is ReadableToolHubFace {
 }
 
 function unwrapNamespace(namespace: Record<string, unknown>): ToolHubRemoteFace {
-  const invoke = async (method: 'list' | 'setEnabled', input?: ToolHubSetEnabledInputV1): Promise<unknown> => {
+  const invoke = async (method: 'list' | 'setEnabled' | 'connectDoc' | 'rediscover', input?: ToolHubSetEnabledInputV1): Promise<unknown> => {
     const fn = namespace[method]
     if (typeof fn !== 'function') throw new ToolHubClientError('contract_mismatch')
     const response: unknown = await fn.call(namespace, ...(input === undefined ? [] : [input]))
@@ -104,6 +104,11 @@ function unwrapNamespace(namespace: Record<string, unknown>): ToolHubRemoteFace 
       if (typeof namespace.setEnabled !== 'function') return { ok: false, code: 'toggle-unsupported', message: 'Enablement is not exposed by this owner' }
       return codec('setEnabled').parse(await invoke('setEnabled', input)) as ToolHubSetEnabledAnswerV1
     },
+    // Additive probes: forwarded only when the namespace already exposes them;
+    // there is no contribution descriptor yet, so answers pass through as-is
+    // and the connect-doc controller validates the wire shape client-side.
+    ...(typeof namespace.connectDoc === 'function' ? { connectDoc: async (): Promise<ToolHubConnectDocAnswerV1> => await invoke('connectDoc') as ToolHubConnectDocAnswerV1 } : {}),
+    ...(typeof namespace.rediscover === 'function' ? { rediscover: async (): Promise<ToolHubRediscoverAnswerV1> => await invoke('rediscover') as ToolHubRediscoverAnswerV1 } : {}),
   }
 }
 

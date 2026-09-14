@@ -36,7 +36,16 @@ export { decodeToolFailure, deriveCatalogFailureSignals, resolveFailurePresentat
 export type { DecodedFailure, DecodedTaxonomyCode, EmptyToolsFailureSignal, FailurePresentation, FailurePresentationVocabulary, FailureTaxonomyCode, RetryAfterHint, ToolActivityFailureSignal, ToolFailureSignal, ToolHubClientFailureSignal } from './failure-decode.ts'
 export { FailureDecodeCard } from './DebugCards.tsx'
 export type { FailureDecodeCardProps } from './DebugCards.tsx'
+export { ConnectDocController, createConnectDocController } from './connect-doc.ts'
+export type { ConnectDocControllerState, ConnectDocNotice, ConnectDocRemoteResolver } from './connect-doc.ts'
 export type {
+  ConnectDocUnavailableFailureV1,
+  ToolHubConnectDocAnswerV1,
+  ToolHubConnectDocOkV1,
+  ToolHubConnectFaceV1,
+  ToolHubRediscoverAnswerV1,
+  ToolHubRediscoverFailureV1,
+  ToolHubRediscoverOkV1,
   ToolHubAvailability,
   ToolHubCatalogAnswerV1,
   ToolHubCatalogV1,
