@@ -10,9 +10,10 @@
  *
  * @module @yeisme/dsh-client-ui-mcp-inspector/client
  */
-import type { JSX } from 'react'
+import { useEffect, useSyncExternalStore, type JSX } from 'react'
 import type { McpInspectorKey } from './locales.ts'
 import { decodeToolFailure, resolveFailurePresentation, retryAfterHint, type ToolFailureSignal } from './failure-decode.ts'
+import { ConnectDocController, type ConnectDocNotice } from './connect-doc.ts'
 
 type FailureText = (key: McpInspectorKey, params?: Readonly<Record<string, string | number>>) => string
 
@@ -92,3 +93,73 @@ export function FailureDecodeCard({ signals, text }: FailureDecodeCardProps): JS
     </section>
   )
 }
+
+export interface CapabilityMapCardProps {
+  readonly controller: ConnectDocController
+  readonly text: FailureText
+}
+
+/**
+ * Capability map card: faces + digest + observedAt from the host connect-doc
+ * projection, with an explicit stale banner on digest drift and a single
+ * user-triggered re-discovery action. Degrades disabled-with-reason; never
+ * renders fallback capability data or stale docs as fresh.
+ */
+export function CapabilityMapCard({ controller, text }: CapabilityMapCardProps): JSX.Element {
+  const subscribe = controller.subscribe.bind(controller)
+  const state = useSyncExternalStore(subscribe, controller.getSnapshot.bind(controller), controller.getSnapshot.bind(controller))
+  const notice = useSyncExternalStore(subscribe, controller.noticeSnapshot.bind(controller), controller.noticeSnapshot.bind(controller))
+  const rediscovering = useSyncExternalStore(subscribe, controller.rediscoveringSnapshot.bind(controller), controller.rediscoveringSnapshot.bind(controller))
+  // First read only: drift is surfaced by later reads (recheck or re-discovery),
+  // never by a timer or an automatic re-discovery.
+  useEffect(() => { void controller.read() }, [controller])
+
+  if (state.status === 'idle' || state.status === 'reading') {
+    return (
+      <section className="tools-capability-map" data-capability-map="" data-map-state="loading" aria-label={text('map.section.aria')} aria-busy="true">
+        <div className="vk-skeleton" aria-hidden="true" />
+        <p>{text('map.loading')}</p>
+      </section>
+    )
+  }
+  if (state.status === 'disabled') {
+    return (
+      <section className="tools-capability-map" data-capability-map="" data-map-state="disabled" aria-label={text('map.section.aria')}>
+        <div className="vk-alert" data-tone="neutral"><strong>{text('map.disabled')}</strong><p>{state.reason}</p></div>
+      </section>
+    )
+  }
+  if (state.status === 'error') {
+    return (
+      <section className="tools-capability-map" data-capability-map="" data-map-state="error" aria-label={text('map.section.aria')}>
+        <div className="vk-alert" data-tone="warn"><strong>{text('map.error')}</strong><p>{state.message}</p><div><button type="button" className="vk-btn" data-map-reread="" onClick={() => { void controller.read() }}>{text('map.reread')}</button></div></div>
+      </section>
+    )
+  }
+  const stale = state.status === 'stale'
+  const doc = state.doc
+  return (
+    <section className="tools-capability-map" data-capability-map="" data-map-state={stale ? 'stale' : 'ready'} data-map-digest={doc.docDigest} aria-label={text('map.section.aria')}>
+      <header className="tools-map-header"><strong>{text('map.section.aria')}</strong>{stale ? <span className="vk-badge" data-map-stale="true">{text('map.staleBadge')}</span> : null}</header>
+      {stale ? (
+        <div className="vk-alert tools-map-mismatch" data-tone="warn" role="alert">
+          <p>{text('map.stale', { rendered: doc.docDigest, current: state.currentDigest })}</p>
+          <div><button type="button" className="vk-btn" data-map-rediscover="" disabled={rediscovering} onClick={() => { void controller.rediscover() }}>{rediscovering ? text('map.rediscovering') : text('map.rediscover')}</button></div>
+        </div>
+      ) : null}
+      <dl>
+        <div><dt>{text('map.digest')}</dt><dd><code className="tools-map-digest">{doc.docDigest}</code></dd></div>
+        <div><dt>{text('map.observedAt')}</dt><dd><time dateTime={new Date(doc.observedAt).toISOString()} data-map-observed-at={doc.observedAt}>{new Date(doc.observedAt).toISOString()}</time></dd></div>
+        <div><dt>{text('map.faces')}</dt><dd>{text('map.faceCount', { count: doc.faces.length })}</dd></div>
+      </dl>
+      <ul className="tools-map-faces">
+        {doc.faces.map(face => (
+          <li key={face.id} data-map-face={face.id}><span>{face.publicName}</span><span className="vk-badge">{face.kind}</span>{face.toolCount !== undefined ? <small>{text('map.toolCount', { count: face.toolCount })}</small> : null}</li>
+        ))}
+      </ul>
+      {notice === undefined ? null : <p className="tools-notice" data-tone="warn" role="status">{text(notice.kind === 'rediscover-rejected' ? 'map.rediscoverUnavailable' : 'map.rediscoverFailed', { reason: notice.message })}</p>}
+    </section>
+  )
+}
+
+export type { ConnectDocNotice }

@@ -19,7 +19,8 @@ import { ToolsPane } from './pane.tsx'
 import { createInstalledToolsSearchSource } from './installed-search-source.ts'
 import { createSessionToolsSearchSource } from './session-search-source.ts'
 import { sessionCatalogRemote } from './session-catalog.ts'
-import { reconnectingToolHubRemote } from './remote.ts'
+import { reconnectingToolHubRemote, resolveToolHubRemote } from './remote.ts'
+import { ConnectDocController } from './connect-doc.ts'
 
 export { McpInspectorView, renderToolsInspectorTree } from './McpInspectorView.tsx'
 export type { ToolsInspectorTreeProps, ToolsInspectorViewProps, ToolsNotice, ToolsSection, ToolsTranslator } from './McpInspectorView.tsx'
@@ -38,6 +39,8 @@ export { FailureDecodeCard } from './DebugCards.tsx'
 export type { FailureDecodeCardProps } from './DebugCards.tsx'
 export { ConnectDocController, createConnectDocController } from './connect-doc.ts'
 export type { ConnectDocControllerState, ConnectDocNotice, ConnectDocRemoteResolver } from './connect-doc.ts'
+export { CapabilityMapCard } from './DebugCards.tsx'
+export type { CapabilityMapCardProps } from './DebugCards.tsx'
 export type {
   ConnectDocUnavailableFailureV1,
   ToolHubConnectDocAnswerV1,
@@ -96,6 +99,9 @@ export function apply(ctx: ClientContext): () => void {
   let pane: PaneFace | undefined
   let disposePane = () => {}
   const catalogRemote = reconnectingToolHubRemote(ctx)
+  // Capability map card source: resolves (and probes) per query, so an old
+  // host stays a recoverable disabled state instead of a hard failure.
+  const connectDocController = new ConnectDocController(() => resolveToolHubRemote(ctx))
   const installedSearch = createInstalledToolsSearchSource({ read: () => catalogRemote.list(), open: async item => {
     const currentPane = pane
     if (!currentPane?.controller) return false
@@ -168,7 +174,7 @@ export function apply(ctx: ClientContext): () => void {
       descriptor: descriptor(manager), i18n: { namespace: NS, labelKey: manager ? 'view.globalTools' : 'view.tools' },
       component: ({ view }) => {
         const sessionId = manager ? undefined : typeof view.metadata?.sessionId === 'string' ? view.metadata.sessionId : undefined
-        return createElement(ToolsPane, { ctx, sessions, workspace, t, sessionId, manager,
+        return createElement(ToolsPane, { ctx, sessions, workspace, t, sessionId, manager, connectDocController,
           ...(manager && typeof (get('settingsNavigation') as { open?: unknown } | undefined)?.open === 'function' ? { onSettings: () => { (get('settingsNavigation') as { open(section: string): void }).open('plugins') } } : {}),
           onSessionSelected: id => { rebindPane(view.id, id) },
           ...(!sessionId || !navigation() ? {} : { onOpenSession: () => { navigation()?.open(sessionId, 'chat') } }),
@@ -194,7 +200,7 @@ export function apply(ctx: ClientContext): () => void {
   }
   const slots = ctx.get('slots') as unknown as { inject(name: string, factory: () => () => void): () => void; register(options: unknown, component: (props: { boundSessionId: string }) => unknown): () => void }
   const offTab = slots.inject('conversation.view', () => slots.register({ name: 'conversation.view', id: 'mcp-inspector', order: 30, locale: NS, label: () => t('view.tools'), inject: (sessionId: string) => ({ boundSessionId: sessionId }) }, ({ boundSessionId }) => createElement('div', { 'data-conversation-readonly-view': true, 'data-tools-session-tab': true }, createElement(ToolsPane, {
-    ctx, sessions, workspace, t, sessionId: boundSessionId,
+    ctx, sessions, workspace, t, sessionId: boundSessionId, connectDocController,
     ...(pane ? { onPin: () => { openSessionTools({ sessionId: boundSessionId, presentation: 'pane' }) } } : {}),
     ...(navigation() ? { onOpenSession: () => { navigation()?.open(boundSessionId, 'chat') } } : {}),
     onManage: openGlobalTools,
@@ -214,5 +220,5 @@ export function apply(ctx: ClientContext): () => void {
     }
   }, { global: true })
   const offReset = ctx.on('connection/reset' as never, (() => { workspace.refreshActive(); installedSearch.notify(); sessionSearch.notify() }) as never)
-  return () => { offReset(); offService(); offFace(); offTab(); disposePane(); installedSearch.dispose(); sessionSearch.dispose(); workspace.dispose(); disposeLocale() }
+  return () => { offReset(); offService(); offFace(); offTab(); disposePane(); installedSearch.dispose(); sessionSearch.dispose(); workspace.dispose(); disposeLocale(); connectDocController.dispose() }
 }

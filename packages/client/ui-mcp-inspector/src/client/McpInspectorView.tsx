@@ -19,8 +19,9 @@ import { en, type McpInspectorKey } from './locales.ts'
 import { mcpInspectorStyles } from './styles.ts'
 import type { ToolHubClientErrorCode } from './remote.ts'
 import type { ToolHubHealthStateV1, ToolHubItemV1 } from './wire.ts'
-import { FailureDecodeCard } from './DebugCards.tsx'
+import { CapabilityMapCard, FailureDecodeCard } from './DebugCards.tsx'
 import { deriveCatalogFailureSignals, type ToolFailureSignal } from './failure-decode.ts'
+import type { ConnectDocController } from './connect-doc.ts'
 
 export type ToolsTranslator = (key: McpInspectorKey, params?: Readonly<Record<string, string | number>>) => string
 export type ToolsSection = 'catalog' | 'details'
@@ -67,6 +68,8 @@ export interface ToolsInspectorTreeProps {
   readonly draftDisabledReason?: string
   /** Read-only failure decode signals; absent or empty renders no card. */
   readonly failureSignals?: readonly ToolFailureSignal[]
+  /** Capability map card; absent on old hosts and visual fixtures. */
+  readonly connectDocController?: ConnectDocController
   readonly onAddToDraft?: (item: ToolHubItemV1) => Promise<DraftReferenceResult>
   readonly onScopeChange?: (scope: 'session' | 'installed') => void
   readonly onOpenSession?: () => void
@@ -253,6 +256,7 @@ export function renderToolsInspectorTree(props: ToolsInspectorTreeProps): JSX.El
       ) : null}
 
       {props.failureSignals !== undefined && props.failureSignals.length > 0 ? <FailureDecodeCard signals={props.failureSignals} text={text} /> : null}
+      {props.connectDocController === undefined ? null : <CapabilityMapCard controller={props.connectDocController} text={text} />}
 
       <div className="tools-workspace" data-active-section={activeSection} data-right-content={rightContent}>
         <section className="tools-pane tools-catalog-pane" data-section="catalog" aria-label={text('section.catalog')}>
@@ -313,7 +317,7 @@ export function McpInspectorView(props: ToolsInspectorViewProps): JSX.Element {
 }
 
 /** Shared content for the legacy exported renderer and the session-following pane. */
-export function ToolsInspectorContent({ binding, controller, t, renderReference, initialFamily = 'all', sessionNotice, viewState, toolbarActions, contextLabel, readOnlyCatalog, globalManagement, scope, boundSessionLabel, boundSessionId, onAddToDraft, draftDisabledReason, onScopeChange, onOpenSession, preferChinesePurpose }: {
+export function ToolsInspectorContent({ binding, controller, t, renderReference, initialFamily = 'all', sessionNotice, viewState, toolbarActions, contextLabel, readOnlyCatalog, globalManagement, scope, boundSessionLabel, boundSessionId, onAddToDraft, draftDisabledReason, onScopeChange, onOpenSession, preferChinesePurpose, connectDocController }: {
   readonly binding?: ToolsHubBinding | undefined
   readonly renderReference?: (item: ToolHubItemV1, generation: number) => ReactNode
   readonly controller?: ToolsHubController | undefined
@@ -333,6 +337,7 @@ export function ToolsInspectorContent({ binding, controller, t, renderReference,
   readonly preferChinesePurpose?: boolean
   readonly initialFamily?: FamilyFilter
   readonly sessionNotice?: string | undefined
+  readonly connectDocController?: ConnectDocController
 }): JSX.Element {
   const subscribe = binding === undefined ? idleSubscribe : binding.subscribe.bind(binding)
   const bound = useSyncExternalStore(subscribe, () => snapshotController(binding, controller), () => snapshotController(binding, controller))
@@ -392,6 +397,7 @@ export function ToolsInspectorContent({ binding, controller, t, renderReference,
     catalogState, toolbarActions, instanceId, ...(preferChinesePurpose === undefined ? {} : { preferChinesePurpose }), ...(globalManagement === undefined ? {} : { globalManagement }), ...(contextLabel === undefined ? {} : { contextLabel }), ...(readOnlyCatalog === undefined ? {} : { readOnlyCatalog }), ...(scope === undefined ? {} : { scope }), ...(boundSessionLabel === undefined ? {} : { boundSessionLabel }), ...(boundSessionId === undefined ? {} : { boundSessionId }), ...(draftDisabledReason === undefined ? {} : { draftDisabledReason }), ...(onScopeChange === undefined ? {} : { onScopeChange }), ...(onOpenSession === undefined ? {} : { onOpenSession }),
     ...(pendingId === undefined ? {} : { pendingId }),
     ...(failureSignals.length > 0 ? { failureSignals } : {}),
+    ...(connectDocController === undefined ? {} : { connectDocController }),
     query,
     family,
     enabled,

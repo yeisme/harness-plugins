@@ -79,6 +79,11 @@ export class ConnectDocController {
     }
   }
 
+  /** Plugin unmount: drop listeners; the controller holds no other resources. */
+  dispose(): void {
+    this.listeners.clear()
+  }
+
   private setState(next: ConnectDocControllerState): void {
     this.state = next
     for (const listener of this.listeners) listener()

@@ -183,6 +183,23 @@ export const zh = {
   'failure.code.protocol_error.cause.2': 'JSON-RPC 协议层失败',
   'failure.code.protocol_error.action.1': '核对工具名与调用路径',
   'failure.code.protocol_error.action.2': '查看协议错误详情后重试',
+
+  'map.section.aria': 'MCP 能力地图',
+  'map.loading': '正在读取能力地图…',
+  'map.disabled': '能力地图不可用',
+  'map.error': '能力地图读取失败，可重探',
+  'map.digest': '文档摘要',
+  'map.observedAt': '观测时间',
+  'map.faces': '能力入口',
+  'map.faceCount': '{count} 个入口',
+  'map.toolCount': '{count} 个工具',
+  'map.stale': '已渲染 {rendered}，当前 {current}；显示的数据可能过期。',
+  'map.staleBadge': '可能过期',
+  'map.reread': '重新读取',
+  'map.rediscover': '重新发现能力',
+  'map.rediscovering': '正在重新发现…',
+  'map.rediscoverUnavailable': '重新发现不可用：{reason}',
+  'map.rediscoverFailed': '重新发现失败：{reason}',
 } as const
 
 export const en = {
@@ -362,6 +379,23 @@ export const en = {
   'failure.code.protocol_error.cause.2': 'JSON-RPC protocol-layer failure',
   'failure.code.protocol_error.action.1': 'Verify the tool name and call path',
   'failure.code.protocol_error.action.2': 'Inspect the protocol error and retry',
+
+  'map.section.aria': 'MCP capability map',
+  'map.loading': 'Reading the capability map…',
+  'map.disabled': 'Capability map unavailable',
+  'map.error': 'Capability map read failed; retry available',
+  'map.digest': 'Document digest',
+  'map.observedAt': 'Observed at',
+  'map.faces': 'Capability faces',
+  'map.faceCount': '{count} faces',
+  'map.toolCount': '{count} tools',
+  'map.stale': 'Rendered {rendered}, current {current}; displayed data may be stale.',
+  'map.staleBadge': 'may be stale',
+  'map.reread': 'Read again',
+  'map.rediscover': 'Re-discover capabilities',
+  'map.rediscovering': 'Re-discovering…',
+  'map.rediscoverUnavailable': 'Re-discovery unavailable: {reason}',
+  'map.rediscoverFailed': 'Re-discovery failed: {reason}',
 } as const
 
 export type McpInspectorKey = keyof typeof zh

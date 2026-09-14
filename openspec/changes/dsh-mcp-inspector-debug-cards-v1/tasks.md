@@ -68,17 +68,19 @@
   - **Acceptance**：probe 不到 `connectDoc`/`rediscover`（旧宿主）→ controller 呈禁用态而非报错。
   - **Validation**：`pnpm --filter @yeisme/dsh-client-ui-mcp-inspector test -- tests/connect-doc.test.ts`。
   - **Evidence**：`src/client/wire.ts` mirror（connect-doc/rediscover 类型 + `ToolHubRemoteFace` 可选方法）、`src/client/connect-doc.ts` `ConnectDocController`（digest 背书/漂移置 stale 保留渲染 doc/重读一致不冒充/rediscover 单飞守卫同步生效）、`src/client/remote.ts` unwrapNamespace 仅在 namespace 已暴露时 additive 转发；`tests/connect-doc.test.ts` 8 项绿（含禁用/错误/stale/单飞/守卫静态扫描：client 源无 fetch/XMLHttpRequest/WebSocket/document.cookie/gateway URL）。包 vitest 19 文件 129 测试全绿、typecheck+build 绿、check:bundles 29/29、check:plugins 全 PASS。
-- [ ] 4.4 能力地图卡 UI：faces+digest+observedAt 呈现、digest 漂移 mismatch 横幅（stale 标注，不冒充新鲜）、横幅内单一 re-discovery 动作（in-flight 禁用）、禁用+原因降级态；zh/en 双语；无手写快速卡兜底、无静默陈旧回退。
+- [x] 4.4 能力地图卡 UI：faces+digest+observedAt 呈现、digest 漂移 mismatch 横幅（stale 标注，不冒充新鲜）、横幅内单一 re-discovery 动作（in-flight 禁用）、禁用+原因降级态；zh/en 双语；无手写快速卡兜底、无静默陈旧回退。
   - **Owner/Scope**：卡片组件 + `src/client/locales.ts`；接入既有 pane，不加 tab/bundle/pane kind。
   - **Acceptance**：`ui-conversation` 只读边界不变；bundle 仅在需要时 additive 导出（cordis.patch.yml insert 行不变）。
   - **Validation**：`pnpm --filter @yeisme/dsh-client-ui-mcp-inspector typecheck && pnpm --filter @yeisme/dsh-client-ui-mcp-inspector build && pnpm run check:bundles`。
-- [ ] 4.5 降级链验证：投影缺失（旧宿主）、`connect-doc-unavailable`（G4 未落地）、transport error 三态均诚实——禁用+原因 / error+重探，不渲染任何冒充新鲜的数据。
+  - **Evidence**：`src/client/DebugCards.tsx` `CapabilityMapCard`：faces+digest(`<code>`)+observedAt 呈现、digest 漂移 mismatch 横幅（`role="alert"`、明示已渲染/当前 digest、stale 标注）、横幅内单一 re-discovery 动作（in-flight `disabled`）、禁用+原因/骨架/error+重探降级态；zh/en locale 16+15 键对称；经 `connectDocController` 接入 `renderToolsInspectorTree`（index.ts apply 创建 controller，pane 注册与 tab 结构零改动，未传时不渲染、视觉 fixture 字节不变）；无手写快速卡兜底、无 timer。`typecheck`+`build`+`check:bundles` 29/29+`check:plugins` 全 PASS。
+- [x] 4.5 降级链验证：投影缺失（旧宿主）、`connect-doc-unavailable`（G4 未落地）、transport error 三态均诚实——禁用+原因 / error+重探，不渲染任何冒充新鲜的数据。
   - **Owner/Scope**：`tests/connect-doc.test.ts` + `tests/degrade-loop.spec.tsx` 增例。
   - **Acceptance**：三态各有断言；无一处把内存旧 doc 当新鲜渲染。
   - **Validation**：`pnpm --filter @yeisme/dsh-client-ui-mcp-inspector test`。
 
 ## 5. i18n 与视觉合同
 
+  - **Evidence**：`tests/connect-doc.test.ts`（投影缺失/`connect-doc-unavailable`/transport error 三态 controller 断言）+ `tests/degrade-loop.spec.tsx` 增例（三态渲染断言：disabled 不渲染 digest/动作、error 带 `[data-map-reread]` 且不泄私有错误、stale 横幅 role=alert 保留渲染 doc、显式 re-discovery 后 digest 一致才撤横幅）；包 vitest 19 文件 132 测试全绿。无一处把内存旧 doc 当新鲜渲染（stale 状态显式标注断言）。
 - [ ] 5.1 双语字典：两卡全部文案进 `locales.ts` NS `mcpInspector`（zh/en 对称、key 同名配对），码名/动作/横幅/降级原因零硬编码。
   - **Owner/Scope**：`src/client/locales.ts`。
   - **Acceptance**：`en`/`zh` 键集一致；undecoded/合并态文案不暗示触发条件。

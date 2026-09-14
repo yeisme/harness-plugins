@@ -8,6 +8,7 @@ import { addCapabilityReference } from './draft-reference.ts'
 import { SkillDocumentReader } from './SkillDocumentReader.tsx'
 import { readSkillDocument } from './skill-document-remote.ts'
 import type { ToolHubItemV1 } from './wire.ts'
+import type { ConnectDocController } from './connect-doc.ts'
 
 export interface ToolsPaneProps {
   readonly ctx: ClientContext
@@ -21,6 +22,8 @@ export interface ToolsPaneProps {
   readonly onOpenSession?: (() => void) | undefined
   readonly onManage?: (() => void) | undefined
   readonly onSessionSelected?: ((id: string) => void) | undefined
+  /** Additive capability map card source; absent keeps the pane byte-identical. */
+  readonly connectDocController?: ConnectDocController
 }
 
 /** Explicit affinity: global current is never used to bind this view. */
@@ -124,6 +127,7 @@ function BoundToolsPane(props: ToolsPaneProps): JSX.Element {
     ? undefined : activeCatalog.catalog.items.find((item: ToolHubItemV1) => item.id === selection.selectedId)
   const draftDisabledReason = activeDetail === undefined ? undefined : admissionReason(activeDetail)
   return <ToolsInspectorContent controller={resource.controller} viewState={sessionResource.state} t={t} readOnlyCatalog={!props.manager} globalManagement={!!props.manager}
+    {...(props.connectDocController === undefined ? {} : { connectDocController: props.connectDocController })}
     contextLabel={props.manager ? t('view.globalTools') : t('view.tools')}
     renderReference={(item, generation) => item.family === 'skill' ? <SkillDocumentReader
       key={JSON.stringify([item.id, item.source, generation, catalogScope])} item={item} installed={catalogScope === 'installed'} t={t}
