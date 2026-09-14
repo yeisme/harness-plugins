@@ -200,6 +200,14 @@ export const zh = {
   'map.rediscovering': '正在重新发现…',
   'map.rediscoverUnavailable': '重新发现不可用：{reason}',
   'map.rediscoverFailed': '重新发现失败：{reason}',
+  'map.reason.projectionMissing': 'toolHub 远程投影不可用，能力地图保持禁用。',
+  'map.reason.methodUnexposed': '当前宿主未提供 connectDoc 投影（旧宿主）。',
+  'map.error.transport': '读取投影时传输失败，可重探。',
+  'map.error.malformed': '投影应答形状不合法。',
+  'map.error.validation': '投影未通过客户端校验。',
+  'map.rediscoverReason.projectionMissing': 'toolHub 远程投影不可用',
+  'map.rediscoverReason.methodUnexposed': '当前宿主未提供 rediscover 动作',
+  'map.rediscoverReason.transport': '重新发现传输失败',
 } as const
 
 export const en = {
@@ -396,6 +404,14 @@ export const en = {
   'map.rediscovering': 'Re-discovering…',
   'map.rediscoverUnavailable': 'Re-discovery unavailable: {reason}',
   'map.rediscoverFailed': 'Re-discovery failed: {reason}',
+  'map.reason.projectionMissing': 'The toolHub remote projection is unavailable; the capability map stays disabled.',
+  'map.reason.methodUnexposed': 'This host does not expose the connectDoc projection (old host).',
+  'map.error.transport': 'Transport failed while reading the projection; retry is available.',
+  'map.error.malformed': 'The projection answer had an invalid shape.',
+  'map.error.validation': 'The projection failed client-side validation.',
+  'map.rediscoverReason.projectionMissing': 'the toolHub remote projection is unavailable',
+  'map.rediscoverReason.methodUnexposed': 'this host does not expose the rediscover action',
+  'map.rediscoverReason.transport': 're-discovery transport failed',
 } as const
 
 export type McpInspectorKey = keyof typeof zh

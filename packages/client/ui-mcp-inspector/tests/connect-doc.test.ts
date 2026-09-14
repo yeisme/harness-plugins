@@ -18,26 +18,26 @@ describe('connect doc controller degrade chain', () => {
   it('renders disabled with a reason when the projection is missing (old host)', async () => {
     const missing = new ConnectDocController(async () => undefined)
     await missing.read()
-    expect(missing.getSnapshot()).toMatchObject({ status: 'disabled', reason: expect.stringContaining('unavailable') })
+    expect(missing.getSnapshot()).toMatchObject({ status: 'disabled', reason: { code: 'projection-missing' } })
     const unexposed = new ConnectDocController(async () => face())
     await unexposed.read()
-    expect(unexposed.getSnapshot()).toMatchObject({ status: 'disabled', reason: expect.stringContaining('not exposed') })
+    expect(unexposed.getSnapshot()).toMatchObject({ status: 'disabled', reason: { code: 'method-unexposed' } })
   })
 
   it('renders disabled with the owner reason on connect-doc-unavailable (G4 not landed)', async () => {
     const controller = new ConnectDocController(async () => face({ connectDoc: async () => ({ ok: false, code: 'connect-doc-unavailable', message: 'gateway_connect_doc.v1 is not projected by any approved binding' }) }))
     await controller.read()
-    expect(controller.getSnapshot()).toMatchObject({ status: 'disabled', reason: expect.stringContaining('approved binding') })
+    expect(controller.getSnapshot()).toMatchObject({ status: 'disabled', reason: { code: 'owner-unavailable', ownerMessage: expect.stringContaining('approved binding') } })
   })
 
   it('renders error with a retry surface on transport failures and invalid wires', async () => {
     const transport = new ConnectDocController(async () => face({ connectDoc: async () => { throw new Error('private transport detail') } }))
     await transport.read()
-    expect(transport.getSnapshot()).toMatchObject({ status: 'error' })
+    expect(transport.getSnapshot()).toMatchObject({ status: 'error', code: 'transport' })
     expect(JSON.stringify(transport.getSnapshot())).not.toContain('private transport detail')
     const invalid = new ConnectDocController(async () => face({ connectDoc: async () => doc('NOT-SIXTEEN-HEX') }))
     await invalid.read()
-    expect(invalid.getSnapshot()).toMatchObject({ status: 'error', message: expect.stringContaining('validation') })
+    expect(invalid.getSnapshot()).toMatchObject({ status: 'error', code: 'validation' })
   })
 
   it('serves validated docs and never renders stale data as fresh', async () => {

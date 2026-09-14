@@ -16,17 +16,28 @@ const DOC_DIGEST = /^[0-9a-f]{16}$/
 const SAFE_FACE_TEXT = /^[A-Za-z0-9_.:-]{1,120}$/
 const MAX_FACES = 64
 
+/** Locale-neutral degrade codes; the card maps them to dictionary keys. */
+export type ConnectDocDisabledCode = 'projection-missing' | 'method-unexposed' | 'owner-unavailable'
+export type ConnectDocErrorCode = 'transport' | 'malformed' | 'validation'
+
+export interface ConnectDocDisabledReason {
+  readonly code: ConnectDocDisabledCode
+  /** Verbatim owner message for `owner-unavailable` (already owner-authored). */
+  readonly ownerMessage?: string
+}
+
 export type ConnectDocControllerState =
   | { readonly status: 'idle' }
   | { readonly status: 'reading' }
-  | { readonly status: 'disabled'; readonly reason: string }
-  | { readonly status: 'error'; readonly message: string }
+  | { readonly status: 'disabled'; readonly reason: ConnectDocDisabledReason }
+  | { readonly status: 'error'; readonly code: ConnectDocErrorCode }
   | { readonly status: 'ready'; readonly doc: ToolHubConnectDocOkV1 }
   | { readonly status: 'stale'; readonly doc: ToolHubConnectDocOkV1; readonly currentDigest: string }
 
 export interface ConnectDocNotice {
   readonly kind: 'rediscover-failed' | 'rediscover-rejected'
-  readonly message: string
+  readonly code: ConnectDocDisabledCode | ConnectDocErrorCode
+  readonly ownerMessage?: string
 }
 
 const IDLE: ConnectDocControllerState = Object.freeze({ status: 'idle' })
@@ -101,27 +112,27 @@ export class ConnectDocController {
     try {
       const face = await this.resolve()
       if (face === undefined || typeof face.connectDoc !== 'function') {
-        this.setState({ status: 'disabled', reason: face === undefined ? 'toolHub remote projection is unavailable' : 'connectDoc is not exposed by this host' })
+        this.setState({ status: 'disabled', reason: { code: face === undefined ? 'projection-missing' : 'method-unexposed' } })
         return
       }
       let answer: ToolHubConnectDocAnswerV1
       try {
         answer = await face.connectDoc()
       } catch {
-        this.setState({ status: 'error', message: 'connect doc transport failed' })
+        this.setState({ status: 'error', code: 'transport' })
         return
       }
       if (answer === undefined || typeof answer !== 'object' || answer === null) {
-        this.setState({ status: 'error', message: 'connect doc answer was malformed' })
+        this.setState({ status: 'error', code: 'malformed' })
         return
       }
       if (!answer.ok) {
-        this.setState({ status: 'disabled', reason: answer.message })
+        this.setState({ status: 'disabled', reason: { code: 'owner-unavailable', ownerMessage: answer.message } })
         return
       }
       const doc = parseDoc(answer)
       if (doc === undefined) {
-        this.setState({ status: 'error', message: 'connect doc failed validation' })
+        this.setState({ status: 'error', code: 'validation' })
         return
       }
       if (this.state.status === 'ready' && this.state.doc.docDigest !== doc.docDigest) {
@@ -153,12 +164,12 @@ export class ConnectDocController {
     try {
       const face = await this.resolve()
       if (face === undefined || typeof face.rediscover !== 'function') {
-        this.notice = { kind: 'rediscover-rejected', message: face === undefined ? 'toolHub remote projection is unavailable' : 'rediscover is not exposed by this host' }
+        this.notice = { kind: 'rediscover-rejected', code: face === undefined ? 'projection-missing' : 'method-unexposed' }
         return
       }
       const answer = await face.rediscover()
       if (!answer.ok) {
-        this.notice = { kind: 'rediscover-failed', message: answer.message }
+        this.notice = { kind: 'rediscover-failed', code: 'owner-unavailable', ownerMessage: answer.message }
         return
       }
       this.notice = undefined
@@ -172,7 +183,7 @@ export class ConnectDocController {
         this.setState({ status: 'ready', doc })
       }
     } catch {
-      this.notice = { kind: 'rediscover-failed', message: 're-discovery transport failed' }
+      this.notice = { kind: 'rediscover-failed', code: 'transport' }
     } finally {
       this.rediscovering = false
       this.notify()
@@ -186,12 +197,12 @@ export class ConnectDocController {
   private async readFresh(face: ToolHubRemoteFace): Promise<ToolHubConnectDocOkV1 | undefined> {
     const answer = await face.connectDoc!()
     if (!answer.ok) {
-      this.setState({ status: 'disabled', reason: answer.message })
+      this.setState({ status: 'disabled', reason: { code: 'owner-unavailable', ownerMessage: answer.message } })
       return undefined
     }
     const doc = parseDoc(answer)
     if (doc === undefined) {
-      this.setState({ status: 'error', message: 'connect doc failed validation' })
+      this.setState({ status: 'error', code: 'validation' })
       return undefined
     }
     return doc

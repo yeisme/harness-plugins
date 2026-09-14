@@ -81,10 +81,11 @@
 ## 5. i18n 与视觉合同
 
   - **Evidence**：`tests/connect-doc.test.ts`（投影缺失/`connect-doc-unavailable`/transport error 三态 controller 断言）+ `tests/degrade-loop.spec.tsx` 增例（三态渲染断言：disabled 不渲染 digest/动作、error 带 `[data-map-reread]` 且不泄私有错误、stale 横幅 role=alert 保留渲染 doc、显式 re-discovery 后 digest 一致才撤横幅）；包 vitest 19 文件 132 测试全绿。无一处把内存旧 doc 当新鲜渲染（stale 状态显式标注断言）。
-- [ ] 5.1 双语字典：两卡全部文案进 `locales.ts` NS `mcpInspector`（zh/en 对称、key 同名配对），码名/动作/横幅/降级原因零硬编码。
+- [x] 5.1 双语字典：两卡全部文案进 `locales.ts` NS `mcpInspector`（zh/en 对称、key 同名配对），码名/动作/横幅/降级原因零硬编码。
   - **Owner/Scope**：`src/client/locales.ts`。
   - **Acceptance**：`en`/`zh` 键集一致；undecoded/合并态文案不暗示触发条件。
   - **Validation**：`pnpm --filter @yeisme/dsh-client-ui-mcp-inspector typecheck && pnpm run check:plugins`。
+  - **Evidence**：两卡全部文案进 `locales.ts` NS `mcpInspector`：失败解码卡 39 键 + 能力地图卡 31 键，zh/en 逐键同名配对（197/197 一致）；降级原因改为 locale 中立结构码（`ConnectDocDisabledCode`/`ConnectDocErrorCode`），卡内映射字典键，owner 消息原样透传，码名/动作/横幅/降级原因零硬编码文案。`typecheck`+`check:plugins` 全 PASS；vitest 132 测试全绿。
 - [ ] 5.2 视觉合同：扩展 `tests/ui-visual/tools-discovery-page.mjs` fixture 与 `tests/ui-visual/visual-tools.spec.ts`（真实 Chromium/Playwright）覆盖两卡状态矩阵（分类法码卡、undecoded、digest 漂移横幅、禁用+原因、360/560/960px）；`check:surfaces` 绿；基线仅在人工确认差异符合视觉系统后经 `test:visual:update` 更新。
   - **Owner/Scope**：`tests/ui-visual/tools-discovery-page.mjs`、`tests/ui-visual/visual-tools.spec.ts`。
   - **Acceptance**：两卡各状态有截图断言；不修改 `dsh-mcp-inspector-v1` 既有 snapshot 语义。
@@ -92,14 +93,16 @@
 
 ## 6. 验收、证据与门禁
 
-- [ ] 6.1 focused Vitest 全绿：两包新增/受影响测试文件逐一通过。
+- [x] 6.1 focused Vitest 全绿：两包新增/受影响测试文件逐一通过。
   - **Owner/Scope**：`@yeisme/dsh-client-ui-mcp-inspector`、`@yeisme/dsh-tool-hub-host`。
   - **Validation**：`pnpm --filter @yeisme/dsh-client-ui-mcp-inspector test && pnpm --filter @yeisme/dsh-tool-hub-host test`。
+  - **Evidence**：两包新增/受影响测试文件逐一通过：client `failure-decode.test.ts`（27）/`remote.test.ts`（10）/`connect-doc.test.ts`（8）/`degrade-loop.spec.tsx`（4）及全包 19 文件 132 测试 exit 0；host `service.spec.ts` 9 项 exit 0。host 包全量另有 2 个 owner spec 需 `--host` 集成证据入口（环境门），已在本 change 改动前于 `.wt/` 基线 worktree 复现为同样红，分类 environmental、非本 change 引入。
 - [ ] 6.2 全仓门禁：`pnpm run typecheck && pnpm run test && pnpm run build && pnpm run check:bundles` + `pnpm run check:plugins`、`pnpm run check:surfaces`、`pnpm run test:visual`；全局门红灯先分类（introduced/pre-existing/concurrent/environmental），只修本 change 引入项。
   - **Validation**：逐条记录 exit code。
 - [ ] 6.3 证据脱敏落 `temp/integration-test-runs/<run-id>/`：`pnpm --filter @yeisme/dsh-client-ui-mcp-inspector run ui:acceptance`（或 `run test:integration`）跑六件套；证据不含 secret/raw prompt/private tool arguments/绝对路径/完整思维链。
   - **Validation**：evidence 目录含 command/env/exit code/redaction summary。
-- [ ] 6.4 `openspec validate dsh-mcp-inspector-debug-cards-v1 --strict --no-interactive` 绿 + 零阻塞核验：`openspec/changes/dsh-mcp-inspector-v1/` 零文件改动、其 3.1 external-gate 复核节奏不受本 change 影响。
+- [x] 6.4 `openspec validate dsh-mcp-inspector-debug-cards-v1 --strict --no-interactive` 绿 + 零阻塞核验：`openspec/changes/dsh-mcp-inspector-v1/` 零文件改动、其 3.1 external-gate 复核节奏不受本 change 影响。
   - **Validation**：validate 绿 + `git diff --stat -- openspec/changes/dsh-mcp-inspector-v1/` 为空。
+  - **Evidence**：`openspec validate dsh-mcp-inspector-debug-cards-v1 --strict --no-interactive` 绿（2026-09-14 实测）；`git diff --stat -- openspec/changes/dsh-mcp-inspector-v1/` 为空（本 change 全程零触碰其文件与 L2 seam）；其 3.1 external-gate 复核节奏不受影响。归档时可原样重跑复核。
 - [ ] 6.5 external-gate：Gateway `gateway_connect_doc.v1` 投影（根仓 tasks 6.4/G4，owner change 未建）落地前，能力地图卡保持 4.5 诚实降级且失败解码卡独立可用；投影落地后在真实 connect doc 上复验消费与 digest 漂移（含一次真实 re-discovery），证据落 §6.3 目录。该复验完成前本项与 4.x 对应真源勾选保持克制。
   - **Validation**：真实投影消费证据（redacted）+ 复核注记。

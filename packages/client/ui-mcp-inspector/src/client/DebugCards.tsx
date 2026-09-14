@@ -13,7 +13,7 @@
 import { useEffect, useSyncExternalStore, type JSX } from 'react'
 import type { McpInspectorKey } from './locales.ts'
 import { decodeToolFailure, resolveFailurePresentation, retryAfterHint, type ToolFailureSignal } from './failure-decode.ts'
-import { ConnectDocController, type ConnectDocNotice } from './connect-doc.ts'
+import { ConnectDocController, type ConnectDocDisabledCode, type ConnectDocNotice } from './connect-doc.ts'
 
 type FailureText = (key: McpInspectorKey, params?: Readonly<Record<string, string | number>>) => string
 
@@ -125,14 +125,14 @@ export function CapabilityMapCard({ controller, text }: CapabilityMapCardProps):
   if (state.status === 'disabled') {
     return (
       <section className="tools-capability-map" data-capability-map="" data-map-state="disabled" aria-label={text('map.section.aria')}>
-        <div className="vk-alert" data-tone="neutral"><strong>{text('map.disabled')}</strong><p>{state.reason}</p></div>
+        <div className="vk-alert" data-tone="neutral"><strong>{text('map.disabled')}</strong><p>{disabledReasonText(state.reason, text)}</p></div>
       </section>
     )
   }
   if (state.status === 'error') {
     return (
       <section className="tools-capability-map" data-capability-map="" data-map-state="error" aria-label={text('map.section.aria')}>
-        <div className="vk-alert" data-tone="warn"><strong>{text('map.error')}</strong><p>{state.message}</p><div><button type="button" className="vk-btn" data-map-reread="" onClick={() => { void controller.read() }}>{text('map.reread')}</button></div></div>
+        <div className="vk-alert" data-tone="warn"><strong>{text('map.error')}</strong><p>{text(`map.error.${state.code}` as McpInspectorKey)}</p><div><button type="button" className="vk-btn" data-map-reread="" onClick={() => { void controller.read() }}>{text('map.reread')}</button></div></div>
       </section>
     )
   }
@@ -157,9 +157,21 @@ export function CapabilityMapCard({ controller, text }: CapabilityMapCardProps):
           <li key={face.id} data-map-face={face.id}><span>{face.publicName}</span><span className="vk-badge">{face.kind}</span>{face.toolCount !== undefined ? <small>{text('map.toolCount', { count: face.toolCount })}</small> : null}</li>
         ))}
       </ul>
-      {notice === undefined ? null : <p className="tools-notice" data-tone="warn" role="status">{text(notice.kind === 'rediscover-rejected' ? 'map.rediscoverUnavailable' : 'map.rediscoverFailed', { reason: notice.message })}</p>}
+      {notice === undefined ? null : <p className="tools-notice" data-tone="warn" role="status">{text(notice.kind === 'rediscover-rejected' ? 'map.rediscoverUnavailable' : 'map.rediscoverFailed', { reason: noticeReasonText(notice, text) })}</p>}
     </section>
   )
+}
+
+function disabledReasonText(reason: { code: ConnectDocDisabledCode; ownerMessage?: string }, text: FailureText): string {
+  if (reason.code === 'owner-unavailable') return reason.ownerMessage ?? text('map.reason.projectionMissing')
+  return text(reason.code === 'projection-missing' ? 'map.reason.projectionMissing' : 'map.reason.methodUnexposed')
+}
+
+function noticeReasonText(notice: ConnectDocNotice, text: FailureText): string {
+  if (notice.code === 'owner-unavailable') return notice.ownerMessage ?? text('map.rediscoverReason.transport')
+  if (notice.code === 'transport') return text('map.rediscoverReason.transport')
+  if (notice.code === 'malformed' || notice.code === 'validation') return text(`map.error.${notice.code}` as McpInspectorKey)
+  return text(notice.code === 'projection-missing' ? 'map.rediscoverReason.projectionMissing' : 'map.rediscoverReason.methodUnexposed')
 }
 
 export type { ConnectDocNotice }

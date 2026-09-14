@@ -55,7 +55,7 @@ describe('capability map card degrade chain', () => {
       const { view } = mapCard(resolve)
       render(view)
       await waitFor(() => { expect(document.querySelector('[data-capability-map]')?.getAttribute('data-map-state')).toBe('disabled') })
-      expect(document.querySelector('[data-capability-map]')?.textContent).toContain(label === 'old-host' ? 'unavailable' : 'approved binding')
+      expect(document.querySelector('[data-capability-map]')?.textContent).toContain(label === 'old-host' ? 'unavailable' : 'approved binding') // owner message rendered verbatim
       expect(document.querySelector('[data-map-rediscover]')).toBeNull()
       expect(document.querySelector('[data-map-digest]')).toBeNull()
       cleanup()
