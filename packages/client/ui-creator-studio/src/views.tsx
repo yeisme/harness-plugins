@@ -47,6 +47,7 @@ import { auctraStudioScopeKey } from './auctra-studio-scope.ts'
 import { creatorStudioStyles } from './styles.ts'
 import { CreatorArtifactWorkspace, type CreatorComposerBridge } from './artifact-workspace.tsx'
 import { CreatorSubtitleResults } from './subtitle-results.tsx'
+import { CreatorCapabilityMatrix } from './capability-matrix.tsx'
 import { CreatorTranscriptionCapabilities } from './transcription-capabilities.tsx'
 
 export type CreatorStudioViewMode = 'home' | 'text' | 'visual' | 'audio' | 'production' | 'context' | 'assets' | 'analysis' | 'generation' | 'approvals' | 'review' | 'jobs'
@@ -303,7 +304,7 @@ export function WorkspaceView({ meta, owner, snapshot, state, controller, pane, 
       }} t={t} />{(!professional || owner.actions.some(action => action.actionId === 'candidate.adopt')) && <SharedCreatorActionComposer owner={{ ...owner, actions: owner.actions.filter(action => action.actionId === 'candidate.adopt') }} task="image" snapshot={snapshot} state={state} controller={controller} t={t} />}{resources}</>} />
       : owner.owner === 'auctra' && meta.task === 'text'
         ? <AuctraWritingStudioPages t={t} structure={resources} candidates={candidates} versions={versions} exportPage={exportPage} recovery={recovery} />
-        : <div className="cs-workspace-grid">{resources}{candidates}{configure}{owner.owner === 'sonora' && <><CreatorSubtitleResults key={`results:${JSON.stringify(snapshot.context)}`} receipt={state.lastReceipt} read={artifact => controller.readArtifactContent(artifact)} t={t} /><CreatorTranscriptionCapabilities key={`capabilities:${JSON.stringify(snapshot.context)}`} runtime={controller} t={t} /></>}</div>}
+        : <div className="cs-workspace-grid">{resources}{candidates}{configure}{owner.owner === 'sonora' && <><CreatorSubtitleResults key={`results:${JSON.stringify(snapshot.context)}`} receipt={state.lastReceipt} read={artifact => controller.readArtifactContent(artifact)} t={t} /><CreatorCapabilityMatrix key={`matrix:${JSON.stringify(snapshot.context)}`} runtime={controller} t={t} /><CreatorTranscriptionCapabilities key={`capabilities:${JSON.stringify(snapshot.context)}`} runtime={controller} t={t} /></>}</div>}
   </div>
 }
 

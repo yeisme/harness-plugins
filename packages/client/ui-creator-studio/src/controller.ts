@@ -36,7 +36,9 @@ import {
   validateCreatorStudioSnapshot,
   validateCreatorOwnerViewSnapshot,
   validateSonoraTranscriptionCatalog,
+  validateSonoraCapabilityMatrix,
   type SonoraTranscriptionCatalog,
+  type SonoraCapabilityMatrix,
   type CreatorAssetQueryV1,
   type CreatorAssetV1,
   type CreatorMediaAccessV1,
@@ -80,6 +82,7 @@ export interface CreatorStudioRemote {
   resolveArtifact(artifact: ArtifactRefV1): Promise<RemoteResult<CreatorMediaAccessV1 | null>>
   readArtifactContent?(artifact: ArtifactRefV1): Promise<RemoteResult<CreatorArtifactContentV1 | null>>
   readTranscriptionCatalog?(context: CreatorStudioContextV1): Promise<RemoteResult<SonoraTranscriptionCatalog | null>>
+  readCapabilityMatrix?(): Promise<RemoteResult<SonoraCapabilityMatrix | null>>
   assets?(query: CreatorAssetQueryV1): Promise<RemoteResult<unknown>>
   decideApproval?(input: { readonly decisionRef: string }): Promise<RemoteResult<PaneActionReceiptV1>>
 }
@@ -768,6 +771,19 @@ export class CreatorStudioController {
       const result = await this.remote.readTranscriptionCatalog(expected)
       if (this.disposed || this.store.getSnapshot().errorCode === 'pane_binding_changed' || generation !== this.generation || context !== this.contextKey || !result.ok) return undefined
       return validateSonoraTranscriptionCatalog(result.value)
+    } catch { return undefined }
+  }
+
+  /** §2.2 provider 能力矩阵：owner 描述为源的独立只读入口；失败返回 undefined（诚实降级）。 */
+  async readCapabilityMatrix(): Promise<SonoraCapabilityMatrix | undefined> {
+    if (this.disposed || this.store.getSnapshot().errorCode === 'pane_binding_changed' || this.contextKey === undefined || this.remote.readCapabilityMatrix === undefined) return undefined
+    const generation = this.generation
+    const context = this.contextKey
+    if (this.store.getSnapshot().snapshot?.context === undefined) return undefined
+    try {
+      const result = await this.remote.readCapabilityMatrix()
+      if (this.disposed || this.store.getSnapshot().errorCode === 'pane_binding_changed' || generation !== this.generation || context !== this.contextKey || !result.ok) return undefined
+      return validateSonoraCapabilityMatrix(result.value)
     } catch { return undefined }
   }
 

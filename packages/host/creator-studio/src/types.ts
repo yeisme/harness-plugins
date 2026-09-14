@@ -8,6 +8,7 @@ import type {
   PaneStatus,
 } from '@yeisme/dsh-pane-protocol'
 import type { SonoraTranscriptionCatalog } from './sonora-transcription-catalog.ts'
+import type { SonoraCapabilityMatrix } from './sonora-capability-matrix.ts'
 import type { SonoraWorksTableResult } from './sonora-works-table.ts'
 
 export const CREATOR_STUDIO_OWNERS = ['eikona', 'scaena', 'sonora', 'auctra', 'pinax', 'anatomia'] as const
@@ -352,6 +353,8 @@ export interface CreatorOwnerAdapterV1 {
   readonly configured?: boolean
   /** Sonora capability probes are independent from executable action snapshots. */
   readTranscriptionCatalog?(context: CreatorStudioContextV1): Promise<SonoraTranscriptionCatalog | undefined>
+  /** provider 能力矩阵（§2.2）：owner 描述为源；缺失/未验证保留禁用原因。 */
+  readCapabilityMatrix?(context: CreatorStudioContextV1): Promise<SonoraCapabilityMatrix | undefined>
   /** 声音工作列表（§2.1）：owner table projection 一页；缺省即第一页。 */
   readWorksTable?(context: CreatorStudioContextV1, cursor?: string): Promise<SonoraWorksTableResult>
   snapshot(context: CreatorStudioContextV1): CreatorOwnerSnapshotV1 | Promise<CreatorOwnerSnapshotV1>

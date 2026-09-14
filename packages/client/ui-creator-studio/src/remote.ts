@@ -30,6 +30,7 @@ import {
   validateCreatorStudioSnapshot,
   validateCreatorOwnerViewSnapshot,
   validateSonoraTranscriptionCatalog,
+  validateSonoraCapabilityMatrix,
   validateCreatorStudioContext,
 } from '@yeisme/dsh-creator-studio-host/contracts'
 import type { CreatorStudioRemote } from './controller.ts'
@@ -216,6 +217,17 @@ export const creatorStudioRemoteContribution = {
         const catalog = validateSonoraTranscriptionCatalog(value)
         if (catalog === undefined) throw new TypeError('creatorStudio.readTranscriptionCatalog contract mismatch')
         return catalog
+      } }),
+    },
+    {
+      id: '@yeisme/dsh-creator-studio-host/creatorStudio.readCapabilityMatrix@1',
+      service: 'creatorStudio', namespace: 'creatorStudio', method: 'readCapabilityMatrix', invocation: { kind: 'direct' },
+      parameters: [],
+      result: strict('SonoraCapabilityMatrix | null', { parse(value) {
+        if (value === null) return null
+        const matrix = validateSonoraCapabilityMatrix(value)
+        if (matrix === undefined) throw new TypeError('creatorStudio.readCapabilityMatrix contract mismatch')
+        return matrix
       } }),
     },
     {

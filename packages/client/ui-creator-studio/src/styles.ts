@@ -44,6 +44,13 @@ ${S} .cs-capability-list{list-style:none;margin:0;padding:0;min-width:0}
 ${S} .cs-capability-list>li{padding:var(--vk-gap-md) 0;border-bottom:1px solid var(--vk-border-l1);overflow-wrap:anywhere}
 ${S} .cs-capability-details{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:var(--vk-gap-sm);font-size:var(--vk-font-small)}
 ${S} .cs-capability-details dt{color:var(--vk-text-tertiary)}${S} .cs-capability-details dd{min-width:0;margin:0;overflow-wrap:anywhere}
+${S} .cs-capability-matrix{display:grid;margin:0;min-width:0}
+${S} .cs-capability-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:var(--vk-gap-sm);padding:var(--vk-gap-sm) 0;border-bottom:1px solid var(--vk-border-l1)}
+${S} .cs-capability-row>dt{color:var(--vk-text-tertiary);font-size:var(--vk-font-small)}
+${S} .cs-capability-row>dd{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;margin:0;min-width:0;overflow-wrap:anywhere}
+${S} .cs-capability-state[data-state='supported']{color:var(--vk-state-positive)}${S} .cs-capability-state[data-state='unverified']{color:var(--vk-state-warn)}${S} .cs-capability-state[data-state='missing']{color:var(--vk-state-error)}
+${S} .cs-capability-providers{color:var(--vk-text-secondary);font-size:var(--vk-font-small)}
+@container yeisme-surface (max-width:420px){${S} .cs-capability-row{grid-template-columns:1fr}}
 ${S} .cs-subtitle-version{overflow-wrap:anywhere}
 ${S} .cs-subtitle-code{min-width:0;padding:var(--vk-gap-md);background:var(--vk-bg-layer-1);border-radius:var(--vk-radius-sm)}
 ${S} .cs-subtitle-code pre{margin:var(--vk-gap-md) 0 0;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--vk-text-primary);font-size:var(--vk-font-small)}

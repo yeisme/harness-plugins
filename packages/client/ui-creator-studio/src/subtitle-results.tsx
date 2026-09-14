@@ -13,6 +13,11 @@ export function CreatorSubtitleResults({ receipt, read, t }: {
 }) {
   const artifacts = receipt?.owner === 'sonora' && ['completed', 'partial'].includes(receipt.status)
     ? (receipt.outputArtifacts ?? []).filter(artifact => artifact.owner === 'sonora' && artifact.kind === 'subtitle' && ['text/vtt', 'application/x-subrip'].includes(artifact.mediaType)) : []
+  // §2.5 handoff 回执产物：固定 owner/ref/version + 目标 scope。交接资源只读展示
+  // （consumer 由 owner 回执携带），不提供正文读取或本地交付；production
+  // acceptance 保持 owner pending，消费方（如 Scaena）按 owner 合同自行对账。
+  const handoffs = receipt?.owner === 'sonora' && receipt.actionId === 'subtitle.handoff' && ['completed', 'partial'].includes(receipt.status)
+    ? (receipt.outputArtifacts ?? []).filter(artifact => artifact.owner === 'sonora' && artifact.kind === 'subtitle-handoff') : []
   const [selected, setSelected] = useState<ArtifactRefV1>()
   const [body, setBody] = useState<string>()
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('ready')
@@ -50,8 +55,17 @@ export function CreatorSubtitleResults({ receipt, read, t }: {
     } catch { if (url !== undefined) URL.revokeObjectURL(url); if (generation.current === current) setDownloadError(true) }
     finally { if (generation.current === current) setDownloading(false) }
   }
-  if (artifacts.length === 0 && selected === undefined) return null
+  if (artifacts.length === 0 && selected === undefined && handoffs.length === 0) return null
   return <SurfaceSection className="cs-section" title={t('subtitle.results.title')} description={t('subtitle.results.description')} data-subtitle-results>
+    {handoffs.length > 0 && <ul className="cs-capability-list">{handoffs.map(handoff => <li key={`${handoff.ref}:${handoff.version}`}>
+      <strong>{handoff.title}</strong>
+      <dl className="cs-capability-details">
+        <dt>{t('subtitle.results.handoffRef')}</dt><dd>{handoff.ref}</dd>
+        <dt>{t('subtitle.results.handoffVersion')}</dt><dd>{handoff.version}</dd>
+        {handoff.evidenceRefs.length > 0 && <><dt>{t('subtitle.results.handoffReview')}</dt><dd>{handoff.evidenceRefs[0]}</dd></>}
+      </dl>
+      <p className="cs-muted">{t('subtitle.results.handoffNote')}</p>
+    </li>)}</ul>}
     <div className="cs-actions">{artifacts.map(artifact => <Button className="cs-button vk-btn" type="button" size="sm" variant="toolbar" key={`${artifact.ref}:${artifact.version}`} onClick={() => void open(artifact)}>{t('subtitle.results.open', { title: artifact.title })}</Button>)}</div>
     {selected !== undefined && <p className="cs-subtitle-version cs-muted">{t('subtitle.results.selected', { title: selected.title, version: selected.version })}</p>}
     {phase === 'loading' && <SurfaceState phase="loading" title={t('state.loading')} />}

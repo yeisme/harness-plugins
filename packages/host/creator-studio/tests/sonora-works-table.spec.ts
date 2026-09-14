@@ -14,20 +14,36 @@ function binding(overrides: Partial<SonoraWorksConnection> = {}): SonoraWorksCon
   return { baseURL: 'http://127.0.0.1:8917/', headers: { authorization: 'Bearer x' }, context, ...overrides }
 }
 
+/** Live-wire table envelope（internal/workspace ProjectionEnvelope + data.*）。 */
 function tableBody(overrides: Record<string, unknown> = {}): unknown {
   return {
-    schema: 'sonora.audio_workspace_projection.v1',
-    projection_id: 'sonora://workspace-projection/table-1',
-    kind: 'table',
-    source: { ref: 'sonora://audio-table/main', type: 'table', revision: 'rev1', digest: 'd0' },
-    freshness: 'fresh',
-    fallback: 'read_only',
-    columns: [{ key: 'title', label: '工作' }, { key: 'status', label: '状态' }],
-    rows: [
-      { row_ref: 'sonora://workspace-row/1', revision: 'r1', cells: { title: '配音-EP01', status: 'ready' } },
-      { row_ref: 'sonora://workspace-row/2', revision: 'r2', cells: { title: '音效-脚步', status: null } },
-    ],
-    generated_at: '2026-09-11T12:00:00.000Z',
+    spec_version: 'sonora.audio_workspace_projection.v1',
+    projection_kind: 'table',
+    projection_ref: 'sonora://workspace-projection/abc123',
+    source: { resource_ref: 'sonora://project/main', resource_type: 'project', revision: 'rev1', digest: 'd0' },
+    generated_at: '2026-09-14T12:00:00.000Z',
+    freshness: { state: 'fresh', observed_at: '2026-09-14T12:00:00.000Z', expires_at: '2026-09-14T12:05:00.000Z' },
+    actions: [],
+    fallback: { mode: 'read_only', reason_code: 'none', safe_summary: 'Audio job table summary.' },
+    data: {
+      columns: [
+        { column_id: 'state', label: 'State', kind: 'string' },
+        { column_id: 'updated_at', label: 'Updated', kind: 'timestamp' },
+        { column_id: 'estimated_cost_usd', label: 'Estimated Cost', kind: 'number' },
+      ],
+      rows: [
+        { row_ref: 'sonora://audio-job/1', revision: 'r1', cells: [
+          { column_id: 'state', value: 'running', state: 'available' },
+          { column_id: 'updated_at', value: '2026-09-14T11:00:00Z', state: 'available' },
+          { column_id: 'estimated_cost_usd', state: 'unavailable' },
+        ] },
+        { row_ref: 'sonora://audio-job/2', revision: 'r2', cells: [
+          { column_id: 'state', value: 'succeeded', state: 'available' },
+          { column_id: 'updated_at', value: null, state: 'stale' },
+        ] },
+      ],
+      page_cursor: 'page_2',
+    },
     ...overrides,
   }
 }
@@ -36,45 +52,51 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 }
 
-describe('validateSonoraWorksTable', () => {
-  it('accepts a well-formed envelope and preserves null cells', () => {
+describe('validateSonoraWorksTable (live wire)', () => {
+  it('accepts a well-formed envelope and preserves unknown-value cells as absent values', () => {
     const parsed = validateSonoraWorksTable(tableBody())
-    expect(parsed?.rows).toHaveLength(2)
-    expect(parsed?.rows[1]?.cells.status).toBeNull()
+    expect(parsed?.data.rows).toHaveLength(2)
+    // owner 对未知值（如未结算费用）省略 value：保持缺失，不伪造零值。
+    expect(parsed?.data.rows[0]?.cells[2]?.value).toBeUndefined()
+    expect(parsed?.data.rows[1]?.cells[1]?.value).toBeNull()
+    expect(parsed?.data.page_cursor).toBe('page_2')
   })
 
   it('rejects rows that reference unknown columns', () => {
-    expect(validateSonoraWorksTable(tableBody({ rows: [{ row_ref: 'sonora://workspace-row/3', revision: 'r3', cells: { nope: 'x' } }] }))).toBeUndefined()
+    expect(validateSonoraWorksTable(tableBody({ data: { columns: [{ column_id: 'state', label: 'State', kind: 'string' }], rows: [{ row_ref: 'sonora://audio-job/3', revision: 'r3', cells: [{ column_id: 'nope', value: 'x', state: 'available' }] }] } }))).toBeUndefined()
   })
 
-  it('rejects duplicate columns and wrong schema literals', () => {
-    expect(validateSonoraWorksTable(tableBody({ columns: [{ key: 'a', label: 'A' }, { key: 'a', label: 'A2' }] }))).toBeUndefined()
-    expect(validateSonoraWorksTable(tableBody({ schema: 'other.v1' }))).toBeUndefined()
+  it('rejects duplicate columns and wrong spec literals', () => {
+    expect(validateSonoraWorksTable(tableBody({ data: { columns: [{ column_id: 'a', label: 'A', kind: 'string' }, { column_id: 'a', label: 'A2', kind: 'string' }], rows: [] } }))).toBeUndefined()
+    expect(validateSonoraWorksTable(tableBody({ spec_version: 'other.v1' }))).toBeUndefined()
+    expect(validateSonoraWorksTable(tableBody({ projection_kind: 'board' }))).toBeUndefined()
   })
 
   it('keeps stale/expired/denied freshness honest instead of dropping the page', () => {
-    expect(validateSonoraWorksTable(tableBody({ freshness: 'stale' }))?.freshness).toBe('stale')
-    expect(validateSonoraWorksTable(tableBody({ freshness: 'denied' }))?.fallback).toBe('read_only')
+    expect(validateSonoraWorksTable(tableBody({ freshness: { state: 'stale', observed_at: '2026-09-14T12:00:00.000Z', expires_at: '2026-09-14T12:05:00.000Z', reason_code: 'projection_stale' } }))?.freshness.state).toBe('stale')
+    const denied = validateSonoraWorksTable(tableBody({ freshness: { state: 'denied', observed_at: '2026-09-14T12:00:00.000Z', expires_at: '2026-09-14T12:05:00.000Z' } }))
+    expect(denied?.freshness.state).toBe('denied')
+    expect(denied?.fallback.mode).toBe('read_only')
   })
 
-  it('bounds the page cursor namespace', () => {
-    expect(validateSonoraWorksTable(tableBody({ next_cursor: 'not-a-sonora-cursor' }))).toBeUndefined()
-    expect(validateSonoraWorksTable(tableBody({ next_cursor: 'sonora.audio_workspace.table.page.0001' }))?.next_cursor).toBe('sonora.audio_workspace.table.page.0001')
+  it('bounds the owner page cursor namespace', () => {
+    expect(validateSonoraWorksTable(tableBody({ data: { columns: [{ column_id: 'state', label: 'State', kind: 'string' }], rows: [], page_cursor: 'not-a-page-cursor' } }))).toBeUndefined()
+    expect(validateSonoraWorksTable(tableBody({ data: { columns: [{ column_id: 'state', label: 'State', kind: 'string' }], rows: [], page_cursor: 'page_12' } }))?.data.page_cursor).toBe('page_12')
   })
 })
 
-describe('SonoraWorksTableClient (§2.1 adapter)', () => {
+describe('SonoraWorksTableClient (§2.1 adapter, live wire)', () => {
   it('reads the first page and passes the owner cursor on the next call', async () => {
     const fetcher = vi.fn(async (input: URL | RequestInfo) => {
       const url = String(input)
-      if (!url.includes('page_cursor=')) return jsonResponse(tableBody({ next_cursor: 'sonora.audio_workspace.table.page.0001' }))
-      expect(url).toContain('page_cursor=sonora.audio_workspace.table.page.0001')
-      return jsonResponse(tableBody())
+      if (!url.includes('page_cursor=')) return jsonResponse(tableBody())
+      expect(url).toContain('page_cursor=page_2')
+      return jsonResponse(tableBody({ data: { columns: [{ column_id: 'state', label: 'State', kind: 'string' }], rows: [] } }))
     })
     const client = new SonoraWorksTableClient(async () => binding(), fetcher as never)
     const first = await client.read(context)
     expect(first).toMatchObject({ status: 'ready' })
-    const second = await client.read(context, 'sonora.audio_workspace.table.page.0001')
+    const second = await client.read(context, 'page_2')
     expect(second).toMatchObject({ status: 'ready' })
   })
 
@@ -89,7 +111,7 @@ describe('SonoraWorksTableClient (§2.1 adapter)', () => {
     const client = new SonoraWorksTableClient(async () => undefined)
     expect(await client.read(context)).toEqual({ status: 'rejected', reason: 'unavailable' })
     const other = new SonoraWorksTableClient(async () => binding({ context: { ...context, projectRef: 'p2' } as never }))
-    expect(await client ? await other.read(context) : undefined).toMatchObject({ status: 'rejected', reason: 'permission_denied' })
+    expect(await other.read(context)).toMatchObject({ status: 'rejected', reason: 'permission_denied' })
   })
 
   it('maps owner status codes to typed honest reasons', async () => {

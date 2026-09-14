@@ -31,7 +31,21 @@
 
 能力矩阵输入合同增量：Host仅消费Sonora的capability_probe目录，保留fixture、失败provider和诊断是否可用；cost_model为外部runtime或未知时不能显示零费用，探测成功不能代替生成预览/确认。缺失诊断标志表示未知，不能把缺失provider视为删除。此数据读取与字幕导出独立，后续UI不得要求ASR目录就绪才允许已审阅字幕导出。
 
-### 字幕回执结果查看与下载增量
+### 声音能力矩阵增量（§2.2）
+
+- Surface classification：adopted，嵌在既有audio workspace Section中；不新建主壳、报价系统或第二个能力真源。
+- 视觉顺序：矩阵标题→逐能力族（配音/克隆/音乐/音效/转写/词级对齐/字幕导出）→状态（已声明可用/未验证/缺失）+稳定原因码+有界provider标识→无报价说明。复用SurfaceSection、SurfaceState、官方Button及cs/vk token；以dl列表表达，不做卡片墙。
+- 状态：矩阵条目state=supported|unverified|missing 由owner描述推导（/api/v1/providers、/api/v1/music/providers、转写目录）；缺失保留禁用条目与稳定原因码（如 owner_http_provider_description_absent），不删除入口；来源为1.1合同核对的条目显式标注"非实时探测"；刷新失败保留旧矩阵并标stale；任何来源读取失败整体诚实unavailable，不显示半新半旧矩阵。矩阵不提供执行报价，不把未知费用显示为零。
+- 响应式：≤420px矩阵行单列，其余两列（族/状态+事实）；长ref与原因码换行；键盘Tab/Enter刷新；不引入动画。完整Creator context作为组件key，上下文变化卸载并丢弃迟到读。
+- 中英文覆盖capability.matrix命名空间；状态/族名本地化，原因码保留机器稳定值不翻译为断言。
+
+### 交接回执产物增量（§2.5）
+
+- Surface classification：adopted，沿用既有字幕成果Section（subtitle.results）；不新增主壳。
+- 视觉顺序：交接回执产物（kind=subtitle-handoff）显示于成果列表顶部：标题→回执ref→固定版本（track_digest）→审阅证据ref→owner边界说明。只读展示，不提供正文读取或下载入口；consumer/handoff_ready/production_acceptance保留owner语义，不由插件推断交付。
+- 状态：仅completed/partial回执渲染；blocked交接以partial回执+blockers进入同一列表；无回执不显示。
+
+
 
 - Surface classification：沿用声音workspace内的adopted Section，不增加主壳或CSS系统；遵循`docs/design/dsh-unified-panel-visual-system.md`。
 - 视觉顺序：已有确认/执行区域→字幕成果按钮→用户主动打开的固定版本正文。新回执只更新可选入口，不自动替换当前阅读。

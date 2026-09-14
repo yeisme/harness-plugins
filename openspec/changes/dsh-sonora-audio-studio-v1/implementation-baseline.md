@@ -4,6 +4,48 @@
 
 字幕导出已接通owner持久服务、HTTP/SDK、DSH adapter、固定版本查看及标准正文上限内的下载；实际Host→Sonora HTTP/SQLite测试通过，但身份与transcription输入为fixture。转写能力及失败诊断已通过独立Gateway/Remote读取，并在声音workspace呈现只读能力列表。Sonora owner 已把 workspace waveform/chart/board/table/action/events 挂到授权 HTTP/SDK（合并 OpenAPI live），command-asr 可经用户配置装配且失败保持 unavailable；词级对齐仍明确不可用。尚未完成实际ASR识别、TTS/music/SFX直接操作、试听/候选/镜头交接、大文件下载以及完整真实浏览器owner路径；本专业Pane未整体验收。
 
+## 2026-09-14 Wave 2（§2.2–§2.5 DSH 侧消费面）
+
+本波交付 §2.2–§2.5 的 DSH 侧实现（owner 描述/合同为源、focused 测试）；真实浏览器、真实 provider、Pane 注册（3.1）与整体验收（4.x/5.x）保持未完成。
+
+### §2.1 wire 对齐修正（本波发现）
+
+2.1 已交付的 works-table 客户端 envelope 此前是自拟形状（`schema`/`kind`/扁平 freshness/`columns[].key`/cells record/`next_cursor`），与 owner live wire（`internal/workspace` ProjectionEnvelope：`spec_version`/`projection_kind`/嵌套 freshness+fallback/`data.columns[].column_id`/cells 数组/`data.page_cursor`，页游标 `page_<n>`）不一致——此前只经合成 fixture 验证，未对真实服务生效。已按 live wire 重写 `sonora-works-table.ts`（保留列/行上限、cursor 透传、诚实降级与 1MiB 界），并以 `sonora-workspace.ts` 共享同一 envelope schema 家族供 board/动作消费。未知值 cell（如未结算费用）保持缺失，不伪造零值。
+
+### §2.2 provider 能力矩阵
+
+- Host `sonora-capability-matrix.ts`：一次一致读取 `GET /api/v1/providers`（TTS provider：kind/tier/clone/configured/status/locale/format）+ `GET /api/v1/music/providers`（readiness/terms）+ 既有转写目录，推导七族矩阵（speech/voice_clone/music/sfx/transcription/word_alignment/subtitle_export），逐项 supported|unverified|missing + 稳定原因码 + 有界 provider 标识 + 来源标注；任一来源失败整体诚实 unavailable，不显示半新半旧矩阵。
+- 诚实边界：sfx 在授权 HTTP provider 描述面缺席（owner 仅 CLI envelope）→ missing + `owner_http_provider_description_absent`，不编造；music readiness 为 preview/first-support → unverified（不升级 production ready）；转写 fixture-only → unverified；无词级声明 → missing + `segment_to_cue_only`（segment-to-cue≠word-level 边界显式）；字幕导出来自 1.1 合同核对（digest 记录），条目标注 contract_audit 非实时探测。矩阵不携带 cost_model 值或任何报价数值。
+- Gateway `@Remote('readCapabilityMatrix')`（context/generation/directory 三重 fence，迟到不跨上下文）+ client remote descriptor/controller 方法 + `capability-matrix.tsx`（SurfaceSection/dl/官方 Button/vk token；≤420px 单列；zh/en；刷新失败保留旧矩阵标 stale）。
+- 证据：`tests/sonora-capability-matrix.spec.ts` 7 项 + `sonora-audio-studio.integration.spec.ts` §2.2 5 项（gateway fence/membership 迟到丢弃）+ `capability-matrix.spec.tsx` 5 项（zh/en 全族状态、stale 保留、诚实 unavailable、跨项目迟到丢弃）。
+
+### §2.3 动作发现/预览/确认
+
+- Host `sonora-workspace.ts`：live wire board 投影（server-authored `WorkspaceActionDescriptor`：permission/required_scopes/confirmation/availability/blockers）+ `POST /api/v1/workspace-actions`（confirmed、Idempotency-Key、201 receipt）+ `GET /api/v1/workspace-action-receipts/{id}`；同 2.1 连接 fence（loopback http/https、context 11 键、有界响应）。
+- Adapter（`createSonoraSubtitleExportAdapter` 第 4 参 `SonoraAudioStudioExtras.workspace` + `selectedJob`）：board action → PaneActionDescriptor（owner `act_*` id 原样；availability!=enabled 或 freshness 非 fresh 不发布，blockers 经 audio-job 资源卡保留；confirmation.required→confirm；cancel_job risk=medium；预览显式"owner 无报价"，不合成零价）；dispatch 前重读 board 复核 descriptor/revision/values；receipt outcome 映射 accepted→completed / rejected→rejected / pending→pending，绝不在本地标记 cancelled；409 幂等冲突保持 unknown。
+- 对账：workspace 动作 owner 唯一恢复面是同 key 幂等回放（same digest 返回原 receipt）；adapter 内存飞行表（≤32）记住精确原 body，仅显式 reconcile 回放；重启后无记忆 → unknown 不猜输入。字幕 handoff/export 对账维持原路径（GET by key / 同 key 重放）。
+- 证据：`tests/sonora-workspace.spec.ts` 8 项 + `sonora-audio-studio.integration.spec.ts` §2.3（descriptor 发布/受阻保留、owner receipt-only 结算、rejected findings、lost POST→unknown→同 body 回放拿回原 receipt、重启后 unknown）。
+- owner 边界：owner 的 server-authored descriptor 面当前只覆盖 cancel_job/request_review；audio job 生成（TTS/music/SFX）只有原始 POST API，无 owner-authored descriptor，DSH 不发明生成动作（矩阵如实用 owner 描述呈现能力）。浏览器走查与真实安装绑定归 3.1/4.x/5.3。
+
+### §2.4 试听与产物消费
+
+- Host `sonora-audition.ts`：`POST /api/v1/artifacts/{id}/access-grants`（owner 授权 rendition，24h capability URL，digest 绑定）+ audio job/asset 安全子集读取（`sonora://audio-asset/*`，无本地路径）。
+- Adapter `resolveArtifact`：`sonora://audio-asset/<id>` → 签发 grant → 校验 `artifact_digest === artifact.version` 且 `artifact_ref === artifact.ref` 且未过期 → 仅返回 {url, expiresAt}；任何不匹配即 undefined（播放禁用，不回退 raw URL/别的版本/本地转码）。access token 只存在于授权 URL，不进 snapshot/日志（测试断言）。
+- snapshot `artifactWorkspace`：job 输出 asset（≤4）以固定 digest 版本进入既有候选/试听工作区（media durationMs），播放走既有 `MediaPlaybackRenderer`（时间范围选择）。字幕固定版本消费沿用 2.4 既有交付。
+- 证据：`tests/sonora-audition.spec.ts` 7 项 + integration §2.4（授权试听、版本漂移禁用、capability token 不入投影）。
+- owner 边界：HTTP 字幕 cue DTO 不含词级时间（词级 runtime 在 owner 内部/SDK）；"精细对齐"产物消费保持 owner gap。大字幕仍受 256Ki 正文接口上限（design UI Contract 已记录边界）。
+
+### §2.5 交接
+
+- Host `sonora-subtitle-handoff.ts`：`POST/GET /api/v1/subtitle-handoffs`（同 key 幂等重放 replay=true；409=不同 digest 冲突；`production_acceptance` 固定 `pending`，出现其它值 fail-closed 拒绝投影；blocked handoff 保留完整 refs/blockers）。
+- Adapter：exportable track 发布 `subtitle.handoff` descriptor（consumer select=scaena——owner 合同唯一文档化 consumer）；dispatch 后交叉校验回执 `track_digest` 与本地独立 track 读取一致，不一致 → unknown 不回填；receipt = handoff ref、版本 = track_digest、scope = consumer 三者分别来自 owner 回执本体；handoff_ready=false → partial（blockers 原样），不升级 delivered。
+- 回填：receipt outputArtifact（kind subtitle-handoff）经既有 `CreatorSubtitleResults` 回执模式进入引用工作区展示（回执 ref/固定版本/审阅证据 + owner 边界说明，无正文读取）；消费方（Scaena）按 owner 合同自行读取 handoff ref 对账。画布文档回填保持可选消费（design 依赖与回滚补全：画布回填按能力单独接入不阻塞独立页面；画布 draft 不被回填写改），归 5.4 单独验收。
+- 证据：`tests/sonora-subtitle-handoff.spec.ts` 6 项 + integration §2.5（completed/partial/版本漂移 unknown）+ `subtitle-results.spec.tsx` handoff 展示 1 项。
+
+### 本波验证
+
+`pnpm --filter @yeisme/dsh-creator-studio-host run test`：61 文件 451 项全绿（基线 418 → +33）。`pnpm --filter @yeisme/dsh-client-ui-creator-studio run test`：35 文件 253 项全绿（基线 247 → +6）。host/client/bundle typecheck 绿；host build 绿；`pnpm run check:surfaces` 绿（29 client/8 bundle）。全部为合成 fixture 的 focused 测试（未调用真实 Sonora 进程或真实 provider；`test:visual` 全套按本波约束未运行，矩阵/交接 UI 的浏览器截图证据归 5.2/5.3）。
+
 ### 转写能力视图验证
 
 状态矩阵浏览器补验：增加中英文初次读取失败及刷新恢复、空的已探测目录、缺失失败诊断标志三个边界。`pnpm run test:visual -- visual-transcription-capabilities.spec.ts`共12条通过，证据`temp/integration-test-runs/ui-visual-2026-09-08T06-52-27-661Z-1745362/`。空目录不显示fixture或执行控件；未知诊断单独说明，初次失败可重新读取恢复；原360/560/960正常及stale路径仍通过。测试使用实际组件和合成数据，不属于真实ASR证据。

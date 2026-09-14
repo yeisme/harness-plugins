@@ -89,8 +89,10 @@ it('discards a catalog response after the membership changes', async () => {
 it('registers an owner-derived export action and returns a fixed-version artifact receipt', async () => {
   const h = await setup()
   expect(h.owner.status).toBe('ready')
-  expect(h.owner.actions).toHaveLength(1)
-  expect(h.owner.actions[0]).toMatchObject({ confirmation: 'confirm', targetVersion: track.track_digest, preview: { cost: { amount: 0, estimate: false } } })
+  // §2.5 增量：exportable track 现在同时发布 subtitle.export 与 subtitle.handoff。
+  expect(h.owner.actions).toHaveLength(2)
+  expect(h.owner.actions[0]).toMatchObject({ actionId: 'subtitle.export', confirmation: 'confirm', targetVersion: track.track_digest, preview: { cost: { amount: 0, estimate: false } } })
+  expect(h.owner.actions[1]).toMatchObject({ actionId: 'subtitle.handoff' })
   expect(JSON.stringify(h.owner)).not.toContain('private-cue-sentinel')
   const result = await h.gateway.dispatch(h.request)
   expect(result).toMatchObject({ owner: 'sonora', actionId: 'subtitle.export', status: 'completed', receiptRef: exported.ref,

@@ -83,3 +83,17 @@ it('discards late reads when the project context key changes', async () => {
   await act(async () => { resolve(result) })
   expect(ui.container.textContent).not.toContain('字幕内容')
 })
+
+it('pins handoff receipts with version and target scope without a body read', async () => {
+  const t = createCreatorStudioTranslator('en')
+  const handoffArtifact: ArtifactRefV1 = { schema: 'pane.artifact.v1alpha1', owner: 'sonora', kind: 'subtitle-handoff', ref: 'sonora://subtitle-handoff/h1', version: 'track-digest', mediaType: 'application/json', title: 'Subtitle handoff (scaena)', evidenceRefs: ['sonora://review-packet/r1'], capabilities: [] }
+  const read = vi.fn()
+  const ui = render(<CreatorSubtitleResults receipt={{ status: 'partial', owner: 'sonora', actionId: 'subtitle.handoff', receiptRef: handoffArtifact.ref, outputArtifacts: [handoffArtifact] }} read={read} t={t} />)
+  expect(ui.container.textContent).toContain('sonora://subtitle-handoff/h1')
+  expect(ui.container.textContent).toContain('track-digest')
+  expect(ui.container.textContent).toContain('sonora://review-packet/r1')
+  expect(ui.container.textContent).toContain(t('subtitle.results.handoffNote'))
+  // 交接产物没有正文读取或下载入口：read 永不被调用。
+  expect(read).not.toHaveBeenCalled()
+  expect(screen.queryByRole('button', { name: t('subtitle.results.download') })).toBeNull()
+})

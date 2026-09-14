@@ -43,6 +43,7 @@ import { OperationRecoveryStore, type OperationRecoveryStorage, type OperationRe
 import { CreatorStudioOwnerDirectory } from './directory.ts'
 import { validateCreatorArtifactImage } from './artifact-image.ts'
 import { sonoraTranscriptionCatalogSchema, type SonoraTranscriptionCatalog } from './sonora-transcription-catalog.ts'
+import { validateSonoraCapabilityMatrix, type SonoraCapabilityMatrix } from './sonora-capability-matrix.ts'
 import type { SonoraWorksTableResult } from './sonora-works-table.ts'
 import {
   CREATOR_STUDIO_OWNERS,
@@ -711,6 +712,24 @@ export class CreatorStudioGateway extends TypertRemoteService {
         || directory.generation !== generation || directory.selected('sonora') !== adapter) return null
       const parsed = sonoraTranscriptionCatalogSchema.safeParse(result)
       return parsed.success ? parsed.data : null
+    } catch { return null }
+  }
+
+  /** §2.2 provider 能力矩阵：owner 描述为源的独立只读入口，不进入动作 snapshot。 */
+  @Remote('readCapabilityMatrix')
+  async readCapabilityMatrix(): Promise<SonoraCapabilityMatrix | null> {
+    const context = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+    if (context === undefined || this.expectedContext === undefined || !sameContext(context, this.expectedContext)) return null
+    const directory = this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) as CreatorStudioOwnerDirectory | undefined
+    const adapter = directory?.selected('sonora')
+    if (directory === undefined || adapter?.readCapabilityMatrix === undefined) return null
+    const generation = directory.generation
+    try {
+      const result = await adapter.readCapabilityMatrix(context)
+      const latest = validateCreatorStudioContext(this.ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT))
+      if (latest === undefined || !sameContext(context, latest) || this.ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY) !== directory
+        || directory.generation !== generation || directory.selected('sonora') !== adapter) return null
+      return validateSonoraCapabilityMatrix(result) ?? null
     } catch { return null }
   }
 
