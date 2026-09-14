@@ -102,6 +102,8 @@ export interface PipelineObjectListItem {
   readonly kind: CreativePipelineNodeKindV1 | 'group' | 'draft' | 'operation' | 'material' | 'result'
   readonly title: string
   readonly status?: string
+  /** Owner version; the pane-link adoption backfill fills it with the adopted fixed version. */
+  readonly version?: string
   readonly selected?: boolean
 }
 

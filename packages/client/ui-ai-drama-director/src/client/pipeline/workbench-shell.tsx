@@ -200,7 +200,7 @@ function ObjectList({ objects, onSelect }: { readonly objects: readonly Pipeline
             <button type="button" className="plw-object-row" data-selected={object.selected === true} onClick={() => onSelect(object.id)}>
               <span className="plw-object-kind">{object.kind}</span>
               <span className="plw-object-title">{object.title}</span>
-              {object.status === undefined ? null : <span className="plw-object-status">{object.status}</span>}
+              {object.status === undefined ? null : <span className="plw-object-status">{object.version === undefined ? object.status : `${object.status} · ${object.version}`}</span>}
             </button>
           </li>
         ))}

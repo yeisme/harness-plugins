@@ -550,7 +550,7 @@ ReactDOM.createRoot(document.getElementById('tools')).render(React.createElement
   if (url.pathname === '/3d-director') {
     const requestedWidth = Math.trunc(Number(url.searchParams.get('width') ?? 1152) || 1152)
     const width = [400, 720, 1152].includes(requestedWidth) ? requestedWidth : 1152
-    const scenarios = new Set(['desktop', 'narrow', 'conflict', 'export-blocked'])
+    const scenarios = new Set(['desktop', 'narrow', 'conflict', 'export-blocked', 'rollback'])
     const requestedScenario = url.searchParams.get('case') ?? 'desktop'
     const scenario = scenarios.has(requestedScenario) ? requestedScenario : 'desktop'
     response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })

@@ -68,6 +68,14 @@ import {
 } from './media.js'
 import type { PipelineAssetNodeIntentV1, PipelineMediaDragPosition } from './media-drag.js'
 import { findScene3DBindingForCanvasNode, findScene3DBindingForSceneObject } from './scene-3d.js'
+import {
+  PaneLinkSequenceGate,
+  decodePipelineCandidateAdoption,
+  decodePipelinePaneSelectionHandoff,
+  type PipelineCandidateAdoptionV1,
+  type PipelinePaneLinkOutcome,
+  type PipelinePaneSelectionHandoffV1,
+} from './pane-selection.js'
 import type {
   BottomRunStripProps,
   PipelineObjectListItem,
@@ -174,6 +182,23 @@ export interface PipelineScene3DViewV1 {
   readonly controller?: Scene3DController
 }
 
+/** Last professional-pane selection handoff applied by stable ref (task 3.2). */
+export interface PipelinePaneSelectionStateV1 {
+  readonly source: PipelinePaneSelectionHandoffV1['source']
+  readonly kind: PipelinePaneSelectionHandoffV1['selection']['kind']
+  readonly ref: string
+}
+
+/** One applied candidate adoption, keyed by the candidate's fixed ref (task 3.2). */
+export interface PipelineCandidateAdoptionStateV1 {
+  readonly source: PipelinePaneSelectionHandoffV1['source']
+  readonly candidateRef: string
+  readonly adoptedVersion: string
+  readonly adoptedForShotRef?: string
+  readonly artifact?: PipelineCandidateAdoptionV1['artifact']
+  readonly seq: number
+}
+
 export interface PipelineWorkbenchViewStateV1 {
   readonly phase: PipelineWorkbenchPhase
   /** Bounded reason for disabled/error phases, and for the last rejected intent. */
@@ -212,6 +237,10 @@ export interface PipelineWorkbenchViewStateV1 {
   readonly selectedShot?: PipelineSelectedShotV1
   /** Embedded 3D viewport state; `available === false` always carries a bounded reason. */
   readonly scene3d: PipelineScene3DViewV1
+  /** Last professional-pane selection handoff applied by stable object ref. */
+  readonly paneSelection?: PipelinePaneSelectionStateV1
+  /** Candidate adoptions backfilled into this envelope, keyed by fixed candidate ref. */
+  readonly candidateAdoptions: readonly PipelineCandidateAdoptionStateV1[]
 }
 
 export const PIPELINE_WORKBENCH_NO_CHANNEL_REASON =
@@ -220,6 +249,10 @@ export const PIPELINE_WORKBENCH_NO_CHANNEL_REASON =
 const MAX_STRIP_TEXT = 160
 const MAX_OBJECT_TITLE = 80
 const DROPPED_ASSET_SIZE = { width: 240, height: 160 } as const
+/** Pane-link clock skew tolerance: a source far in the future is dropped, not clamped. */
+const PIPELINE_PANE_LINK_CLOCK_SKEW_MS = 10 * 60 * 1000
+/** Bounded adoption registry: beyond this, the oldest adoption is evicted. */
+const MAX_CANDIDATE_ADOPTIONS = 64
 
 export const PIPELINE_SCENE_3D_NO_PROJECTION_REASON =
   'The pipeline owner did not project a 3D scene binding for this shot.'
@@ -443,6 +476,12 @@ export class PipelineWorkbenchController {
   private scene3dPushedNodeId: string | undefined
   /** Last scene node id observed from the scene controller (pick detection). */
   private scene3dObservedNodeId: string | undefined
+  /** Per-source monotonic sequence gate for professional-pane link entries (task 3.2). */
+  private readonly paneLinkSeq = new PaneLinkSequenceGate()
+  /** Applied candidate adoptions keyed by the candidate's fixed ref; bounded, insertion-ordered. */
+  private readonly candidateAdoptions = new Map<string, PipelineCandidateAdoptionStateV1>()
+  /** Last APPLIED pane selection handoff, projected through the view state. */
+  private paneSelection: PipelinePaneSelectionStateV1 | undefined
 
   private state: PipelineWorkbenchViewStateV1
   private decoded: DecodedSnapshotV1 | undefined
@@ -548,6 +587,8 @@ export class PipelineWorkbenchController {
         ...(this.canvas === undefined ? {} : { canvas: this.canvas }),
         mediaResolver: this.mediaResolver,
         scene3d: this.composeScene3D(undefined),
+        ...(this.paneSelection === undefined ? {} : { paneSelection: this.paneSelection }),
+        candidateAdoptions: [],
       }
     }
     const capsule: WorkSurfaceCapsuleV1 = this.surfaceOverride === undefined || this.surfaceOverride === decoded.capsule.surface
@@ -578,15 +619,26 @@ export class PipelineWorkbenchController {
       selected: item.id === this.selectedEdgeId,
     }))
     const localDocument = this.canvas?.getSnapshot().editor?.document
-    const objects: PipelineObjectListItem[] = localDocument ? localDocument.nodes.map(node => ({
+    // Adoption backfill overlay (task 3.2): a candidate adopted in a
+    // professional pane flips its object row to `adopted` with the adopted
+    // fixed ref until the owner snapshot refresh carries the truth. Only rows
+    // whose stable ref matches an adoption change; unrelated nodes are never
+    // touched and no pane is reopened (compose is a pure re-derivation).
+    const adoptionFor = (ref: string | undefined): PipelineCandidateAdoptionStateV1 | undefined =>
+      ref === undefined ? undefined : this.candidateAdoptions.get(ref)
+    const overlayAdoption = (item: PipelineObjectListItem, ref: string | undefined): PipelineObjectListItem => {
+      const adoption = adoptionFor(ref)
+      return adoption === undefined ? item : { ...item, status: 'adopted', version: adoption.adoptedVersion }
+    }
+    const objects: PipelineObjectListItem[] = localDocument ? localDocument.nodes.map(node => overlayAdoption({
       id: node.id, kind: node.kind, title: bounded(node.title, MAX_OBJECT_TITLE),
       // Execution status still comes only from the owner projection.
       ...(nodesById.get(node.id)?.status === undefined ? {} : { status: nodesById.get(node.id)!.status }),
       selected: node.id === this.selectedNodeId,
-    })) : decoded.nodes.map(node => ({
+    }, 'domainRef' in node ? node.domainRef : undefined)) : decoded.nodes.map(node => overlayAdoption({
       id: node.id, kind: node.kind, title: bounded(node.summary.text, MAX_OBJECT_TITLE),
       status: node.status, selected: node.id === this.selectedNodeId,
-    }))
+    }, node.ref))
     const runStrip: BottomRunStripProps = {
       log: [...decoded.runs.values()].map(run =>
         stripEntry(run.run_ref, `Run ${run.run_ref}: ${run.state.state} — ${run.state.reason}`, run.state.state, run.revision)),
@@ -620,6 +672,8 @@ export class PipelineWorkbenchController {
       mediaResolver: this.mediaResolver,
       ...(selectedShot === undefined ? {} : { selectedShot }),
       scene3d: this.composeScene3D(decoded),
+      ...(this.paneSelection === undefined ? {} : { paneSelection: this.paneSelection }),
+      candidateAdoptions: [...this.candidateAdoptions.values()],
     }
   }
 
@@ -747,6 +801,105 @@ export class PipelineWorkbenchController {
   selectObject(nodeId: string): void {
     if (this.disposed) return
     this.canvas?.edit({ type: 'select', ids: [nodeId] })
+  }
+
+  /**
+   * Apply one professional-pane selection handoff (task 3.2). The selection is
+   * resolved by STABLE OBJECT REF (pipeline projection ref first, then the
+   * canvas draft node's domainRef/id) — never by row index. Late or duplicate
+   * deliveries (per-source monotonic sequence), cross-project payloads, and
+   * contract violations are dropped whole; nothing retries. An applied handoff
+   * routes through the same single selection truth as a canvas click, so the
+   * shot anchor and the embedded 3D viewport converge with it.
+   */
+  applyPaneSelectionHandoff(input: unknown): PipelinePaneLinkOutcome {
+    const drop = (reason: string): PipelinePaneLinkOutcome => ({ status: 'dropped', reason })
+    const decodedHandoff = decodePipelinePaneSelectionHandoff(input)
+    if (!decodedHandoff.ok) return drop(decodedHandoff.reason)
+    const handoff = decodedHandoff.value
+    if (this.disposed) return drop('The workbench is closed.')
+    const decoded = this.decoded
+    if (decoded === undefined) return drop('The pipeline projection is not loaded.')
+    if (handoff.projectRef !== decoded.project.ref) return drop('The pane link is for another project; it never touches this workbench.')
+    if (handoff.issuedAt > Date.now() + PIPELINE_PANE_LINK_CLOCK_SKEW_MS) return drop('The pane link clock is ahead; the handoff was dropped.')
+    // One ordered stream per source: a handoff that is not strictly newer than
+    // the last accepted entry (selection or adoption) is late/duplicate.
+    if (!this.paneLinkSeq.accept(handoff.source, handoff.seq)) return drop('Late or duplicate pane link dropped.')
+    const nodeId = this.resolvePaneSelectionNodeId(handoff.selection.ref)
+    if (nodeId === undefined) return drop(`No object carries the fixed ref ${bounded(handoff.selection.ref, MAX_OBJECT_TITLE)}.`)
+    this.paneSelection = { source: handoff.source, kind: handoff.selection.kind, ref: handoff.selection.ref }
+    // Duplicate target: applying again is idempotent — no canvas edit churn.
+    if (nodeId !== this.selectedNodeId) {
+      const canvas = this.canvas
+      if (canvas === undefined || !canvas.edit({ type: 'select', ids: [nodeId] })) {
+        // No canvas draft (the owner projected no canvas binding): keep the
+        // selection truth locally and converge the embedded viewport directly.
+        this.selectedNodeId = nodeId
+        this.syncScene3DSelection()
+      }
+    }
+    this.publish(this.compose(this.state.phase))
+    return { status: 'applied' }
+  }
+
+  /**
+   * Record one candidate adoption from a professional pane (task 3.2). The
+   * adoption is keyed by the candidate's fixed ref and backfills the derived
+   * object list (status `adopted` + adopted version) until the next owner
+   * snapshot refresh carries the owner truth. The canvas DRAFT is never
+   * rewritten: candidate version/artifact truth belongs to the owner. No pane
+   * is reopened and unrelated nodes are untouched. Late/duplicate and
+   * cross-project entries are dropped whole.
+   */
+  applyCandidateAdoption(input: unknown): PipelinePaneLinkOutcome {
+    const drop = (reason: string): PipelinePaneLinkOutcome => ({ status: 'dropped', reason })
+    const decodedAdoption = decodePipelineCandidateAdoption(input)
+    if (!decodedAdoption.ok) return drop(decodedAdoption.reason)
+    const adoption = decodedAdoption.value
+    if (this.disposed) return drop('The workbench is closed.')
+    const decoded = this.decoded
+    if (decoded === undefined) return drop('The pipeline projection is not loaded.')
+    if (adoption.projectRef !== decoded.project.ref) return drop('The pane link is for another project; it never touches this workbench.')
+    if (!this.paneLinkSeq.accept(adoption.source, adoption.seq)) return drop('Late or duplicate pane link dropped.')
+    // Bounded registry: the newest adoption per candidate ref wins; the oldest
+    // entry is evicted when the registry is full.
+    if (this.candidateAdoptions.size >= MAX_CANDIDATE_ADOPTIONS && !this.candidateAdoptions.has(adoption.candidateRef)) {
+      const oldest = this.candidateAdoptions.keys().next().value
+      if (oldest !== undefined) this.candidateAdoptions.delete(oldest)
+    }
+    this.candidateAdoptions.delete(adoption.candidateRef)
+    this.candidateAdoptions.set(adoption.candidateRef, {
+      source: adoption.source,
+      candidateRef: adoption.candidateRef,
+      adoptedVersion: adoption.adoptedVersion,
+      seq: adoption.seq,
+      ...(adoption.adoptedForShotRef === undefined ? {} : { adoptedForShotRef: adoption.adoptedForShotRef }),
+      ...(adoption.artifact === undefined ? {} : { artifact: adoption.artifact }),
+    })
+    this.notice = `Candidate ${bounded(adoption.candidateRef, MAX_OBJECT_TITLE)} adopted (${bounded(adoption.adoptedVersion, MAX_OBJECT_TITLE)}).`
+    this.publish(this.compose(this.state.phase))
+    return { status: 'applied' }
+  }
+
+  /** Stable-ref resolution: pipeline projection ref first, then the canvas draft node's domainRef/id. */
+  private resolvePaneSelectionNodeId(ref: string, depth = 0): string | undefined {
+    const decoded = this.decoded
+    if (decoded === undefined) return undefined
+    const byProjection = decoded.nodes.find(node => node.ref === ref)
+    if (byProjection !== undefined) return byProjection.id
+    // A 3D Director handoff addresses the scene object: the owner-projected
+    // CanvasBinding maps sceneObjectRef → the canvas node's stable ref (the
+    // binding's nodeRef keys the canvas node id or its domain ref). The depth
+    // guard keeps a pathological binding cycle from recursing.
+    if (depth < 2) {
+      const binding = decoded.scene3d?.bindings.find(entry => entry.sceneObjectRef === ref)
+      if (binding !== undefined) {
+        const bound = this.resolvePaneSelectionNodeId(binding.nodeRef, depth + 1)
+        if (bound !== undefined) return bound
+      }
+    }
+    const canvasNodes = this.canvas?.getSnapshot().editor?.document.nodes
+    return canvasNodes?.find(node => node.id === ref || ('domainRef' in node && node.domainRef === ref))?.id
   }
 
   private onCanvasChange(): void {

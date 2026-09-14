@@ -94,3 +94,31 @@ test('narrow width keeps Shot navigation, viewport tree and timeline readable wi
   await page.screenshot({ path: testInfo.outputPath('3d-director-narrow-400.png'), fullPage: true })
   expect(errors).toEqual([])
 })
+
+/**
+ * Historical previz rollback (dsh-screenplay-production-continuity-v1 task 4.1
+ * browser leg): the real controller drives the negotiated workbench contract —
+ * edit shots+keyframes → save → accept a previewed change set → edit further →
+ * save → roll back — and the restored previz state renders. Host-truth
+ * semantics for the ring (documents AND shots) are covered by the host package
+ * integration specs; this scenario proves the browser surface.
+ */
+test('rollback restores the retained previz state and the legacy scene contract stays strict', async ({ page }, testInfo) => {
+  const errors = await openDirector(page, 'rollback')
+  await waitReady(page)
+  // The change-set panel shows the rolled-back terminal badge.
+  await expect(page.getByText('rolled_back')).toBeVisible()
+  const evidence = await page.evaluate(() => (window as unknown as { __rollbackEvidence?: Record<string, unknown> }).__rollbackEvidence)
+  expect(evidence).toMatchObject({
+    acceptedStatus: 'accepted',
+    rolledBackStatus: 'rolled_back',
+    finalVersion: 7,
+    heroTranslate: [2, 0, 0],
+    keyframeFrame: 12,
+    saveStatus: 'clean',
+    legacyCarriesShots: false,
+  })
+  await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+  await page.screenshot({ path: testInfo.outputPath('3d-director-rollback-restored.png'), fullPage: true })
+  expect(errors).toEqual([])
+})

@@ -79,14 +79,27 @@ interface SceneGraphInflightV1 {
   readonly document: SceneDocumentV1
 }
 
+/**
+ * One retained history-ring entry: the previously committed workbench payload
+ * (scene document plus, when the save carried them, its previsualization
+ * shots). Rollback re-commits the whole payload — restoring only the document
+ * would silently drop the historical previz state (dsh-screenplay-production-
+ * continuity-v1 task 4.1 rollback leg). Entries written before the envelope
+ * shape persisted as bare documents and stay readable (parseSceneGraphRow).
+ */
+export interface SceneGraphHistoryEntryV1 {
+  readonly document: SceneDocumentV1
+  readonly shots?: readonly ShotV1[]
+}
+
 export interface SceneGraphRowV1 {
   readonly shots?: readonly ShotV1[]
 
   readonly document: SceneDocumentV1
   readonly receipts: readonly SceneGraphReceiptV1[]
   readonly inflight?: SceneGraphInflightV1
-  /** Bounded ring of previously committed documents (oldest first) for rollback. */
-  readonly history: readonly SceneDocumentV1[]
+  /** Bounded ring of previously committed workbench payloads (oldest first) for rollback. */
+  readonly history: readonly SceneGraphHistoryEntryV1[]
 }
 
 /** Append-only per-scene generation change-set row. */
@@ -137,12 +150,23 @@ export function parseSceneGraphRow(input: unknown): SceneGraphRowV1 {
   const inflight = value.inflight === undefined ? undefined : parseInflight(value.inflight)
   if (value.inflight !== undefined && inflight === undefined) throw new Error('scene graph row journal failed validation')
   if (!Array.isArray(value.history) || value.history.length > SCENE_3D_HISTORY_LIMIT) throw new Error('scene graph row history is invalid')
-  const history = value.history.map(entry => {
-    const parsed = SceneDocumentSchema.safeParse(entry)
-    if (!parsed.success) throw new Error('scene graph row history entry failed the scene document contract')
-    return parsed.data
-  })
+  const history = value.history.map(parseHistoryEntry)
   return { ...(value.shots === undefined ? {} : { shots: parseShots(value.shots) }), document: document.data, receipts: receipts as SceneGraphReceiptV1[], ...(inflight === undefined ? {} : { inflight }), history }
+}
+
+/**
+ * History entries cross as `{ document, shots? }` envelopes; bare documents are
+ * the pre-envelope persisted shape and stay readable with no shots (a legacy
+ * entry never fabricates a historical previz state it did not retain).
+ */
+function parseHistoryEntry(input: unknown): SceneGraphHistoryEntryV1 {
+  const bare = SceneDocumentSchema.safeParse(input)
+  if (bare.success) return { document: bare.data }
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) throw new Error('scene graph row history is invalid')
+  const value = input as Record<string, unknown>
+  const parsed = SceneDocumentSchema.safeParse(value.document)
+  if (!parsed.success) throw new Error('scene graph row history entry failed the scene document contract')
+  return { ...(value.shots === undefined ? {} : { shots: parseShots(value.shots) }), document: parsed.data }
 }
 
 export function parseScene3DChangeSetRow(input: unknown): Scene3DChangeSetRowV1 {
@@ -160,14 +184,16 @@ export function parseScene3DChangeSetRow(input: unknown): Scene3DChangeSetRowV1 
 /**
  * Domain declaration for the 3D Director scene graph. Opened exactly once per
  * Host (the domain facility enforces single-open per name); the change-set log
- * reuses the store's handle instead of opening the domain again.
+ * reuses the store's handle instead of opening the domain again. Table names
+ * are lowercase snake_case: the real DSH storage backend rejects camelCase
+ * table names (UNIT_NAME_RE), so `change_sets` is the only openable spelling.
  */
 export const scene3dDomainSpec = {
   name: 'yeisme_scene_3d_graph_v1',
   version: 1,
   tables: {
     documents: { valueSchema: { parse: parseSceneGraphRow } },
-    changeSets: { valueSchema: { parse: parseScene3DChangeSetRow } },
+    change_sets: { valueSchema: { parse: parseScene3DChangeSetRow } },
   },
 } as const
 export type Scene3DDomainSpec = typeof scene3dDomainSpec
@@ -182,7 +208,7 @@ export interface Scene3DChangeSetsTable {
 }
 export interface Scene3DDomain {
   table(name: 'documents'): Scene3DDocumentsTable
-  table(name: 'changeSets'): Scene3DChangeSetsTable
+  table(name: 'change_sets'): Scene3DChangeSetsTable
   close(): Promise<void>
 }
 export interface Scene3DStorage {
@@ -335,7 +361,13 @@ export class SceneGraphStore {
           inflight: { requestId, digest, baseVersion: version, document, ...(shots === undefined ? {} : { shots }) },
         }))
         writing = true
-        const history = [...(row?.history ?? []), ...(row === undefined || row.document.version === 0 ? [] : [row.document])].slice(-SCENE_3D_HISTORY_LIMIT)
+        // Retain the previously committed payload (document AND its committed
+        // shots): rollback must restore the historical previz state, not just
+        // the scene graph (task 4.1 rollback leg).
+        const history: SceneGraphHistoryEntryV1[] = [
+          ...(row?.history ?? []),
+          ...(row === undefined || row.document.version === 0 ? [] : [{ document: row.document, ...(row.shots === undefined ? {} : { shots: row.shots }) }]),
+        ].slice(-SCENE_3D_HISTORY_LIMIT)
         const next = parseSceneGraphRow({ document: { ...document, version: version + 1 },
           receipts: [...(row?.receipts ?? []), { requestId, digest, version: version + 1 }].slice(-MAX_RECEIPTS),
           history, ...((shots ?? row?.shots) === undefined ? {} : { shots: shots ?? row?.shots }) })
@@ -353,6 +385,17 @@ export class SceneGraphStore {
    * out of the bounded history ring; never fabricates content.
    */
   async readVersion(scope: ProjectCanvasScope, documentId: string, version: number): Promise<SceneDocumentV1 | undefined> {
+    return (await this.readWorkbenchVersion(scope, documentId, version))?.document
+  }
+
+  /**
+   * Read one committed workbench payload (scene document plus its retained
+   * previsualization shots) for change-set rollback. `shots` is present only
+   * when the historical revision actually committed shots — a legacy ring entry
+   * reports none instead of fabricating them, and the caller decides whether
+   * the current shots stay (save-without-shots semantics).
+   */
+  async readWorkbenchVersion(scope: ProjectCanvasScope, documentId: string, version: number): Promise<SceneGraphHistoryEntryV1 | undefined> {
     const context = this.current(scope)
     if (context === undefined || !isSafeVersion(version)) return undefined
     try {
@@ -363,8 +406,10 @@ export class SceneGraphStore {
       if (raw === undefined) return undefined
       const row = parseSceneGraphRow(raw)
       if (!this.matches(row.document, scope, documentId)) return undefined
-      if (row.document.version === version && row.document.version > 0) return row.document
-      return row.history.find(entry => entry.version === version)
+      if (row.document.version === version && row.document.version > 0) {
+        return { document: row.document, ...(row.shots === undefined ? {} : { shots: row.shots }) }
+      }
+      return row.history.find(entry => entry.document.version === version)
     } catch { return undefined }
   }
 
@@ -373,7 +418,7 @@ export class SceneGraphStore {
     const context = this.current(scope)
     if (context === undefined) return undefined
     await this.tail
-    const table = (await this.domainHandle()).table('changeSets')
+    const table = (await this.domainHandle()).table('change_sets')
     if (!this.unchanged(context, scope)) return undefined
     const raw = table.get(this.key(context, documentId))
     if (raw === undefined) return undefined
@@ -385,7 +430,7 @@ export class SceneGraphStore {
     const context = this.current(scope)
     if (context === undefined) throw new Error('scene graph context unavailable')
     const work = this.tail.then(async () => {
-      const table = (await this.domainHandle()).table('changeSets')
+      const table = (await this.domainHandle()).table('change_sets')
       if (!this.unchanged(context, scope)) throw new Error('scene graph context changed')
       await table.put(this.key(context, documentId), parseScene3DChangeSetRow(row))
     })

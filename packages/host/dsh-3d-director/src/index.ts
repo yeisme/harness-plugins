@@ -13,6 +13,7 @@ export type {
   Scene3DDomainSpec,
   Scene3DStorage,
   Scene3DStoreContextV1,
+  SceneGraphHistoryEntryV1,
   SceneGraphRowV1,
 } from './scene-store.js'
 

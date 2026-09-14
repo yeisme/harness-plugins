@@ -266,7 +266,10 @@ export class GenerationChangeSetLog {
    * Roll back an accepted change set: re-commit the retained prior revision as
    * a new scene version (history is append-only; rollback never rewrites a
    * committed revision), then mark the change set rolled_back at the restored
-   * revision. Rejected/failed change sets have nothing to roll back.
+   * revision. Rejected/failed change sets have nothing to roll back. The
+   * retained workbench payload carries its historical previsualization shots;
+   * when the retained entry predates shot retention (no shots recorded), the
+   * current shots stay — nothing is fabricated.
    */
   async rollback(input: Scene3DChangeSetSelector & { readonly changeSetRef: string; readonly requestId: string }): Promise<Scene3DChangeSetRollbackResult> {
     if (this.store.contextFor(input.scope) === undefined) return { status: 'forbidden' }
@@ -279,15 +282,15 @@ export class GenerationChangeSetLog {
     }
     const pointer = changeSet.rollbackRef === undefined ? undefined : parseSceneRevisionRef(changeSet.rollbackRef)
     if (pointer === undefined || pointer.documentId !== input.documentId) return { status: 'invalid', reason: 'rollback_ref_contract' }
-    const retained = await this.store.readVersion(input.scope, input.documentId, pointer.version)
+    const retained = await this.store.readWorkbenchVersion(input.scope, input.documentId, pointer.version)
     if (retained === undefined) return { status: 'revision_not_retained', version: pointer.version }
     const currentRead = await this.store.read({ scope: input.scope, documentId: input.documentId })
     if (currentRead.status !== 'ready') {
       return { status: currentRead.status === 'missing' ? 'missing' : currentRead.status === 'error' ? 'unavailable' : currentRead.status }
     }
     // Rollback is itself a base-fenced save: a concurrent writer conflicts instead of being overwritten.
-    const restored: SceneDocumentV1 = { ...retained, version: currentRead.document.version }
-    const saved = await this.store.save({ requestId: input.requestId, document: restored })
+    const restored: SceneDocumentV1 = { ...retained.document, version: currentRead.document.version }
+    const saved = await this.store.save({ requestId: input.requestId, document: restored }, retained.shots)
     if (saved.status === 'conflict') return { status: 'conflict', version: saved.version }
     if (saved.status !== 'saved') {
       return saved.status === 'not_applied'

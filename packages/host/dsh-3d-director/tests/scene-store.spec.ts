@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { SCENE_3D_SCHEMA, type SceneDocumentV1 } from '@yeisme/dsh-pane-protocol'
+import { SCENE_3D_SCHEMA, type SceneDocumentV1, type ShotV1 } from '@yeisme/dsh-pane-protocol'
 import {
   SceneGraphStore,
+  parseSceneGraphRow,
   type Scene3DChangeSetsTable,
   type Scene3DDocumentsTable,
   type Scene3DStorage,
@@ -135,6 +136,57 @@ describe('Host scene graph persistence', () => {
     expect(await h.store.readVersion(read.scope, 'scene:main', 2)).toMatchObject({ version: 2 })
     expect(await h.store.readVersion(read.scope, 'scene:main', 3)).toMatchObject({ version: 3 })
     expect(await h.store.readVersion(read.scope, 'scene:main', 99)).toBeUndefined()
+  })
+
+  it('retains the committed shots of each revision so rollback restores the historical previz state', async () => {
+    const h = harness()
+    const shot = (frame: number): ShotV1 => ({
+      shotRef: 'shot:opening',
+      sceneRef: 'scene:one',
+      version: 'v1',
+      cameraRef: 'node:root',
+      frameRange: { start: 0, end: 48, fps: 24 },
+      keyframes: [{ id: 'kf-1', frame, objectRef: 'node:root', property: 'translate', value: [0, 0, 0] }],
+      objectRefs: ['node:root'],
+      visibility: [],
+      generationRefs: [],
+      deliveryProjection: { status: 'pending' },
+    })
+    // v1 commits the previz shot at frame 0; v2 moves the keyframe to frame 12.
+    await h.store.save({ requestId: 'save-1', document: sceneDocument() }, [shot(0)])
+    await h.store.save({ requestId: 'save-2', document: sceneDocument({ version: 1 }) }, [shot(12)])
+    expect(await h.store.readWorkbenchVersion(read.scope, 'scene:main', 1)).toMatchObject({ document: { version: 1 }, shots: [{ keyframes: [{ frame: 0 }] }] })
+    expect(await h.store.readWorkbenchVersion(read.scope, 'scene:main', 2)).toMatchObject({ document: { version: 2 }, shots: [{ keyframes: [{ frame: 12 }] }] })
+    // Rollback path: re-committing the retained v1 payload restores its shots exactly.
+    const retained = await h.store.readWorkbenchVersion(read.scope, 'scene:main', 1)
+    expect(await h.store.save({ requestId: 'rollback-1', document: { ...retained!.document, version: 2 } }, retained!.shots)).toEqual({ status: 'saved', requestId: 'rollback-1', version: 3 })
+    const after = await h.store.readWorkbench(read)
+    expect(after.result).toMatchObject({ status: 'ready', document: { version: 3 } })
+    expect(after.shots?.[0]?.keyframes[0]?.frame).toBe(0)
+    // The ring stays bounded and keeps the payload envelopes, not bare documents.
+    const row = parseSceneGraphRow(h.docs.get(JSON.stringify(['tenant:one', 'workspace:one', 'project:one', 'scene:main'])))
+    expect(row.history.length).toBeLessThanOrEqual(8)
+    expect(row.history.every(entry => typeof entry.document.version === 'number')).toBe(true)
+  })
+
+  it('reads legacy bare-document history rows without fabricating shots', async () => {
+    const h = harness()
+    await h.store.save({ requestId: 'save-1', document: sceneDocument() })
+    await h.store.save({ requestId: 'save-2', document: sceneDocument({ version: 1 }) })
+    const key = JSON.stringify(['tenant:one', 'workspace:one', 'project:one', 'scene:main'])
+    const row = parseSceneGraphRow(h.docs.get(key))
+    // Simulate a pre-envelope persisted row: history entries as bare documents.
+    h.docs.set(key, { ...row, history: row.history.map(entry => entry.document) })
+    const legacy = await h.store.readWorkbenchVersion(read.scope, 'scene:main', 1)
+    expect(legacy).toMatchObject({ document: { version: 1 } })
+    expect(legacy).not.toHaveProperty('shots')
+    // A rollback over a legacy entry keeps the CURRENT shots (save-without-shots semantics).
+    expect(await h.store.save({ requestId: 'save-3', document: sceneDocument({ version: 2 }) }, [
+      { shotRef: 'shot:opening', sceneRef: 'scene:one', version: 'v1', cameraRef: 'node:root', frameRange: { start: 0, end: 48, fps: 24 }, keyframes: [], objectRefs: [], visibility: [], generationRefs: [], deliveryProjection: { status: 'pending' } },
+    ])).toEqual({ status: 'saved', requestId: 'save-3', version: 3 })
+    const retained = await h.store.readWorkbenchVersion(read.scope, 'scene:main', 2)
+    expect(await h.store.save({ requestId: 'rollback-1', document: { ...retained!.document, version: 3 } }, retained!.shots)).toEqual({ status: 'saved', requestId: 'rollback-1', version: 4 })
+    expect(await h.store.readWorkbench(read)).toMatchObject({ result: { status: 'ready' }, shots: [{ shotRef: 'shot:opening' }] })
   })
 
   it('rejects cross-project reads and forged authority without opening storage', async () => {

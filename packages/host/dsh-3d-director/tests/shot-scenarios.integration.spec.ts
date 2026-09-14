@@ -24,7 +24,8 @@ import {
   type Scene3DContextV1,
   type Scene3DGlbByteSourceV1,
 } from '../src/gateway.ts'
-import type { Scene3DChangeSetsTable, Scene3DDocumentsTable, Scene3DStorage } from '../src/scene-store.ts'
+import { GenerationChangeSetLog } from '../src/change-set.ts'
+import { SceneGraphStore, type Scene3DChangeSetsTable, type Scene3DDocumentsTable, type Scene3DStorage } from '../src/scene-store.ts'
 import { Scene3DController } from '../../../client/ui-3d-director/src/scene3d-controller.js'
 import {
   buildScene3DSelectionConvergence,
@@ -243,6 +244,89 @@ describe('Shot scenario A: shot-anchored open → timeline scrub → step-sample
     expect(buildShotPreviewDocument(committed!, undefined, 24)).toBe(committed)
     const reread = await gateway.sceneRead({ scope: { ...SCOPE }, documentId: 'scene:main' })
     expect(reread).toMatchObject({ status: 'ready', document: { version: 1 } })
+  })
+})
+
+describe('Shot scenario P2: save shots → further edit → historical previz rollback (task 4.1)', () => {
+  it('rolls an accepted generation change set back to the retained revision and restores its historical shots, keeping legacy reads strict', async () => {
+    const harness = storageHarness()
+    const gateway = await gatewayHarness({ storage: harness.storage })
+    // The change-set log rides the same storage seam (the generation owner's
+    // record entry is not a browser Remote); it serializes through its own
+    // store handle exactly like gateway.spec's logHarness.
+    const changeSetLog = new GenerationChangeSetLog(new SceneGraphStore(harness.storage, () => scene3dContext()))
+    const record = (changeSetRef: string, baseVersion: number) => changeSetLog.record({
+      scope: SCOPE,
+      documentId: 'scene:main',
+      changeSet: {
+        changeSetRef,
+        sceneRef: 'scene:main',
+        baseVersion,
+        inputRefs: ['asset:hero'],
+        operationSummary: 'Regenerate hero motion',
+        patchDigest: 'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+        status: 'pending' as const,
+      },
+    })
+
+    // v1: commit the scene with its previsualization shots (kf-2 at frame 24,
+    // hero at its original transform).
+    await gateway.saveSceneWorkbench({ requestId: 'seed-p2', document: sceneDocument(), shots: [shotOpening()] })
+
+    let idCounter = 0
+    const controller = makeController(gateway, 'scene:main', { newId: () => `p2-${++idCounter}` })
+    await controller.load()
+    expect(controller.getSnapshot().shots[0]!.keyframes[1]!.frame).toBe(24)
+
+    // First edit wave → v2 (kf-2 at frame 18, hero translated).
+    expect(controller.editShotKeyframe('shot:opening', { type: 'move-keyframe', keyframeId: 'kf-2', frame: 18 })).toBe(true)
+    expect(controller.editNodeTransform('hero', { translate: [9, 0, 0] })).toBe(true)
+    await controller.save()
+    expect(controller.getSnapshot().document?.version).toBe(2)
+
+    // The generation owner records a change set on the CURRENT base (v2) and
+    // publishes its preview/artifact refs; the real client accept commits the
+    // draft as the resulting revision v3 and stamps a rollback pointer at the
+    // retained v2 payload.
+    expect((await record('changeset:p2', 2)).status).toBe('recorded')
+    expect((await changeSetLog.transition({
+      scope: SCOPE, documentId: 'scene:main', changeSetRef: 'changeset:p2', status: 'preview', previewRef: 'preview:p2-one',
+      artifactRef: {
+        schema: 'pane.artifact.v1alpha1', owner: 'eikona', kind: 'image', ref: 'artifact:gen-p2',
+        version: '1', mediaType: 'image/png', title: 'Generated hero motion', evidenceRefs: [], capabilities: ['preview'],
+      },
+    })).status).toBe('updated')
+    await controller.refreshChangeSets()
+    const accepted = await controller.acceptChangeSet('changeset:p2')
+    expect(accepted).toMatchObject({ status: 'accepted', version: 3 })
+
+    // Second edit wave → v4 (kf-2 at frame 30, hero further translated). The
+    // live truth now DIFFERS from the retained v2 payload in both document and
+    // shots, so the rollback below is observable end to end.
+    expect(controller.editShotKeyframe('shot:opening', { type: 'move-keyframe', keyframeId: 'kf-2', frame: 30 })).toBe(true)
+    expect(controller.editNodeTransform('hero', { translate: [12, 0, 0] })).toBe(true)
+    await controller.save()
+    expect(controller.getSnapshot().document?.version).toBe(4)
+    expect(controller.getSnapshot().shots[0]!.keyframes[1]!.frame).toBe(30)
+
+    // Historical previz rollback: the retained v2 workbench payload (document
+    // AND shots) returns as a new committed revision; the controller reloads
+    // the owner truth and shows the v2 previz state again.
+    const rolledBack = await controller.rollbackChangeSet('changeset:p2')
+    expect(rolledBack).toMatchObject({ status: 'rolled_back' })
+    const snapshot = controller.getSnapshot()
+    expect(snapshot.status).toBe('ready')
+    expect(snapshot.document?.version).toBe(5)
+    expect(snapshot.document?.nodes.find(node => node.id === 'hero')?.transform.translate).toEqual([9, 0, 0])
+    expect(snapshot.shots[0]!.keyframes[1]!.frame).toBe(18)
+    // Legacy strict scene read never carries shots; the old scene contract is unchanged.
+    const legacy = await gateway.sceneRead({ scope: SCOPE, documentId: 'scene:main' })
+    expect(legacy).not.toHaveProperty('shots')
+    if (legacy.status === 'ready') expect(legacy.document).not.toHaveProperty('shots')
+    // The negotiated workbench read carries the restored shots for later sessions.
+    const workbench = await gateway.sceneWorkbenchRead({ scope: SCOPE, documentId: 'scene:main' })
+    expect(workbench.shots?.[0]?.keyframes[1]?.frame).toBe(18)
+    controller.dispose()
   })
 })
 

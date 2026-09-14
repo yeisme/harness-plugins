@@ -13,7 +13,15 @@
  * - narrow: same fixture at <=420 width (container-query padding contract);
  * - conflict: the first save answers a revision conflict → read-only freeze bar;
  * - export-blocked: draco capability report blocks export; the spec surfaces
- *   the gap list by invoking the real controller export path.
+ *   the gap list by invoking the real controller export path;
+ * - rollback (dsh-screenplay-production-continuity-v1 task 4.1): the remote
+ *   ports the negotiated workbench contract (sceneWorkbenchRead/
+ *   saveSceneWorkbench with CAS receipts and a history ring that retains
+ *   {document, shots} payloads, plus the change-set accept/rollback controls).
+ *   The page drives the REAL controller: edit shots+keyframes → save → accept
+ *   a previewed change set → edit further → save → roll back, then records the
+ *   restored previz state on `window.__rollbackEvidence` (host truth for the
+ *   ring semantics is covered by the host package integration specs).
  */
 const IDENTITY = { translate: [0, 0, 0], rotate: [0, 0, 0, 1], scale: [1, 1, 1] }
 
@@ -96,6 +104,35 @@ const CHANGE_SETS = [
   },
 ]
 
+/**
+ * Rollback-scenario change set: previewed with its artifact ref, based on the
+ * revision the page's first save commits (the fixture document starts at
+ * version 3; the edit wave saves version 4).
+ */
+const ROLLBACK_CHANGE_SETS = [
+  {
+    changeSetRef: 'changeset:browser-rollback',
+    sceneRef: 'scene:main',
+    baseVersion: 4,
+    inputRefs: ['asset:hero'],
+    operationSummary: 'Regenerate hero motion',
+    patchDigest: 'sha256:0123456789abcdef',
+    status: 'preview',
+    previewRef: 'preview:browser-rollback',
+    artifactRef: {
+      schema: 'pane.artifact.v1alpha1',
+      owner: 'eikona',
+      kind: 'image',
+      ref: 'artifact:browser-rollback',
+      version: '1',
+      mediaType: 'image/png',
+      title: 'Generated hero motion',
+      evidenceRefs: [],
+      capabilities: ['preview'],
+    },
+  },
+]
+
 export function director3DPage(width, scenario, baseImportMap) {
   const importMap = {
     imports: {
@@ -111,7 +148,7 @@ export function director3DPage(width, scenario, baseImportMap) {
     document: scenario === 'export-blocked' ? blockedDocument() : sceneDocument(),
     shots: SHOTS,
     bindings: BINDINGS,
-    changeSets: CHANGE_SETS,
+    changeSets: scenario === 'rollback' ? ROLLBACK_CHANGE_SETS : CHANGE_SETS,
   }
   return `<!doctype html><html><head><meta charset="utf-8"><script type="importmap">${JSON.stringify(importMap)}</script>
 <style>
@@ -137,6 +174,62 @@ import { Scene3DController, Director3DSurface } from '/3d-director-client.js';
 const fixture = ${JSON.stringify(fixture)};
 const target = { scope: { workspaceRef: 'workspace:fixture', projectRef: 'project:fixture' }, documentId: 'main' };
 let committed = structuredClone(fixture.document);
+
+// Rollback scenario only: a compact port of the negotiated workbench contract
+// (CAS by document.version, idempotent receipts, history ring retaining
+// {document, shots} payloads, and the change-set accept/rollback controls).
+const workbench = fixture.scenario === 'rollback'
+  ? (() => {
+      const receipts = [];
+      const history = [];
+      let changeSets = structuredClone(fixture.changeSets);
+      let shots = structuredClone(fixture.shots);
+      const save = (request, carriedShots) => {
+        const base = committed.version;
+        if (request.document.version !== base) return { status: 'conflict', version: base };
+        const prior = receipts.find(receipt => receipt.requestId === request.requestId);
+        if (prior !== undefined) return { status: 'saved', requestId: prior.requestId, version: prior.version };
+        if (base > 0) history.push({ document: committed, shots });
+        committed = { ...structuredClone(request.document), version: base + 1 };
+        if (carriedShots !== undefined) shots = structuredClone(carriedShots);
+        receipts.push({ requestId: request.requestId, version: committed.version });
+        return { status: 'saved', requestId: request.requestId, version: committed.version };
+      };
+      const retainedVersion = ref => {
+        const match = /^scene-revision:main@(\\d+)$/.exec(ref ?? '');
+        const version = match === null ? 0 : Number(match[1]);
+        return version === committed.version
+          ? { document: committed, shots }
+          : history.find(entry => entry.document.version === version);
+      };
+      return {
+        read: () => ({ schema: 'dsh.scene-workbench.v1', result: { status: 'ready', document: structuredClone(committed) }, shots: structuredClone(shots) }),
+        save,
+        changeSets: () => changeSets,
+        accept: request => {
+          const entry = changeSets.find(item => item.changeSetRef === request.changeSetRef);
+          if (entry === undefined || entry.status !== 'preview') return { status: 'failed' };
+          const saved = save({ requestId: request.requestId, document: request.document });
+          if (saved.status !== 'saved') return saved;
+          entry.status = 'accepted';
+          entry.rollbackRef = 'scene-revision:main@' + (saved.version - 1);
+          return { status: 'accepted', changeSet: entry, version: saved.version };
+        },
+        rollback: request => {
+          const entry = changeSets.find(item => item.changeSetRef === request.changeSetRef);
+          if (entry === undefined || entry.status !== 'accepted') return { status: 'failed' };
+          const retained = retainedVersion(entry.rollbackRef);
+          if (retained === undefined) return { status: 'failed' };
+          const saved = save({ requestId: request.requestId, document: { ...retained.document, version: committed.version } }, retained.shots);
+          if (saved.status !== 'saved') return saved;
+          entry.status = 'rolled_back';
+          entry.rollbackRef = 'scene-revision:main@' + saved.version;
+          return { status: 'rolled_back', changeSet: entry, version: saved.version };
+        },
+      };
+    })()
+  : undefined;
+
 const remote = {
   sceneRead: async () => ({ status: 'ready', document: structuredClone(committed) }),
   saveScene: async request => {
@@ -147,7 +240,15 @@ const remote = {
   reconcileScene: async () => ({ status: 'unknown' }),
   importGlb: async () => ({ status: 'unavailable', reason: 'fixture_has_no_byte_source' }),
   exportGlb: async () => ({ status: 'exported', bytesBase64: 'RklYVFVSRQ==', size: 8, mediaType: 'model/gltf-binary', report: committed.capabilityReport }),
-  listChangeSets: async () => ({ status: 'ready', changeSets: fixture.changeSets }),
+  listChangeSets: async () => ({ status: 'ready', changeSets: workbench === undefined ? fixture.changeSets : workbench.changeSets() }),
+  ...(workbench === undefined ? {} : {
+    sceneWorkbenchRead: async () => workbench.read(),
+    saveSceneWorkbench: async request => workbench.save(request, request.shots),
+    previewChangeSet: async request => ({ status: 'ready', changeSet: workbench.changeSets().find(entry => entry.changeSetRef === request.changeSetRef), currentVersion: committed.version, baseRevisionRetained: true }),
+    acceptChangeSet: async request => workbench.accept(request),
+    rejectChangeSet: async () => ({ status: 'updated', changeSet: workbench.changeSets()[0] }),
+    rollbackChangeSet: async request => workbench.rollback(request),
+  }),
 };
 const controller = new Scene3DController(remote, target, { shots: fixture.shots, bindings: fixture.bindings });
 window.__director3d = controller;
@@ -165,6 +266,31 @@ if (fixture.scenario === 'conflict') {
 if (fixture.scenario === 'export-blocked') {
   // Real export path: the authoritative capability report blocks with gaps.
   await controller.exportScene();
+}
+if (fixture.scenario === 'rollback') {
+  // Historical previz rollback through the REAL controller against the ported
+  // workbench contract: edit shots+keyframes → save → accept a previewed
+  // change set → edit further → save → roll back to the retained payload.
+  controller.editShotKeyframe('shot:opening', { type: 'move-keyframe', keyframeId: 'kf-1', frame: 12 });
+  controller.editNodeTransform('hero', { translate: [2, 0, 0] });
+  await controller.save();
+  const accepted = await controller.acceptChangeSet('changeset:browser-rollback');
+  controller.editShotKeyframe('shot:opening', { type: 'move-keyframe', keyframeId: 'kf-1', frame: 24 });
+  controller.editNodeTransform('hero', { translate: [5, 0, 0] });
+  await controller.save();
+  const rolledBack = await controller.rollbackChangeSet('changeset:browser-rollback');
+  await controller.refreshChangeSets();
+  const snapshot = controller.getSnapshot();
+  const legacy = await remote.sceneRead(target);
+  window.__rollbackEvidence = {
+    acceptedStatus: accepted.status,
+    rolledBackStatus: rolledBack.status,
+    finalVersion: snapshot.document?.version,
+    heroTranslate: snapshot.document?.nodes.find(node => node.id === 'hero')?.transform.translate,
+    keyframeFrame: snapshot.shots[0]?.keyframes.find(keyframe => keyframe.id === 'kf-1')?.frame,
+    saveStatus: snapshot.saveStatus,
+    legacyCarriesShots: legacy !== null && typeof legacy === 'object' && 'shots' in legacy,
+  };
 }
 document.body.dataset.director3dMounted = fixture.scenario;
 </script>

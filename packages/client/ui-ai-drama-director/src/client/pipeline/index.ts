@@ -112,7 +112,9 @@ export {
   PIPELINE_WORKBENCH_SNAPSHOT_SCHEMA,
 } from './workbench-controller.js'
 export type {
+  PipelineCandidateAdoptionStateV1,
   PipelineConfirmationStoreV1,
+  PipelinePaneSelectionStateV1,
   PipelineScene3DViewV1,
   PipelineSelectedShotV1,
   PipelineWorkbenchAvailabilityV1,
@@ -128,6 +130,25 @@ export {
   findScene3DBindingForCanvasNode,
   findScene3DBindingForSceneObject,
 } from './scene-3d.js'
+export {
+  PaneLinkSequenceGate,
+  decodePipelineCandidateAdoption,
+  decodePipelinePaneSelectionHandoff,
+  PIPELINE_CANDIDATE_ADOPTION_SCHEMA,
+  PIPELINE_PANE_SELECTION_HANDOFF_SCHEMA,
+  PIPELINE_PANE_SELECTION_KINDS,
+  PIPELINE_PANE_SELECTION_SOURCES,
+} from './pane-selection.js'
+export type {
+  PipelineAdoptedArtifactRefV1,
+  PipelineCandidateAdoptionV1,
+  PaneLinkSequenceGate as PipelinePaneLinkSequenceGate,
+  PipelinePaneLinkDecodeResult,
+  PipelinePaneLinkOutcome,
+  PipelinePaneSelectionHandoffV1,
+  PipelinePaneSelectionKindV1,
+  PipelinePaneSelectionSourceV1,
+} from './pane-selection.js'
 export {
   createPipelineWorkbenchView,
   creativePipelineRemoteOwnerFace,
