@@ -5,6 +5,7 @@ import { homedir, userInfo } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { readFile, realpath, mkdir, writeFile, rename, rm } from 'node:fs/promises'
 import { z } from 'zod'
+import { createLocalAuctraAdapter, localAuctraConfigSchema } from './local-auctra.ts'
 import { withLocalScaenaTable } from './local-scaena-table.ts'
 import { withLocalScaenaPackage } from './local-scaena-package.ts'
 import { withLocalScaena } from './local-scaena.ts'
@@ -18,6 +19,7 @@ const cliSettings = z.object({
   workingDirectory: z.string().min(1).optional(),
   eikona: z.object({ executable: z.string().min(1).default('eikona'), config: z.string().min(1).optional(), project: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/u).optional(), outputRoot: z.string().min(1).optional() }).strict().optional(),
   scaena: z.object({ executable: z.string().min(1).default('scaena'), config: z.string().min(1).optional() }).strict().optional(),
+  auctra: localAuctraConfigSchema.optional(),
 }).strict()
 export const localStudioConfigSchema = cliSettings
 export const localStudioConfigPath = () => join(homedir(), '.config', 'yeisme', 'dsh-creator-studio.json')
@@ -78,6 +80,11 @@ export class LocalStudioCLI {
       // Do not forward command arguments, owner stdout, config paths or stderr to the browser.
       throw new Error(`${owner}_cli_unavailable`)
     }
+  }
+
+  /** Auctra is served over the approved loopback Service API, not a local CLI. */
+  auctraAdapter(): CreatorOwnerAdapterV1 | undefined {
+    return this.settings.auctra === undefined ? undefined : createLocalAuctraAdapter(this.settings.auctra)
   }
 
   adapter(owner: LocalOwner): CreatorOwnerAdapterV1 {

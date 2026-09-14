@@ -319,6 +319,8 @@ async function acquireCreatorStudio(ctx: Context): Promise<() => Promise<void>> 
           for (const owner of ['eikona', 'scaena'] as const) {
             if (current.directory?.selected(owner) === undefined) releases.push(current.directory!.register(local.adapter(owner)))
           }
+          const auctra = local.auctraAdapter()
+          if (auctra !== undefined && current.directory?.selected('auctra') === undefined) releases.push(current.directory!.register(auctra))
         } catch (error) { releases.reverse().forEach(release => release()); releaseContext(); throw error }
         return () => { releases.reverse().forEach(release => release()); releaseContext() }
       })

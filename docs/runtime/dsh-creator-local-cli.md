@@ -19,6 +19,18 @@ pnpm dsh:workbench -- --no-open --host 127.0.0.1 --port 40869
 
 配置保存在 `~/.config/yeisme/dsh-creator-studio.json`，由命令校验并原子保存。额外选项：`--eikona`、`--scaena` 指定可执行文件；`--eikona-config`、`--scaena-config` 指向各 CLI 已有配置。修改后重启本地预览。用户级设置由用户显式选择，测试不覆盖该文件。
 
+## Auctra 文本台接线
+
+`creator.text` 打开 Auctra 写作台。Auctra 走已批准的 loopback Service API（`auctra serve`），不经本地 CLI 进程：
+
+```bash
+auctra serve --root /path/to/writing-project --connection-file ~/.config/auctra/studio-connection.json
+node scripts/creator-studio-config.mjs set --auctra-connection ~/.config/auctra/studio-connection.json --auctra-unit chapter:ch1 --auctra-write
+pnpm dsh:workbench -- --no-open --host 127.0.0.1 --port 40869
+```
+
+连接文件由 `auctra serve` 以 0600 写出（base_url + token + project_ref）；DSH 每次请求前重读，`auctra serve` 重启换 token 不需要重启预览。`--auctra-unit` 是显式选择（`chapter:<id>`、`text:<id>` 或 `screenplay-draft:<id>`），不从列表顺序推断。默认只读；`--auctra-write` 显式开启保存/候选/Checkpoint/Review/导出动作。非 loopback 地址被拒绝，connection file 缺失或失效时写作台诚实显示 unavailable，不显示正文。
+
 需要包含本轮新增合同的 CLI 构建：Eikona `list --project --offset`、`preparation approval-status/reconcile`、`artifacts read`、`review status/decide/reconcile`；Scaena `storyboard table reconcile`、`storyboard package export-status`。旧 CLI 缺少合同会显示 unavailable/unconfirmed；不能把旧命令的演示结果作为正式制作。
 
 ## 当前交付与边界
@@ -29,7 +41,9 @@ pnpm dsh:workbench -- --no-open --host 127.0.0.1 --port 40869
 
 完整计划仍开放：批量本地 CLI、参考图导入、区域编辑、继续修改、Eikona→Scaena 固定版本交接、项目/镜头创建、声音绑定、候选替换、审阅与合成，以及正式宿主的双项目/双会话完整验收。已通过的组件和 fixture 证据不替代这些步骤，也不替代视觉认可或真实付费 provider 验收。
 
-后续按已批准顺序推进：项目画布与连续性；开发会话/文件/终端/差异/Ordo 联动；再按独立领域入口补 Auctra、Sonora、Anatomia、Pinax。
+文本：写作台已接 `auctra serve` loopback Service API（配置见上文），保存/候选/Checkpoint/Review/固定版本导出经真实 owner HTTP 链路；生产准入与 4.2 真实闭环验收仍开放。
+
+后续按已批准顺序推进：项目画布与连续性；开发会话/文件/终端/差异/Ordo 联动；再按独立领域入口补 Sonora、Anatomia、Pinax。
 
 ## 验证
 

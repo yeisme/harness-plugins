@@ -376,7 +376,7 @@ it('mounts the complete Eikona studio adapter without granting execution or star
 it('mounts local CLI context and owner adapters through the workspace service lifecycle', async () => {
   const { LocalStudioCLI } = await import('@yeisme/dsh-creator-studio-host')
   const context = expectedContext()
-  const open = vi.spyOn(LocalStudioCLI, 'open').mockResolvedValue({ context, adapter: (owner: string) => ({ ...eikonaAdapter(), owner }) } as never)
+  const open = vi.spyOn(LocalStudioCLI, 'open').mockResolvedValue({ context, adapter: (owner: string) => ({ ...eikonaAdapter(), owner }), auctraAdapter: () => undefined } as never)
   const ctx = new Context()
   contexts.push(ctx)
   provideTypert(ctx)
@@ -390,5 +390,30 @@ it('mounts local CLI context and owner adapters through the workspace service li
     expect(snapshot.owners).toHaveLength(1)
     expect(snapshot.owners[0].status).toBe('ready')
     await release()
+  } finally { open.mockRestore() }
+})
+
+it('registers the configured local Auctra adapter next to the CLI owners', async () => {
+  const { LocalStudioCLI } = await import('@yeisme/dsh-creator-studio-host')
+  const context = expectedContext()
+  const auctra: CreatorOwnerAdapterV1 = { ...eikonaAdapter(), owner: 'auctra', transport: 'service' }
+  const open = vi.spyOn(LocalStudioCLI, 'open').mockResolvedValue({
+    context,
+    adapter: (owner: string) => ({ ...eikonaAdapter(), owner }),
+    auctraAdapter: () => auctra,
+  } as never)
+  const ctx = new Context()
+  contexts.push(ctx)
+  provideTypert(ctx)
+  ctx.provide('workspaceRegistry' as never, { list: () => [] } as never)
+  try {
+    const release = await apply(ctx)
+    await vi.waitFor(() => expect(ctx.get(CREATOR_STUDIO_EXPECTED_CONTEXT)).toEqual(context))
+    const directory = ctx.get(CREATOR_STUDIO_OWNER_DIRECTORY)!
+    expect(directory.selected('auctra')).toBe(auctra)
+    const gateway = ctx.get('creatorStudio') as { snapshotOwner(owner: string): Promise<any> }
+    expect((await gateway.snapshotOwner('auctra')).owners[0].owner).toBe('auctra')
+    await release()
+    expect(directory.selected('auctra')).toBeUndefined()
   } finally { open.mockRestore() }
 })

@@ -5,6 +5,8 @@ export { CreatorStudioOwnerDirectory } from './directory.ts'
 export { createSelectableEikonaReviewAdapter } from './eikona-selection-adapter.ts'
 export { normalizeAuctraWorkingCopyOpen, normalizeAuctraTextUnitList, normalizeAuctraWorkingCopyCandidate, normalizeAuctraCandidateAdopt } from './auctra-working-copy.ts'
 export { AuctraWorkingCopyClient, AUCTRA_WORKING_COPY_SCHEMA_DIGEST } from './auctra-working-copy-client.ts'
+export { createLocalAuctraAdapter, localAuctraConfigSchema } from './local-auctra.ts'
+export type { LocalAuctraConfig } from './local-auctra.ts'
 export type { AuctraWorkingCopyConnection, AuctraWorkingCopyReadResult, AuctraWorkingCopySaveResult, AuctraWorkingCopyCandidateResult, AuctraWorkingCopyAdoptResult } from './auctra-working-copy-client.ts'
 export {
   CREATOR_STUDIO_EXPECTED_CONTEXT,

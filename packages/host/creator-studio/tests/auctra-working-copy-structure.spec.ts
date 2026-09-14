@@ -11,7 +11,7 @@ it('maps the three authorized families and omits unknown kinds without a body', 
     { id: 'secret', kind: 'internal_ledger', title: 'Hidden', status: 'ready' },
   ]))
   expect(items).toEqual([
-    { unitRef: 'chapter:ch_001', family: 'novel-chapter', title: '第一章', status: 'draft' },
+    { unitRef: 'text:ch_001', family: 'novel-chapter', title: '第一章', status: 'draft' },
     { unitRef: 'text:scene_001', family: 'screenplay-scene', title: '第一场', status: 'editing' },
     { unitRef: 'text:note_001', family: 'general-text', title: '随笔', status: 'draft' },
   ])
