@@ -115,8 +115,58 @@ try {
     stale_revision_conflict: true,
   })
 
-  if (liveEnabled) {
-    const liveConfig = { binary: liveBinary }
+  // Market dual host path (dsh-radar-market-intelligence-v1 §1.3): the
+  // connected MCP seam must answer with ZERO process spawns, and the
+  // fixed-argv fallback must survive a mid-read owner drop and re-establish.
+  // The argv leg spawns the SYNTHETIC stdio MCP fixture under tests/fixtures
+  // (real node process, minimal MCP protocol, synthetic market payloads).
+  const fixtureServerPath = resolve(packageRoot, 'tests/fixtures/market-stdio-server.mjs')
+  let dualSpawns = 0
+  const countingSpawn = descriptor => {
+    dualSpawns++
+    return spawnSyntheticServer(fixtureServerPath, descriptor.argv)
+  }
+  const connectedBrief = { spec: 'radar.market_brief.v1', brief_ref: 'brief-dual-1', digest: 'sha256:brief-dual',
+    policy_revision: 'sha256:policy', generated_at: '2026-09-14T09:00:00.000Z', timezone: 'UTC',
+    window: { start: '2026-09-13T00:00:00.000Z', end: '2026-09-14T00:00:00.000Z' }, status: 'empty',
+    main: [], watching: [], remaining: 0, filtered: false, correction_count: 0, limitations: [],
+    coverage: { spec: 'radar.market_source_gaps.v1', sources: [] } }
+  const connectedTransport = {
+    async readResource({ uri }) {
+      const data = uri.endsWith('/capabilities') ? { spec: 'radar.market_capabilities.v1', views: ['market_brief', 'market_reader'] }
+        : uri.endsWith('/reader') ? { spec: 'radar.market_reader.v1', reader_ref: 'local', revision: 1, policy_revision: 'sha256:policy' }
+          : connectedBrief
+      return { contents: [{ uri, text: JSON.stringify(data) }] }
+    },
+  }
+  const dualConnected = radar.createDualPathMarketTransport({ connected: () => connectedTransport, fixedArgv: { binary: 'radar', spawnProcess: countingSpawn } })
+  const connectedRead = await radar.readConnectedMarketBrief(dualConnected)
+  assert(connectedRead.ok && connectedRead.brief.briefRef === 'brief-dual-1', 'connected MCP path must read the market brief')
+  assert(dualSpawns === 0, 'connected MCP path must not spawn any process')
+  dualConnected.dispose()
+
+  const dualStateFile = resolve(artifactsRoot, 'market-dual-dropped-once')
+  process.env.MARKET_STATE_FILE = dualStateFile
+  const dualArgv = radar.createDualPathMarketTransport({ connected: () => null, fixedArgv: { binary: 'radar', spawnProcess: descriptor => spawnSyntheticServer(fixtureServerPath, descriptor.argv) } })
+  const droppedRead = await radar.readConnectedMarketBrief(dualArgv)
+  assert(!droppedRead.ok && droppedRead.reason === 'offline', 'mid-read owner drop must surface the shared offline code')
+  assert(!JSON.stringify(droppedRead).match(/exit|ECONN|fixture/i), 'drop recovery must not leak raw process errors')
+  const recoveredRead = await radar.readConnectedMarketBrief(dualArgv)
+  assert(recoveredRead.ok && recoveredRead.brief.briefRef === 'brief-fixture-1' && recoveredRead.brief.status === 'ready', 'follow-up read must re-establish and return the synthetic brief')
+  const recoveredEvidence = await radar.readConnectedMarketEvidence(dualArgv, { signalRef: 'signal-fixture-1', revision: 2 }, 'evidence-fixture-1')
+  assert(recoveredEvidence.ok && recoveredEvidence.evidence.evidenceRef === 'evidence-fixture-1', 'rebuilt argv connection must serve revision-bound evidence reads')
+  dualArgv.dispose()
+  delete process.env.MARKET_STATE_FILE
+  checks.push({
+    stage: 'market_dual_path',
+    connected_path_spawns: 0,
+    argv_drop_reason: 'offline',
+    argv_recovery_brief: 'brief-fixture-1',
+    argv_recovery_evidence: 'evidence-fixture-1',
+    synthetic_fixture: 'tests/fixtures/market-stdio-server.mjs',
+  })
+
+  if (liveEnabled) {    const liveConfig = { binary: liveBinary }
     const liveIntent = (kind, refs = [], key = `dsh-live-${kind}`) => ({
       schema: radar.RADAR_INTENT_SCHEMA,
       kind,
@@ -223,6 +273,37 @@ async function writeJson(path, value) {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
+}
+
+/**
+ * Spawn the SYNTHETIC stdio MCP fixture as a real node process standing in
+ * for the Radar CLI: executable + the frozen RADAR_FIXED_ARGV descriptor.
+ * Line/exit plumbing mirrors the production nodeMarketSpawn factory.
+ */
+function spawnSyntheticServer(fixturePath, argv) {
+  const child = spawn(process.execPath, [fixturePath, ...argv], { stdio: ['pipe', 'pipe', 'pipe'] })
+  const lineListeners = new Set()
+  const exitListeners = new Set()
+  let buffer = ''
+  child.stdout.setEncoding('utf8')
+  child.stdout.on('data', chunk => {
+    buffer += chunk
+    let index
+    while ((index = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, index).trim()
+      buffer = buffer.slice(index + 1)
+      if (line) for (const listener of [...lineListeners]) listener(line)
+    }
+  })
+  const notifyExit = failure => { for (const listener of [...exitListeners]) listener(failure) }
+  child.on('error', notifyExit)
+  child.on('close', () => notifyExit(new Error('synthetic server closed')))
+  return {
+    write: frame => child.stdin.write(frame + '\n'),
+    onLine(listener) { lineListeners.add(listener); return () => lineListeners.delete(listener) },
+    onExit(listener) { exitListeners.add(listener); return () => exitListeners.delete(listener) },
+    kill: () => child.kill(),
+  }
 }
 
 async function realRadarRunner(descriptor, killAfterMs) {

@@ -47,6 +47,22 @@ test('detail host rejects stale contexts before dispatch and discards responses 
   expect(calls).toBe(1)
 })
 
+test('evidence host mirrors the detail guards: stale contexts never read, replaced connections discard results', async () => {
+  let calls = 0, reject!: (error: unknown) => void
+  let context: MarketConnectionContext = { ref: 'session-a', connection: { readResource() {
+    calls++; return new Promise((_resolve, fail) => { reject = fail })
+  } } }
+  const host = createConnectedRadarMarketHost({ current: () => context, subscribeContext: () => () => {}, subscribePolicy: () => () => {} })
+  const selection = { signalRef: 'signal-a', revision: 2 }
+  expect(await host.loadEvidence!('session-old', selection, 'evidence-a', new AbortController().signal)).toMatchObject({ reason: 'cancelled' })
+  expect(calls).toBe(0)
+  const pending = host.loadEvidence!('session-a', selection, 'evidence-a', new AbortController().signal)
+  context = { ref: 'session-b', connection: context.connection }
+  reject({ data: { code: 'evidence_not_found' } })
+  expect(await pending).toMatchObject({ reason: 'cancelled' })
+  expect(calls).toBe(1)
+})
+
 test('probeCapability classifies through the current connection and reports no-connection honestly', async () => {
   const transport = { async readResource({ uri }: { uri: string }) {
     return { contents: [{ uri, mimeType: 'application/json', text: JSON.stringify({ spec: 'radar.market_capabilities.v1', views: ['market_capabilities', 'market_reader'] }) }] }

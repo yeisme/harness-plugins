@@ -14,9 +14,9 @@ test('detail selection rejects a newer revision and evidence from another select
   expect(() => projectSelectedMarketSignal({ ...signal(), revision: 2 }, selection, 'sha256:policy')).toThrow('selection_mismatch')
   expect(() => projectSelectedMarketSignal({ ...signal(), signal_ref: 'signal-2' }, selection, 'sha256:policy')).toThrow('selection_mismatch')
   const evidence = { evidence_ref: 'evidence-1', source_ref: 'other-source', observed_at: '2026-09-11T08:00:00Z', summary: 'Linked correction evidence', origin: 'manual', limitations: [] }
-  expect(projectSelectedMarketEvidence(evidence, selected, 'evidence-1').sourceRef).toBe('other-source')
-  expect(() => projectSelectedMarketEvidence(evidence, selected, 'evidence-2')).toThrow('not_attached')
-  expect(() => projectSelectedMarketEvidence({ ...evidence, evidence_ref: 'evidence-2' }, selected, 'evidence-1')).toThrow('selection_mismatch')
+  expect(projectSelectedMarketEvidence(evidence, selected, 'evidence-1', 'sha256:policy').sourceRef).toBe('other-source')
+  expect(() => projectSelectedMarketEvidence(evidence, selected, 'evidence-2', 'sha256:policy')).toThrow('not_attached')
+  expect(() => projectSelectedMarketEvidence({ ...evidence, evidence_ref: 'evidence-2' }, selected, 'evidence-1', 'sha256:policy')).toThrow('selection_mismatch')
 })
 test('market projection preserves owner revision and unknown geography while stripping unknown fields', () => {
   const result = projectMarketSignal({ ...signal(), raw_payload: 'private', url: 'https://example.invalid' }, 'sha256:abc')
@@ -74,10 +74,37 @@ test('unknown versions, missing revisions, impossible times and unsafe refs fail
     expect(() => projectMarketSignal({ ...signal(), ...patch }, 'sha256:abc')).toThrow()
   }
 })
+test('every owner claim kind and assertion level projects; unknown taxonomy still fails closed', () => {
+  // Radar design §4 + implementation emit all eight claim kinds and three
+  // assertion levels; each must survive projection with its policy revision.
+  const kinds = ['newly_observed', 'listing_changed', 'rank_changed', 'metric_changed', 'placement_changed', 'topic_mix_changed', 'cross_market_observed', 'correction']
+  for (const claim_kind of kinds) {
+    expect(projectMarketSignal({ ...signal(), claim_kind }, 'sha256:abc').claimKind).toBe(claim_kind)
+  }
+  for (const assertion_level of ['observed', 'corroborated', 'confirmed']) {
+    expect(projectMarketSignal({ ...signal(), assertion_level }, 'sha256:abc').assertionLevel).toBe(assertion_level)
+  }
+  expect(() => projectMarketSignal({ ...signal(), claim_kind: 'viral_hit' }, 'sha256:abc')).toThrow('market_contract_mismatch')
+  expect(() => projectMarketSignal({ ...signal(), assertion_level: 'guaranteed' }, 'sha256:abc')).toThrow('market_contract_mismatch')
+})
+test('a ready brief with a full main list is the normal completed edition, not a contract error', () => {
+  // Radar marks a completed non-empty edition status=ready (design §5);
+  // the projection must not mistake the normal state for a mismatch, while
+  // unknown statuses still fail closed instead of degrading to degraded.
+  const ready = { ...brief(), status: 'ready', watching: [],
+    main: [1, 2, 3, 4, 5].map(revision => ({ ...signal(), signal_ref: `signal-${revision}`, revision })) }
+  const projected = projectMarketBrief(ready)
+  expect(projected.status).toBe('ready')
+  expect(projected.main).toHaveLength(5)
+  expect(() => projectMarketBrief({ ...brief(), status: 'absent' })).toThrow('market_contract_mismatch')
+  expect(() => projectMarketBrief({ ...ready, main: [...ready.main, { ...signal(), signal_ref: 'signal-6' }] })).toThrow()
+})
+
 test('reader and evidence projections require owner versions and bounded summaries', () => {
   expect(projectMarketReader({ spec: 'radar.market_reader.v1', reader_ref: 'local', revision: 2, policy_revision: 'sha256:abc' }).revision).toBe(2)
   const evidence = { evidence_ref: 'evidence-1', source_ref: 'hongguo', observed_at: '2026-09-11T08:00:00Z',
     summary: 'Sample only', origin: 'fixture', limitations: [] }
-  expect(projectMarketEvidence(evidence).origin).toBe('fixture')
-  expect(() => projectMarketEvidence({ ...evidence, summary: 'x'.repeat(501) })).toThrow()
+  // The evidence projection carries the read-time policy that filtered it.
+  expect(projectMarketEvidence(evidence, 'sha256:abc')).toMatchObject({ origin: 'fixture', policyRevision: 'sha256:abc' })
+  expect(() => projectMarketEvidence({ ...evidence, summary: 'x'.repeat(501) }, 'sha256:abc')).toThrow()
 })

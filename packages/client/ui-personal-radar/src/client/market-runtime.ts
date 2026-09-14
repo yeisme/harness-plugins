@@ -1,8 +1,9 @@
 import { createElement } from 'react'
-import { createMarketReadingController, createMarketCatchupController, createMarketDetailController, createMarketCompareController, type RadarMarketHostFace } from '@yeisme/dsh-personal-radar'
+import { createMarketReadingController, createMarketCatchupController, createMarketDetailController, createMarketCompareController, createMarketEvidenceTimelineController, type RadarMarketHostFace } from '@yeisme/dsh-personal-radar'
 import { MarketReadingView } from './market-view.js'
 import { createMarketActionsController } from './market-actions.js'
 import { createMarketQuestionController, type MarketQuestionSessionsFace } from './market-question.js'
+import type { MarketEvidenceSourceOpener } from './market-detail-view.js'
 import type { RadarPaneWorkbenchFace } from './probe.js'
 
 export type { RadarMarketHostFace } from '@yeisme/dsh-personal-radar'
@@ -11,13 +12,19 @@ export async function mountRadarMarket(pane: RadarPaneWorkbenchFace, host: Radar
   const catchup = host.loadCatchup ? createMarketCatchupController(host.loadCatchup.bind(host)) : undefined
   const detail = host.loadSignal ? createMarketDetailController(host.loadSignal.bind(host)) : undefined
   const compare = host.loadCompare ? createMarketCompareController(host.loadCompare.bind(host)) : undefined
+  const evidence = host.loadEvidence ? createMarketEvidenceTimelineController(host.loadEvidence.bind(host)) : undefined
   const actions = createMarketActionsController(host, () => { void controller.refresh() })
   const question = createMarketQuestionController(sessions)
-  const context = (ref: string | null) => { controller.setContext(ref); catchup?.setContext(ref); detail?.setContext(ref); compare?.setContext(ref); void controller.refresh() }
+  // Safe source-open is host-owned navigation: without the seam the detail view
+  // shows the stable source_open_unavailable reason and never a raw URL.
+  const openSource: MarketEvidenceSourceOpener | undefined = typeof host.openEvidenceSource === 'function'
+    ? async (contextRef, item) => host.openEvidenceSource!(contextRef, item, new AbortController().signal)
+    : undefined
+  const context = (ref: string | null) => { controller.setContext(ref); catchup?.setContext(ref); detail?.setContext(ref); compare?.setContext(ref); evidence?.setContext(ref); void controller.refresh() }
   const disposers: (() => void)[] = []
   try {
     disposers.push(host.subscribeContext(context))
-    disposers.push(host.subscribePolicy(() => { controller.invalidatePolicy(); catchup?.invalidatePolicy(); detail?.invalidatePolicy(); compare?.invalidatePolicy() }))
+    disposers.push(host.subscribePolicy(() => { controller.invalidatePolicy(); catchup?.invalidatePolicy(); detail?.invalidatePolicy(); compare?.invalidatePolicy(); evidence?.invalidatePolicy() }))
     context(host.contextRef())
     // Capability gate: a deterministic missing/foreign capability shows the
     // owner's disabled reason up front; transient unavailability keeps the
@@ -29,7 +36,8 @@ export async function mountRadarMarket(pane: RadarPaneWorkbenchFace, host: Radar
     }
     disposers.push(pane.registerView({ descriptor: { kind: 'drama-radar.market', label: host.locale === 'en' ? 'Market changes' : '市场变化',
       componentKey: 'radarMarket', role: 'content', preferredRegion: 'either', retention: 'recreate', singleton: true },
-    component: () => createElement(MarketReadingView, { controller, ...(detail ? { detail } : {}), ...(catchup ? { catchup } : {}), ...(compare ? { compare } : {}),
+    component: () => createElement(MarketReadingView, { controller, ...(detail ? { detail } : {}), ...(catchup ? { catchup } : {}), ...(compare ? { compare } : {}), ...(evidence ? { evidence } : {}),
+      ...(openSource ? { openSource } : {}),
       ...(actions.snapshot().available ? { actions } : {}), ...(sessions !== undefined ? { question } : {}), ...(capability !== undefined ? { capability } : {}), ...(host.locale ? { locale: host.locale } : {}) }) }))
     if (pane.registerCommand) disposers.push(pane.registerCommand({ descriptor: { id: 'drama.radar.market',
       label: host.locale === 'en' ? 'Market changes' : '市场变化' }, execute: () => pane.openView({ kind: 'drama-radar.market' }) }))
@@ -38,6 +46,7 @@ export async function mountRadarMarket(pane: RadarPaneWorkbenchFace, host: Radar
     catchup?.dispose()
     detail?.dispose()
     compare?.dispose()
+    evidence?.dispose()
     actions.dispose()
     question.dispose()
     for (const dispose of disposers.reverse()) dispose()
@@ -51,6 +60,7 @@ export async function mountRadarMarket(pane: RadarPaneWorkbenchFace, host: Radar
     catchup?.dispose()
     detail?.dispose()
     compare?.dispose()
+    evidence?.dispose()
     actions.dispose()
     question.dispose()
     for (const dispose of disposers.reverse()) dispose()

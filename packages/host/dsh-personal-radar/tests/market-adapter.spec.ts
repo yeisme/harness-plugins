@@ -1,6 +1,45 @@
 import { expect, test } from 'vitest'
-import { readConnectedMarketBrief, readConnectedMarketCatchup, type ConnectedMarketTransport } from '../src/market-adapter.js'
+import { readConnectedMarketBrief, readConnectedMarketCatchup, readConnectedMarketEvidence, type ConnectedMarketTransport } from '../src/market-adapter.js'
 import { readConnectedMarketSignal } from '../src/market-adapter.js'
+import { createDualPathMarketTransport, RADAR_FIXED_ARGV, type MarketProcessFactory } from '../src/adapter.js'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const fixtureServer = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'market-stdio-server.mjs')
+
+/**
+ * Factory that spawns the SYNTHETIC stdio MCP fixture (real node process) the
+ * way the host spawns the Radar CLI: executable + the frozen RADAR_FIXED_ARGV.
+ * The fixture itself validates that argv, proving the descriptor contract.
+ */
+const syntheticSpawn: MarketProcessFactory = ({ argv }) => {
+  const { spawn } = process.getBuiltinModule('node:child_process') as typeof import('node:child_process')
+  const child = spawn(process.execPath, [fixtureServer, ...argv], { stdio: ['pipe', 'pipe', 'pipe'] })
+  const lineListeners = new Set<(line: string) => void>()
+  const exitListeners = new Set<(failure: unknown) => void>()
+  let buffer = ''
+  child.stdout.setEncoding('utf8')
+  child.stdout.on('data', (chunk: string) => {
+    buffer += chunk
+    let index: number
+    while ((index = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, index).trim()
+      buffer = buffer.slice(index + 1)
+      if (line) for (const listener of [...lineListeners]) listener(line)
+    }
+  })
+  const notifyExit = (failure: unknown) => { for (const listener of [...exitListeners]) listener(failure) }
+  child.on('error', notifyExit)
+  child.on('close', () => notifyExit(new Error('fixture closed')))
+  return {
+    write: frame => child.stdin.write(frame + '\n'),
+    onLine(listener) { lineListeners.add(listener); return () => { lineListeners.delete(listener) } },
+    onExit(listener) { exitListeners.add(listener); return () => { exitListeners.delete(listener) } },
+    kill: () => child.kill(),
+  }
+}
 
 function transport(options: { policyChange?: boolean; missingCapability?: boolean; malformed?: boolean } = {}) {
   const calls: string[] = []
@@ -123,3 +162,72 @@ test.each(['signal_not_found', 'evidence_not_found'])('missing %s is not treated
   expect(result).toMatchObject({ ok: false, reason: 'reference_unavailable' })
   if (!result.ok) expect(result.recovery).toContain('without substituting the latest revision')
 })
+
+test('evidence reads stay bound to the exact signal revision and never substitute another item', async () => {
+  const paths: string[] = []
+  const connection: ConnectedMarketTransport = { async readResource({ uri }) {
+    paths.push(uri)
+    const data = uri.endsWith('capabilities') ? { spec: 'radar.market_capabilities.v1', views: ['market_reader', 'market_evidence'] }
+      : uri.endsWith('/reader') ? { spec: 'radar.market_reader.v1', reader_ref: 'local', revision: 1, policy_revision: 'sha256:policy' }
+        : { evidence_ref: 'evidence-1', source_ref: 'hongguo', observed_at: '2026-09-11T08:00:00Z', summary: 'Catalog sample', origin: 'fixture', limitations: [] }
+    return { contents: [{ uri, text: JSON.stringify(data) }] }
+  } }
+  const result = await readConnectedMarketEvidence(connection, { signalRef: 'signal-1', revision: 3 }, 'evidence-1')
+  expect(result).toMatchObject({ ok: true, evidence: { evidenceRef: 'evidence-1', policyRevision: 'sha256:policy' } })
+  // The evidence resource path is revision-bound; there is no latest fallback.
+  expect(paths).toContain('radar://market/signals/signal-1/revisions/3/evidence/evidence-1')
+  // A substituted payload under the requested reference is a mismatch.
+  expect(await readConnectedMarketEvidence(connection, { signalRef: 'signal-1', revision: 3 }, 'evidence-2')).toMatchObject({ reason: 'contract_mismatch' })
+  const missing: ConnectedMarketTransport = { async readResource() { throw { data: { code: 'evidence_not_found' } } } }
+  expect(await readConnectedMarketEvidence(missing, { signalRef: 'signal-1', revision: 3 }, 'evidence-9')).toMatchObject({ reason: 'reference_unavailable' })
+  await expect(readConnectedMarketEvidence(connection, { signalRef: 'signal-1', revision: 3 }, '../unsafe')).rejects.toThrow('market_selection_invalid')
+})
+
+test('no local CLI: the connected MCP path reads the brief with zero process spawns', async () => {
+  let spawns = 0
+  const countingSpawn: MarketProcessFactory = descriptor => { spawns++; return syntheticSpawn(descriptor) }
+  const connected: ConnectedMarketTransport = { async readResource({ uri }) {
+    const data = uri.endsWith('capabilities') ? { spec: 'radar.market_capabilities.v1', views: ['market_brief', 'market_reader'] }
+      : uri.endsWith('/reader') ? { spec: 'radar.market_reader.v1', reader_ref: 'local', revision: 1, policy_revision: 'sha256:policy' }
+        : { spec: 'radar.market_brief.v1', brief_ref: 'brief-1', digest: 'sha256:brief', policy_revision: 'sha256:policy',
+          generated_at: '2026-09-13T09:00:00.000Z', timezone: 'UTC', window: { start: '2026-09-12T00:00:00Z', end: '2026-09-13T00:00:00Z' },
+          status: 'empty', main: [], watching: [], remaining: 0, filtered: false, correction_count: 0, limitations: [],
+          coverage: { spec: 'radar.market_source_gaps.v1', sources: [] } }
+    return { contents: [{ uri, text: JSON.stringify(data) }] }
+  } }
+  const dual = createDualPathMarketTransport({ connected: () => connected, fixedArgv: { binary: 'radar', spawnProcess: countingSpawn } })
+  const result = await readConnectedMarketBrief(dual)
+  expect(result).toMatchObject({ ok: true, brief: { briefRef: 'brief-1' } })
+  // The connected seam answers everything; the fixed-argv fallback never ran.
+  expect(spawns).toBe(0)
+  dual.dispose()
+})
+
+test('owner-side recovery: the fixed-argv path spawns a synthetic stdio server, survives a mid-read drop and re-establishes', async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), 'dsh-market-dual-'))
+  const stateFile = join(stateDir, 'dropped-once')
+  process.env.MARKET_STATE_FILE = stateFile
+  try {
+    const dual = createDualPathMarketTransport({ connected: () => null, fixedArgv: { binary: 'radar', spawnProcess: syntheticSpawn } })
+    // First journey: the synthetic owner dies mid-read; only the shared named
+    // offline code comes back, never the process error text.
+    const dropped = await readConnectedMarketBrief(dual)
+    expect(dropped).toMatchObject({ ok: false, reason: 'offline' })
+    expect(JSON.stringify(dropped)).not.toMatch(/exit|ECONN|fixture|private/i)
+    // Follow-up read re-establishes a fresh process and reads the brief.
+    const recovered = await readConnectedMarketBrief(dual)
+    expect(recovered).toMatchObject({ ok: true, brief: { briefRef: 'brief-fixture-1', status: 'ready' }, reader: { revision: 1 } })
+    if (recovered.ok) expect(recovered.brief.main[0].claimKind).toBe('metric_changed')
+    // The same rebuilt connection also serves revision-bound signal/evidence reads.
+    const signal = await readConnectedMarketSignal(dual, { signalRef: 'signal-fixture-1', revision: 2 })
+    expect(signal).toMatchObject({ ok: true, signal: { assertionLevel: 'corroborated' } })
+    const evidence = await readConnectedMarketEvidence(dual, { signalRef: 'signal-fixture-1', revision: 2 }, 'evidence-fixture-1')
+    expect(evidence).toMatchObject({ ok: true, evidence: { evidenceRef: 'evidence-fixture-1' } })
+    const missing = await readConnectedMarketEvidence(dual, { signalRef: 'signal-fixture-1', revision: 2 }, 'evidence-missing')
+    expect(missing).toMatchObject({ ok: false, reason: 'reference_unavailable' })
+    dual.dispose()
+  } finally {
+    delete process.env.MARKET_STATE_FILE
+    await rm(stateDir, { recursive: true, force: true })
+  }
+}, 15000)

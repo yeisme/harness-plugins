@@ -1,5 +1,6 @@
 import { projectMarketBrief, projectMarketReader, projectMarketCatchup, type MarketBriefProjection, type MarketReaderProjection, type MarketCatchupProjection } from './market-contracts.js'
 import { projectSelectedMarketSignal, projectMarketCompare, type MarketSignalProjection, type MarketCompareProjection } from './market-contracts.js'
+import { projectMarketEvidence, type MarketEvidenceProjection } from './market-contracts.js'
 import { isSafeRadarRef } from './contracts.js'
 
 /** Inject the host's existing connection; this adapter never resolves a binary or spawns a process. */
@@ -13,6 +14,7 @@ type MarketReadFailure = Extract<MarketReadResult, { ok: false }>
 export type MarketCatchupReadResult = { ok: true; page: MarketCatchupProjection; reader: MarketReaderProjection } | MarketReadFailure
 export type MarketSignalReadResult = { ok: true; signal: MarketSignalProjection; reader: MarketReaderProjection } | MarketReadFailure
 export type MarketCompareReadResult = { ok: true; compare: MarketCompareProjection; reader: MarketReaderProjection } | MarketReadFailure
+export type MarketEvidenceReadResult = { ok: true; evidence: MarketEvidenceProjection; reader: MarketReaderProjection } | MarketReadFailure
 
 function resourceData(input: unknown, uri: string): unknown {
   if (!input || typeof input !== 'object') throw new Error('contract_mismatch')
@@ -110,6 +112,30 @@ export async function readConnectedMarketSignal(transport: ConnectedMarketTransp
   const result = await readMarketProjection(transport, `signals/${selection.signalRef}/revisions/${selection.revision}`, 'market_signal',
     (input, policy) => projectSelectedMarketSignal(input, selection, policy), timeoutMs, signal)
   return result.ok ? { ok: true, signal: result.value, reader: result.reader } : result
+}
+/**
+ * Read one evidence item attached to the user's exact signal selection.
+ *
+ * The resource path is revision-bound (`signals/{ref}/revisions/{n}/evidence/
+ * {evidence}`): a missing revision or unattached evidence surfaces the owner's
+ * named evidence_not_found code, never a silent fallback to the latest
+ * revision or a substituted evidence item. Policy consistency is enforced by
+ * the shared reader pre/post read, so the returned evidence, its policy
+ * revision (via `reader`) and the selection stay bound together.
+ */
+export async function readConnectedMarketEvidence(transport: ConnectedMarketTransport, selection: { signalRef: string; revision: number }, evidenceRef: string,
+  timeoutMs = 5000, signal?: AbortSignal): Promise<MarketEvidenceReadResult> {
+  if (!isSafeRadarRef(selection.signalRef) || !Number.isSafeInteger(selection.revision) || selection.revision < 1) throw new Error('market_selection_invalid')
+  if (!isSafeRadarRef(evidenceRef)) throw new Error('market_selection_invalid')
+  const result = await readMarketProjection(transport, `signals/${selection.signalRef}/revisions/${selection.revision}/evidence/${evidenceRef}`,
+    'market_evidence', (input, policy) => {
+      const evidence = projectMarketEvidence(input, policy)
+      // Selection guard: a substituted evidence payload is a mismatch, not
+      // content to display under the requested reference.
+      if (evidence.evidenceRef !== evidenceRef) throw new Error('market_selection_mismatch')
+      return evidence
+    }, timeoutMs, signal)
+  return result.ok ? { ok: true, evidence: result.value, reader: result.reader } : result
 }
 export async function readConnectedMarketCompare(transport: ConnectedMarketTransport, left: { signalRef: string; revision: number }, right: { signalRef: string; revision: number },
   timeoutMs = 5000, signal?: AbortSignal): Promise<MarketCompareReadResult> {

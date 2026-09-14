@@ -1,9 +1,10 @@
-import { readConnectedMarketBrief, readConnectedMarketCatchup, type ConnectedMarketTransport, type MarketCatchupReadResult } from './market-adapter.js'
+import { readConnectedMarketBrief, readConnectedMarketCatchup, readConnectedMarketEvidence, type ConnectedMarketTransport, type MarketCatchupReadResult, type MarketEvidenceReadResult } from './market-adapter.js'
 import type { MarketLoader } from './market-controller.js'
 import { isSafeRadarRef } from './contracts.js'
 import { readConnectedMarketSignal, readConnectedMarketCompare, type MarketSignalReadResult, type MarketCompareReadResult } from './market-adapter.js'
 import { createMarketActionStore, type MarketActionReceiptV1, type MarketMutationIntentV1, type MarketMutationTransport } from './market-actions.js'
 import { probeMarketCapability, MARKET_OPTIONAL_VIEWS, MARKET_REQUIRED_VIEWS, type MarketCapabilityProbeResultV1, type MarketViewName } from './market-probe.js'
+import type { MarketEvidenceProjection } from './market-contracts.js'
 
 const emptyMarketViews = (): Record<MarketViewName, boolean> => {
   const views = { market_capabilities: false } as Record<MarketViewName, boolean>
@@ -17,6 +18,14 @@ export interface RadarMarketHostFace {
   load: MarketLoader
   loadCatchup?(contextRef: string, cursor: string | null, signal: AbortSignal): Promise<MarketCatchupReadResult>
   loadSignal?(contextRef: string, selection: { signalRef: string; revision: number }, signal: AbortSignal): Promise<MarketSignalReadResult>
+  /** Evidence timeline read bound to the exact selected signal revision. */
+  loadEvidence?(contextRef: string, selection: { signalRef: string; revision: number }, evidenceRef: string, signal: AbortSignal): Promise<MarketEvidenceReadResult>
+  /**
+   * Safe source-open seam for evidence origin links. Absent while no host
+   * navigation seam exists: the client then shows `source_open_unavailable`
+   * and never renders a raw URL.
+   */
+  openEvidenceSource?(contextRef: string, evidence: MarketEvidenceProjection, signal: AbortSignal): Promise<{ ok: boolean; reason?: string }>
   loadCompare?(contextRef: string, left: { signalRef: string; revision: number }, right: { signalRef: string; revision: number }, signal: AbortSignal): Promise<MarketCompareReadResult>
   /** Explicit typed mutation through the current connection; absent seam stays disabled. */
   mutate?(contextRef: string, intent: MarketMutationIntentV1, signal: AbortSignal): Promise<MarketMutationDispatchResult>
@@ -132,6 +141,20 @@ export function createConnectedRadarMarketHost(source: MarketContextSource, loca
       const result = await readConnectedMarketSignal(before.connection, selection, 5000, signal)
       if (!sameContext(before, signal)) return {
         ok: false, reason: 'cancelled', recovery: 'The Radar context changed; discard the earlier detail.',
+      }
+      noteRevision(result)
+      return result
+    },
+    async loadEvidence(contextRef, selection, evidenceRef, signal) {
+      // Same guards as loadSignal: stale contexts never dispatch, and a
+      // connection replacement discards the returned evidence entirely.
+      const before = current()
+      if (!before || before.ref !== contextRef || signal.aborted) return {
+        ok: false, reason: 'cancelled', recovery: 'Select the active Radar context before reading evidence.',
+      }
+      const result = await readConnectedMarketEvidence(before.connection, selection, evidenceRef, 5000, signal)
+      if (!sameContext(before, signal)) return {
+        ok: false, reason: 'cancelled', recovery: 'The Radar context changed; discard the earlier evidence.',
       }
       noteRevision(result)
       return result

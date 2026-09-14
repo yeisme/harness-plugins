@@ -7,6 +7,12 @@
  * cwd, env overrides, or an unregistered method fail closed. Process
  * execution is delegated to an injected runner so tests and the browser
  * projection never touch the shell.
+ *
+ * The market read path below extends the same fixed-argv seam: the HOST may
+ * spawn the Radar CLI as a stdio MCP server (RADAR_FIXED_ARGV, no lane for
+ * reader-default reads) when no connected MCP seam exists. The browser/client
+ * never receives the executable, argv, cwd, env or credentials — only the
+ * resulting ConnectedMarketTransport projection seam.
  */
 
 import {
@@ -16,6 +22,7 @@ import {
   type RadarLane,
 } from './contracts.js'
 import { RADAR_INTENT_OPERATIONS, type RadarOperationV1 } from './intersection.js'
+import type { ConnectedMarketTransport } from './market-adapter.js'
 
 export const RADAR_FIXED_ARGV = ['mcp', '--transport', 'stdio'] as const
 
@@ -153,5 +160,178 @@ export async function dispatchRadarIntent(
       idempotencyKey: intent.idempotencyKey,
       ...result.receipt,
     },
+  }
+}
+
+/**
+ * Minimal stdio MCP process seam for the fixed-argv market fallback.
+ *
+ * Host-side only. The factory is injected so the browser bundle, tests and
+ * the client projection never depend on child_process: a browser context
+ * simply never constructs this path.
+ */
+export interface MarketStdioProcess {
+  /** Write one newline-terminated JSON-RPC frame to the server's stdin. */
+  write(frame: string): void
+  /** Observe newline-delimited stdout frames; returns a cleanup function. */
+  onLine(listener: (line: string) => void): () => void
+  /** Observe process exit or spawn failure; returns a cleanup function. */
+  onExit(listener: (failure: unknown) => void): () => void
+  /** Terminate the process; idempotent. */
+  kill(): void
+}
+export type MarketProcessFactory = (descriptor: { binary: string; argv: readonly string[] }) => MarketStdioProcess
+
+/** Default host factory: node child_process spawn with pipes (no shell). */
+export const nodeMarketSpawn: MarketProcessFactory = ({ binary, argv }) => {
+  // Resolved lazily through process.getBuiltinModule so bundlers never pull a
+  // static node: import into browser builds; only a real host reaches here.
+  const childProcess = process.getBuiltinModule('node:child_process') as typeof import('node:child_process')
+  const child = childProcess.spawn(binary, [...argv], { stdio: ['pipe', 'pipe', 'pipe'] })
+  const lineListeners = new Set<(line: string) => void>()
+  const exitListeners = new Set<(failure: unknown) => void>()
+  let buffer = ''
+  child.stdout.setEncoding('utf8')
+  child.stdout.on('data', (chunk: string) => {
+    buffer += chunk
+    let index: number
+    while ((index = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, index).trim()
+      buffer = buffer.slice(index + 1)
+      if (line) for (const listener of [...lineListeners]) listener(line)
+    }
+  })
+  const notifyExit = (failure: unknown) => { for (const listener of [...exitListeners]) listener(failure) }
+  child.on('error', notifyExit)
+  child.on('close', () => notifyExit(new Error('market_owner_process_closed')))
+  return {
+    write: frame => { child.stdin.write(frame + '\n') },
+    onLine(listener) { lineListeners.add(listener); return () => { lineListeners.delete(listener) } },
+    onExit(listener) { exitListeners.add(listener); return () => { exitListeners.delete(listener) } },
+    kill: () => { child.kill() },
+  }
+}
+
+export interface FixedArgvMarketConnection extends ConnectedMarketTransport {
+  /** Kill the owned child process; reads after this re-establish on demand. */
+  dispose(): void
+}
+
+/**
+ * Market read transport over the legacy fixed Radar CLI argv
+ * (`radar mcp --transport stdio`), speaking minimal MCP stdio JSON-RPC.
+ *
+ * One child process serves the whole connection and is (re)established
+ * lazily: after a mid-read drop the pending read fails with the constant
+ * `market_owner_disconnected` (mapped to the shared offline taxonomy by the
+ * adapter; no raw process error ever crosses the seam) and the next read
+ * spawns a fresh process. Requests are multiplexed by JSON-RPC id; an outer
+ * AbortSignal kills the process instead of leaving half-read state behind.
+ */
+export function createFixedArgvMarketTransport(config: RadarAdapterConfigV1, options: { spawnProcess: MarketProcessFactory }): FixedArgvMarketConnection {
+  if (!isSafeRadarBinary(config.binary)) throw new Error('unsafe_binary')
+  let child: MarketStdioProcess | undefined
+  let ready: Promise<void> | undefined
+  let nextId = 1
+  let disposed = false
+  const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: unknown) => void }>()
+  const teardown = () => {
+    child?.kill()
+    child = undefined
+    ready = undefined
+    // Constant error text only: spawn failures and exit codes stay host-side.
+    for (const entry of [...pending.values()]) entry.reject(new Error('market_owner_disconnected'))
+    pending.clear()
+  }
+  const establish = () => {
+    if (child !== undefined) return ready
+    const process_ = options.spawnProcess({ binary: config.binary, argv: [...RADAR_FIXED_ARGV] })
+    child = process_
+    process_.onLine(line => {
+      let frame: { id?: unknown; result?: unknown; error?: { code?: unknown; data?: { code?: unknown } } }
+      try { frame = JSON.parse(line) } catch { return }
+      if (typeof frame.id !== 'number') return // notifications are ignored
+      const entry = pending.get(frame.id)
+      if (entry === undefined) return
+      pending.delete(frame.id)
+      if (frame.error) {
+        // Preserve the owner's stable resource error code (brief_not_found,
+        // evidence_not_found, ...) for the adapter's named-code mapping.
+        entry.reject({ data: { code: frame.error.data?.code ?? frame.error.code ?? 'market_read_failed' } })
+      } else entry.resolve(frame.result)
+    })
+    process_.onExit(() => { if (child === process_) teardown() })
+    const initializeId = nextId++
+    ready = new Promise<void>((resolve, reject) => {
+      pending.set(initializeId, { resolve: () => resolve(), reject: error => reject(error) })
+      process_.write(JSON.stringify({ jsonrpc: '2.0', id: initializeId, method: 'initialize',
+        params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'dsh-personal-radar', version: '1' } } }))
+      process_.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }))
+    })
+    return ready
+  }
+  return {
+    async readResource(input, options) {
+      if (disposed) throw new Error('market_owner_disconnected')
+      // An outer abort (timeout or cancelled read) drops the whole connection
+      // instead of leaving a half-read child behind; the next read rebuilds it.
+      const onAbort = () => teardown()
+      options?.signal?.addEventListener('abort', onAbort, { once: true })
+      try {
+        await establish()
+        if (disposed || child === undefined) throw new Error('market_owner_disconnected')
+        const id = nextId++
+        // The MCP stdio resource seam mirrors the connected-transport read
+        // contract: `resources/read` with the exact radar://market URI.
+        return await new Promise<unknown>((resolve, reject) => {
+          pending.set(id, { resolve, reject })
+          child!.write(JSON.stringify({ jsonrpc: '2.0', id, method: 'resources/read', params: { uri: input.uri } }))
+        })
+      } catch (error) {
+        // JSON-RPC rejections carry only stable owner codes; everything else
+        // collapses to the constant disconnected marker (never raw text).
+        if (error && typeof error === 'object' && 'data' in error) throw error
+        throw new Error('market_owner_disconnected')
+      } finally {
+        options?.signal?.removeEventListener('abort', onAbort)
+      }
+    },
+    dispose() { disposed = true; teardown() },
+  }
+}
+
+export interface DualPathMarketTransportOptions {
+  /** Preferred seam: the host's already-connected scoped MCP market connection. */
+  connected?: () => ConnectedMarketTransport | null | undefined
+  /** Fallback seam: fixed-argv Radar CLI stdio server; host side only. */
+  fixedArgv?: { binary: string; spawnProcess?: MarketProcessFactory }
+}
+export interface DualPathMarketConnection extends ConnectedMarketTransport {
+  dispose(): void
+}
+
+/**
+ * Compose the two host read paths into one transport contract.
+ *
+ * The connected MCP seam wins whenever it is present at read time (dynamic
+ * per call so connection replacements are honored immediately and no process
+ * is ever spawned); the fixed-argv fallback engages only when that seam is
+ * absent AND a safe binary is configured. Both paths yield the same
+ * ConnectedMarketTransport consumed by createConnectedRadarMarketHost, so
+ * aborts, timeouts and the offline/blocked error taxonomy stay uniform.
+ */
+export function createDualPathMarketTransport(options: DualPathMarketTransportOptions): DualPathMarketConnection {
+  const fallback = options.fixedArgv !== undefined
+    ? createFixedArgvMarketTransport({ binary: options.fixedArgv.binary },
+      { spawnProcess: options.fixedArgv.spawnProcess ?? nodeMarketSpawn })
+    : undefined
+  return {
+    async readResource(input, readOptions) {
+      const seam = options.connected?.() ?? null
+      if (seam !== null) return seam.readResource(input, readOptions)
+      if (fallback !== undefined) return fallback.readResource(input, readOptions)
+      throw new Error('market_transport_unavailable')
+    },
+    dispose: () => fallback?.dispose(),
   }
 }

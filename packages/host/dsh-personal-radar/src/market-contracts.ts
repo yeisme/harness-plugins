@@ -9,10 +9,13 @@ export interface MarketSignalProjection {
   title: string
   market: string
   observedAt: string
-  claimKind: string
+  // Owner claim taxonomy (Radar design §4): every kind the owner may emit is
+  // whitelisted here so a legitimate signal never fails projection, while an
+  // unknown future kind still fails closed instead of being reinterpreted.
+  claimKind: 'newly_observed' | 'listing_changed' | 'rank_changed' | 'metric_changed' | 'placement_changed' | 'topic_mix_changed' | 'cross_market_observed' | 'correction'
   sourceRef: string
   origin: 'fixture' | 'manual' | 'live'
-  assertionLevel: 'observed' | 'confirmed'
+  assertionLevel: 'observed' | 'corroborated' | 'confirmed'
   comparison: MarketComparisonProjection | null
   lifecycle: 'active' | 'retracted' | 'inconclusive' | 'cooled'
   evidenceRefs: string[]
@@ -35,7 +38,7 @@ export interface MarketBriefProjection {
   generatedAt: string
   timezone: string
   window: { start: string; end: string }
-  status: 'empty' | 'degraded'
+  status: 'ready' | 'empty' | 'degraded'
   main: MarketSignalProjection[]
   watching: MarketSignalProjection[]
   remaining: number
@@ -75,6 +78,8 @@ export interface MarketEvidenceProjection {
   observedAt: string
   summary: string
   origin: 'fixture' | 'manual' | 'live'
+  /** Read-time policy that filtered this evidence copy (owner re-filters on every read). */
+  policyRevision: string
   limitations: string[]
 }
 
@@ -174,19 +179,21 @@ export function projectMarketCatchup(input: unknown): MarketCatchupProjection {
 }
 export function projectMarketSignal(input: unknown, policyRevision: string): MarketSignalProjection {
   const row = object(input)
-  const claims = ['newly_observed', 'metric_changed', 'rank_changed', 'placement_changed', 'correction']
+  const claims: MarketSignalProjection['claimKind'][] = ['newly_observed', 'listing_changed', 'rank_changed', 'metric_changed', 'placement_changed', 'topic_mix_changed', 'cross_market_observed', 'correction']
   const states = ['active', 'retracted', 'inconclusive', 'cooled']
-  if (row.spec !== 'radar.market_signal.v1' || !claims.includes(String(row.claim_kind)) || !states.includes(String(row.lifecycle)) ||
-    !['fixture', 'manual', 'live'].includes(String(row.origin)) || !['observed', 'confirmed'].includes(String(row.assertion_level)) ||
+  if (row.spec !== 'radar.market_signal.v1' || !claims.includes(String(row.claim_kind) as MarketSignalProjection['claimKind']) || !states.includes(String(row.lifecycle)) ||
+    !['fixture', 'manual', 'live'].includes(String(row.origin)) || !['observed', 'corroborated', 'confirmed'].includes(String(row.assertion_level)) ||
     typeof row.market !== 'string' || !/^(?:[A-Z]{2}|global|unknown)$/.test(row.market)) throw new Error('market_contract_mismatch')
   return { schema: MARKET_PROJECTION_SCHEMA, signalRef: ref(row.signal_ref), revision: revision(row.revision), policyRevision: ref(policyRevision),
-    title: text(row.title), market: row.market, observedAt: instant(row.observed_at), claimKind: String(row.claim_kind),
+    title: text(row.title), market: row.market, observedAt: instant(row.observed_at), claimKind: String(row.claim_kind) as MarketSignalProjection['claimKind'],
     sourceRef: ref(row.source_ref), origin: row.origin as MarketSignalProjection['origin'], assertionLevel: row.assertion_level as MarketSignalProjection['assertionLevel'],
     comparison: comparison(row.comparison), lifecycle: row.lifecycle as MarketSignalProjection['lifecycle'], evidenceRefs: list(row.evidence_refs, 100, ref), limitations: list(row.limitations, 20, text) }
 }
 export function projectMarketBrief(input: unknown): MarketBriefProjection {
   const row = object(input)
-  if (row.spec !== 'radar.market_brief.v1' || !['empty', 'degraded'].includes(String(row.status)) ||
+  // Brief status (Radar design §5): ready is the normal completed edition;
+  // empty and degraded stay distinct states, absent is a read error instead.
+  if (row.spec !== 'radar.market_brief.v1' || !['ready', 'empty', 'degraded'].includes(String(row.status)) ||
     typeof row.filtered !== 'boolean' || typeof row.timezone !== 'string' || row.timezone.length > 80) throw new Error('market_contract_mismatch')
   try { new Intl.DateTimeFormat('en', { timeZone: row.timezone }) } catch { throw new Error('market_contract_mismatch') }
   const policyRevision = ref(row.policy_revision)
@@ -204,11 +211,12 @@ export function projectMarketBrief(input: unknown): MarketBriefProjection {
       return { sourceRef: ref(source.source_ref), health: String(source.health), qualified: source.qualified, reasons: list(source.reasons, 20, ref) }
     }) }
 }
-export function projectMarketEvidence(input: unknown): MarketEvidenceProjection {
+export function projectMarketEvidence(input: unknown, policyRevision: string): MarketEvidenceProjection {
   const row = object(input)
   if (!['fixture', 'manual', 'live'].includes(String(row.origin))) throw new Error('market_contract_mismatch')
   return { evidenceRef: ref(row.evidence_ref), sourceRef: ref(row.source_ref), observedAt: instant(row.observed_at),
-    summary: text(row.summary), origin: row.origin as MarketEvidenceProjection['origin'], limitations: list(row.limitations, 20, text) }
+    summary: text(row.summary), origin: row.origin as MarketEvidenceProjection['origin'], policyRevision: ref(policyRevision),
+    limitations: list(row.limitations, 20, text) }
 }
 
 /** Validate the response against the user's exact selection before exposing it. */
@@ -219,10 +227,10 @@ export function projectSelectedMarketSignal(input: unknown, selection: { signalR
   return projected
 }
 
-export function projectSelectedMarketEvidence(input: unknown, signal: MarketSignalProjection, evidenceRef: string): MarketEvidenceProjection {
+export function projectSelectedMarketEvidence(input: unknown, signal: MarketSignalProjection, evidenceRef: string, policyRevision: string): MarketEvidenceProjection {
   const selected = ref(evidenceRef)
   if (!signal.evidenceRefs.includes(selected)) throw new Error('market_evidence_not_attached')
-  const evidence = projectMarketEvidence(input)
+  const evidence = projectMarketEvidence(input, policyRevision)
   if (evidence.evidenceRef !== selected) throw new Error('market_selection_mismatch')
   // Cross-source correction evidence is valid when the owner explicitly links
   // it. Do not infer identity or reject it just because the publisher differs.

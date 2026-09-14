@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Surface, SurfaceContextBar, SurfaceSection, SurfaceState } from '@yeisme/dsh-client-ui-surface'
-import type { MarketReadingState, createMarketReadingController, createMarketCatchupController, createMarketDetailController, createMarketCompareController } from '@yeisme/dsh-personal-radar'
-import { MarketDetailView } from './market-detail-view.js'
+import type { MarketReadingState, createMarketReadingController, createMarketCatchupController, createMarketDetailController, createMarketCompareController, createMarketEvidenceTimelineController } from '@yeisme/dsh-personal-radar'
+import { MarketDetailView, type MarketEvidenceSourceOpener } from './market-detail-view.js'
 import { MarketCompareView } from './market-compare-view.js'
 import { MarketCatchupView } from './market-catchup-view.js'
 import { marketLabel, marketTime } from './market-labels.js'
@@ -45,7 +45,7 @@ export type MarketLocale = 'en' | 'zh' | 'pseudo'
 type Controller = ReturnType<typeof createMarketReadingController>
 const styles = '[data-radar-market] .ys-context-value{white-space:normal;overflow-wrap:anywhere}[data-radar-market] .ys-row{grid-template-columns:minmax(0,1fr);overflow-wrap:anywhere}[data-radar-market] .ys-row h3,[data-radar-market] .ys-row p{margin:0;font-size:var(--vk-font-body)}[data-radar-market] summary{min-height:var(--vk-ctrl-touch);cursor:pointer}[data-radar-market] details{padding-block:var(--vk-gap-sm)}'
 
-export function MarketReadingView({ controller, catchup, detail, compare, actions, question, capability, locale = 'zh' }: { controller: Controller; detail?: ReturnType<typeof createMarketDetailController>; catchup?: ReturnType<typeof createMarketCatchupController>; compare?: ReturnType<typeof createMarketCompareController>; actions?: MarketActionsController; question?: MarketQuestionController; capability?: { status: 'reader_only' | 'mismatch'; reason: string }; locale?: MarketLocale }) {
+export function MarketReadingView({ controller, catchup, detail, compare, actions, question, capability, evidence, openSource, locale = 'zh' }: { controller: Controller; detail?: ReturnType<typeof createMarketDetailController>; catchup?: ReturnType<typeof createMarketCatchupController>; compare?: ReturnType<typeof createMarketCompareController>; actions?: MarketActionsController; question?: MarketQuestionController; capability?: { status: 'reader_only' | 'mismatch'; reason: string }; evidence?: ReturnType<typeof createMarketEvidenceTimelineController>; openSource?: MarketEvidenceSourceOpener; locale?: MarketLocale }) {
   const [detailOpen, setDetailOpen] = useState(false)
   const [compareOpen, setCompareOpen] = useState(false)
   const [compareSelections, setCompareSelections] = useState<Array<{ signalRef: string; revision: number }>>([])
@@ -98,7 +98,7 @@ export function MarketReadingView({ controller, catchup, detail, compare, action
       status={brief?.status === 'degraded' ? label('partial') : undefined} />
     {compareOpen && compare ? <div className="ys-body"><MarketCompareView controller={compare} locale={locale} onClose={() => { compare.close(); setCompareOpen(false) }} /></div> : detailOpen && detail ? <div className="ys-body"><MarketDetailView controller={detail} locale={locale} onClose={() => {
       detail.close(); setDetailOpen(false); requestAnimationFrame(() => { if (returnFocus.current?.isConnected) returnFocus.current.focus() })
-    }} {...(question ? { question } : {})} /></div> : null}<div hidden={detailOpen || compareOpen}>
+    }} {...(question ? { question } : {})} {...(evidence ? { evidence } : {})} {...(openSource ? { openSource } : {})} /></div> : null}<div hidden={detailOpen || compareOpen}>
     {actions && !actionState.available ? <p role="status">{label('actionsUnavailable')}</p> : null}
     {mode === 'catchup' && catchup ? <div className="ys-body"><MarketCatchupView controller={catchup} locale={locale} {...(actions ? { actions } : {})} /></div> : <>
     {state.loading ? <SurfaceState phase="loading" title={label('loading')} /> : null}

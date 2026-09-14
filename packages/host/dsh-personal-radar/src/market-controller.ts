@@ -1,4 +1,4 @@
-import type { MarketReadResult, MarketCatchupReadResult, MarketSignalReadResult, MarketCompareReadResult } from './market-adapter.js'
+import type { MarketReadResult, MarketCatchupReadResult, MarketSignalReadResult, MarketCompareReadResult, MarketEvidenceReadResult } from './market-adapter.js'
 import { isSafeRadarRef } from './contracts.js'
 
 export interface MarketReadingState<Result = MarketReadResult> {
@@ -142,5 +142,104 @@ export function createMarketCompareController(load: MarketCompareLoader) {
     },
     close() { selections = null; base.invalidatePolicy() },
     dispose() { disposed = true; selections = null; base.dispose() },
+  }
+}
+
+export type MarketEvidenceLoader = (contextRef: string, selection: MarketSignalSelection, evidenceRef: string, signal: AbortSignal) => Promise<MarketEvidenceReadResult>
+export interface MarketEvidenceTimelineEntry {
+  readonly state: 'loading' | 'loaded' | 'failed'
+  readonly result: MarketEvidenceReadResult | null
+}
+export interface MarketEvidenceTimelineState {
+  readonly contextRef: string | null
+  readonly selection: MarketSignalSelection | null
+  readonly entries: Readonly<Record<string, MarketEvidenceTimelineEntry>>
+}
+
+/**
+ * Per-evidence timeline state for the currently selected signal revision.
+ *
+ * A second click while an entry is pending or loaded is a no-op (no duplicate
+ * owner read), and switching selection, context or policy clears every entry
+ * so late responses never attach stale evidence to a new selection. Entries
+ * are display-only; nothing is persisted or auto-retried.
+ */
+export function createMarketEvidenceTimelineController(load: MarketEvidenceLoader) {
+  let state: MarketEvidenceTimelineState = { contextRef: null, selection: null, entries: {} }
+  let generation = 0
+  let disposed = false
+  let active: AbortController | undefined
+  const listeners = new Set<(state: MarketEvidenceTimelineState) => void>()
+  const emit = () => {
+    const version = generation
+    for (const listener of [...listeners]) {
+      if (disposed || generation !== version) break
+      if (!listeners.has(listener)) continue
+      // A broken view subscription must not abort state transitions; detach
+      // it and keep healthy views updated (same policy as the list states).
+      try { listener(structuredClone(state)) } catch { listeners.delete(listener) }
+    }
+  }
+  const invalidate = () => { generation++; active?.abort(); active = undefined }
+  const clear = () => { state = { contextRef: state.contextRef, selection: null, entries: {} } }
+  return {
+    snapshot: (): MarketEvidenceTimelineState => structuredClone(state),
+    subscribe(listener: (state: MarketEvidenceTimelineState) => void) {
+      if (disposed) throw new Error('market_controller_disposed')
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+    setContext(contextRef: string | null) {
+      if (disposed) return
+      if (contextRef !== null && !isSafeRadarRef(contextRef)) throw new Error('market_unsafe_ref')
+      invalidate()
+      state = { contextRef, selection: null, entries: {} }
+      emit()
+    },
+    invalidatePolicy() {
+      if (disposed) return
+      invalidate()
+      clear()
+      emit()
+    },
+    /** Bind the timeline to one selection; switching it clears all entries. */
+    setSelection(selection: MarketSignalSelection | null) {
+      if (disposed) return
+      if (selection === null) { clear(); emit(); return }
+      if (!isSafeRadarRef(selection.signalRef) || !Number.isSafeInteger(selection.revision) || selection.revision < 1) throw new Error('market_selection_invalid')
+      if (state.selection?.signalRef === selection.signalRef && state.selection.revision === selection.revision) return
+      invalidate()
+      state = { ...state, selection: { ...selection }, entries: {} }
+      emit()
+    },
+    async load(evidenceRef: string) {
+      if (disposed || state.contextRef === null || state.selection === null) return
+      if (!isSafeRadarRef(evidenceRef)) throw new Error('market_selection_invalid')
+      const existing = state.entries[evidenceRef]
+      if (existing !== undefined && existing.state !== 'failed') return
+      const request = generation, contextRef = state.contextRef, selection = { ...state.selection }
+      const controller = new AbortController()
+      active = controller
+      state = { ...state, entries: { ...state.entries, [evidenceRef]: { state: 'loading', result: null } } }
+      emit()
+      let result: MarketEvidenceReadResult
+      try { result = await load(contextRef, selection, evidenceRef, controller.signal) }
+      catch { result = { ok: false, reason: 'offline', recovery: 'Inspect the active Radar connection.' } }
+      // Guards: transports that ignore AbortSignal or resolve after a switch
+      // must not attach evidence to a newer selection or context.
+      if (disposed || request !== generation || state.selection === null ||
+        state.selection.signalRef !== selection.signalRef || state.selection.revision !== selection.revision ||
+        state.contextRef !== contextRef) return
+      active = undefined
+      state = { ...state, entries: { ...state.entries, [evidenceRef]: { state: result.ok ? 'loaded' : 'failed', result: structuredClone(result) } } }
+      emit()
+    },
+    dispose() {
+      if (disposed) return
+      invalidate()
+      disposed = true
+      state = { contextRef: null, selection: null, entries: {} }
+      listeners.clear()
+    },
   }
 }
