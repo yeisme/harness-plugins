@@ -34,11 +34,12 @@ const SCENARIOS = [
   { id: 'P2', name: 'historical-previz-rollback-restores-retained-payload', fixture: 'real controller/gateway/store/change-set log over in-memory storageDomain, synthetic scene + shots' },
   { id: 'H1', name: 'real-staging-storage-remount-restore', fixture: 'real DSH staging storage/storage-json/storage-domain modules on a temp directory, synthetic scene + shots' },
   { id: 'H2', name: 'real-child-process-close-reopen', fixture: 'built host lib + real staging JSON storage; two cold node processes on the same directory, synthetic payloads' },
-  { id: 'W', name: 'pipeline-pane-selection-handoff-and-adoption-backfill', fixture: 'fixture pipeline projection owner; real workbench controller contracts' },
+  { id: 'W', name: 'pipeline-pane-selection-handoff-and-adoption-backfill', fixture: 'fixture pipeline projection owner; real workbench controller contracts; pane-link bus emission (3d-director picks) and scaena-table emitter seams' },
 ]
 const commands = [
   ['pnpm', ['--filter', '@yeisme/dsh-3d-director-host', 'exec', 'vitest', 'run', 'tests/shot-scenarios.integration.spec.ts', 'tests/screenplay-continuity-host.integration.spec.ts']],
-  ['pnpm', ['--filter', '@yeisme/dsh-client-ui-ai-drama-director', 'exec', 'vitest', 'run', 'tests/pipeline-pane-selection.spec.ts', 'tests/pipeline-scene3d.spec.tsx', 'tests/pipeline-scene3d-pane.spec.tsx', 'tests/pipeline-integration.spec.tsx']],
+  ['pnpm', ['--filter', '@yeisme/dsh-client-ui-ai-drama-director', 'exec', 'vitest', 'run', 'tests/pipeline-pane-selection.spec.ts', 'tests/pipeline-pane-link-bus.spec.ts', 'tests/pipeline-scene3d.spec.tsx', 'tests/pipeline-scene3d-pane.spec.tsx', 'tests/pipeline-integration.spec.tsx']],
+  ['pnpm', ['--filter', '@yeisme/dsh-client-ui-creator-studio', 'exec', 'vitest', 'run', 'tests/scaena-pane-link.spec.tsx']],
 ]
 const publicCommand = 'node scripts/run-screenplay-continuity-evidence.mjs'
 
@@ -138,7 +139,7 @@ writeFileSync(resolve(evidenceDir, 'summary.json'), `${JSON.stringify({
   notes: [
     'H1/H2 chain the real DSH staging storage modules (the same JSON backend the preview runs) with the real SceneGraphGateway and the real client Scene3DController; the child-process leg rebuilds and imports the BUILT host artifact so process death is real.',
     'The browser leg (rollback rendering) references the linked ui-visual run: real built client bundle + a fixture remote that ports the negotiated workbench contract; no GLB bytes, no provider execution, no credentials or absolute paths recorded.',
-    'The 做剧工作台 3D embed inside the real DSH web host remains composition-blocked: the creativePipeline gateway does not project a scene3d section and neither expected-context service is provided by the staging bundles (both live outside this change-touched paths). The negotiated persistence itself is proven here end to end.',
+    'The 做剧工作台 composition blockers were fixed and verified in the real DSH web host on 2026-09-14 (run screenplay-continuity-20260914-103847-2446594): pane launcher registration remount, scene3d envelope section through the single scene-domain owner, both expected contexts derived by the drama bundle from LocalStudioCLI, and the client-side Remote namespace mounts. That browser leg lives in its own evidence run; this runner keeps the controller/store contracts green.',
   ],
 }, null, 2)}\n`)
 
