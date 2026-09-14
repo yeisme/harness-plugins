@@ -1,8 +1,59 @@
 {
-  "name": "@yeisme/dsh-template-registry-bundle", "version": "0.1.0", "type": "module", "main": "lib/index.js",
-  "scripts": { "build": "tsc -p tsconfig.json && tsdown", "typecheck": "tsc -p tsconfig.json --noEmit", "test": "pnpm run build" },
-  "exports": { ".": "./lib/index.js", "./client": "./lib/client.js", "./cordis.patch.yml": "./cordis.patch.yml" },
-  "dsh": { "bundle": { "patch": "./cordis.patch.yml" }, "client": { "inject": ["@deepseek-ai/dsh-client-locale", "@deepseek-ai/dsh-client-runtime"], "platform": "web", "immediately": true } },
-  "dependencies": { "@yeisme/dsh-template-registry": "workspace:*", "@yeisme/dsh-client-ui-template-registry": "workspace:*" },
-  "devDependencies": { "typescript": "^5.9.3", "tsdown": "^0.22.14" }
+  "name": "@yeisme/dsh-template-registry-bundle",
+  "version": "0.1.0",
+  "description": "DSH template-registry bundle: 模板目录 + 引导编译 panes over the host service seam (capability-probed installable patch layer)",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.mjs",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "lib/index.mjs",
+    "lib/index.d.mts",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "scripts": {
+    "check:metadata": "node scripts/check-metadata.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json && tsdown",
+    "smoke:bundle": "node scripts/smoke-bundle.mjs",
+    "test": "pnpm run check:metadata && pnpm run build && pnpm run smoke:bundle"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.mts",
+      "default": "./lib/index.mjs"
+    },
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "inject": ["@deepseek-ai/dsh-client-locale", "@deepseek-ai/dsh-client-runtime"],
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "dependencies": {
+    "@yeisme/dsh-template-registry": "workspace:*",
+    "@yeisme/dsh-client-ui-template-registry": "workspace:*"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": { "optional": true },
+    "@deepseek-ai/dsh-client-runtime": { "optional": true }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3"
+  }
 }

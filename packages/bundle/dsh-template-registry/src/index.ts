@@ -1,8 +1,26 @@
-export * from '@yeisme/dsh-template-registry'
+/**
+ * @yeisme/dsh-template-registry-bundle root entry (installable host face).
+ *
+ * The 2.x host layers (stdio MCP transport, typed catalog/session RPCs,
+ * storage domain, session projection, connection manager) are exported as a
+ * library from `@yeisme/dsh-template-registry`; wiring the
+ * `templateRegistryHost` Remote into a live DSH host profile is the host
+ * runtime's composition step. This root apply is a deliberate no-op so the
+ * bundle stays installable on host-only profiles without spawning anything.
+ *
+ * @module @yeisme/dsh-template-registry-bundle
+ */
 
-// 装载门：host 入口必须是 cordis 插件形态（apply/inject/name）。
-// Template registry 的真实 host face（服务/命令/transport）由后续切片交付；
-// 当前为 no-op 占位，schema/类型照常导出供消费方与测试使用。
+import type { Context } from '@deepseek-ai/cordis'
+
 export const name = 'dsh-template-registry'
 export const inject: readonly string[] = []
-export function apply(_ctx: unknown): void {}
+
+/** No-op Host lifecycle: this change adds no DSH core fork and does not replicate private Host implementation. */
+export function apply(_ctx: Context): void {
+  // host side intentionally empty
+}
+
+const DshTemplateRegistryPlugin = { name, inject, apply }
+
+export default DshTemplateRegistryPlugin

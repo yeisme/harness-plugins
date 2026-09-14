@@ -32,7 +32,7 @@ const clientCatalog = {
   'ui-session-tags': 'adopted',
   'ui-session-status': 'excluded', // pure view-model/state logic; Web rendering is owned by ui-command-experience-web (SESSION_STATUS_VIEW_ID)
   'ui-structured-content': 'embed',
-  'ui-template-registry': 'embed', // embedded vk-token studio view; scaffold slice, not yet on the shared Surface
+  'ui-template-registry': 'adopted', // dsh-template-registry-integration-v1 3.1: catalog navigator + guided-compile workspace panes on the shared Surface
   'ui-surface': 'adopted',
   'ui-visual-kit': 'excluded',
   'ui-url-session': 'embed', // dsh-url-session-v1 §3: missing-session state + session-link menu consume official primitives and --vk-* tokens
