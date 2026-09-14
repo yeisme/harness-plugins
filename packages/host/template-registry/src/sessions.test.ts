@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   foldRegistrySessionView,
+  fromWireFieldKey,
+  toWireFieldKey,
   registryCompileSession,
   registryExportCompile,
   registrySessionConfirm,
@@ -54,6 +56,30 @@ describe('session view folding', () => {
   it('fails closed on views without identity or with unknown readiness', () => {
     expect(foldRegistrySessionView({ revision: 1, readiness: 'needs_input' }, CONTEXT)).toBeUndefined()
     expect(foldRegistrySessionView({ id: 's1', revision: 1, readiness: 'mystery' }, CONTEXT)).toBeUndefined()
+  })
+  it('learns the wire step ids from the view steps (4.1 field-key translation)', () => {
+    const session = foldRegistrySessionView({
+      id: 'sea5e980fca7b1d371263c1cd2e373ef7', revision: 1, readiness: 'needs_input',
+      issues: [], fields: [], sources: [],
+      steps: [{ id: 'main', status: 'ready', path: '' }, { id: 'main', status: 'ready', path: '' }, { id: 'other', status: 'ready', path: '' }],
+      next_action: 'session.update',
+    }, CONTEXT)
+    expect(session!.stepIds).toEqual(['main', 'other'])
+    // Without view steps the context-supplied ids survive (host memory path).
+    const remembered = foldRegistrySessionView({
+      id: 's2', revision: 1, readiness: 'needs_input', issues: [], fields: [], sources: [], steps: [],
+    }, { ...CONTEXT, stepIds: ['main'] })
+    expect(remembered!.stepIds).toEqual(['main'])
+  })
+  it('translates contract-name keys to the <step>.<name> wire form and back', () => {
+    const steps = ['main']
+    expect(toWireFieldKey('asset_ref', steps)).toBe('main.asset_ref')
+    expect(toWireFieldKey('main.asset_ref', steps)).toBe('main.asset_ref')
+    expect(toWireFieldKey('asset_ref', undefined)).toBe('asset_ref')
+    expect(toWireFieldKey('asset_ref', [])).toBe('asset_ref')
+    expect(fromWireFieldKey('main.asset_ref', steps)).toBe('asset_ref')
+    expect(fromWireFieldKey('main.asset_ref', ['other'])).toBe('main.asset_ref')
+    expect(fromWireFieldKey('asset_ref', steps)).toBe('asset_ref')
   })
   it('extracts the required wire field names from INPUT issues', () => {
     const issues = sessionIssuesFromView({ issues: [{ code: 'GOAL_CONFIRMATION_REQUIRED' }, { code: 'INPUT_REQUIRED', field: 'main.asset_ref' }, { code: 'INPUT_CONFIRMATION_REQUIRED', field: 'main.intended_use' }, { code: 'INPUT_REQUIRED', field: 'main.asset_ref' }] })
@@ -168,6 +194,35 @@ describe('compile journey over the real spawned synthetic fixture (2.3)', () => 
       .toMatchObject({ ok: false, failure: { kind: 'guard', code: 'stale_digest' } })
     conn.dispose()
   }, 15000)
+
+  it('accepts pane-canonical (unprefixed) field keys by translating them onto the wire (4.1 real-binary finding)', async () => {
+    const conn = connection()
+    const created = await registrySessionCreate(conn, { goal: 'pane flow', ref: REF }, CONTEXT)
+    const session = expectOk(created)
+    expect(session.stepIds).toEqual(['main'])
+    // The pane submits contract input names; the host prefixes them with the
+    // learned step id. Without translation the fixture (like the real owner)
+    // answers FIELD_INVALID.
+    const direct = await registrySessionUpdate(conn, {
+      sessionId: session.id, expectedRevision: session.revision,
+      fields: { asset_ref: { value: 'asset-9' } },
+    }, { ...CONTEXT, fields: session.fields })
+    expect(direct).toMatchObject({ ok: false, failure: { kind: 'registry_error', code: 'FIELD_INVALID' } })
+    const updated = await registrySessionUpdate(conn, {
+      sessionId: session.id, expectedRevision: session.revision,
+      fields: { asset_ref: { value: 'asset-9' }, intended_use: { value: 'review pass' } },
+    }, { ...CONTEXT, fields: session.fields, stepIds: session.stepIds })
+    expect(updated.ok).toBe(true)
+    const updatedSession = expectOk(updated)
+    // The merged projection stays contract-name canonical (pane keys), not wire keys.
+    expect(updatedSession.fields).toMatchObject({ asset_ref: 'asset-9', intended_use: 'review pass' })
+    const confirmed = await registrySessionConfirm(conn, {
+      sessionId: session.id, expectedRevision: updatedSession.revision, decisionRef: 'owner-decision-2', goal: true,
+      fields: ['asset_ref', 'intended_use'],
+    }, { ...CONTEXT, fields: updatedSession.fields, stepIds: updatedSession.stepIds })
+    expect(confirmed.ok).toBe(true)
+    expect(expectOk(confirmed).confirmed).toBe(true)
+  })
 })
 
 describe('storage domain persistence (yeisme_template_registry_v1)', () => {
@@ -196,6 +251,7 @@ describe('storage domain persistence (yeisme_template_registry_v1)', () => {
         fields: { 'main.asset_ref': 'asset-1' }, confirmed: true, provider_calls: 0 as const,
         updatedAt: '2026-09-14T00:00:00.000Z', revision: 3, readiness: 'ready_to_compile' as const,
         confirmedKeys: ['main.asset_ref'], contractDigest: CONTEXT.contractDigest, decisionRef: 'owner-decision-1',
+        stepIds: ['main'],
       },
       ...overrides,
     }

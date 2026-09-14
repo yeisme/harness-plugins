@@ -64,9 +64,13 @@ export function createTemplateCompileState(): TemplateCompileState {
  * The decision-ref scheme for the pane's confirmation gate. Deterministic,
  * names the exact session and revision being confirmed, and is only ever
  * submitted by the explicit confirm action — the pane never self-approves.
+ *
+ * Separator note (4.1 real-binary acceptance): the owner validates
+ * decision_ref against `^[a-zA-Z][a-zA-Z0-9_.-]{0,159}$`, so the scheme uses
+ * dots — a colon form is refused with USER_DECISION_REF_REQUIRED.
  */
 export function composeConfirmDecisionRef(sessionId: string, revision: number): string {
-  return `dsh.template-registry.confirm.v1:${sessionId}:${revision}`
+  return `dsh.template-registry.confirm.v1.${sessionId}.${revision}`
 }
 
 /** Required contract inputs that still have an empty pane draft (readable missing list). */

@@ -142,6 +142,14 @@ function handleCall(name, args) {
     if (session === undefined || args.session_id !== session.id) {
       return envelope('failed', 'Operation failed.', {}, undefined, { code: 'SESSION_NOT_FOUND', message: 'SESSION_NOT_FOUND', retryable: false })
     }
+    // Owner rule (mirrors the real compile.go knownField): wire field keys are
+    // `<step-id>.<contract-input-name>`; anything else is FIELD_INVALID.
+    const known = new Set(CONTRACT_INPUTS.map(input => `main.${input.name}`))
+    for (const key of Object.keys(args.fields ?? {})) {
+      if (!known.has(key)) {
+        return envelope('failed', 'Operation failed.', {}, undefined, { code: 'FIELD_INVALID', message: 'FIELD_INVALID', retryable: false })
+      }
+    }
     if (conflictApplied) {
       conflictApplied = false
       session.revision = 2

@@ -20,6 +20,8 @@
 
 - [会话工具工作区（已验证）](design/dsh-session-tools-workspace.md)：会话工具 Tab、固定旁栏、Pane 标题会话管理与目录恢复；[正式验收计划](qa/dsh-session-tools-workspace-acceptance.md)。
 
+- [模板仓库目录与引导编译 Pane（已实现）](design/dsh-template-registry-panes.md)：MCP 优先的目录/编译 pane、诚实三态降级、无 CLI 场景投影恢复与权限边界；[OpenSpec 与任务](../openspec/changes/dsh-template-registry-integration-v1/tasks.md)。
+
 - [Pane 风格交互与后续支持](design/dsh-pane-interaction-completion.md)：Explorer、选区工具条、MCP 入口及侧栏/布局快捷键。
 
 - [DSH 本地图像与制作 Pane](runtime/dsh-creator-local-cli.md)：Eikona/Scaena 独立入口、用户级 CLI 配置、验收覆盖与开放项。

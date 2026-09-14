@@ -43,6 +43,34 @@ export interface RegistrySessionContext {
   readonly decisionRef?: string | undefined
   /** Material status override after compile/export (the view tops out at ready). */
   readonly status?: TemplateSession['status'] | undefined
+  /**
+   * Step ids learned from the session view (wire field keys are
+   * `<step-id>.<input-name>`). Supplied by the host service; the pane never
+   * sees or composes wire keys.
+   */
+  readonly stepIds?: readonly string[] | undefined
+}
+
+/**
+ * Wire-key translation (4.1 real-binary finding): the registry addresses
+ * fields as `<step-id>.<contract-input-name>` while the pane stays canonical
+ * on contract input names. A caller key that already carries a known step
+ * prefix passes through; otherwise the first known step prefixes it. Without
+ * learned steps the key passes through unchanged (older owners/tests).
+ */
+export function toWireFieldKey(key: string, stepIds: readonly string[] | undefined): string {
+  if (stepIds === undefined || stepIds.length === 0) return key
+  if (stepIds.some(step => key.startsWith(`${step}.`))) return key
+  return `${stepIds[0]}.${key}`
+}
+
+/** Inverse fold for projections rebuilt from wire traffic: strip a known step prefix. */
+export function fromWireFieldKey(key: string, stepIds: readonly string[] | undefined): string {
+  if (stepIds === undefined || stepIds.length === 0) return key
+  for (const step of stepIds) {
+    if (key.startsWith(`${step}.`)) return key.slice(step.length + 1)
+  }
+  return key
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -77,6 +105,15 @@ export function foldRegistrySessionView(view: unknown, context: RegistrySessionC
   }
   const readinessParsed = (['needs_input','needs_analysis','needs_confirmation','ready_to_compile','blocked'] as const).find(value => value === readiness)
   if (readinessParsed === undefined) return undefined
+  // Step ids from the view drive the wire-key translation (bounded, deduped).
+  const stepsRaw = Array.isArray(root.steps) ? root.steps : []
+  const stepIds: string[] = []
+  for (const entry of stepsRaw) {
+    const row = asRecord(entry)
+    const id = row === undefined || typeof row.id !== 'string' ? undefined : row.id
+    if (id !== undefined && id !== '' && !stepIds.includes(id) && stepIds.length < 16) stepIds.push(id)
+  }
+  const knownSteps = stepIds.length > 0 ? stepIds : context.stepIds === undefined ? [] : [...context.stepIds].slice(0, 16)
   const session = TemplateSessionSchema.safeParse({
     id, ref: context.ref, digest: context.digest,
     status: context.status ?? sessionStatusFromReadiness(readinessParsed),
@@ -90,6 +127,7 @@ export function foldRegistrySessionView(view: unknown, context: RegistrySessionC
     confirmedKeys: confirmedKeys.slice(0, 64),
     ...(context.contractDigest === undefined ? {} : { contractDigest: context.contractDigest }),
     ...(context.decisionRef === undefined ? {} : { decisionRef: context.decisionRef }),
+    stepIds: knownSteps,
   })
   return session.success ? session.data : undefined
 }
@@ -193,10 +231,12 @@ export async function registrySessionUpdate(
   }
   // Wire-true field shape: {value, kind, confirmed}. DSH form values are
   // user-supplied (`kind: 'user'`) and NOT yet confirmed — approval happens
-  // only through session_confirm with the owner's decision ref.
+  // only through session_confirm with the owner's decision ref. Keys are
+  // translated to the registry's `<step-id>.<name>` form here (the pane and
+  // the merged projection stay contract-name canonical).
   const fields: Record<string, { value: unknown; kind: string; confirmed: boolean }> = {}
   for (const [name, entry] of Object.entries(input.fields)) {
-    fields[name] = { value: entry.value, kind: entry.kind ?? 'user', confirmed: false }
+    fields[toWireFieldKey(name, context.stepIds)] = { value: entry.value, kind: entry.kind ?? 'user', confirmed: false }
   }
   const outcome = await callTemplateRegistryTool(connection, 'template_registry_session_update', {
     session_id: input.sessionId, expected_revision: input.expectedRevision, fields,
@@ -207,7 +247,7 @@ export async function registrySessionUpdate(
     }
     return outcome
   }
-  const merged: RegistrySessionContext = { ...context, fields: { ...(context.fields ?? {}), ...Object.fromEntries(Object.entries(fields).map(([name, entry]) => [name, entry.value])) } }
+  const merged: RegistrySessionContext = { ...context, fields: { ...(context.fields ?? {}), ...Object.fromEntries(Object.entries(input.fields).map(([name, entry]) => [name, entry.value])) } }
   const session = foldRegistrySessionView(outcome.call.data, merged)
   if (session === undefined) return { ok: false, failure: { kind: 'contract_mismatch' } }
   return { ok: true, value: session }
@@ -230,7 +270,7 @@ export async function registrySessionConfirm(
     session_id: input.sessionId, expected_revision: input.expectedRevision, decision_ref: input.decisionRef,
   }
   if (input.goal !== undefined) args.goal = input.goal
-  if (input.fields !== undefined) args.fields = [...input.fields]
+  if (input.fields !== undefined) args.fields = input.fields.map(name => toWireFieldKey(name, context.stepIds))
   const outcome = await callTemplateRegistryTool(connection, 'template_registry_session_confirm', args)
   if (!outcome.ok) {
     if (outcome.failure.kind === 'registry_error' && outcome.failure.code === 'REVISION_CONFLICT') {

@@ -38,7 +38,7 @@ import {
   type TemplateExportReceipt,
   type TemplateSession,
 } from './contracts.js'
-import { foldRegistrySessionView } from './sessions.js'
+import { foldRegistrySessionView, fromWireFieldKey } from './sessions.js'
 
 export const TEMPLATE_COMPILE_PROJECTION_KEY = 'templateRegistryCompile'
 export const TEMPLATE_COMPILE_PROJECTION_STATE_VERSION = 1
@@ -241,13 +241,16 @@ function foldCall(state: TemplateCompileProjectionState, call: FoldedCall): Temp
     const submitted: Record<string, unknown> = {}
     for (const [name, value] of Object.entries(fields)) {
       const record = asRecord(value)
-      if (record !== undefined && 'value' in record) submitted[name] = record.value
+      // Wire keys are `<step-id>.<input-name>`; the folded (pane-facing)
+      // session stays contract-name canonical.
+      if (record !== undefined && 'value' in record) submitted[fromWireFieldKey(name, entry.session.stepIds)] = record.value
     }
     const session = foldRegistrySessionView(call.data, {
       ref: entry.session.ref, digest: entry.session.digest,
       fields: { ...entry.session.fields, ...submitted },
       ...(entry.session.contractDigest === undefined ? {} : { contractDigest: entry.session.contractDigest }),
       ...(entry.session.decisionRef === undefined ? {} : { decisionRef: entry.session.decisionRef }),
+      stepIds: entry.session.stepIds,
     })
     if (session === undefined || session.revision === entry.session.revision && session.readiness === entry.session.readiness && session.status === entry.session.status) return state
     return upsertSession(state, { ...entry, session, lastSeq: call.seq })
@@ -259,6 +262,7 @@ function foldCall(state: TemplateCompileProjectionState, call: FoldedCall): Temp
       ref: entry.session.ref, digest: entry.session.digest, fields: entry.session.fields,
       contractDigest: entry.session.contractDigest,
       ...(decisionRef === undefined ? {} : { decisionRef }),
+      stepIds: entry.session.stepIds,
     })
     if (session === undefined) return state
     return upsertSession(state, { ...entry, session, lastSeq: call.seq })
@@ -275,6 +279,7 @@ function foldCall(state: TemplateCompileProjectionState, call: FoldedCall): Temp
       ref: entry.session.ref, digest: entry.session.digest, fields: entry.session.fields,
       ...(entry.session.contractDigest === undefined ? {} : { contractDigest: entry.session.contractDigest }),
       ...(entry.session.decisionRef === undefined ? {} : { decisionRef: entry.session.decisionRef }),
+      stepIds: entry.session.stepIds,
       status: 'compiled',
     }) ?? { ...entry.session, status: 'compiled' as const, updatedAt: new Date().toISOString() }
     return upsertSession(state, { session, compileId, lastSeq: call.seq })

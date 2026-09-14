@@ -163,6 +163,41 @@ describe('template-registry service three honest states (2.1)', () => {
     service.dispose()
   })
 
+  it('translates pane-canonical field keys onto the wire using learned step ids (4.1)', async () => {
+    const service = createTemplateRegistryService({
+      mcp: { binary: 'template-registry', spawnProcess: fixtureSpawn() },
+      catalog: { load: async () => sampleCatalog() },
+    })
+    expect(await service.probe()).toMatchObject({ state: 'connected' })
+    const REF = 'promptrepo://official/3d/3d-asset-review-beta@1.0.0-beta.1?locale=en&kind=template&role=main'
+    const inspected = await service.inspect(REF)
+    expect(inspected.ok).toBe(true)
+    if (!inspected.ok) return
+    const context = { ref: REF, digest: inspected.inspection.template.digest, contractDigest: inspected.inspection.contract.digest }
+    const created = await service.createSession({ goal: 'pane journey', ref: REF }, context)
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+    expect(created.value.stepIds).toEqual(['main'])
+    // The pane submits contract input names with NO stepIds in the context:
+    // the service replays the step ids it learned from the create view, so
+    // the owner's `<step>.<name>` wire keys are satisfied (FIELD_INVALID
+    // otherwise — the 4.1 real-binary finding).
+    const updated = await service.updateSession({
+      sessionId: created.value.id, expectedRevision: created.value.revision,
+      fields: { asset_ref: { value: 'asset-9' }, intended_use: { value: 'review pass' } },
+    }, { ...context, fields: created.value.fields })
+    expect(updated.ok).toBe(true)
+    if (!updated.ok) return
+    expect(updated.value.fields).toMatchObject({ asset_ref: 'asset-9', intended_use: 'review pass' })
+    const confirmed = await service.confirmSession({
+      sessionId: created.value.id, expectedRevision: updated.value.revision,
+      decisionRef: 'dsh.template-registry.confirm.v1.test.3', goal: true, fields: ['asset_ref', 'intended_use'],
+    }, { ...context, fields: updated.value.fields })
+    expect(confirmed.ok).toBe(true)
+    expect(confirmed.ok && confirmed.value.confirmed).toBe(true)
+    service.dispose()
+  })
+
   it('rejects unsafe binary names at construction', () => {
     expect(() => createTemplateRegistryService({
       mcp: { binary: '/bin/sh' }, catalog: { load: async () => sampleCatalog() },

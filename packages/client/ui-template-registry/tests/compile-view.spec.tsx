@@ -61,7 +61,7 @@ describe('guided compile pane (task 3.2 state matrix)', () => {
     const controller = await armedController()
     const html = render(controller)
     expect(html).toContain('确认门')
-    expect(html).toContain('dsh.template-registry.confirm.v1:')
+    expect(html).toContain('dsh.template-registry.confirm.v1.')
     expect(html).toContain('确认本次编译选择')
     expect(html).not.toContain('已确认')
   })

@@ -81,6 +81,24 @@ describe('templateRegistryCompile projection fold (2.4)', () => {
     expect(state.pendingCalls).toEqual({})
   })
 
+  it('strips the learned step prefix from wire field keys (pane-canonical restore, 4.1)', () => {
+    let state = createTemplateCompileProjectionState()
+    state = applyTemplateCompileProjection(state, toolCall('w1', 'template_registry_inspect', { ref: REF }, 1))
+    state = applyTemplateCompileProjection(state, toolResult('w1', envelope({ ref: REF, digest: DIGEST }), 2))
+    state = applyTemplateCompileProjection(state, toolCall('w2', 'template_registry_session_create', { goal: 'review', ref: REF }, 3))
+    // The real owner view carries steps[]: the fold learns the step ids.
+    state = applyTemplateCompileProjection(state, toolResult('w2', envelope({ ...view('needs_input', 1), steps: [{ id: 'main', status: 'ready', path: '' }] }, { id: SESSION_ID, readiness: 'needs_input', revision: 1 }, 'partial'), 4))
+    expect(state.sessions[0]!.session.stepIds).toEqual(['main'])
+    // Wire traffic addresses fields as `<step>.<name>`; the restored session
+    // stays contract-name canonical so the reopened pane matches its drafts.
+    state = applyTemplateCompileProjection(state, toolCall('w3', 'template_registry_session_update', {
+      session_id: SESSION_ID, expected_revision: 1,
+      fields: { 'main.asset_ref': { value: 'asset-7', kind: 'user', confirmed: false } },
+    }, 5))
+    state = applyTemplateCompileProjection(state, toolResult('w3', envelope(view('needs_confirmation', 2, [{ key: 'main.asset_ref', confirmed: false }])), 6))
+    expect(state.sessions[0]!.session.fields).toEqual({ asset_ref: 'asset-7' })
+  })
+
   it('returns the SAME state reference for unrelated events (Object.is change gate)', () => {
     const state = foldJourney()
     for (const event of [

@@ -122,7 +122,7 @@ describe('compile controller gate and stale fold', () => {
 
     await controller.confirm()
     expect(host.calls.decisionRefs).toStrictEqual([composeConfirmDecisionRef(session!.id, session!.revision)])
-    expect(composeConfirmDecisionRef('s1', 3)).toBe('dsh.template-registry.confirm.v1:s1:3')
+    expect(composeConfirmDecisionRef('s1', 3)).toBe('dsh.template-registry.confirm.v1.s1.3')
     expect(controller.snapshot().session?.confirmed).toBe(true)
   })
 

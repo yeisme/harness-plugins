@@ -188,6 +188,28 @@ export function createTemplateRegistryService(options: TemplateRegistryServiceOp
   let health: TemplateRegistryHealth = { state: 'offline', reason: 'connect_failed' }
   let catalogCache: CatalogCache | undefined
 
+  // Wire-key translation memory (4.1): the registry addresses session fields
+  // as `<step-id>.<input-name>`; step ids are learned from session views this
+  // service instance has already folded and replayed into later mutation
+  // contexts so the pane never composes wire keys itself. Bounded FIFO; a
+  // fresh service instance relearns on its first session view.
+  const STEP_MEMORY_LIMIT = 32
+  const stepIdsBySession = new Map<string, readonly string[]>()
+  const rememberSteps = (session: TemplateSession): void => {
+    if (session.stepIds.length === 0) return
+    stepIdsBySession.set(session.id, session.stepIds)
+    while (stepIdsBySession.size > STEP_MEMORY_LIMIT) {
+      const oldest = stepIdsBySession.keys().next().value
+      if (oldest === undefined) break
+      stepIdsBySession.delete(oldest)
+    }
+  }
+  const withSteps = (input: { sessionId: string }, context: RegistrySessionContext): RegistrySessionContext => {
+    if (context.stepIds !== undefined || !stepIdsBySession.has(input.sessionId)) return context
+    const stepIds = stepIdsBySession.get(input.sessionId)
+    return stepIds === undefined ? context : { ...context, stepIds }
+  }
+
   const loadCatalog = (): Promise<PromptCatalog | undefined> => {
     if (catalogCache === undefined) {
       const promise = options.catalog.load().then(parsePromptCatalog, () => undefined)
@@ -306,6 +328,7 @@ export function createTemplateRegistryService(options: TemplateRegistryServiceOp
       const gate = requireConnection()
       if (!gate.ok) return { ok: false, failure: gate.failure }
       const outcome = await registrySessionCreate(connection, input, context)
+      if (outcome.ok) rememberSteps(outcome.value)
       if (!outcome.ok) noteTransportFailure(outcome.failure)
       return outcome
     },
@@ -313,7 +336,8 @@ export function createTemplateRegistryService(options: TemplateRegistryServiceOp
     async updateSession(input, context) {
       const gate = requireConnection()
       if (!gate.ok) return { ok: false, failure: gate.failure }
-      const outcome = await registrySessionUpdate(connection, input, context)
+      const outcome = await registrySessionUpdate(connection, input, withSteps(input, context))
+      if (outcome.ok) rememberSteps(outcome.value)
       if (!outcome.ok) noteTransportFailure(outcome.failure)
       return outcome
     },
@@ -321,7 +345,8 @@ export function createTemplateRegistryService(options: TemplateRegistryServiceOp
     async confirmSession(input, context) {
       const gate = requireConnection()
       if (!gate.ok) return { ok: false, failure: gate.failure }
-      const outcome = await registrySessionConfirm(connection, input, context)
+      const outcome = await registrySessionConfirm(connection, input, withSteps(input, context))
+      if (outcome.ok) rememberSteps(outcome.value)
       if (!outcome.ok) noteTransportFailure(outcome.failure)
       return outcome
     },
@@ -330,6 +355,7 @@ export function createTemplateRegistryService(options: TemplateRegistryServiceOp
       const gate = requireConnection()
       if (!gate.ok) return { ok: false, failure: gate.failure }
       const outcome = await registryCompileSession(connection, input, guard, context)
+      if (outcome.ok) rememberSteps(outcome.value.session)
       if (!outcome.ok) noteTransportFailure(outcome.failure)
       return outcome
     },
@@ -346,6 +372,7 @@ export function createTemplateRegistryService(options: TemplateRegistryServiceOp
       const gate = requireConnection()
       if (!gate.ok) return { ok: false, failure: gate.failure }
       const outcome = await registrySessionShow(connection, sessionId, context)
+      if (outcome.ok) rememberSteps(outcome.value)
       if (!outcome.ok) noteTransportFailure(outcome.failure)
       return outcome
     },

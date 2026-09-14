@@ -95,6 +95,11 @@ export const TemplateSessionSchema = z.object({
   confirmedKeys: z.array(z.string().max(128)).max(64).default([]),
   contractDigest: z.string().min(1).optional(),
   decisionRef: z.string().min(1).max(128).optional(),
+  // 4.1 addition (real-binary acceptance finding): the registry addresses
+  // session fields on the wire as `<step-id>.<contract-input-name>` (compile.go
+  // knownField). The pane stays contract-name canonical; the host owns the
+  // prefix translation. These are the step ids learned from the session view.
+  stepIds: z.array(z.string().min(1).max(64)).max(16).default([]),
 })
 
 export type TemplateSession = z.infer<typeof TemplateSessionSchema>
@@ -183,7 +188,7 @@ export function advanceTemplateSession(session: TemplateSession, event: Template
 }
 
 export function createTemplateSession(ref: string, digest: string): TemplateSession {
-  return { id: crypto.randomUUID(), ref, digest, status: 'filling', fields: {}, confirmed: false, provider_calls: 0, updatedAt: new Date().toISOString(), revision: 1, confirmedKeys: [] }
+  return { id: crypto.randomUUID(), ref, digest, status: 'filling', fields: {}, confirmed: false, provider_calls: 0, updatedAt: new Date().toISOString(), revision: 1, confirmedKeys: [], stepIds: [] }
 }
 
 /** Compile is armed only in filling/confirming/ready with explicit confirmation and all required fields present. */
