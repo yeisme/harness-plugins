@@ -221,8 +221,10 @@ function familyOf(kind: string): AuctraTextFamily | undefined {
 
 function unitRefOf(kind: string, id: string): string | undefined {
   const family = familyOf(kind)
-  if (family === 'novel-chapter') return `chapter:${id}`
-  if (family === 'screenplay-scene' || family === 'general-text') return `text:${id}`
+  // The owner's canonical open ref is `text:<id>` for every list family,
+  // including chapters; verified against the real Service API (a `chapter:<id>`
+  // open is rejected with operation_failed).
+  if (family !== undefined) return `text:${id}`
   return undefined
 }
 
@@ -475,7 +477,15 @@ export function normalizeAuctraExportReceipt(value: unknown, expected: { unitRef
   }) }).safeParse(value)
   if (!parsed.success) return undefined
   const receipt = parsed.data.data
-  if (receipt.unit_ref !== expected.unitRef || receipt.source_version_ref !== expected.sourceVersion) return undefined
+  if (receipt.unit_ref !== expected.unitRef) return undefined
+  // Verified against the real owner export route: a fresh receipt pins the
+  // exported fixed version by its ContentVersion ref (`version_<unitId>_<n>`),
+  // while an idempotent replay echoes the caller's expected_revision. Both bind
+  // the artifact to this unit's fixed version chain; a foreign unit's version
+  // ref is rejected instead of being confused with the requested revision.
+  const unitId = expected.unitRef.replace(/^text:/u, '').replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+  if (receipt.source_version_ref !== expected.sourceVersion
+    && !new RegExp(`^version_${unitId}_[0-9]{1,10}$`, 'u').test(receipt.source_version_ref)) return undefined
   return { artifactRef: receipt.artifact_ref, unitRef: receipt.unit_ref, sourceVersion: receipt.source_version_ref }
 }
 

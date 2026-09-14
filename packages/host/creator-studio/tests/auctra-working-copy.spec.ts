@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { expect, it } from 'vitest'
-import { normalizeAuctraWorkingCopyOpen } from '../src/auctra-working-copy.ts'
+import { normalizeAuctraExportReceipt, normalizeAuctraWorkingCopyOpen } from '../src/auctra-working-copy.ts'
 
 const body = '正文😀\r\n保留原格式。'
 const digest = createHash('sha256').update(body).digest('hex')
@@ -49,4 +49,33 @@ it.each(['project', 'unit', 'digest', 'utf16-length', 'recovery', 'version', 'su
     input.data.working_copy.content_digest = createHash('sha256').update(input.data.body).digest('hex')
   }
   expect(normalizeAuctraWorkingCopyOpen(input, { ...binding, ...(kind === 'version' ? { version: 'older' } : {}) })).toBeUndefined()
+})
+
+const exportEnvelope = (sourceVersionRef: string, replayed = false) => ({ schema_version: 'auctra.api.envelope.v1', status: 'success',
+  data: { schema_version: 'auctra.export_receipt.v1', artifact_ref: 'artifact:artifact_chapter_001_export_fixed', unit_ref: 'text:chapter_001',
+    source_version_ref: sourceVersionRef, evidence_refs: ['artifact:artifact_chapter_001_export_fixed'], replayed,
+    review_decision_ref: 'review_decision:decision_rev_chapter_001_manual_1' } })
+
+it('accepts the real owner export receipt pinning the exported ContentVersion ref', () => {
+  // Verified against the real Service API: a fresh export answers with the
+  // exported version row ref, not the requested draft checksum.
+  expect(normalizeAuctraExportReceipt(exportEnvelope('version_chapter_001_004'), { unitRef: 'text:chapter_001', sourceVersion: digest }))
+    .toEqual({ artifactRef: 'artifact:artifact_chapter_001_export_fixed', unitRef: 'text:chapter_001', sourceVersion: 'version_chapter_001_004' })
+})
+
+it('accepts an idempotent export replay that echoes the requested revision', () => {
+  expect(normalizeAuctraExportReceipt(exportEnvelope(digest, true), { unitRef: 'text:chapter_001', sourceVersion: digest })?.sourceVersion).toBe(digest)
+})
+
+it.each([
+  ['a foreign unit version ref', 'version_other_004'],
+  ['an unrelated string', 'rev-anything'],
+])('rejects %s', (_name, sourceVersionRef) => {
+  expect(normalizeAuctraExportReceipt(exportEnvelope(sourceVersionRef), { unitRef: 'text:chapter_001', sourceVersion: digest })).toBeUndefined()
+})
+
+it('rejects an export receipt for another unit', () => {
+  const input = exportEnvelope('version_chapter_001_004')
+  input.data.unit_ref = 'text:other'
+  expect(normalizeAuctraExportReceipt(input, { unitRef: 'text:chapter_001', sourceVersion: digest })).toBeUndefined()
 })

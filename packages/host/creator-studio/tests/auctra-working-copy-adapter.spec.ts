@@ -292,7 +292,7 @@ it('publishes Checkpoint, Review, Canon, and export as separate owner actions an
       status: 'accepted', accepted_revision: 'rev-canon', evidence_refs: ['review:rev-chk-one'], replayed: false }))
     if (href.includes('/export')) return Response.json(envelope({
       schema_version: 'auctra.export_receipt.v1', artifact_ref: 'artifact:export-one', unit_ref: 'text:one',
-      source_version_ref: 'rev-fixed', evidence_refs: ['artifact:export-one'], replayed: false }))
+      source_version_ref: 'version_one_001', evidence_refs: ['artifact:export-one'], replayed: false }))
     if (href.includes('/text-units/') && href.includes('/draft')) return Response.json(envelope({ unit_id: 'one', revision: 'rev-fixed' }))
     if (href.includes('/text-units')) return Response.json(envelope(units))
     if (options?.method === 'GET') return Response.json(envelope(copy))

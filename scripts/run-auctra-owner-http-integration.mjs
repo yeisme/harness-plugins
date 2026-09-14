@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createServer } from 'node:net'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -826,6 +826,250 @@ try {
     selected = true
     checks.push('revoked Host selection rejects actual recovery discovery, clears previously loaded preview/metadata, disables recovery save and retains unsaved editor input without retry')
 
+    // Task 4.2 real full writing journey. Every capability below is REAL: real
+    // Chromium browser, real Host Gateway/action dispatch, real Auctra HTTP and
+    // application/storage. The fixture only seeds units (disposable project);
+    // each step asserts matched DOM/owner outcomes — zero-match fails the run.
+    // Editor legs (open/edit/confirmed save, selection→candidate→compare→adopt)
+    // run in the browser UI; the Checkpoint/Review/Canon/export legs ride the
+    // exact dispatchAction surface the versions/export page composers call.
+    commands.push('Playwright: full writing journey -> novel chapter + screenplay scene + general text -> Checkpoint/Review -> Canon accept -> fixed-version export')
+    const families = (await client.listUnits(scope))
+    assert.equal(families.status, 'ready')
+    const familyOf = unitRef => families.value.find(unit => unit.unitRef === unitRef)?.family
+    assert.equal(familyOf(ready.chapter_ref), 'novel-chapter')
+    assert.equal(familyOf(ready.scene_ref), 'screenplay-scene')
+    assert.equal(familyOf(ready.unit_ref), 'general-text')
+    checks.push('real: owner structure list exposes all three families (novel-chapter / screenplay-scene / general-text) for the journey')
+    const fullCtx = new Context()
+    const fullOwners = new CreatorStudioOwnerDirectory()
+    let fullSelected = true, fullSelection
+    const fullBinding = { context: scope, baseURL: ready.base_url, ownerProjectRef: ready.project_ref, headers: { Authorization: 'Bearer fixture-only' },
+      // The candidate digests are package-internal constants; mirror the literal
+      // values the earlier stages use instead of importing unexported names.
+      admission: { consumer: 'dsh', schemaDigest: AUCTRA_WORKING_COPY_SCHEMA_DIGEST, approved: true, writeApproved: true,
+        candidateContentDigest: '1780a2fa0ee082cbd3d61ce9b363e115b859e6f529b44842e10d917beec1b0e9',
+        candidateListDigest: '9ed42760be771c1b81070cac1cf0eece686edba2e11e3c8ff8e0b7d82e93509d', candidateRequestRecovery: 'v1alpha1' } }
+    let fullPuts = 0
+    const fullWriter = new AuctraWorkingCopyClient(async () => fullBinding, async (url, options) => {
+      if (options.method === 'PUT') fullPuts++
+      return fetch(url, options)
+    })
+    let disposeFullAdapter = fullOwners.register(createAuctraWorkingCopyAdapter(fullWriter, async () => fullSelected ? fullSelection : undefined))
+    fullCtx.provide(CREATOR_STUDIO_EXPECTED_CONTEXT, scope)
+    fullCtx.provide(CREATOR_STUDIO_OWNER_DIRECTORY, fullOwners)
+    await fullCtx.plugin(CreatorStudioGateway)
+    const fullGateway = fullCtx.get('creatorStudio')
+    const fullCounts = async () => {
+      const response = await fetch(new URL('/__fixture/version-counts', ready.base_url), { headers: fullBinding.headers, signal: AbortSignal.timeout(15_000) })
+      assert.equal(response.status, 200)
+      return response.json()
+    }
+    const fullDispatch = async (actionId, values, idempotencyKey) => {
+      const descriptor = (await fullGateway.snapshot()).owners.find(owner => owner.owner === 'auctra').actions.find(action => action.actionId === actionId)
+      assert.ok(descriptor, `${actionId} must be published for the selected Working Copy`)
+      return fullGateway.dispatch({ schema: 'pane.action-request.v1alpha1', owner: 'auctra', actionId,
+        descriptorRef: descriptor.descriptorRef, expectedTargetRef: descriptor.targetRef, expectedTargetVersion: descriptor.targetVersion,
+        context: scope, idempotencyKey, values })
+    }
+    const chapterOpened = await fullWriter.open(scope, ready.chapter_ref)
+    assert.equal(chapterOpened.status, 'ready')
+    assert.equal(chapterOpened.value.content, '第一章初始正文。\r\n第二段😀\r\n')
+    fullSelection = { unitRef: ready.chapter_ref, artifact: chapterOpened.value.artifact, canSave: true }
+    const chapterCountsBefore = await fullCounts()
+    const fullPage = await browser.newPage({ viewport: { width: 560, height: 1000 }, reducedMotion: 'reduce' })
+    fullPage.setDefaultTimeout(10_000)
+    fullPage.setDefaultNavigationTimeout(15_000)
+    let fullReceipt
+    await fullPage.exposeFunction('ownerSnapshot', async acknowledge => {
+      if (acknowledge && fullReceipt?.status === 'completed' && fullReceipt.outputArtifacts?.[0]) fullSelection = { ...fullSelection, artifact: fullReceipt.outputArtifacts[0] }
+      return fullGateway.snapshot()
+    })
+    await fullPage.exposeFunction('ownerRead', artifact => fullGateway.readArtifactContent(artifact))
+    await fullPage.exposeFunction('ownerRecoveries', () => fullGateway.listOperationRecoveries())
+    await fullPage.exposeFunction('ownerCandidatePage', query => fullGateway.readCandidatePage(query))
+    await fullPage.exposeFunction('ownerDispatch', async (descriptor, values) => {
+      const request = { schema: 'pane.action-request.v1alpha1', owner: 'auctra', actionId: descriptor.actionId,
+        descriptorRef: descriptor.descriptorRef, expectedTargetRef: descriptor.targetRef, expectedTargetVersion: descriptor.targetVersion,
+        context: scope, idempotencyKey: randomUUID(), ...encodePaneActionValues(descriptor, values) }
+      fullReceipt = await fullGateway.dispatch(request)
+      return fullReceipt
+    })
+    const fullErrors = []
+    fullPage.on('pageerror', error => fullErrors.push(error.message))
+    await fullPage.goto(`${visualOrigin}/owner-save`)
+    await fullPage.locator('[data-creator-artifact-tab="source"]').click()
+    const fullEditor = () => fullPage.locator('[data-creator-artifact-editor] textarea')
+    // The HTML textarea API normalizes CRLF to LF in the DOM value, so browser
+    // DOM assertions compare the LF projection while the exact owner-side CRLF
+    // bytes are asserted through the typed client reads above and below.
+    const domText = text => text.replaceAll('\r\n', '\n')
+    await fullPage.waitForFunction(body => document.querySelector('[data-creator-artifact-editor] textarea')?.value === body, domText(chapterOpened.value.content))
+    checks.push('real browser: novel chapter opens from the owner list selection with the exact seeded CRLF/emoji body')
+    const chapterEdit = '小说章节编辑后的正文😀\r\n带 CRLF 的第二行。\r\n'
+    await fullEditor().fill(chapterEdit)
+    await fullPage.getByRole('button', { name: '保存草稿', exact: true }).click()
+    await fullPage.getByRole('button', { name: '执行操作', exact: true }).click()
+    await fullPage.waitForFunction(() => window.ownerLastReceipt?.status === 'completed' && window.ownerDirty === false)
+    const chapterSaved = await fullWriter.open(scope, ready.chapter_ref, fullReceipt.outputArtifacts[0].version)
+    assert.equal(chapterSaved.status, 'ready')
+    assert.equal(chapterSaved.value.content, chapterEdit)
+    assert.deepEqual(await fullCounts(), chapterCountsBefore)
+    await fullPage.screenshot({ path: resolve(directory, 'artifacts', 'auctra-fullflow-chapter-save.png'), fullPage: true })
+    checks.push('real browser: confirmed save of the novel chapter persists the exact dispatched Unicode/emoji/CRLF bytes; Working Copy save creates no Canon version')
+    await fullPage.evaluate(() => window.refreshOwnerView())
+    await fullPage.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === '创建候选' && !button.disabled))
+    const chapterCandidateText = 'Agent 候选改写后的章节😀\r\n候选第二行。\r\n'
+    await fullEditor().fill(chapterCandidateText)
+    await fullPage.getByRole('button', { name: '创建候选', exact: true }).click()
+    await fullPage.getByRole('button', { name: '执行操作', exact: true }).click()
+    await fullPage.waitForFunction(() => window.ownerLastReceipt?.actionId === 'working-copy.candidate.create' && window.ownerLastReceipt.status === 'completed')
+    assert.equal(await fullPage.evaluate(() => window.ownerDirty), true)
+    await fullPage.evaluate(() => window.refreshOwnerView())
+    await fullPage.locator('[data-creator-artifact-tab="compare"]').click()
+    const chapterComparison = fullPage.locator('[data-creator-artifact-text-compare]')
+    await chapterComparison.waitFor()
+    assert.equal(await chapterComparison.locator('[data-side="before"]').textContent(), chapterEdit)
+    assert.equal(await chapterComparison.locator('[data-side="after"]').textContent(), chapterCandidateText)
+    const chapterAdoptCounts = await fullCounts()
+    await fullPage.getByRole('button', { name: '采纳候选', exact: true }).click()
+    await fullPage.getByRole('button', { name: '执行操作', exact: true }).click()
+    await fullPage.waitForFunction(() => window.ownerLastReceipt?.actionId === 'working-copy.candidate.adopt' && window.ownerLastReceipt.status === 'completed')
+    fullSelection = { ...fullSelection, artifact: fullReceipt.outputArtifacts[0] }
+    const chapterAdopted = await fullWriter.open(scope, ready.chapter_ref, fullReceipt.outputArtifacts[0].version)
+    assert.equal(chapterAdopted.status, 'ready')
+    assert.equal(chapterAdopted.value.content, chapterCandidateText)
+    assert.deepEqual(await fullCounts(), chapterAdoptCounts)
+    await fullPage.screenshot({ path: resolve(directory, 'artifacts', 'auctra-fullflow-candidate-compare.png'), fullPage: true })
+    checks.push('real browser: selection→candidate→compare→adopt advances the Working Copy only; adoption promotes no Canon version, review item or checkpoint')
+    // Checkpoint → ReviewItem → human Canon decision over the owner routes.
+    const beforeCheckpoint = await fullCounts()
+    const checkpointReceipt = await fullDispatch('working-copy.checkpoint.create', {}, 'full-checkpoint')
+    assert.equal(checkpointReceipt.status, 'completed')
+    const afterCheckpoint = await fullCounts()
+    assert.equal(afterCheckpoint.checkpoints, beforeCheckpoint.checkpoints + 1)
+    assert.equal(afterCheckpoint.versions, beforeCheckpoint.versions)
+    assert.equal(afterCheckpoint.reviews, beforeCheckpoint.reviews)
+    const checkpointPage = await fullWriter.listCheckpoints(scope, { artifact: fullSelection.artifact })
+    assert.equal(checkpointPage.status, 'ready')
+    const chapterCheckpointRef = checkpointPage.value.checkpoints.find(checkpoint => checkpoint.workingCopyRef === chapterAdopted.value.artifact.ref.split(':').at(-1))?.ref
+      ?? checkpointPage.value.checkpoints.at(-1)?.ref
+    assert.ok(chapterCheckpointRef)
+    const beforeReview = await fullCounts()
+    const submitReceipt = await fullDispatch('working-copy.review.submit', { checkpoint_ref: chapterCheckpointRef }, 'full-review-submit')
+    assert.equal(submitReceipt.status, 'completed')
+    const afterReview = await fullCounts()
+    assert.equal(afterReview.reviews, beforeReview.reviews + 1)
+    assert.equal(afterReview.versions, beforeReview.versions)
+    const chapterQueue = await fullWriter.listReviewQueue(scope)
+    assert.equal(chapterQueue.status, 'ready')
+    const chapterReviewItem = chapterQueue.value.items.find(item => item.ref === submitReceipt.receiptRef)
+    assert.ok(chapterReviewItem)
+    const checkpointAccept = await fullDispatch('review.accept', { review_item_ref: chapterReviewItem.ref, expected_version: chapterReviewItem.version }, 'full-checkpoint-accept')
+    assert.equal(checkpointAccept.status, 'completed')
+    assert.deepEqual(await fullCounts(), afterReview)
+    checks.push('real: Checkpoint create + Review submit bind the adopted Working Copy as a pending ReviewItem; the human accept records the Canon decision without an automatic content writeback')
+    // Canon promotion through the owner's explicit document save → submit → accept
+    // chain (the only path the owner promotes content units to Canon today).
+    const chapterUnitId = ready.chapter_ref.slice('text:'.length)
+    const adoptedChapterBody = chapterCandidateText
+    const draftFetch = async (method, path, payload) => {
+      const response = await fetch(new URL(path, ready.base_url), { method, headers: { ...fullBinding.headers, 'Content-Type': 'application/json' },
+        ...(payload === undefined ? {} : { body: JSON.stringify(payload) }), redirect: 'error', signal: AbortSignal.timeout(15_000) })
+      assert.equal(response.status, 200)
+      return (await response.json()).data
+    }
+    const seededDraft = await draftFetch('GET', `/api/v1/projects/current/text-units/${chapterUnitId}/draft`)
+    assert.notEqual(seededDraft.revision, createHash('sha256').update(adoptedChapterBody).digest('hex'))
+    await draftFetch('PUT', `/api/v1/projects/current/text-units/${chapterUnitId}/draft`, { body: adoptedChapterBody, expected_revision: seededDraft.revision, idempotency_key: 'full-document-save' })
+    const submittedDraft = (await draftFetch('GET', `/api/v1/projects/current/text-units/${chapterUnitId}/draft`))
+    const documentSubmission = await draftFetch('POST', `/api/v1/projects/current/text-units/${chapterUnitId}/draft/submit`, { expected_revision: submittedDraft.revision, idempotency_key: 'full-document-submit' })
+    const documentReviewRef = documentSubmission.review_item_ref.replace(/^review:/u, '')
+    const documentQueue = await fullWriter.listReviewQueue(scope)
+    const documentReviewItem = documentQueue.value.items.find(item => item.ref === documentReviewRef)
+    assert.ok(documentReviewItem)
+    const documentAccept = await fullDispatch('review.accept', { review_item_ref: documentReviewItem.ref, expected_version: documentReviewItem.version }, 'full-document-accept')
+    assert.equal(documentAccept.status, 'completed')
+    const afterCanon = await fullCounts()
+    assert.equal(afterCanon.versions, afterReview.versions + 2)
+    const canonDraft = await draftFetch('GET', `/api/v1/projects/current/text-units/${chapterUnitId}/draft`)
+    assert.equal(canonDraft.body, adoptedChapterBody)
+    assert.equal(canonDraft.revision, createHash('sha256').update(adoptedChapterBody).digest('hex'))
+    checks.push('real: the owner Canon path (document save → review submit → human accept) is the only step that advances formal versions (+2) and pins the accepted body digest')
+    const exportReceipt = await fullDispatch('text.export', { expected_revision: canonDraft.revision, format: 'markdown' }, 'full-export')
+    assert.equal(exportReceipt.status, 'completed')
+    assert.match(exportReceipt.receiptRef, /^artifact:artifact_/u)
+    const exportedBody = await fetch(new URL(`/__fixture/export-read?artifact_ref=${encodeURIComponent(exportReceipt.receiptRef)}`, ready.base_url), { headers: fullBinding.headers, signal: AbortSignal.timeout(15_000) })
+    assert.equal(exportedBody.status, 200)
+    const exported = await exportedBody.json()
+    assert.equal(exported.body, adoptedChapterBody)
+    assert.equal(exported.checksum, canonDraft.revision)
+    // A stale expected revision is fenced twice: the Gateway refuses values the
+    // current descriptor no longer offers (descriptor fence), and the typed
+    // client surfaces the owner's draft_version_conflict CAS as a typed conflict.
+    const staleExport = await fullDispatch('text.export', { expected_revision: seededDraft.revision, format: 'markdown' }, 'full-export-stale')
+    assert.equal(staleExport.status, 'reconcile_required')
+    const staleTypedExport = await fullWriter.exportFixedVersion(scope, { artifact: fullSelection.artifact, unitRef: ready.chapter_ref,
+      expectedRevision: seededDraft.revision, format: 'markdown', idempotencyKey: 'full-export-stale-typed' })
+    assert.equal(staleTypedExport.status, 'conflict')
+    assert.deepEqual(await fullCounts(), afterCanon)
+    await fullPage.screenshot({ path: resolve(directory, 'artifacts', 'auctra-fullflow-export.png'), fullPage: true })
+    checks.push('real: fixed-version export returns the pinned owner version receipt whose exported bytes and sha256 digest equal the accepted Canon revision; a stale expected revision is rejected without mutation')
+    // Screenplay scene family: open + concurrent-editing rejection + reread recovery.
+    const sceneOpened = await fullWriter.open(scope, ready.scene_ref)
+    assert.equal(sceneOpened.status, 'ready')
+    assert.equal(sceneOpened.value.content, 'INT. 房间 - 夜\r\n\r\n初始场景对白😀\r\n')
+    fullSelection = { unitRef: ready.scene_ref, artifact: sceneOpened.value.artifact, canSave: true }
+    fullReceipt = undefined
+    await fullPage.goto(`${visualOrigin}/owner-save`)
+    await fullPage.locator('[data-creator-artifact-tab="source"]').click()
+    await fullPage.waitForFunction(body => document.querySelector('[data-creator-artifact-editor] textarea')?.value === body, domText(sceneOpened.value.content))
+    checks.push('real browser: screenplay scene opens as the third structure family over the same owner Working Copy contract')
+    const sceneFirstEdit = 'INT. 房间 - 日\r\n\r\n首次确认保存的场景对白😀\r\n'
+    await fullEditor().fill(sceneFirstEdit)
+    await fullPage.getByRole('button', { name: '保存草稿', exact: true }).click()
+    await fullPage.getByRole('button', { name: '执行操作', exact: true }).click()
+    await fullPage.waitForFunction(() => window.ownerLastReceipt?.status === 'completed' && window.ownerDirty === false)
+    const sceneSaved = await fullWriter.open(scope, ready.scene_ref, fullReceipt.outputArtifacts[0].version)
+    assert.equal(sceneSaved.status, 'ready')
+    assert.equal(sceneSaved.value.content, sceneFirstEdit)
+    checks.push('real browser: screenplay scene completes a confirmed save with exact persisted bytes, closing the edit+save journey for all three structure families')
+    // A confirmed save drops the previous action bindings; the acknowledged
+    // snapshot refresh republishes them on the new version before the next leg.
+    await fullPage.evaluate(() => window.refreshOwnerView())
+    await fullPage.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === '保存草稿' && !button.disabled))
+    // Concurrent editing: a second writer saves first; the browser edit is then
+    // fenced because the Host selection went stale (owner snapshot not fresh),
+    // and the typed client surfaces the owner's own stale-base CAS conflict.
+    const sceneCompetitorBody = '另一编辑器后保存的场景正文😀\r\n'
+    const sceneCompetitor = await fullWriter.save(scope, { unitRef: ready.scene_ref, base: sceneSaved.value, content: sceneCompetitorBody, idempotencyKey: 'full-scene-competing' })
+    assert.equal(sceneCompetitor.status, 'ready')
+    const sceneEdit = 'INT. 房间 - 黄昏\r\n\r\n并发冲突期间保留的输入😀\r\n'
+    await fullEditor().fill(sceneEdit)
+    await fullPage.getByRole('button', { name: '保存草稿', exact: true }).click()
+    await fullPage.getByRole('button', { name: '执行操作', exact: true }).click()
+    await fullPage.waitForFunction(() => window.ownerLastReceipt?.status === 'reconcile_required')
+    assert.equal(await fullPage.evaluate(() => window.ownerLastReceipt?.reconcileReason), 'owner_snapshot_not_fresh')
+    assert.equal(await fullEditor().inputValue(), sceneEdit)
+    const staleSceneSave = await fullWriter.save(scope, { unitRef: ready.scene_ref, base: sceneSaved.value, content: sceneEdit, idempotencyKey: 'full-scene-stale' })
+    assert.equal(staleSceneSave.status, 'conflict')
+    assert.equal((await fullWriter.open(scope, ready.scene_ref)).value.content, sceneCompetitorBody)
+    const sceneReread = await fullWriter.open(scope, ready.scene_ref)
+    assert.equal(sceneReread.status, 'ready')
+    fullSelection = { ...fullSelection, artifact: sceneReread.value.artifact }
+    await fullPage.evaluate(() => window.refreshOwnerView())
+    await fullPage.waitForFunction((raw, lf) => {
+      const value = document.querySelector('[data-creator-artifact-editor] textarea')?.value
+      return value === raw || value === lf
+    }, sceneCompetitorBody, domText(sceneCompetitorBody))
+    await fullPage.screenshot({ path: resolve(directory, 'artifacts', 'auctra-fullflow-scene-recovery.png'), fullPage: true })
+    checks.push('real: concurrent editing rejection fences the stale browser dispatch (owner snapshot not fresh) and the typed stale-base save conflicts closed; the browser input survives and the reread recovery shows the newer authoritative version')
+    assert.ok(fullPuts >= 3)
+    assert.deepEqual(fullErrors, [])
+    await fullPage.close()
+    disposeFullAdapter()
+    await fullCtx.fiber.dispose()
+    checks.push('full writing journey complete: open novel-chapter/screenplay-scene/general-text → edit + confirmed save → selection→candidate→compare→adopt → Checkpoint/Review → Canon accept → fixed-version export; general-text editor/candidate/recovery legs covered earlier in this same run against the same real owner')
 
   }
   const candidateBase = await writer.open(scope, ready.unit_ref)
@@ -1143,7 +1387,7 @@ try {
   writeFileSync(resolve(directory, 'env.json'), JSON.stringify({ node: process.version, platform: process.platform, arch: process.arch, cgo: 'disabled', provider_calls: 'disabled' }, null, 2))
   writeFileSync(resolve(directory, 'summary.json'), JSON.stringify({ runId, startedAt: startedAt.toISOString(), finishedAt: new Date().toISOString(),
     status: exitCode === 0 ? 'passed' : 'failed', exitCode, layer: 'system', checks,
-    notes: ['Actual DSH client and Auctra HTTP/application/storage; fixture text and fixture-only consumer admission; compatibility screenplay draft exercises text.draft.save (owner rejects the generic PUT for drafts).', browserMode ? 'Actual browser editor with test Host RPC/selection bridge; no production DSH installation or full writing journey acceptance.' : 'No browser or full writing acceptance.', 'No provider calls or production admission; temporary owner project removed on exit.'],
+    notes: ['Actual DSH client and Auctra HTTP/application/storage; fixture text and fixture-only consumer admission; compatibility screenplay draft exercises text.draft.save (owner rejects the generic PUT for drafts).', browserMode ? 'Actual browser editor with test Host RPC/selection bridge; full writing journey (open/edit/save, selection→candidate→compare→adopt in the browser UI; Checkpoint/Review/Canon decision and fixed-version export over the same Host dispatchAction surface); no production DSH installation or production admission.' : 'No browser or full writing acceptance.', 'No provider calls or production admission; temporary owner project removed on exit.'],
   }, null, 2))
   console.log(`Auctra owner HTTP evidence: ${relative(root, directory)}`)
   process.exitCode = exitCode
