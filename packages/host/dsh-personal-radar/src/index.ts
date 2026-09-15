@@ -10,13 +10,13 @@
  * @module @yeisme/dsh-personal-radar
  */
 
-export { MARKET_PROJECTION_SCHEMA, projectMarketReader, projectMarketSignal, projectMarketEvidence, projectMarketBrief, projectMarketCatchup, projectMarketCompare } from './market-contracts.js'
+export { MARKET_PROJECTION_SCHEMA, projectMarketReader, projectMarketSignal, projectMarketEvidence, projectMarketBrief, projectMarketCatchup, projectMarketCompare, projectMarketReview, projectMarketReviewIndex } from './market-contracts.js'
 export { projectSelectedMarketSignal, projectSelectedMarketEvidence } from './market-contracts.js'
-export type { MarketSignalProjection, MarketReaderProjection, MarketEvidenceProjection, MarketBriefProjection, MarketComparisonProjection, MarketCatchupProjection, MarketCompareProjection, MarketCompareSideProjection } from './market-contracts.js'
-export { readConnectedMarketBrief, readConnectedMarketCatchup, readConnectedMarketSignal, readConnectedMarketCompare, readConnectedMarketEvidence } from './market-adapter.js'
-export type { ConnectedMarketTransport, MarketReadResult, MarketCatchupReadResult, MarketSignalReadResult, MarketCompareReadResult, MarketEvidenceReadResult } from './market-adapter.js'
-export { createMarketReadingController, createMarketCatchupController, createMarketDetailController, createMarketCompareController, createMarketEvidenceTimelineController } from './market-controller.js'
-export type { MarketReadingState, MarketLoader, MarketCatchupLoader, MarketSignalSelection, MarketSignalLoader, MarketCompareLoader, MarketEvidenceLoader, MarketEvidenceTimelineEntry, MarketEvidenceTimelineState } from './market-controller.js'
+export type { MarketSignalProjection, MarketReaderProjection, MarketEvidenceProjection, MarketBriefProjection, MarketComparisonProjection, MarketCatchupProjection, MarketCompareProjection, MarketCompareSideProjection, MarketReviewProjection, MarketReviewEntryProjection, MarketReviewSummaryProjection, MarketReviewIndexProjection } from './market-contracts.js'
+export { readConnectedMarketBrief, readConnectedMarketCatchup, readConnectedMarketSignal, readConnectedMarketCompare, readConnectedMarketEvidence, readConnectedMarketReviewIndex, readConnectedMarketReview } from './market-adapter.js'
+export type { ConnectedMarketTransport, MarketReadResult, MarketCatchupReadResult, MarketSignalReadResult, MarketCompareReadResult, MarketEvidenceReadResult, MarketReviewIndexReadResult, MarketReviewReadResult } from './market-adapter.js'
+export { createMarketReadingController, createMarketCatchupController, createMarketDetailController, createMarketCompareController, createMarketEvidenceTimelineController, createMarketReviewController } from './market-controller.js'
+export type { MarketReadingState, MarketLoader, MarketCatchupLoader, MarketSignalSelection, MarketSignalLoader, MarketCompareLoader, MarketEvidenceLoader, MarketEvidenceTimelineEntry, MarketEvidenceTimelineState, MarketReviewState, MarketReviewIndexLoader, MarketReviewLoader } from './market-controller.js'
 export { createConnectedRadarMarketHost } from './market-host.js'
 export type { RadarMarketHostFace, MarketContextSource, MarketConnectionContext, MarketMutationDispatchResult } from './market-host.js'
 export { createMarketToolTransport } from './market-tool-transport.js'

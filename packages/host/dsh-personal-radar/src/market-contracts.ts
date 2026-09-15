@@ -82,6 +82,49 @@ export interface MarketEvidenceProjection {
   policyRevision: string
   limitations: string[]
 }
+/** One summarized row of the bounded `market_reviews` discovery list. */
+export interface MarketReviewSummaryProjection {
+  reviewRef: string
+  digest: string
+  window: { start: string; end: string }
+  asOf: string
+  /** Owner count of entries in the bound review payload; never used as content. */
+  entries: number
+}
+export interface MarketReviewIndexProjection {
+  schema: 'dsh.radar.market-review-index.v1'
+  /** Policy fence around the index read (from the owner reader pre/post read). */
+  policyRevision: string
+  reviews: MarketReviewSummaryProjection[]
+  limitations: string[]
+}
+/**
+ * Weekly judgment review (Radar design: 判断回顾). The owner freezes each
+ * review (window + cutoff); entries keep the ORIGINAL judgment and the LATER
+ * follow-up signal side by side. A missing follow-up is `inconclusive` — the
+ * owner states "never a failed prediction" — so the client must never render
+ * it as an error or a failure.
+ */
+export interface MarketReviewEntryProjection {
+  original: MarketSignalProjection
+  followup: MarketSignalProjection | null
+  outcome: 'sustained' | 'cooled' | 'retracted' | 'inconclusive'
+  reason: string
+}
+export interface MarketReviewProjection {
+  schema: 'dsh.radar.market-review.v1'
+  reviewRef: string
+  digest: string
+  policyRevision: string
+  window: { start: string; end: string }
+  /** Review cutoff (`as_of`): follow-ups are only counted up to this instant. */
+  asOf: string
+  entries: MarketReviewEntryProjection[]
+  builderVersion: string
+  /** Owner re-filtered blocked topics out of this read copy. */
+  filtered: boolean
+  limitations: string[]
+}
 
 function object(input: unknown): Record<string, unknown> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('market_contract_mismatch')
@@ -217,6 +260,43 @@ export function projectMarketEvidence(input: unknown, policyRevision: string): M
   return { evidenceRef: ref(row.evidence_ref), sourceRef: ref(row.source_ref), observedAt: instant(row.observed_at),
     summary: text(row.summary), origin: row.origin as MarketEvidenceProjection['origin'], policyRevision: ref(policyRevision),
     limitations: list(row.limitations, 20, text) }
+}
+const MARKET_REVIEW_OUTCOMES = ['sustained', 'cooled', 'retracted', 'inconclusive'] as const
+
+function projectMarketReviewEntry(input: unknown, policyRevision: string): MarketReviewEntryProjection {
+  const row = object(input)
+  if (!MARKET_REVIEW_OUTCOMES.includes(String(row.outcome) as MarketReviewEntryProjection['outcome'])) throw new Error('market_contract_mismatch')
+  // A missing follow-up is the owner's inconclusive outcome, never missing
+  // data to synthesize or a failure to display as an error.
+  const followup = row.followup === null ? null : projectMarketSignal(row.followup, policyRevision)
+  return { original: projectMarketSignal(row.original, policyRevision), followup,
+    outcome: String(row.outcome) as MarketReviewEntryProjection['outcome'], reason: text(row.reason) }
+}
+export function projectMarketReview(input: unknown, fencePolicyRevision: string): MarketReviewProjection {
+  const row = object(input)
+  if (row.spec !== 'radar.market_review.v1' || typeof row.filtered !== 'boolean' ||
+    typeof row.builder_version !== 'string' || row.builder_version.length < 1 || row.builder_version.length > 120) throw new Error('market_contract_mismatch')
+  // The owner payload carries the policy revision its entries were re-filtered
+  // under; it must agree with the reader fence around this read.
+  const policyRevision = ref(row.policy_revision)
+  if (policyRevision !== ref(fencePolicyRevision)) throw new Error('market_contract_mismatch')
+  const entries = list(row.entries, 100, entry => projectMarketReviewEntry(entry, policyRevision))
+  if (new Set(entries.map(entry => entry.original.signalRef)).size !== entries.length) throw new Error('market_contract_mismatch')
+  return { schema: 'dsh.radar.market-review.v1', reviewRef: ref(row.review_ref), digest: ref(row.digest), policyRevision,
+    window: window(row.window), asOf: instant(row.as_of), entries, builderVersion: row.builder_version,
+    filtered: row.filtered, limitations: list(row.limitations, 20, text) }
+}
+export function projectMarketReviewIndex(input: unknown, fencePolicyRevision: string): MarketReviewIndexProjection {
+  const row = object(input)
+  if (row.spec !== 'radar.market_reviews.v1') throw new Error('market_contract_mismatch')
+  const policyRevision = ref(fencePolicyRevision)
+  const reviews = list(row.reviews, 30, input => {
+    const summary = object(input)
+    return { reviewRef: ref(summary.review_ref), digest: ref(summary.digest), window: window(summary.window),
+      asOf: instant(summary.as_of), entries: number(summary.entries, true) }
+  })
+  if (new Set(reviews.map(summary => summary.reviewRef)).size !== reviews.length) throw new Error('market_contract_mismatch')
+  return { schema: 'dsh.radar.market-review-index.v1', policyRevision, reviews, limitations: list(row.limitations, 20, text) }
 }
 
 /** Validate the response against the user's exact selection before exposing it. */

@@ -18,11 +18,14 @@ test('ready probe reports every declared view without touching personal resource
   const log: string[] = []
   const result = await probeMarketCapability(transportWith(capabilities([
     'market_capabilities', 'market_reader', 'market_brief', 'market_catchup', 'market_signal', 'market_evidence', 'market_compare',
+    'market_reviews', 'market_review',
   ]), log))
   expect(result.status).toBe('ready')
   expect(result.reason).toBe('')
   expect(result.views.market_brief).toBe(true)
   expect(result.views.market_compare).toBe(true)
+  expect(result.views.market_review).toBe(true)
+  expect(result.views.market_reviews).toBe(true)
   expect(log).toEqual(['radar://market/capabilities'])
 })
 

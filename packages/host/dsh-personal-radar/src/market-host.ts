@@ -1,7 +1,7 @@
-import { readConnectedMarketBrief, readConnectedMarketCatchup, readConnectedMarketEvidence, type ConnectedMarketTransport, type MarketCatchupReadResult, type MarketEvidenceReadResult } from './market-adapter.js'
+import { readConnectedMarketBrief, readConnectedMarketCatchup, readConnectedMarketEvidence, type ConnectedMarketTransport, type MarketCatchupReadResult, type MarketEvidenceReadResult, type MarketReviewIndexReadResult, type MarketReviewReadResult } from './market-adapter.js'
 import type { MarketLoader } from './market-controller.js'
 import { isSafeRadarRef } from './contracts.js'
-import { readConnectedMarketSignal, readConnectedMarketCompare, type MarketSignalReadResult, type MarketCompareReadResult } from './market-adapter.js'
+import { readConnectedMarketSignal, readConnectedMarketCompare, readConnectedMarketReviewIndex, readConnectedMarketReview, type MarketSignalReadResult, type MarketCompareReadResult } from './market-adapter.js'
 import { createMarketActionStore, type MarketActionReceiptV1, type MarketMutationIntentV1, type MarketMutationTransport } from './market-actions.js'
 import { probeMarketCapability, MARKET_OPTIONAL_VIEWS, MARKET_REQUIRED_VIEWS, type MarketCapabilityProbeResultV1, type MarketViewName } from './market-probe.js'
 import type { MarketEvidenceProjection } from './market-contracts.js'
@@ -27,6 +27,10 @@ export interface RadarMarketHostFace {
    */
   openEvidenceSource?(contextRef: string, evidence: MarketEvidenceProjection, signal: AbortSignal): Promise<{ ok: boolean; reason?: string }>
   loadCompare?(contextRef: string, left: { signalRef: string; revision: number }, right: { signalRef: string; revision: number }, signal: AbortSignal): Promise<MarketCompareReadResult>
+  /** Bounded discovery list of owner-frozen reviews (latest first, summaries only). */
+  loadReviewIndex?(contextRef: string, signal: AbortSignal): Promise<MarketReviewIndexReadResult>
+  /** Read one frozen weekly review by its exact ref; absent seam stays disabled. */
+  loadReview?(contextRef: string, reviewRef: string, signal: AbortSignal): Promise<MarketReviewReadResult>
   /** Explicit typed mutation through the current connection; absent seam stays disabled. */
   mutate?(contextRef: string, intent: MarketMutationIntentV1, signal: AbortSignal): Promise<MarketMutationDispatchResult>
   lookupMutationReceipt?(contextRef: string, idempotencyKey: string, signal: AbortSignal): Promise<MarketActionReceiptV1 | null>
@@ -175,6 +179,30 @@ export function createConnectedRadarMarketHost(source: MarketContextSource, loca
       const result = await readConnectedMarketCatchup(before.connection, cursor, 5000, signal)
       if (!sameContext(before, signal)) return {
         ok: false, reason: 'cancelled', recovery: 'The Radar context changed; discard the earlier page.',
+      }
+      noteRevision(result)
+      return result
+    },
+    async loadReviewIndex(contextRef, signal) {
+      const before = current()
+      if (!before || before.ref !== contextRef || signal.aborted) return {
+        ok: false, reason: 'cancelled', recovery: 'Select the active Radar context before reading reviews.',
+      }
+      const result = await readConnectedMarketReviewIndex(before.connection, 5000, signal)
+      if (!sameContext(before, signal)) return {
+        ok: false, reason: 'cancelled', recovery: 'The Radar context changed; discard the earlier review list.',
+      }
+      noteRevision(result)
+      return result
+    },
+    async loadReview(contextRef, reviewRef, signal) {
+      const before = current()
+      if (!before || before.ref !== contextRef || signal.aborted) return {
+        ok: false, reason: 'cancelled', recovery: 'Select the active Radar context before reading a review.',
+      }
+      const result = await readConnectedMarketReview(before.connection, reviewRef, 5000, signal)
+      if (!sameContext(before, signal)) return {
+        ok: false, reason: 'cancelled', recovery: 'The Radar context changed; discard the earlier review.',
       }
       noteRevision(result)
       return result

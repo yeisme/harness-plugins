@@ -1,6 +1,6 @@
 import { projectMarketBrief, projectMarketReader, projectMarketCatchup, type MarketBriefProjection, type MarketReaderProjection, type MarketCatchupProjection } from './market-contracts.js'
 import { projectSelectedMarketSignal, projectMarketCompare, type MarketSignalProjection, type MarketCompareProjection } from './market-contracts.js'
-import { projectMarketEvidence, type MarketEvidenceProjection } from './market-contracts.js'
+import { projectMarketEvidence, projectMarketReview, projectMarketReviewIndex, type MarketEvidenceProjection, type MarketReviewProjection, type MarketReviewIndexProjection } from './market-contracts.js'
 import { isSafeRadarRef } from './contracts.js'
 
 /** Inject the host's existing connection; this adapter never resolves a binary or spawns a process. */
@@ -15,6 +15,8 @@ export type MarketCatchupReadResult = { ok: true; page: MarketCatchupProjection;
 export type MarketSignalReadResult = { ok: true; signal: MarketSignalProjection; reader: MarketReaderProjection } | MarketReadFailure
 export type MarketCompareReadResult = { ok: true; compare: MarketCompareProjection; reader: MarketReaderProjection } | MarketReadFailure
 export type MarketEvidenceReadResult = { ok: true; evidence: MarketEvidenceProjection; reader: MarketReaderProjection } | MarketReadFailure
+export type MarketReviewIndexReadResult = { ok: true; index: MarketReviewIndexProjection; reader: MarketReaderProjection } | MarketReadFailure
+export type MarketReviewReadResult = { ok: true; review: MarketReviewProjection; reader: MarketReaderProjection } | MarketReadFailure
 
 function resourceData(input: unknown, uri: string): unknown {
   if (!input || typeof input !== 'object') throw new Error('contract_mismatch')
@@ -83,7 +85,7 @@ async function readMarketProjection<T extends { policyRevision: string; readerRe
   } catch (error) {
     const code = error && typeof error === 'object' ? (error as { code?: unknown; data?: { code?: unknown } }).data?.code ?? (error as { code?: unknown }).code : undefined
     const reason = internalReason ?? (code === 'state_conflict' || code === 'cursor_invalid' ? 'state_changed' : code === 'brief_not_found' ? 'brief_absent'
-      : code === 'signal_not_found' || code === 'evidence_not_found' ? 'reference_unavailable' : code === 'content_blocked' ? 'content_blocked' : 'offline')
+      : code === 'signal_not_found' || code === 'evidence_not_found' || code === 'review_not_found' ? 'reference_unavailable' : code === 'content_blocked' ? 'content_blocked' : 'offline')
     return { ok: false, reason, recovery: reason === 'state_changed' ? 'Discard the old cursor and restart catch-up from the current owner state.'
       : reason === 'reference_unavailable' ? 'The selected revision or evidence is unavailable; select another stored reference without substituting the latest revision.'
       : reason === 'policy_changed' ? 'Read the current owner policy before showing content.'
@@ -143,4 +145,30 @@ export async function readConnectedMarketCompare(transport: ConnectedMarketTrans
   const path = `compare/${left.signalRef}/${left.revision}/${right.signalRef}/${right.revision}`
   const result = await readMarketProjection(transport, path, 'market_compare', projectMarketCompare, timeoutMs, signal)
   return result.ok ? { ok: true, compare: result.value, reader: result.reader } : result
+}
+/**
+ * Read the bounded `market_reviews` discovery list (latest 30 owner-frozen
+ * review summaries) so the client can pick a stored review ref before the
+ * bound deep read. The summaries carry no entry content.
+ */
+export async function readConnectedMarketReviewIndex(transport: ConnectedMarketTransport,
+  timeoutMs = 5000, signal?: AbortSignal): Promise<MarketReviewIndexReadResult> {
+  const result = await readMarketProjection(transport, 'reviews', 'market_reviews', projectMarketReviewIndex, timeoutMs, signal)
+  return result.ok ? { ok: true, index: result.value, reader: result.reader } : result
+}
+/**
+ * Read one owner-frozen weekly review by its exact ref. Missing reviews
+ * surface the owner's review_not_found code as `reference_unavailable` —
+ * never a silent fallback to the latest review.
+ */
+export async function readConnectedMarketReview(transport: ConnectedMarketTransport, reviewRef: string,
+  timeoutMs = 5000, signal?: AbortSignal): Promise<MarketReviewReadResult> {
+  if (!isSafeRadarRef(reviewRef)) throw new Error('market_selection_invalid')
+  const result = await readMarketProjection(transport, `reviews/${reviewRef}`, 'market_review', projectMarketReview, timeoutMs, signal)
+  // Selection guard: a substituted review payload is a mismatch, not content
+  // to display under the requested reference.
+  if (result.ok && result.value.reviewRef !== reviewRef) return {
+    ok: false, reason: 'contract_mismatch', recovery: 'The connected Radar owner returned a different review; select a stored review reference.',
+  }
+  return result.ok ? { ok: true, review: result.value, reader: result.reader } : result
 }

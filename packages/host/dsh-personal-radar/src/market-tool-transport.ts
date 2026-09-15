@@ -4,7 +4,7 @@ export interface DiscoveredMarketSearch {
   name: string
   inputSchema: unknown
 }
-export type MarketToolCaller = (name: string, args: { view: string; cursor?: string; signal?: string; revision?: number; evidence?: string }, signal?: AbortSignal) => Promise<unknown>
+export type MarketToolCaller = (name: string, args: { view: string; cursor?: string; signal?: string; revision?: number; evidence?: string; review?: string }, signal?: AbortSignal) => Promise<unknown>
 
 /** The caller supplies the exact discovered public name; never reconstruct MCP namespace names. */
 export function createMarketToolTransport(tool: DiscoveredMarketSearch, call: MarketToolCaller): ConnectedMarketTransport {
@@ -16,15 +16,20 @@ export function createMarketToolTransport(tool: DiscoveredMarketSearch, call: Ma
     'radar://market/capabilities': 'market_capabilities',
     'radar://market/reader': 'market_reader',
     'radar://market/briefs/latest': 'market_brief',
+    'radar://market/reviews': 'market_reviews',
   }
   return { async readResource({ uri }, options) {
     let args: Parameters<MarketToolCaller>[1]
     const detail = /^radar:\/\/market\/signals\/([A-Za-z0-9][A-Za-z0-9._:-]{0,159})\/revisions\/([1-9]\d*)(?:\/evidence\/([A-Za-z0-9][A-Za-z0-9._:-]{0,159}))?$/.exec(uri)
+    const review = /^radar:\/\/market\/reviews\/([A-Za-z0-9][A-Za-z0-9._:-]{0,159})$/.exec(uri)
     if (detail) {
       const view = detail[3] ? 'market_evidence' : 'market_signal'
       const revision = Number(detail[2])
       if (!views.includes(view) || !Number.isSafeInteger(revision)) throw new Error('market_resource_unavailable')
       args = { view, signal: detail[1]!, revision, ...(detail[3] ? { evidence: detail[3] } : {}) }
+    } else if (review) {
+      if (!views.includes('market_review')) throw new Error('market_resource_unavailable')
+      args = { view: 'market_review', review: review[1]! }
     } else if (uri === 'radar://market/catchup' || uri.startsWith('radar://market/catchup?')) {
       const query = new URL(uri).searchParams
       const cursor = query.get('cursor')
@@ -32,7 +37,7 @@ export function createMarketToolTransport(tool: DiscoveredMarketSearch, call: Ma
         (cursor !== null && (!/^[A-Za-z0-9_-]+$/.test(cursor) || cursor.length > 2048))) throw new Error('market_resource_unavailable')
       args = { view: 'market_catchup', ...(cursor !== null ? { cursor } : {}) }
     } else {
-      if (!Object.hasOwn(paths, uri)) throw new Error('market_resource_unavailable')
+      if (!Object.hasOwn(paths, uri) || !views.includes(paths[uri]!)) throw new Error('market_resource_unavailable')
       args = { view: paths[uri]! }
     }
     const response = await call(tool.name, args, options?.signal) as {

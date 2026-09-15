@@ -12,7 +12,7 @@
 import type { ConnectedMarketTransport } from './market-adapter.js'
 
 export const MARKET_REQUIRED_VIEWS = ['market_brief', 'market_reader'] as const
-export const MARKET_OPTIONAL_VIEWS = ['market_catchup', 'market_signal', 'market_evidence', 'market_compare'] as const
+export const MARKET_OPTIONAL_VIEWS = ['market_catchup', 'market_signal', 'market_evidence', 'market_compare', 'market_reviews', 'market_review'] as const
 export type MarketViewName = typeof MARKET_REQUIRED_VIEWS[number] | typeof MARKET_OPTIONAL_VIEWS[number] | 'market_capabilities'
 
 export type MarketCapabilityStatus =

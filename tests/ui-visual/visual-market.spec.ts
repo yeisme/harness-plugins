@@ -14,7 +14,8 @@ for (const width of [360, 560, 960]) test(`market reading ${width}px`, async ({ 
   const summary = page.locator('summary').first()
   await summary.focus()
   await page.keyboard.press('Enter')
-  await expect(page.getByText('证据引用: evidence-a')).toBeVisible()
+  // The fixture brief lists two signals; the first signal's details carry evidence-a.
+  await expect(page.locator('article').first().getByText('证据引用: evidence-a')).toBeVisible()
   expect(await summary.evaluate(element => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44)
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
   await page.screenshot({ path: info.outputPath('market.png'), fullPage: true })
@@ -46,7 +47,8 @@ test('catch-up follows the empty continuation page and stops at the last cursor'
 
 test('detail navigation requests the selected revision and restores focus to its list button', async ({ page }) => {
   await page.goto('/market?width=360&lang=zh')
-  const open = page.getByRole('button', { name: '打开详情', exact: true })
+  // The fixture brief lists two signals; detail navigation exercises the first row (signal-a).
+  const open = page.getByRole('button', { name: '打开详情', exact: true }).first()
   await open.click()
   await expect(page.getByRole('heading', { name: '信号详情', exact: true })).toBeFocused()
   await expect(page.getByText('signal-a · 修订 2')).toBeVisible()

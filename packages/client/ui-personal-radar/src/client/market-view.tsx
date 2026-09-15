@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Surface, SurfaceContextBar, SurfaceSection, SurfaceState } from '@yeisme/dsh-client-ui-surface'
-import type { MarketReadingState, createMarketReadingController, createMarketCatchupController, createMarketDetailController, createMarketCompareController, createMarketEvidenceTimelineController } from '@yeisme/dsh-personal-radar'
+import type { MarketReadingState, createMarketReadingController, createMarketCatchupController, createMarketDetailController, createMarketCompareController, createMarketEvidenceTimelineController, createMarketReviewController } from '@yeisme/dsh-personal-radar'
 import { MarketDetailView, type MarketEvidenceSourceOpener } from './market-detail-view.js'
 import { MarketCompareView } from './market-compare-view.js'
 import { MarketCatchupView } from './market-catchup-view.js'
+import { MarketReviewView } from './market-review-view.js'
 import { marketLabel, marketTime } from './market-labels.js'
 import type { MarketActionsController } from './market-actions.js'
 import type { MarketQuestionController } from './market-question.js'
@@ -45,7 +46,7 @@ export type MarketLocale = 'en' | 'zh' | 'pseudo'
 type Controller = ReturnType<typeof createMarketReadingController>
 const styles = '[data-radar-market] .ys-context-value{white-space:normal;overflow-wrap:anywhere}[data-radar-market] .ys-row{grid-template-columns:minmax(0,1fr);overflow-wrap:anywhere}[data-radar-market] .ys-row h3,[data-radar-market] .ys-row p{margin:0;font-size:var(--vk-font-body)}[data-radar-market] summary{min-height:var(--vk-ctrl-touch);cursor:pointer}[data-radar-market] details{padding-block:var(--vk-gap-sm)}'
 
-export function MarketReadingView({ controller, catchup, detail, compare, actions, question, capability, evidence, openSource, locale = 'zh' }: { controller: Controller; detail?: ReturnType<typeof createMarketDetailController>; catchup?: ReturnType<typeof createMarketCatchupController>; compare?: ReturnType<typeof createMarketCompareController>; actions?: MarketActionsController; question?: MarketQuestionController; capability?: { status: 'reader_only' | 'mismatch'; reason: string }; evidence?: ReturnType<typeof createMarketEvidenceTimelineController>; openSource?: MarketEvidenceSourceOpener; locale?: MarketLocale }) {
+export function MarketReadingView({ controller, catchup, detail, compare, review, actions, question, capability, evidence, openSource, locale = 'zh' }: { controller: Controller; detail?: ReturnType<typeof createMarketDetailController>; catchup?: ReturnType<typeof createMarketCatchupController>; compare?: ReturnType<typeof createMarketCompareController>; review?: ReturnType<typeof createMarketReviewController>; actions?: MarketActionsController; question?: MarketQuestionController; capability?: { status: 'reader_only' | 'mismatch'; reason: string }; evidence?: ReturnType<typeof createMarketEvidenceTimelineController>; openSource?: MarketEvidenceSourceOpener; locale?: MarketLocale }) {
   const [detailOpen, setDetailOpen] = useState(false)
   const [compareOpen, setCompareOpen] = useState(false)
   const [compareSelections, setCompareSelections] = useState<Array<{ signalRef: string; revision: number }>>([])
@@ -67,7 +68,7 @@ export function MarketReadingView({ controller, catchup, detail, compare, action
     setActionState(actions.snapshot())
     return () => dispose()
   }, [actions])
-  const [mode, setMode] = useState<'brief' | 'catchup'>('brief')
+  const [mode, setMode] = useState<'brief' | 'catchup' | 'review'>('brief')
   const [state, setState] = useState<MarketReadingState>(() => controller.snapshot())
   useEffect(() => {
     const dispose = controller.subscribe(setState)
@@ -87,9 +88,10 @@ export function MarketReadingView({ controller, catchup, detail, compare, action
   })
   return <Surface kind="workspace" data-radar-market aria-label={label('title')}>
     <style>{styles}</style>
-    <SurfaceContextBar title={label('title')} nav={catchup ? <>
+    <SurfaceContextBar title={label('title')} nav={catchup || review ? <>
       <Button aria-pressed={mode === 'brief'} onClick={() => setMode('brief')}>{locale === 'zh' ? '变化简报' : locale === 'pseudo' ? '[!! Brief !!]' : 'Brief'}</Button>
-      <Button aria-pressed={mode === 'catchup'} onClick={() => { setMode('catchup'); void catchup.first() }}>{locale === 'zh' ? '未读补看' : locale === 'pseudo' ? '[!! Catch-up !!]' : 'Catch-up'}</Button>
+      {catchup ? <Button aria-pressed={mode === 'catchup'} onClick={() => { setMode('catchup'); void catchup.first() }}>{locale === 'zh' ? '未读补看' : locale === 'pseudo' ? '[!! Catch-up !!]' : 'Catch-up'}</Button> : null}
+      {review ? <Button aria-pressed={mode === 'review'} onClick={() => { setMode('review'); void review.refresh() }}>{locale === 'zh' ? '回顾' : locale === 'pseudo' ? '[!! Review !!]' : 'Review'}</Button> : null}
     </> : undefined} actions={compare && compareSelections.length === 2 && !compareOpen ? <Button onClick={() => { setCompareOpen(true); void compare.select(compareSelections[0]!, compareSelections[1]!) }}>{locale === 'zh' ? '打开对照' : 'Open comparison'}</Button> : undefined} context={brief && mode === 'brief' ? <span>
       <time dateTime={brief.window.start} title={brief.window.start}>{marketTime(brief.window.start, brief.timezone, locale)}</time>
       {' – '}<time dateTime={brief.window.end} title={brief.window.end}>{marketTime(brief.window.end, brief.timezone, locale)}</time>
@@ -100,7 +102,7 @@ export function MarketReadingView({ controller, catchup, detail, compare, action
       detail.close(); setDetailOpen(false); requestAnimationFrame(() => { if (returnFocus.current?.isConnected) returnFocus.current.focus() })
     }} {...(question ? { question } : {})} {...(evidence ? { evidence } : {})} {...(openSource ? { openSource } : {})} /></div> : null}<div hidden={detailOpen || compareOpen}>
     {actions && !actionState.available ? <p role="status">{label('actionsUnavailable')}</p> : null}
-    {mode === 'catchup' && catchup ? <div className="ys-body"><MarketCatchupView controller={catchup} locale={locale} {...(actions ? { actions } : {})} /></div> : <>
+    {mode === 'review' && review ? <div className="ys-body"><MarketReviewView controller={review} locale={locale} {...(detail ? { detail, onOpenSignal: (_selection: { signalRef: string; revision: number }, source: HTMLElement | null) => { returnFocus.current = source; setDetailOpen(true) } } : {})} /></div> : mode === 'catchup' && catchup ? <div className="ys-body"><MarketCatchupView controller={catchup} locale={locale} {...(actions ? { actions } : {})} /></div> : <>
     {state.loading ? <SurfaceState phase="loading" title={label('loading')} /> : null}
     {!state.loading && !result ? <SurfaceState phase="disabled" title={label('unavailable')} description={capability !== undefined ? capability.reason : label('connect')} /> : null}
     {!state.loading && result && !result.ok ? <SurfaceState phase={result.reason === 'brief_absent' ? 'empty' : 'error'}
@@ -108,6 +110,9 @@ export function MarketReadingView({ controller, catchup, detail, compare, action
     {brief ? <div className="ys-body">
       {brief.status === 'empty' ? <SurfaceState phase="empty" title={label('empty')} /> : null}
       {brief.filtered ? <SurfaceState phase="partial" title={label('filtered')} /> : null}
+      {review && brief.correctionCount > 0 ? <p role="status">{locale === 'zh' ? `本窗口包含 ${brief.correctionCount} 处更正` : locale === 'pseudo' ? `[!! ${brief.correctionCount} corrections in this window !!]` : `${brief.correctionCount} corrections in this window`}
+        {/* Corrections surfaced in the brief link to the frozen weekly review, never a live rebuild. */}
+        <Button onClick={() => { setMode('review'); void review.refresh() }}>{locale === 'zh' ? '查看回顾' : locale === 'pseudo' ? '[!! Open review !!]' : 'Open review'}</Button></p> : null}
       {(['main', 'watching'] as const).map(section => <SurfaceSection key={section} title={label(section)}>
         <div className="ys-list">{brief[section].map(signal => <article key={`${signal.signalRef}:${signal.revision}`} className="ys-row">
           <h3>{signal.title}</h3>

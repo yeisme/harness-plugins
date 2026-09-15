@@ -3,6 +3,7 @@ const labels = {
   health: { fresh: ['Within freshness window', '在有效时间内'], stale: ['Out of date', '数据已过期'], partial: ['Partially available', '部分可用'],
     unavailable: ['Unavailable', '暂不可用'], freshness_unknown: ['Freshness unknown', '时效未知'] },
   lifecycle: { active: ['Active observation', '当前判断'], retracted: ['Retracted', '已撤回'], inconclusive: ['Insufficient evidence', '证据不足'], cooled: ['Cooling', '已降温'] },
+  outcome: { sustained: ['Sustained', '后续持续'], cooled: ['Cooled', '后续消退'], retracted: ['Corrected', '已更正'], inconclusive: ['Cannot judge yet', '暂无法判断'] },
   claim: { newly_observed: ['Newly observed in sample', '样本内首次观察'], metric_changed: ['Metric changed', '指标变化'],
     rank_changed: ['Rank changed', '名次变化'], placement_changed: ['Placement changed', '展示位置变化'], correction: ['Correction', '判断更正'],
     listing_changed: ['Directory listing changed', '目录收录变化'], topic_mix_changed: ['Topic mix changed in sample', '样本内题材供给变化'],
