@@ -69,3 +69,34 @@ test('comparison requires two explicit revisions and keeps both sides side by si
   await page.getByRole('button', { name: 'Back to list', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Add comparison', exact: true }).first()).toBeVisible()
 })
+
+test('weekly review keeps original and follow-up side by side with a separate inconclusive section', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await page.setViewportSize({ width: 560, height: 900 })
+  await page.goto('/market?width=560&lang=zh')
+  // The brief's corrections carry an explicit entry into the frozen review.
+  await expect(page.getByText('本窗口包含 1 处更正')).toBeVisible()
+  await page.getByRole('button', { name: '回顾', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '判断回顾', exact: true })).toBeVisible()
+  // Cutoff, frozen identity and the owner limitation stay visible.
+  await expect(page.locator('[data-radar-market-review]').getByText('截止:')).toBeVisible()
+  await expect(page.getByText('market-review-fixture · market-review-builder.v1')).toBeVisible()
+  await page.locator('[data-radar-market-review] summary').first().click()
+  await expect(page.getByText('No later evidence is inconclusive, never a failed prediction.')).toBeVisible()
+  // Judged entries keep the original and follow-up revisions side by side.
+  expect(await page.locator('[data-review-outcome="sustained"] .ys-row').count()).toBe(2)
+  expect(await page.locator('[data-review-outcome="retracted"] .ys-row').count()).toBe(2)
+  // Inconclusive lives in its own section with the non-scoring copy.
+  await expect(page.getByRole('heading', { name: '暂无法判断', exact: true })).toBeVisible()
+  await expect(page.getByText('截止前无后续证据，不计成败')).toBeVisible()
+  // The correction entry opens the follow-up correction revision in the shared detail view.
+  await page.locator('[data-review-outcome="retracted"]').getByRole('button', { name: '查看更正', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '信号详情', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => (window as unknown as { marketFixture: { reviewReads: unknown[]; detailSelections: unknown[] } }).marketFixture.reviewReads)).toEqual(['market-review-fixture'])
+  expect(await page.evaluate(() => (window as unknown as { marketFixture: { detailSelections: unknown[] } }).marketFixture.detailSelections)).toEqual([{ signalRef: 'signal-a', revision: 4 }])
+  await page.getByRole('button', { name: '返回列表', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '信号详情', exact: true })).toHaveCount(0)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(560)
+  expect(errors).toEqual([])
+})
