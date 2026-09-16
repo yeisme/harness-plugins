@@ -2,7 +2,7 @@
 
 由 scripts/openspec-tasks.py 维护状态。
 
-- [ ] 1.1 核对Tools详情、Skill安装来源、MCP资源、文件预览、Markdown及Composer prepare/ack实际合同；逐操作记录source/handler/支持/缺口及配套owner任务，不修改其他在途change。
+- [x] 1.1 核对Tools详情、Skill安装来源、MCP资源、文件预览、Markdown及Composer prepare/ack实际合同；逐操作记录source/handler/支持/缺口及配套owner任务，不修改其他在途change。 | evidence: 审计记录 implementation-baseline.md（2026-09-16）：可复用=Tools详情容器（McpInspectorView renderReference 插槽）、Skill 源码分页全链（toolReferences.readSkill 256KiB/5000 行 + SkillDocumentReader）、rich-media 预览平台（PreviewResourceV1/ResourcePreviewHostV1/RendererRegistry）、Composer prepare/ack（references-v2.ts 冻结实例合同）；仓内缺口=渲染模式/文内搜索/linkId 解析/包内相对路径授权/历史并排/会话引用；外部 owner 缺口=上游 dsh-skill-filesystem@0.1.5-rc.2 无 getDocument（stock 运行时诚实 reader_unavailable）、dsh-mcp-client@0.1.5-rc.2 无 resources/list・readResource（lib grep 0 命中，方法与版本已记录）。未修改任何在途 change 实现。
 - [ ] 1.2 冻结版本化正文/引用读取合同、scope/source/revision/linkId/分页和限额；保留旧list/setEnabled，记录兼容与回滚。
 - [ ] 2.1 实现Host来源适配与授权正文读取；区分同名不同安装包、项目/全局scope；正文不入目录snapshot或日志。
 - [ ] 2.2 实现引用解析与打开时授权检查；包内../、锚点、唯一行内文件名、编码越界、symlink与检查后替换；浏览器不传任意路径。
