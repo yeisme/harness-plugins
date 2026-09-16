@@ -36,6 +36,22 @@ describe('explicit Skill document reads', () => {
     expect(owner.getDocument).not.toHaveBeenCalled()
   })
 
+  it('reads one install when the same skill name exists in another source and fails closed on same-source duplicates', async () => {
+    const projectInstall = { ...summary, source: 'project-agents', resourceBase: { kind: 'directory', path: 'project-package-root' } }
+    const owner = { list: vi.fn(async () => [summary, projectInstall]), getDocument: vi.fn(async () => ({ ...summary, content: '# user install\n' })) }
+    const reader = new SkillReferenceReader(() => owner)
+    const fromUser = page(await reader.readSkill(request, signal()))
+    expect(fromUser.content).toBe('# user install\n')
+    expect(JSON.stringify(fromUser)).not.toContain('project-package-root')
+    owner.getDocument.mockImplementation(async () => ({ ...projectInstall, content: '# project install\n' }))
+    const fromProject = page(await reader.readSkill({ ...request, source: 'project-agents' }, signal()))
+    expect(fromProject.content).toBe('# project install\n')
+    expect(fromProject.resourceRef).not.toBe(fromUser.resourceRef)
+    owner.list.mockResolvedValue([summary, { ...summary, resourceBase: { kind: 'directory', path: 'second-user-root' } }])
+    expect(await reader.readSkill(request, signal())).toMatchObject({ status: 'denied', reason: 'source_not_readable' })
+    expect(owner.getDocument).toHaveBeenCalledTimes(2)
+  })
+
   it('pages at the line bound without mixing revisions or documents', async () => {
     const { reader, owner } = fixture('line\n'.repeat(5001))
     const first = page(await reader.readSkill(request, signal()))
