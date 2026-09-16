@@ -40,6 +40,23 @@ Skill正文属于用户显式请求查看的安装文档，允许通过独立授
 
 初始文本段上限256KiB且最多5000行（任一先到）；超限显示截断并提供有界续读，不假装已读完整文件。目录引用列表分页，不后台遍历依赖。二进制仅复用已支持的授权预览；不支持时说明类型，可通过既有文件能力打开。正文请求可取消，Pane关闭不改变工具执行；恢复界面不触发执行。
 
+## 合同冻结（`tools.reference-reader.v1alpha1`，2026-09-16，任务 1.2）
+
+以下以已交付的 `toolReferences.readSkill`（specVersion 1.0，search-center 增量）为兼容基线冻结。新增面一律 additive；冻结后语义变更走 OpenSpec 新 change。
+
+| 操作 | 输入（冻结） | 输出（冻结） |
+|---|---|---|
+| `readDocument` | `{ itemId, scope:'profile', source, expectedRevision?, cursor? }`；itemId `skill:<name>`（≤206 字符、小写连字符段）；source ∈ {project-dsh, project-agents, user-dsh, user-agents, custom, bundled}；expectedRevision/cursor 为 64 位 hex / ≤512 base64url | 成功 `{status:'ready'\|'partial', resourceRef:'skill-document:<sha256>', revision:<sha256>, mediaType:'text/markdown', content, startLine, continuedLine, nextCursor?}`；失败 `{status:'disabled'\|'denied'\|'stale'\|'error', reason}`（固定原因词表：invalid_request/reader_unavailable/source_not_readable/document_not_readable/source_changed/revision_changed/invalid_cursor/cursor_mismatch/source_no_longer_visible/permission_denied/cancelled/owner_read_failed） |
+| `resolveReference` | `{ resourceRef, revision, linkId }`；linkId 只由 owner 签发，浏览器不提交路径 | `{ targetResourceRef, targetRevision, kind:'file'\|'anchor'\|'external', status:'readable'\|'missing'\|'denied'\|'out-of-scope'\|'external' , reason? }` |
+| `readResource` | `{ resourceRef, expectedRevision, cursor? }`；cursor 绑定 resource+revision，不跨资源复用 | 同版本正文段（与 readDocument 同限额）或媒体预览授权（走既有 `ResourcePreviewHostV1` 短时句柄）；revision 不符 `stale/revision_changed` |
+| `referenceToSession` | `{ resourceRef, revision, selection?, sessionId }`（sessionId 由用户显式选择） | 既有 Composer prepare/ack 回执（`ComposerReferenceBridgeV1`）；ack 前不宣称成功 |
+
+冻结限额：正文段 ≤256KiB 且 ≤5000 行（先到为准，Unicode 码点边界不截断）；UI 阅读历史 ≤50 项；`readSkill` 现有输入/输出/原因词表原样成为 `readDocument` 的兼容基线（不 rename、不 retype；`readDocument` 未落地前 `readSkill` 继续可用）。
+
+兼容：`toolHub.list`/`toolHub.setEnabled` 与目录快照、启停、会话可用性语义不变；无读取服务时目录/调用功能不受影响（现状保持）。
+
+回滚：移除新增 Remote 方法与详情正文/引用入口即回滚；正文不落盘、无持久化迁移；Skill 包、会话、布局与用户文件不动。
+
 ## UI Contract
 
 - Surface classification：adopted；Surface kind：inspector，复用现有Tools workspace内详情。
