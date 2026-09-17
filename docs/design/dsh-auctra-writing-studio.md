@@ -1,6 +1,6 @@
 # Auctra 文本台页面与控件设计
 
-状态：规格、任务、fixture 原型与领域 UI 已形成；真实 owner 全路径（4.2）仍开放。唯一任务入口：[tasks](../../openspec/changes/dsh-auctra-writing-studio-v1/tasks.md)；规范：[spec](../../openspec/changes/dsh-auctra-writing-studio-v1/specs/dsh-auctra-writing-studio/spec.md)。
+状态：规格、任务、fixture 原型与领域 UI 已形成；真实 owner 全路径（4.2）仍开放。唯一任务入口：[tasks](../../openspec/changes/archive/2026-09-14-dsh-auctra-writing-studio-v1/tasks.md)；规范：[spec](../../openspec/changes/archive/2026-09-14-dsh-auctra-writing-studio-v1/specs/dsh-auctra-writing-studio/spec.md)。
 
 ## 用户路径
 
@@ -42,7 +42,7 @@ loading保留scope与最后确认内容；empty给首个创建/导入动作；er
 
 ## 复用与依赖
 
-复用ui-surface、ui-visual-kit、官方primitives，以及既有CreatorActionComposer、artifact-workspace和rich-media。不要把本文解释为重新实现所有共享编辑/候选/引用能力。具体UI Contract见[design](../../openspec/changes/dsh-auctra-writing-studio-v1/design.md)；共用接口、证据和边界见[公共合同](../interfaces/dsh-creative-studio-contracts.md)。
+复用ui-surface、ui-visual-kit、官方primitives，以及既有CreatorActionComposer、artifact-workspace和rich-media。不要把本文解释为重新实现所有共享编辑/候选/引用能力。具体UI Contract见[design](../../openspec/changes/archive/2026-09-14-dsh-auctra-writing-studio-v1/design.md)；共用接口、证据和边界见[公共合同](../interfaces/dsh-creative-studio-contracts.md)。
 
 依据：[owner文档](../../../../cli/auctra/docs/service-api-interface.md)。当前源码/文档不等于真实providerready；任务1.1复核operation/handler/registry/version，任务5.1对确认缺失能力在`cli/auctra`创建配套OpenSpec/tasks，并双向链接。缺少canary只应进入验证任务，不重复造API。
 

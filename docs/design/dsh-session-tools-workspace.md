@@ -1,6 +1,6 @@
 # 会话工具 Tab、固定旁栏与标题管理
 
-本文记录Tools V2的会话绑定基础。当前工具页已把调用活动移交dsh-context，目录与草稿发现改进见 [工具发现与会话草稿](dsh-tools-discovery-draft.md)，本轮进度由 [新任务入口](../../openspec/changes/dsh-tools-discovery-draft-v1/tasks.md) 维护。原 [V2交付](../qa/dsh-session-tools-workspace-delivery.md) 的98项视觉结果仅代表当时版本。
+本文记录Tools V2的会话绑定基础。当前工具页已把调用活动移交dsh-context，目录与草稿发现改进见 [工具发现与会话草稿](dsh-tools-discovery-draft.md)，本轮进度由 [新任务入口](../../openspec/changes/archive/2026-09-11-dsh-tools-discovery-draft-v1/tasks.md) 维护。原 [V2交付](../qa/dsh-session-tools-workspace-delivery.md) 的98项视觉结果仅代表当时版本。
 
 ## 用户路径
 

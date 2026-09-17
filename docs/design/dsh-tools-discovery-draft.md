@@ -1,6 +1,6 @@
 # 工具发现与会话草稿
 
-工具页服务于“找到能力 → 看懂用途和可用条件 → 加入绑定会话草稿”。本功能本地验收已通过：8项浏览器场景、真实Host A/B草稿隔离、相关包及布局/补丁门；全仓类型与视觉检查仍有其它在途改动失败，详见 [验收记录](../../openspec/changes/dsh-tools-discovery-draft-v1/verification.md)。实施由 [OpenSpec](../../openspec/changes/dsh-tools-discovery-draft-v1/tasks.md) 维护；完整 [UI Contract](../../openspec/changes/dsh-tools-discovery-draft-v1/design.md) 沿用项目统一视觉系统。
+工具页服务于“找到能力 → 看懂用途和可用条件 → 加入绑定会话草稿”。本功能本地验收已通过：8项浏览器场景、真实Host A/B草稿隔离、相关包及布局/补丁门；全仓类型与视觉检查仍有其它在途改动失败，详见 [验收记录](../../openspec/changes/archive/2026-09-11-dsh-tools-discovery-draft-v1/verification.md)。实施由 [OpenSpec](../../openspec/changes/archive/2026-09-11-dsh-tools-discovery-draft-v1/tasks.md) 维护；完整 [UI Contract](../../openspec/changes/archive/2026-09-11-dsh-tools-discovery-draft-v1/design.md) 沿用项目统一视觉系统。
 
 ## 使用路径
 

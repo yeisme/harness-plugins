@@ -2,7 +2,7 @@
 
 插件合同与 fixture 浏览器验收已完成。真实官方 DSH / 本机 profile 上的选区 overlay 仍未验证，不计通过。
 
-完整合同与验收标准以 [补充 OpenSpec](../../openspec/changes/dsh-selection-conversation-actions-v1/specs/dsh-selection-conversation-actions/spec.md) 为准；技术决策和 UI Contract 见 [design.md](../../openspec/changes/dsh-selection-conversation-actions-v1/design.md)，待办见 [tasks.md](../../openspec/changes/dsh-selection-conversation-actions-v1/tasks.md)。
+完整合同与验收标准以 [补充 OpenSpec](../../openspec/changes/archive/2026-09-06-dsh-selection-conversation-actions-v1/specs/dsh-selection-conversation-actions/spec.md) 为准；技术决策和 UI Contract 见 [design.md](../../openspec/changes/archive/2026-09-06-dsh-selection-conversation-actions-v1/design.md)，待办见 [tasks.md](../../openspec/changes/archive/2026-09-06-dsh-selection-conversation-actions-v1/tasks.md)。
 
 ## 用户旅程
 
@@ -25,7 +25,7 @@
 
 ## 与现有工作的关系
 
-此补充依赖 [引用草稿与主题 change](../../openspec/changes/dsh-web-composer-references-theme-v1/proposal.md) 和 [多 Pane 工作台](../../openspec/changes/dsh-unified-multi-pane-workbench/proposal.md)。它补充选区交互的明确验收要求，保留两者已有完成记录；未来实现仍复用其宿主和资源 owner，不另建会话或输入框。
+此补充依赖 [引用草稿与主题 change](../../openspec/changes/archive/2026-09-06-dsh-web-composer-references-theme-v1/proposal.md) 和 [多 Pane 工作台](../../openspec/changes/archive/2026-09-06-dsh-unified-multi-pane-workbench/proposal.md)。它补充选区交互的明确验收要求，保留两者已有完成记录；未来实现仍复用其宿主和资源 owner，不另建会话或输入框。
 
 验收命令：
 

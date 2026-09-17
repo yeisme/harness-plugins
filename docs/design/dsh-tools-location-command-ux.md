@@ -20,6 +20,6 @@
 
 目前共享工作区中存在主线程未提交的Tools和宿主导航修改。实施本补充前须确认当前代码状态，避免按截图版本覆盖新代码；涉及相同路径的写入必须串行整合。不能把本旁支撤回的原型当作已审查的安全摘要实现，尤其不能以敏感词正则宣称任意Shell已安全。
 
-规范与任务：[proposal](../../openspec/changes/dsh-tools-location-command-ux-v1/proposal.md)、[设计与约束](../../openspec/changes/dsh-tools-location-command-ux-v1/design.md)、[tasks](../../openspec/changes/dsh-tools-location-command-ux-v1/tasks.md)。
+规范与任务：[proposal](../../openspec/changes/archive/2026-09-09-dsh-tools-location-command-ux-v1/proposal.md)、[设计与约束](../../openspec/changes/archive/2026-09-09-dsh-tools-location-command-ux-v1/design.md)、[tasks](../../openspec/changes/archive/2026-09-09-dsh-tools-location-command-ux-v1/tasks.md)。
 
 未来验收须覆盖多Pane的同名调用、连续定位、失败定位、折叠/历史记录、无摘要、凭据/URL/环境变量/内联脚本、360/560/960px与200%缩放。所有截图和日志脱敏，不能读取或执行真实敏感命令来制作演示。
