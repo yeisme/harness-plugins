@@ -6,10 +6,10 @@
 
 ## 1. 合同、宿主基线与设计核对
 
-- [ ] 1.1 负责：引用适配／Host；交付：当前发布和测试 Host、profile、输入扩展及现有引用类型位置清单；验收：逐项列出可用／缺失 seam，区分历史证据与本次运行基线。（EPR-01、PCP-05）
-- [ ] 1.2 负责：既有引用合同／Host Composer；交付：增量能力、正文与来源分离、媒体和 prepare/ack 接口映射及兼容用例；验收：不重定义 V1，不将新模式设为失败 fallback。（PCP-05）
+- [x] 1.1 负责：引用适配／Host；交付：当前发布和测试 Host、profile、输入扩展及现有引用类型位置清单；验收：逐项列出可用／缺失 seam，区分历史证据与本次运行基线。（EPR-01、PCP-05；证据：implementation-baseline.md 2026-09-18 节——官方 dsh@0.1.5-rc.2 `--check` exit 0、官方安装树六个 editable-prompt seam 标识 0 命中、staging 重建通道与 upstream-prs 四系列在仓未合入、91 包/35 bundle 实测、输入扩展与引用类型位置逐项列明，历史 0.1.2-rc.1 staging 证据与本次基线分开记录）
+- [x] 1.2 负责：既有引用合同／Host Composer；交付：增量能力、正文与来源分离、媒体和 prepare/ack 接口映射及兼容用例；验收：不重定义 V1，不将新模式设为失败 fallback。（PCP-05；证据：implementation-baseline.md 2026-09-18 节——BridgeFeaturesV1 probe 门控、镜像不保留正文、freeze/ack 快照消费、V1 权威 occurrences 替换与不可用诚实排除等反例均锚定 reference-composer.spec.tsx 与 desktop apply.spec.ts；Host 侧合入仍走 upstream-prs，不改 V1 语义）
 - [x] 1.3 负责：Creator Studio／环境适配；交付：草稿保存、候选、比较、采纳、写回、环境连接与启动的 owner descriptor 矩阵；验收：每个缺口有负责服务、所需 seam 和受影响任务，客户端不接管领域状态。（CAW-03/06、DAP-01/02；证据：implementation-baseline.md，仓库源码只读核对，实际服务能力待 6.6）
-- [ ] 1.4 负责：引用 UI／成果 UI；交付：对照统一视觉系统核定组件清单、surface 分类和本 design UI Contract；验收：复用宿主 primitives，明确滚动、焦点和分栏能力来源。（PCP-06、CAW-01）
+- [x] 1.4 负责：引用 UI／成果 UI；交付：对照统一视觉系统核定组件清单、surface 分类和本 design UI Contract；验收：复用宿主 primitives，明确滚动、焦点和分栏能力来源。（PCP-06、CAW-01；证据：implementation-baseline.md 2026-09-18 节——UI Contract 逐项覆盖视觉系统 §12 与 Cross-host Semantics；宿主 primitives 实测消费集 Button/CodeBlock/MarkdownText 并已更正 design 复用行；滚动/焦点/分栏来源锚定 styles.ts 单滚动容器、@container 单栏回退与 --vk-* token；check:surfaces 本次唯一红项为并行 lane 删除文件在 checker allowlist 的残留，与本 change 无关）
 
 ## 2. 文件／选区引用纵向链路
 

@@ -115,7 +115,7 @@ Host Pane slot
 - Surface classification: 引用块和输入框扩展为 embed；成果面板与来源 inspector 为 adopted；纯投影为 excluded。
 - Surface kind: 输入扩展 micro；成果 workspace；来源 inspector。
 - First / second / third visual priority: 当前内容与明确目标；引用／成果与主要操作；来源、版本、状态与次要操作。
-- Existing components reused: 宿主 editor、Button、Menu、Modal、Pill、DiffBlock；ui-surface、ui-visual-kit 与既有媒体／结构化内容 renderer。
+- Existing components reused: 宿主 editor；宿主 primitives 实测消费集 Button、CodeBlock、MarkdownText（2026-09-18 复核更正：Menu、Modal、Pill、DiffBlock 未被本 change 自有文件导入，留作后续 diff／菜单面候选）；ui-surface、ui-visual-kit 与既有媒体／结构化内容 renderer。
 - Cards that earn existence: 可整体操作的引用块和独立媒体／版本预览；普通列表、说明、空态不另套卡片。
 - Primary scroll owner: 对话归 Host；输入正文单一滚动；成果正文单一滚动，源码／媒体专业视口按规范独立滚动。无每条引用的多层滚动。
 

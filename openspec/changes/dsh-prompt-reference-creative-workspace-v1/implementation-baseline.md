@@ -74,3 +74,34 @@ RPC 变更需要重新生成所属包的 Typert Host／Remote 产物，再构建
 本轮 Host 证据：`temp/integration-test-runs/creative-workspace-host-2026-09-08T02-30-55-511Z-2641224/`。视觉证据：`temp/integration-test-runs/ui-visual-2026-09-08T02-31-16-676Z-2650882/`。媒体与开发环境缺口影响 3.4、4.5–4.10、5.1–5.3、6.6；不得通过客户端任意 URL fetch、描述文字或合成成功回执绕过。
 
 图片条目后续增量：现已新增 readArtifactImage（Host-only）及 artifact/media owner 解析，真实 Host 合成 owner 框选／原生图片发送通过，见 verification.md。原矩阵中“仅 artifact/body”描述为该次核对的历史状态。真实领域服务、音视频附件、环境目录与启动依赖仍未关闭。
+
+## 2026-09-18 seam 清单、合同映射与 UI 合同复核（任务 1.1／1.2／1.4）
+
+以下全部为本仓命令的本次运行结果；与 2026-09-07/09-08 历史证据分开记录，不互相冒充。
+
+### 1.1 当前 Host、profile、输入扩展与引用类型清单
+
+本次运行基线：
+
+- 发布 Host：`@deepseek-ai/dsh@0.1.5-rc.2`（pin 于 `scripts/workbench-runtime.mjs`）。`node scripts/dsh-workbench.mjs --check` 本次 exit 0（"Official workbench runtime 0.1.5-rc.2 verified"）。
+- 官方安装树 seam 命中（`node_modules/.pnpm/@deepseek-ai+dsh@0.1.5-rc.2_*` 全树 grep、排除 `.map`）：`editablePrompt`、`refreshReference`、`SessionPromptReference`、`ComposerReferenceV2`、`ComposerReferenceBridgeFeaturesV1`、`ComposerReferenceOwnerRegistryV1` 均为 0 命中。结论：官方发布版 0.1.5-rc.2 无 editable-prompt 引用／refresh／V2 投影 seam；新模式只能经 `upstream-prs` 补丁系列加插件侧 probe 诚实降级，与各任务 Recheck 记录一致。
+- 测试 Host（staging）：重建通道 `scripts/build-editable-reference-host.mjs`（仅 `--plan` 级历史验证；脚本自身规定源文件被并发修改时不得作最终候选构建，本次并发脏树未执行重建）。Host 增量补丁系列在仓且 README/apply.sh/baseline.sha256 齐备：`upstream-prs/editable-prompt-references-v1`（host-files.txt 列 29 个文件：ui-conversation input/editor/ReferenceChip/hub/apply、api/session-controller types 与 tests、context/session-reference、apps/web e2e）、前置 `composer-multi-reference-v1`、后续 `editable-prompt-whitespace-v1` 与 `editable-prompt-ack-consumption-v1`；上游均未合入（官方树 0 命中）。
+- profile：web profile；`discoverWorkspacePackages` 本次实测 91 个 workspace 包，其中 35 个声明 `dsh.bundle.patch` 并经 `dsh plugin --profile web add link:<dir>` 装载。
+- 输入扩展位置：Host 侧＝上列 host-files.txt；插件侧＝`packages/client/ui-pane-workbench/src/explorer/references-v2.ts`（ComposerReferenceV2 类型族与版本化 DOM handoff/probe 事件）、`references.ts`、`packages/bundle/dsh-desktop-workbench/src/client/apply.ts`（Host 插入/移除桥）、`packages/host/dsh-selection-host`（Selection Annotation）、`packages/host/dsh-file-host`。
+- 现有引用类型位置：specs＝`openspec/specs/{dsh-composer-reference,dsh-conversation-reference-drafts,creator-studio-artifact-composition,pane-artifact-handoff,dsh-reference-theme-experience,dsh-tools-discovery-draft}`；代码类型＝`references-v2.ts` 的 ComposerReferenceKindV2/IntentV2/ComposerReferenceV2/ComposerReferenceBridgeFeaturesV1；消费方＝`ui-creator-studio/src/artifact-workspace.tsx`、`dsh-desktop-workbench/src/client/apply.ts`、`dsh-file-host/src/index.ts`。
+- 历史 vs 本次：2026-09-07 的 0.1.2-rc.1 staging 基线（a66e4702）与 2026-09-08 真实 Host 运行记录为历史证据；本次基线为 0.1.5-rc.2 官方 pin 校验与官方树 seam 0 命中实测。两者分开记录。
+
+### 1.2 既有引用合同映射与兼容用例（锚点）
+
+- 增量能力：`ComposerReferenceBridgeFeaturesV1`（references-v2.ts:84 起）＋ `COMPOSER_REFERENCE_HOST_PROBE_EVENT`；消费方仅 `=== true` 门控（references-v2.ts:99 注释）。测试：desktop-workbench apply.spec.ts probe 用例（`report(true)`／activation 门控）。
+- 正文与来源分离：跨面板镜像不保留可编辑正文（reference-composer.spec.tsx "never retains editable bodies in the cross-pane draft mirror"）；Host 侧 SessionPromptReference 投影与 session-reference pre-step 在 editable-prompt-references-v1 补丁内。
+- prepare/ack 映射：冻结提交并按本次快照消费（"freezes submitted references and acknowledgement removes only that prepared snapshot"）；残留消费缺陷由 editable-prompt-ack-consumption-v1 系列修复。
+- 媒体映射：Host 引用 registry 接收 owner image bytes 生成真实附件/裁剪（2026-09-08 真实 Host 证据见 verification.md）；音视频附件仍缺 Host/模型合同，维持缺口记录。
+- 兼容（不重定义 V1、新模式不作失败 fallback）：V1 行为由权威 Host occurrences 替换镜像并去重（"replaces mirrored rows from authoritative Host occurrences and deduplicates exact repeats"）；宿主不可用时诚实排除入草稿（"requires an available host and leaves unavailable or stale references out of drafts"），缺省 hostReason 为 "structured conversation insert capability is unavailable"，不把新模式静默降级为 V1 结构化引用；共享引用摘要投影不携带完整 prompt 正文（本文件前表）。反例（刷新 CAS、prepared 快照拒绝保原引用、重复行去重）均在 reference-composer.spec.tsx。
+
+### 1.4 统一视觉系统核对
+
+- design.md UI Contract 逐项覆盖 `docs/design/dsh-unified-panel-visual-system.md` §12 模板（Surface classification/kind、三级视觉优先级、复用组件、卡片存在理由、Primary scroll owner、State Matrix、Responsive、Accessibility、Visual Exceptions）及共享能力 Cross-host Semantics 段。
+- 组件清单实测（本次 grep）：本 change 自有 UI 实际消费的宿主 primitives＝Button（34 个文件）、CodeBlock、MarkdownText（artifact-workspace.tsx、views.tsx、references-v2.ts、client.ts）；design 原复用行中的 Menu/Modal/Pill/DiffBlock 未被自有文件导入（primitives 包已提供，留作后续 diff/菜单面复用候选），design.md 复用行已按实测更正。当前文本 diff 视图用 `cs-diff` 样式（views.tsx:188）。
+- 滚动／焦点／分栏能力来源：对话滚动归 Host；输入与成果正文单一滚动；专业视口独立滚动（styles.ts `.cs-professional-inspector`/`.cs-scaena-tree` 70vh overflow、`.cs-image-pan` 平移视口）；焦点由 Host primitive 管理并有显式归还规则（design Accessibility）；分栏按容器宽度切换（styles.ts `@container(max-width:600px)` 单栏回退），放大/展开走宿主能力不改 Pane 几何；token 全走 ui-visual-kit（`--vk-*`）。
+- `node scripts/check-ui-surface-contracts.mjs` 本次 exit 1：唯一失败项为并行 lane 已删除的 `packages/client/ui-pane-workbench/src/drag-visuals.tsx` 在 checker allowlist（`scripts/check-ui-surface-contracts.mjs:62`）残留——预先存在／并发失败，与本 change 无关，不由本任务代修。
