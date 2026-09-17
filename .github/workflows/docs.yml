@@ -1,24 +1,8 @@
 name: Docs
 
 on:
-  pull_request:
-    paths:
-      - '.github/workflows/docs.yml'
-      - 'docs/**'
-      - 'openspec/**'
-      - '**/*.md'
-      - 'scripts/doc-sync.mjs'
-  push:
-    branches:
-      - develop
-      - main
-    paths:
-      - '.github/workflows/docs.yml'
-      - 'docs/**'
-      - 'openspec/**'
-      - '**/*.md'
-      - 'scripts/doc-sync.mjs'
   workflow_dispatch:
+
 
 permissions:
   contents: read
