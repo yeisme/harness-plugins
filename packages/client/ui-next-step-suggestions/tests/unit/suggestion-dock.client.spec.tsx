@@ -70,7 +70,7 @@ function renderDock(options: {
       useInput={((selector: (state: { draft: string }) => string) => selector({ draft: options.draft ?? '' })) as never}
       inputActions={{ setDraft, submit } as never}
       getSources={() => []}
-      storage={options.storage}
+      storage={options.storage ?? memoryStorage()}
       t={((key: string) => key) as never}
     />,
   )
