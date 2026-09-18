@@ -59,7 +59,6 @@ const delegatedSurfaceOwners = new Map([
 // cannot express measured position, virtualization, drag, or progress output.
 const dynamicStyleAllowlist = new Map([
   ['packages/client/ui-pane-domain/src/project-canvas-view.tsx', 'user-controlled React Flow node width and height'],
-  ['packages/client/ui-pane-workbench/src/drag-visuals.tsx', 'pointer and measured drag geometry'],
   ['packages/client/ui-creator-studio/src/image-viewport.tsx', 'measured natural size × zoom scale; static CSS cannot express runtime image geometry'],
   ['packages/client/ui-pane-workbench/src/explorer/tree-ui.tsx', 'virtual tree height, offset and depth indentation'],
   ['packages/client/ui-pane-workbench/src/git/source-control.tsx', 'virtual list height and offset'],
